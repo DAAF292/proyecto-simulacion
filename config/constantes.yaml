@@ -1,0 +1,78 @@
+# config/constantes.yaml
+# Unico lugar donde viven los numeros ajustables de la fase 0 (informe de
+# implementacion, seccion 4). Todo valor marcado "provisional" es una
+# hipotesis de partida para el Bloque B (calibracion numerica con el motor
+# corriendo) -- no esta validado observando el juego, solo es razonable como
+# punto de arranque.
+
+mundo:
+  grid_ancho: 20
+  grid_alto: 20
+
+poblacion:
+  gnomos_iniciales: 6
+
+semilla_por_defecto: 42  # valor fijo en desarrollo (informe tecnico, seccion 15)
+
+# --- Generacion procedimental del mapa (paso 1) ---
+# provisional: ver informe de implementacion, seccion 3.5
+generacion_mapa:
+  rio_ancho: 1
+  espesura_num_manchas: 3
+  espesura_cobertura_objetivo: 0.25   # ~25% del grid en Espesura
+  espesura_prob_expansion: 0.5        # probabilidad de que una celda vecina se sume a la mancha
+
+# --- Recursos por tipo de terreno (paso 1) ---
+# Claro -> raices, Espesura -> bayas, Ribera -> sin recurso activo en fase 0.
+# provisional: capacidad_maxima, tasa_regeneracion y valor_nutricional sin calibrar.
+recursos_por_terreno:
+  claro:
+    tipo_recurso: raices
+    capacidad_maxima: 10.0
+    tasa_regeneracion: 0.5
+    valor_nutricional: 0.15   # abundante, poco nutritivo
+  espesura:
+    tipo_recurso: bayas
+    capacidad_maxima: 5.0
+    tasa_regeneracion: 0.2
+    valor_nutricional: 0.4    # escaso, regeneracion lenta, mas nutritivo
+  ribera:
+    tipo_recurso: null
+    capacidad_maxima: 0.0
+    tasa_regeneracion: 0.0
+    valor_nutricional: 0.0
+
+# --- Necesidades fisicas (paso 5) ---
+# Convencion: 0.0 = necesidad satisfecha, 1.0 = critica, igual para las tres.
+# provisional: tasas sin calibrar contra el motor en marcha.
+necesidades:
+  tasa_hambre_por_tick: 0.012    # ~83 ticks (~3.5 dias) de 0 a critico
+  tasa_energia_por_tick: 0.01    # ~100 ticks (~4 dias) de 0 a critico
+  # Regla de muerte por inanicion (paso 6-y-medio, decidida tras observar
+  # esta misma trayectoria: hambre llega a critico en el tick ~84).
+  # provisional: probabilidad fija por tick mientras hambre=1.0 sostenida.
+  # Con 0.02, la espera media hasta morir tras llegar a critico es de
+  # ~50 ticks (~2 dias) -- lo bastante lento para dar margen a que
+  # SistemaDecision/SistemaRecursos (pasos 7-8) puedan resolverlo antes,
+  # lo bastante rapido para que, si de verdad no hay salida, la muerte
+  # llegue dentro de la ventana de 500 ticks de "fase 1 completa".
+  probabilidad_muerte_hambre_critica: 0.02
+  # seguridad no tiene tasa: se mantiene fija hasta que exista una amenaza
+  # real (SistemaDepredacion, paso 12).
+
+# --- Atributos con rango racial (paso 2/3) ---
+# rango [minimo, maximo], sorteo uniforme individual al nacer, fijo de por vida.
+rangos_raciales:
+  gnomo:
+    tamano: [0.8, 1.2]
+    valentia: [0.2, 0.6]
+    sociabilidad: [0.4, 0.9]
+    agresividad: [0.1, 0.4]
+    resistencia: [0.3, 0.7]
+  lobo:
+    tamano: [1.0, 1.6]
+    valentia: [0.5, 0.9]
+    sociabilidad: [0.3, 0.7]
+    agresividad: [0.5, 0.9]
+    resistencia: [0.5, 0.9]
+
