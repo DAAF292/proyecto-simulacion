@@ -15,6 +15,7 @@ import random
 
 import yaml
 
+from componentes.intencion import Intencion
 from componentes.necesidades import Necesidades
 from nucleo.celda import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_gnomo
@@ -23,7 +24,7 @@ from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 from nucleo.territorio import Territorio
 from nucleo.zona_bioma import generar_zona_bioma
-from sistemas import sistema_necesidades
+from sistemas import sistema_decision, sistema_necesidades
 
 SIMBOLO_TERRENO = {
     TipoTerreno.CLARO: ".",
@@ -94,6 +95,7 @@ def main() -> None:
         reloj.avanzar()
         tick_n += 1
         sistema_necesidades.actualizar(gestor, config, rng, bus, reloj.tick_actual)
+        sistema_decision.actualizar(gestor, config)
 
         for evento in bus.eventos_del_tick:
             print(
@@ -108,9 +110,11 @@ def main() -> None:
             print(f"tick={reloj.tick_actual:4d}  dia={reloj.dia:3d}  el gnomo {id_gnomo} ha muerto.")
             break
 
+        intencion = gestor.obtener_componente(id_gnomo, Intencion)
         print(
             f"tick={reloj.tick_actual:4d}  dia={reloj.dia:3d}  "
-            f"hambre={necesidades.hambre:.3f}  energia={necesidades.energia:.3f}"
+            f"hambre={necesidades.hambre:.3f}  energia={necesidades.energia:.3f}  "
+            f"intencion={intencion.accion.value}"
         )
 
 

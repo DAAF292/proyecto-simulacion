@@ -57,6 +57,13 @@ necesidades:
   # lo bastante rapido para que, si de verdad no hay salida, la muerte
   # llegue dentro de la ventana de 500 ticks de "fase 1 completa".
   probabilidad_muerte_hambre_critica: 0.02
+
+# --- Decision (Utility AI, paso 7) ---
+# provisional: umbral de partida sin calibrar contra el motor en marcha.
+decision:
+  utilidad_deambular_base: 0.1   # umbral por debajo del cual, sin nada mas
+                                  # urgente, la entidad deambula en vez de
+                                  # quedarse "vacia"
   # seguridad no tiene tasa: se mantiene fija hasta que exista una amenaza
   # real (SistemaDepredacion, paso 12).
 

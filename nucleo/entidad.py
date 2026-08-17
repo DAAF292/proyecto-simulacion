@@ -16,6 +16,7 @@ import random
 
 from componentes.categoria import Categoria
 from componentes.identidad import Especie, Identidad
+from componentes.intencion import Intencion
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 
@@ -28,6 +29,7 @@ class GestorEntidades:
             Necesidades: {},
             Identidad: {},
             Categoria: {},
+            Intencion: {},
         }
 
     def crear_entidad(self) -> int:
@@ -87,4 +89,5 @@ def crear_gnomo(
     gestor.anadir_componente(
         id_entidad, _sortear_categoria(rng, rangos_raciales["gnomo"])
     )
+    gestor.anadir_componente(id_entidad, Intencion())
     return id_entidad
