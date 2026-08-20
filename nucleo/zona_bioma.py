@@ -1,23 +1,63 @@
 """ZonaBioma: region ecologica dentro de un territorio. Fase 0: una unica
 zona (el bosque), con su propio grid de celdas.
 
-Incluye tambien la generacion procedimental del terreno (paso 1 del orden
-de construccion): un rio por paseo aleatorio, manchas de Espesura por
-crecimiento probabilistico desde semillas, y Claro como terreno por
-defecto. Todo determinista a partir del generador aleatorio (rng) que se
-le pase -- nunca crea su propio Random() interno, para que la generacion
-quede atada a la semilla del mundo.
+Incluye tambien la generacion procedimental del terreno y los recursos
+(paso 1, ampliado tras observar que con recurso en el 95% del mapa la
+escasez era imposible de conseguir): manchas de flora por crecimiento
+probabilistico desde semillas dentro de cada bioma compatible -- igual
+que en un bosque real, no todo el suelo tiene la misma planta. Todo
+determinista a partir del generador aleatorio (rng) que se le pase --
+nunca crea su propio Random() interno, para que la generacion quede
+atada a la semilla del mundo.
+
+Correccion de diseno (pregunta directa de Diego: un bioma es una
+categorizacion de flora/fauna, no deberia llevar implicita la presencia
+o ausencia de agua): el agua nunca excluye celdas de la generacion de
+flora -- Celda.tiene_agua/tipo_agua es una capa independiente que puede
+caer sobre cualquier bioma sin distincion. Nota deliberada, no decidida
+por peticion expresa: una celda con agua puede seguir perteneciendo a una
+mancha de recurso (tiene_agua y tiene_recurso no son excluyentes) -- no
+se anadio ninguna regla que lo impida, seria una fuente de complejidad
+mas sin que nadie la haya pedido todavia.
+
+CORRECCION de generacion de agua (discutida y confirmada con Diego,
+posterior a la correccion biomas/especies): el viejo _generar_rio() (un
+unico camino de un borde al opuesto por paseo aleatorio, retirado de este
+archivo) ya no existe -- ver nucleo/agua.py para el reemplazo completo
+(rio/lago/poza derivados del campo de elevacion, varios cuerpos posibles
+por mundo en vez de exactamente uno siempre).
 """
 import random
 
+from nucleo.agua import generar_cuerpos_agua
+from nucleo.bioma import clasificar_bioma
+from nucleo.campo_continuo import generar_campo
 from nucleo.celda import Celda, TipoTerreno
+from nucleo.clima import Clima
+from nucleo.flora import recursos_alimento
 
 
 class ZonaBioma:
-    def __init__(self, ancho: int, alto: int, grid: list):
+    def __init__(self, ancho: int, alto: int, grid: list, clima_actual: Clima = Clima.DESPEJADO):
         self.ancho = ancho
         self.alto = alto
         self.grid = grid  # grid[x][y] -> Celda
+        self.clima_actual = clima_actual
+        """Estado de tiempo del dia actual (informe tecnico 7.2,
+        sistemas/sistema_clima.py) -- mutable, sorteado a cadencia de
+        dia. Vive en la zona (no en el mundo ni en el territorio) porque
+        el diseno original habla de "modificadores por estacion" por
+        zona de bioma, y clima es la misma idea a cadencia mas fina.
+        Decision tomada en esta pasada, no persiste entre partidas
+        (nucleo/persistencia.py no lo guarda): se resembraria en el
+        primer corte de dia tras cargar, mismo estatus de imprecision
+        aceptada que ya tiene Intencion tras una carga."""
+        self.estacion_previa = None
+        """Ultima Estacion vista por sistema_clima.py, para detectar el
+        cambio de estacion y emitir CambioEstacion solo al entrar en una
+        nueva (mismo patron que CrisisMental). None hasta el primer
+        corte de dia -- tampoco se persiste, mismo criterio que
+        clima_actual."""
 
     def celda(self, x: int, y: int) -> Celda:
         return self.grid[x][y]
@@ -29,123 +69,156 @@ class ZonaBioma:
                 yield x, y, self.grid[x][y]
 
 
-def _vecinos(x: int, y: int, ancho: int, alto: int):
+def vecinos(x: int, y: int, ancho: int, alto: int):
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
         nx, ny = x + dx, y + dy
         if 0 <= nx < ancho and 0 <= ny < alto:
             yield nx, ny
 
 
-def _generar_rio(ancho: int, alto: int, rng: random.Random) -> set:
-    """Camino de una celda de ancho, de un borde del grid al opuesto, con
-    sesgo hacia mantener el rumbo (evita zigzag extremo)."""
-    horizontal = rng.random() < 0.5
-    celdas_rio = set()
-
-    if horizontal:
-        y = rng.randrange(alto)
-        for x in range(ancho):
-            y += rng.choice((-1, 0, 0, 1))
-            y = max(0, min(alto - 1, y))
-            celdas_rio.add((x, y))
-    else:
-        x = rng.randrange(ancho)
-        for y in range(alto):
-            x += rng.choice((-1, 0, 0, 1))
-            x = max(0, min(ancho - 1, x))
-            celdas_rio.add((x, y))
-
-    return celdas_rio
-
-
-def _generar_manchas_espesura(
+def _generar_manchas(
     ancho: int,
     alto: int,
     rng: random.Random,
-    ocupadas: set,
+    celdas_candidatas: set,
     num_manchas: int,
-    cobertura_objetivo: float,
+    objetivo_absoluto: int,
     prob_expansion: float,
 ) -> set:
     """Crecimiento probabilistico desde puntos semilla (flood-fill con
-    probabilidad de expansion por celda vecina). Cada mancha se limita a
-    un reparto justo del objetivo total (objetivo // num_manchas) para
-    que de verdad salgan num_manchas manchas distintas -- sin este tope,
-    la primera semilla puede crecer sola hasta cubrir todo el objetivo y
-    las demas nunca llegan a sembrarse."""
-    total = ancho * alto
-    objetivo = int(total * cobertura_objetivo)
-    tamano_por_mancha = max(1, objetivo // num_manchas)
-    espesura = set()
+    probabilidad de expansion por celda vecina), restringido a un
+    conjunto de celdas candidatas -- puede ser "todo el grid menos el
+    rio" (para generar Espesura sobre Claro) o "solo las celdas Claro"
+    (para generar manchas de raices dentro de Claro). Mismo algoritmo en
+    ambos casos, solo cambia el conjunto de partida.
 
-    intentos_semilla = 0
-    max_intentos = max(num_manchas * 20, 20)
-    manchas_creadas = 0
+    Cada intento de mancha se limita a un reparto justo del objetivo
+    total (objetivo // num_manchas) para que salgan varias manchas
+    distintas en vez de un solo bloque, pero num_manchas es solo un
+    tamano de referencia, no un limite duro de intentos de semilla --
+    una semilla puede quedar boxed-in y crecer menos de lo previsto, asi
+    que se permiten mas intentos de los que en teoria harian falta, hasta
+    alcanzar el objetivo o agotar un presupuesto generoso."""
+    objetivo = min(objetivo_absoluto, len(celdas_candidatas))
+    tamano_por_mancha = max(1, objetivo // max(num_manchas, 1))
+    resultado = set()
 
-    while (
-        len(espesura) < objetivo
-        and manchas_creadas < num_manchas
-        and intentos_semilla < max_intentos
-    ):
-        intentos_semilla += 1
+    intentos = 0
+    max_intentos = max(len(celdas_candidatas) * 4, 200)
+
+    while len(resultado) < objetivo and intentos < max_intentos:
+        intentos += 1
         sx, sy = rng.randrange(ancho), rng.randrange(alto)
-        if (sx, sy) in ocupadas or (sx, sy) in espesura:
+        if (sx, sy) not in celdas_candidatas or (sx, sy) in resultado:
             continue
 
         frontera = [(sx, sy)]
         mancha = set()
-        tope_mancha = min(tamano_por_mancha, objetivo - len(espesura))
+        tope_mancha = min(tamano_por_mancha, objetivo - len(resultado))
         while frontera and len(mancha) < tope_mancha:
             idx = rng.randrange(len(frontera))
             cx, cy = frontera.pop(idx)
-            if (cx, cy) in mancha or (cx, cy) in ocupadas or (cx, cy) in espesura:
+            if (cx, cy) in mancha or (cx, cy) in resultado or (cx, cy) not in celdas_candidatas:
                 continue
             mancha.add((cx, cy))
-            for nx, ny in _vecinos(cx, cy, ancho, alto):
-                ya_asignada = (
-                    (nx, ny) in mancha
-                    or (nx, ny) in ocupadas
-                    or (nx, ny) in espesura
-                )
-                if not ya_asignada and rng.random() < prob_expansion:
+            for nx, ny in vecinos(cx, cy, ancho, alto):
+                candidata = (nx, ny) in celdas_candidatas
+                ya_asignada = (nx, ny) in mancha or (nx, ny) in resultado
+                if candidata and not ya_asignada and rng.random() < prob_expansion:
                     frontera.append((nx, ny))
 
         if mancha:
-            espesura |= mancha
-            manchas_creadas += 1
+            resultado |= mancha
 
-    return espesura
+    return resultado
 
 
 def generar_zona_bioma(
     rng: random.Random,
     config_generacion: dict,
-    config_recursos: dict,
+    config_bioma: dict,
+    config_flora: dict,
+    config_agua: dict,
     ancho: int,
     alto: int,
 ) -> ZonaBioma:
-    rio = _generar_rio(ancho, alto, rng)
-    espesura = _generar_manchas_espesura(
-        ancho,
-        alto,
-        rng,
-        ocupadas=rio,
-        num_manchas=config_generacion["espesura_num_manchas"],
-        cobertura_objetivo=config_generacion["espesura_cobertura_objetivo"],
-        prob_expansion=config_generacion["espesura_prob_expansion"],
-    )
+    todas_las_celdas = {(x, y) for x in range(ancho) for y in range(alto)}
+
+    # Fase terreno 2+3: tres campos continuos (elevacion, lluvia,
+    # temperatura), generados en este orden fijo -- comparten el mismo
+    # rng que el resto de la generacion, asi que el orden de estas tres
+    # llamadas es parte de lo que la semilla del mundo determina; cambiar
+    # el orden cambiaria el mapa resultante para la misma semilla.
+    campo_elevacion = generar_campo(rng, ancho, alto, config_generacion["elevacion_escala_celdas"])
+    campo_lluvia = generar_campo(rng, ancho, alto, config_generacion["lluvia_escala_celdas"])
+    campo_temperatura = generar_campo(rng, ancho, alto, config_generacion["temperatura_escala_celdas"])
+
+    # Fase terreno 3 (nucleo/bioma.py): el bioma de cada celda se deriva
+    # de los tres campos de arriba -- SOLO el bioma, zona climatica, nada
+    # de flora todavia (correccion de diseno posterior, ver
+    # nucleo/celda.py y componentes/planta.py).
+    biomas = {
+        (x, y): clasificar_bioma(campo_elevacion[x][y], campo_lluvia[x][y], campo_temperatura[x][y], config_bioma)
+        for x, y in todas_las_celdas
+    }
+
+    # Cuerpos de agua (correccion posterior a fase terreno 4, ver
+    # nucleo/agua.py): derivados del campo de elevacion de arriba --
+    # rio/lago/poza segun donde termine cada descenso de pendiente, en
+    # vez del viejo paseo aleatorio unico ciego al terreno.
+    cuerpos_agua = generar_cuerpos_agua(campo_elevacion, rng, config_agua, ancho, alto)
+
+    # Flora (correccion posterior a fase terreno 4, discutida y
+    # confirmada con Diego): cada especie del catalogo (config/
+    # constantes.yaml, seccion flora.especies) coloniza una mancha DENTRO
+    # de los biomas donde puede crecer -- mismo _generar_manchas de
+    # siempre, ahora por especie en vez de por terreno fijo Claro/
+    # Espesura. celdas_ya_asignadas se acumula entre especies para que
+    # dos especies del MISMO bioma (hierba silvestre y manzano, ambas en
+    # Bosque) no compitan por la misma celda -- el orden del catalogo
+    # decide quien tiene primera opcion, sin ninguna razon ecologica
+    # detras del orden, solo el orden de config/constantes.yaml.
+    especie_por_celda = {}
+    celdas_ya_asignadas = set()
+    for especie_key, especie_cfg in config_flora["especies"].items():
+        biomas_compatibles = {TipoTerreno(b) for b in especie_cfg["biomas"]}
+        candidatas = {
+            p for p in todas_las_celdas
+            if biomas[p] in biomas_compatibles and p not in celdas_ya_asignadas
+        }
+        objetivo = int(len(candidatas) * especie_cfg["proporcion"])
+        mancha = _generar_manchas(
+            ancho, alto, rng,
+            celdas_candidatas=candidatas,
+            num_manchas=especie_cfg["num_manchas"],
+            objetivo_absoluto=objetivo,
+            prob_expansion=config_generacion["recurso_prob_expansion"],
+        )
+        for p in mancha:
+            especie_por_celda[p] = especie_key
+        celdas_ya_asignadas |= mancha
 
     grid = [[None] * alto for _ in range(ancho)]
     for x in range(ancho):
         for y in range(alto):
-            if (x, y) in rio:
-                tipo = TipoTerreno.RIBERA
-            elif (x, y) in espesura:
-                tipo = TipoTerreno.ESPESURA
-            else:
-                tipo = TipoTerreno.CLARO
+            tipo = biomas[(x, y)]
+            info_agua = cuerpos_agua.get((x, y))
+            tipo_agua = info_agua.tipo if info_agua else ""
+            profundidad_agua = info_agua.profundidad_metros if info_agua else 0.0
+            tiene_agua = tipo_agua != ""
 
-            recursos_iniciales = config_recursos[tipo.value]["capacidad_maxima"]
-            grid[x][y] = Celda(tipo_terreno=tipo, recursos=recursos_iniciales)
+            especie_key = especie_por_celda.get((x, y), "")
+            tiene_recurso = especie_key != ""
+            recursos_iniciales = (
+                {r["nombre"]: r["capacidad_maxima"] for r in recursos_alimento(config_flora["especies"][especie_key])}
+                if tiene_recurso else {}
+            )
+            grid[x][y] = Celda(
+                tipo_terreno=tipo, elevacion=campo_elevacion[x][y],
+                lluvia=campo_lluvia[x][y], temperatura=campo_temperatura[x][y],
+                recursos=recursos_iniciales, tiene_recurso=tiene_recurso,
+                tipo_recurso=especie_key, tiene_agua=tiene_agua, tipo_agua=tipo_agua,
+                profundidad_agua=profundidad_agua,
+            )
 
     return ZonaBioma(ancho=ancho, alto=alto, grid=grid)

@@ -1,22 +1,165 @@
-"""Celda: unidad minima del grid. Dato puro (tipo de terreno + recursos).
+"""Celda: unidad minima del grid. Dato puro (bioma + campos fisicos +
+recursos + presencia de agua).
 
-El tipo de recurso que produce una celda se deriva de su tipo_terreno, no
-es un campo independiente (informe de implementacion, seccion 3.5):
-Claro -> raices, Espesura -> bayas, Ribera -> sin recurso activo en fase 0.
-Los parametros de cada recurso (capacidad, regeneracion, valor nutricional)
-no viven aqui, viven en config/constantes.yaml.
+tipo_terreno es ahora de verdad un BIOMA (fase de correccion de biomas,
+posterior a fase terreno 3 -- discutido y confirmado con Diego): hasta
+este cambio, Claro y Espesura eran valores de TipoTerreno al mismo nivel
+que Montana/Estepa/Tundra, como si las cinco fueran alternativas
+climaticas equivalentes -- error de modelo real, no cosmetico. Un bioma
+es una zona climatica (Pradera, Bosque, Desierto, Montana, Tundra); Claro
+y Espesura nunca fueron eso, eran una textura LOCAL de densidad de
+vegetacion dentro de un bosque real. Esa distincion ahora vive en que
+ESPECIE de planta ocupa cada celda (ver componentes/planta.py) -- Bosque
+puede tener hierba silvestre (sus zonas mas abiertas) o manzano (sus
+zonas mas densas), dos especies dentro del mismo bioma, en vez de dos
+biomas distintos.
+
+El tipo de recurso que produce una celda ya NO se deriva de tipo_terreno
+(antes: Claro -> raices, Espesura -> bayas, informe de implementacion
+seccion 3.5 -- ese acoplamiento directo terreno-recurso es precisamente
+lo que se corrige aqui). Se deriva de que ESPECIE de planta ocupa la
+celda (Celda.tipo_recurso, ver mas abajo) -- un bioma puede alojar varias
+especies posibles (config/constantes.yaml, seccion 'flora'), cada una con
+su propio recurso.
+
+tiene_agua (correccion de diseno anterior, surgida de una pregunta directa
+de Diego -- ver nucleo/zona_bioma.py para la generacion): hasta ese
+cambio, el agua potable era un TipoTerreno mas (RIBERA), exclusivo con
+Claro y Espesura -- eso forzaba que donde hubiera agua no pudiera haber
+vegetacion, y viceversa, cuando son hechos fisicos independientes. Sigue
+siendo una capa ortogonal: cualquier celda, de cualquier bioma, puede
+tener agua o no.
+
+tipo_agua (correccion de diseno posterior, discutida y confirmada con
+Diego -- ver nucleo/agua.py para la generacion): antes de este cambio,
+`tiene_agua` era el unico dato -- toda agua era identica, un unico rio
+generado como un paseo aleatorio ciego al terreno, sin relacion con
+elevacion y sin distincion entre rio/lago/poza. Ahora el agua se deriva
+del campo de elevacion (descenso de pendiente desde picos, cuencas donde
+el descenso termina) y puede haber varios cuerpos a la vez, de tres tipos
+distintos -- necesarios ya no solo para la generacion en si, sino porque
+Diego anticipa fauna futura que dependa del tipo concreto (anfibios en
+pozas, fauna acuatica en rios/lagos). tiene_agua se mantiene como
+booleano derivado (tipo_agua != "") por el mismo criterio que
+tiene_recurso/tipo_recurso: la mayoria de consumidores actuales
+(Accion.BEBER, filtro de habitat del lobo) solo necesitan saber SI hay
+agua, no de que tipo.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
 class TipoTerreno(Enum):
-    CLARO = "claro"
-    ESPESURA = "espesura"
-    RIBERA = "ribera"
+    """Bioma de la celda -- zona climatica, determinada por elevacion+
+    lluvia+temperatura (nucleo/bioma.py). Ya NO incluye Claro/Espesura
+    como valores propios (ver docstring del modulo) -- los cinco valores
+    de aqui son biomas de verdad, mutuamente excluyentes por definicion
+    climatica, no por densidad de vegetacion local."""
+    PRADERA = "pradera"    # lluvia y temperatura moderadas -- pastizal abierto
+    BOSQUE = "bosque"      # lluvia abundante -- aloja hierba silvestre Y manzano
+    DESIERTO = "desierto"  # lluvia escasa -- arido
+    MONTANA = "montana"    # elevacion alta -- vegetacion escasa (liquen)
+    TUNDRA = "tundra"      # temperatura muy baja -- vegetacion escasa (musgo)
 
 
 @dataclass
 class Celda:
     tipo_terreno: TipoTerreno
-    recursos: float = 0.0
+    elevacion: float = 0.0
+    """Fase terreno 2: magnitud continua en [0, 1], generada por
+    nucleo/campo_continuo.py (value noise). Determina el bioma junto con
+    lluvia y temperatura (nucleo/bioma.py). NO se persiste: determinista
+    a partir de la semilla del mundo, se regenera igual en cada carga."""
+    lluvia: float = 0.0
+    """Fase terreno 3: campo continuo en [0, 1], mismo generador que
+    elevacion. Doble uso: (a) junto con elevacion/temperatura, decide el
+    bioma de la celda al generar el mundo (nucleo/bioma.py); (b) despues
+    de eso, sigue viva como dato de la celda -- sistema_flora.py la lee
+    cada dia para modular cuanto produce la planta presente segun su
+    preferencia de lluvia (config/constantes.yaml, seccion flora,
+    'preferencia_lluvia' por especie). NO se persiste, mismo criterio que
+    elevacion."""
+    temperatura: float = 0.0
+    """Fase terreno 3: igual que lluvia, campo continuo en [0, 1] --
+    decide bioma al generar el mundo y modula produccion de flora despues
+    (preferencia_temperatura por especie). NO se persiste."""
+    recursos: dict = field(default_factory=dict)
+    """{nombre_recurso: cantidad_disponible} -- YA NO un unico float
+    (correccion de diseno, discutida y confirmada con Diego): una misma
+    especie puede producir mas de un recurso de categoria alimento (por
+    ejemplo hierba silvestre da raices Y hierba/pasto -- pensado para un
+    futuro herbivoro de pastoreo que coma hierba en vez de raices, ver
+    config/constantes.yaml seccion flora), asi que una celda necesita
+    poder llevar varias cantidades a la vez, no una sola. Vacio {} si
+    tiene_recurso=False. Sin restriccion dietetica todavia -- cualquier
+    entidad con Accion.COMER consume de cualquier recurso presente, sin
+    mirar cual prefiere su especie (sistema_recursos.py); eso es deuda
+    tecnica declarada a proposito, se conecta cuando exista una especie
+    para la que de verdad importe la diferencia."""
+    tiene_recurso: bool = False
+    """Si esta celda tiene una planta produciendo recurso ahora mismo.
+    Las celdas con tiene_recurso=False se quedan siempre con recursos={}:
+    caminables, pero sin comida. DINAMICO (sistema_flora.py,
+    sistema_desastres.py): se pone a True cuando una entidad Planta
+    madura coloniza la celda, a False cuando esa planta se destruye (un
+    incendio). SI se persiste (celdas_estado) -- estado mutado por la
+    partida real."""
+    tiene_agua: bool = False
+    """Si esta celda tiene agua potable -- capa geografica independiente
+    de la vegetacion (ver docstring del modulo). No produce recurso
+    alimenticio propio directamente, pero SI modula la produccion de
+    flora (bono ribereno, ver nucleo/flora.py:factor_ribera) y habilita
+    Accion.BEBER. Derivado de tipo_agua (tipo_agua != ""), mismo patron
+    que tiene_recurso/tipo_recurso. NO se persiste: determinista a partir
+    del campo de elevacion y la semilla del mundo (nucleo/agua.py), igual
+    que elevacion/lluvia/temperatura/tipo_terreno -- nunca se muta en
+    juego, no hay erosion ni sequias todavia."""
+    fertilidad: float = 0.0
+    """Abono: Accion.ALIVIARSE sobre esta celda la sube; decae con el
+    tiempo (cadencia de dia). Bono multiplicativo sobre la produccion de
+    la planta presente (sistema_flora.py) -- SOLO en celdas que ya tienen
+    tiene_recurso=True, no activa recurso donde no lo habia. SI se
+    persiste -- estado mutado por la partida real."""
+    en_llamas: bool = False
+    """Desastres naturales: unico tipo implementado es incendio, unico
+    bioma inflamable es Bosque (mas combustible que el resto). Destruye
+    la vegetacion en pie (recursos a 0, la Planta presente se elimina y
+    tiene_recurso/tipo_recurso vuelven a False/'') e inflige dano a la
+    vitalidad de cualquier entidad que siga de pie en la celda cada tick
+    que dure. SI se persiste -- estado mutado por la partida real."""
+    tipo_recurso: str = ""
+    """Que ESPECIE de planta ocupa esta celda ahora mismo (clave del
+    catalogo config/constantes.yaml, seccion flora.especies -- por
+    ejemplo 'manzano', 'cactus', 'hierba_silvestre'), o "" si no hay
+    ninguna (tiene_recurso=False). Reemplaza el viejo acoplamiento
+    "recurso = f(tipo_terreno)" -- ahora un bioma puede alojar varias
+    especies distintas (Bosque aloja hierba silvestre Y manzano), asi que
+    la celda necesita decir CUAL de ellas tiene, no basta con su bioma.
+    DINAMICO, igual que tiene_recurso (propagacion lo activa, incendio lo
+    desactiva) -- SI se persiste, mismo motivo."""
+    tipo_agua: str = ""
+    """Que TIPO de cuerpo de agua ocupa esta celda ahora mismo -- 'rio',
+    'lago', 'poza', o "" si no hay agua (nucleo/agua.py para la
+    generacion completa). 'rio' es el camino de descenso de pendiente
+    desde un pico de elevacion; 'lago' es la cuenca donde ese descenso
+    termina en un minimo local; 'poza' es una cuenca pequena y aislada,
+    sin rio que la alimente. Sin ningun consumidor mecanico real todavia
+    (declarado con intencion, mismo criterio que los recursos de
+    categoria material en flora.py): la distincion existe para cuando
+    haya fauna acuatica que dependa de cual es (anfibios en poza, peces
+    en rio/lago). NO se persiste, mismo motivo que tiene_agua -- estatico
+    de por vida una vez generado el mundo."""
+    profundidad_agua: float = 0.0
+    """Profundidad del agua de esta celda, en METROS -- unica magnitud de
+    Celda con unidad real en vez de escala normalizada [0,1], a proposito:
+    para que sea comparable con DimensionesFisicas.altura (tambien en
+    metros) cuando exista la mecanica de ahogamiento (pieza 4 de la
+    secuencia de fisica de terreno/agua acordada con Diego, todavia sin
+    construir). 0.0 si tipo_agua == "" (sin agua). Para lago/poza, se
+    deriva de la MISMA geometria de cuenca que ya genera su forma
+    (nucleo/agua.py:_profundidades_cuenca) -- mas profunda cerca del
+    centro, casi nula en el borde, un gradiente que emerge de la cuenca
+    en vez de asignarse a mano. Para rio, valor FIJO uniforme
+    (config.agua.profundidad_metros_rio) -- simplificacion declarada, ver
+    docstring de nucleo/agua.py. NO se persiste, mismo motivo que
+    tipo_agua/tiene_agua."""
