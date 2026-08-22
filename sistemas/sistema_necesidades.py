@@ -1,10 +1,10 @@
 """
 sistemas/sistema_necesidades.py
 
-Sistema de metabolismo y necesidades biológicas (Fase 3: Metabolismo y Resolución).
-Gestiona el desgaste pasivo de necesidades, la reposición de energía por sueño,
-el drenaje de oxigenación por inmersión, la resolución estocástica de mortalidad
-(inanición, deshidratación, asfixia) y la instanciación de restos orgánicos (necromasa).
+Sistema metabólico y de balance fisiológico interno (Fase 3).
+Gestiona el decaimiento de necesidades básicas, la recuperación por sueño,
+la deriva térmica ambiental, la asfixia por inmersión y la mortalidad metabólica
+con depósito de necromasa y emisión de eventos espaciales.
 """
 
 from __future__ import annotations
@@ -26,8 +26,7 @@ from nucleo.reloj import Reloj
 
 class SistemaNecesidades:
     """
-    Procesa el ciclo metabólico tick a tick para todas las entidades vivas
-    que posean componentes de Necesidades e Identidad.
+    Actualiza el estado metabólico de todas las criaturas vivas en la Fase 3.
     """
 
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
@@ -36,37 +35,35 @@ class SistemaNecesidades:
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
-        """Extrae y tipa los parámetros de configuración para acceso O(1)."""
-        cfg_nec = self.config.get("necesidades", {})
-        self.cfg_defecto = cfg_nec.get("defecto", {})
-        self.cfg_especies = {
-            k: v for k, v in cfg_nec.items() if k != "defecto" and isinstance(v, dict)
-        }
+        """Extrae tasas de decaimiento y probabilidades críticas."""
+        self.cfg_nec = self.config.get("necesidades", {})
+        self.defecto = self.cfg_nec.get("defecto", {})
 
-        self.tasa_recuperacion_dormir: float = float(
-            cfg_nec.get("tasa_recuperacion_energia_al_dormir", 0.05)
+        self.tasa_recup_energia: float = float(
+            self.defecto.get("tasa_recuperacion_energia_al_dormir", 0.05)
         )
-        self.tasa_perdida_oxigenacion: float = float(
-            cfg_nec.get("tasa_perdida_oxigenacion_por_inmersion", 0.5)
+        self.tasa_drenaje_oxigeno: float = float(
+            self.defecto.get("tasa_perdida_oxigenacion_por_inmersion", 0.5)
         )
-        self.prob_muerte_ahogamiento: float = float(
-            cfg_nec.get("probabilidad_muerte_ahogamiento", 0.5)
+        self.tasa_recup_oxigeno: float = float(
+            self.defecto.get("tasa_recuperacion_oxigenacion", 1.0)
+        )
+        self.tasa_deriva_termica: float = float(
+            self.defecto.get("tasa_deriva_confort_termico", 0.03)
+        )
+        self.tasa_recup_seguridad: float = float(
+            self.defecto.get("tasa_recuperacion_seguridad", 0.05)
+        )
+
+        self.prob_muerte_inanicion: float = float(
+            self.defecto.get("probabilidad_muerte_saciedad_critica", 0.005)
         )
         self.prob_muerte_deshidratacion: float = float(
-            cfg_nec.get("probabilidad_muerte_deshidratacion", 0.005)
+            self.defecto.get("probabilidad_muerte_deshidratacion", 0.005)
         )
-
-        cfg_clima = self.config.get("clima", {}).get("efectos", {})
-        self.ajustes_confort: dict[str, float] = {
-            clima: float(datos.get("ajuste_confort", 0.0))
-            for clima, datos in cfg_clima.items()
-        }
-
-    def _obtener_parametro(self, especie_str: str, clave: str) -> float:
-        """Resuelve un parámetro metabólico consultando el override racial o el bloque por defecto."""
-        if especie_str in self.cfg_especies and clave in self.cfg_especies[especie_str]:
-            return float(self.cfg_especies[especie_str][clave])
-        return float(self.cfg_defecto.get(clave, 0.0))
+        self.prob_muerte_ahogamiento: float = float(
+            self.defecto.get("probabilidad_muerte_ahogamiento", 0.5)
+        )
 
     def ejecutar(
         self,
@@ -75,109 +72,144 @@ class SistemaNecesidades:
         reloj: Reloj,
         bus_eventos: BusEventos,
     ) -> None:
-        """
-        Ejecuta la actualización metabólica sobre todas las entidades con Necesidades.
-        Debe invocarse en la Fase 3 del tick, posterior a SistemaDecision y SistemaMovimiento.
-        """
+        """Procesa el decaimiento metabólico y resuelve la mortalidad fisiológica."""
         zona = mundo.territorio.zonas[0]
-        clima_actual = getattr(zona, "clima_actual", None)
-        nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
-        ajuste_confort = self.ajustes_confort.get(nombre_clima, 0.0)
+        entidades = sorted(
+            gestor.entidades_con(Necesidades, Posicion, DimensionesFisicas, Identidad)
+        )
 
-        entidades = sorted(gestor.entidades_con(Necesidades, Identidad))
+        for eid in entidades:
+            nec = gestor.obtener_componente(eid, Necesidades)
+            pos = gestor.obtener_componente(eid, Posicion)
+            dims = gestor.obtener_componente(eid, DimensionesFisicas)
+            ident = gestor.obtener_componente(eid, Identidad)
+            intencion = gestor.obtener_componente(eid, Intencion)
 
-        for entidad_id in entidades:
-            nec = gestor.obtener_componente(entidad_id, Necesidades)
-            identidad = gestor.obtener_componente(entidad_id, Identidad)
-            intencion = gestor.obtener_componente(entidad_id, Intencion)
-            pos = gestor.obtener_componente(entidad_id, Posicion)
-            dims = gestor.obtener_componente(entidad_id, DimensionesFisicas)
-
-            if nec is None or identidad is None:
+            if nec is None or pos is None or dims is None or ident is None:
                 continue
 
-            especie_str = identidad.especie.value
+            celda = zona.obtener_celda(pos.x, pos.y)
+            cfg_esp = self.cfg_nec.get(ident.especie.value, self.defecto)
 
-            # 1. Parámetros de desgaste racial
-            tasa_hambre = self._obtener_parametro(especie_str, "tasa_perdida_saciedad_por_tick")
-            tasa_energia = self._obtener_parametro(especie_str, "tasa_perdida_energia_por_tick")
-            tasa_hidratacion = self._obtener_parametro(especie_str, "tasa_perdida_hidratacion_por_tick")
-            tasa_aliviado = self._obtener_parametro(especie_str, "tasa_perdida_aliviado_por_tick")
-            tasa_reproductivo = self._obtener_parametro(especie_str, "tasa_perdida_impulso_reproductivo_por_tick")
-            prob_muerte_saciedad = self._obtener_parametro(especie_str, "probabilidad_muerte_saciedad_critica")
+            # 1. Decaimiento continuo de Saciedad, Hidratación, Aliviado y Energía
+            tasa_hambre = float(
+                cfg_esp.get(
+                    "tasa_perdida_saciedad_por_tick",
+                    self.defecto.get("tasa_perdida_saciedad_por_tick", 0.012),
+                )
+            )
+            tasa_sed = float(
+                cfg_esp.get(
+                    "tasa_perdida_hidratacion_por_tick",
+                    self.defecto.get("tasa_perdida_hidratacion_por_tick", 0.004),
+                )
+            )
+            tasa_alivio = float(
+                cfg_esp.get(
+                    "tasa_perdida_aliviado_por_tick",
+                    self.defecto.get("tasa_perdida_aliviado_por_tick", 0.01),
+                )
+            )
+            tasa_energia = float(
+                cfg_esp.get(
+                    "tasa_perdida_energia_por_tick",
+                    self.defecto.get("tasa_perdida_energia_por_tick", 0.01),
+                )
+            )
 
-            # 2. Desgaste metabólico pasivo
             nec.saciedad = max(0.0, nec.saciedad - tasa_hambre)
-            nec.hidratacion = max(0.0, nec.hidratacion - tasa_hidratacion)
-            nec.aliviado = max(0.0, nec.aliviado - tasa_aliviado)
-            nec.impulso_reproductivo = max(0.0, nec.impulso_reproductivo - tasa_reproductivo)
+            nec.hidratacion = max(0.0, nec.hidratacion - tasa_sed)
+            nec.aliviado = max(0.0, nec.aliviado - tasa_alivio)
 
-            # 3. Resolución de Energía / Sueño (Sincronía Fase 1 -> Fase 3)
+            # 2. Resolución de Sueño vs Fatiga
             if intencion is not None and intencion.accion == Accion.DORMIR:
-                nec.energia = min(1.0, nec.energia + self.tasa_recuperacion_dormir)
+                nec.energia = min(1.0, nec.energia + self.tasa_recup_energia)
             else:
                 nec.energia = max(0.0, nec.energia - tasa_energia)
 
-            # 4. Modulación de Confort Térmico por Clima
-            if ajuste_confort != 0.0:
-                nec.confort_termico = max(0.0, min(1.0, nec.confort_termico + ajuste_confort))
+            # 3. Asfixia por inmersión
+            prof_agua = profundidad_agua_potable(celda)
+            if prof_agua > dims.altura:
+                nec.oxigenacion = max(0.0, nec.oxigenacion - self.tasa_drenaje_oxigeno)
+            else:
+                nec.oxigenacion = min(1.0, nec.oxigenacion + self.tasa_recup_oxigeno)
 
-            # 5. Oxigenación e Inmersión en Agua Profunda
-            if pos is not None and dims is not None:
-                celda = zona.obtener_celda(pos.x, pos.y)
-                prof_agua = profundidad_agua_potable(celda)
-                
-                # Asfixia si la cota de agua excede la estatura corporal
-                if prof_agua > dims.altura:
-                    nec.oxigenacion = max(0.0, nec.oxigenacion - self.tasa_perdida_oxigenacion)
-                else:
-                    nec.oxigenacion = 1.0
+            # 4. Deriva de Confort Térmico estacional
+            obj_termico = float(
+                self.config.get("estaciones", {})
+                .get(reloj.estacion.value, {})
+                .get("objetivo_confort_termico", 0.5)
+            )
+            if nec.confort_termico < obj_termico:
+                nec.confort_termico = min(
+                    obj_termico, nec.confort_termico + self.tasa_deriva_termica
+                )
+            elif nec.confort_termico > obj_termico:
+                nec.confort_termico = max(
+                    obj_termico, nec.confort_termico - self.tasa_deriva_termica
+                )
 
-            # 6. Evaluación de Mortalidad Estocástica
-            muerto = False
-            causa_muerte = ""
+            # 5. Recuperación pasiva de Seguridad
+            if nec.seguridad < 1.0:
+                nec.seguridad = min(1.0, nec.seguridad + self.tasa_recup_seguridad)
 
-            if nec.oxigenacion <= 0.0 and self.rng.random() < self.prob_muerte_ahogamiento:
-                muerto = True
-                causa_muerte = "ahogamiento"
-            elif nec.hidratacion <= 0.0 and self.rng.random() < self.prob_muerte_deshidratacion:
-                muerto = True
-                causa_muerte = "deshidratacion"
-            elif nec.saciedad <= 0.0 and self.rng.random() < prob_muerte_saciedad:
-                muerto = True
-                causa_muerte = "inanicion"
+            # 6. Decaimiento de impulso reproductivo
+            tasa_rep = float(
+                self.defecto.get("tasa_perdida_impulso_reproductivo_por_tick", 0.005)
+            )
+            nec.impulso_reproductivo = max(0.0, nec.impulso_reproductivo - tasa_rep)
 
-            if muerto:
-                self._procesar_muerte(gestor, bus_eventos, reloj, entidad_id, identidad, pos, dims, causa_muerte)
+            # 7. Evaluación de Mortalidad Metabólica
+            causa_muerte = None
 
-    def _procesar_muerte(
+            if nec.oxigenacion <= 0.0:
+                if self.rng.random() < self.prob_muerte_ahogamiento:
+                    causa_muerte = "ahogamiento"
+            elif nec.saciedad <= 0.0:
+                if self.rng.random() < self.prob_muerte_inanicion:
+                    causa_muerte = "inanicion"
+            elif nec.hidratacion <= 0.0:
+                if self.rng.random() < self.prob_muerte_deshidratacion:
+                    causa_muerte = "deshidratacion"
+
+            if causa_muerte is not None:
+                self._resolver_deceso(
+                    gestor=gestor,
+                    bus_eventos=bus_eventos,
+                    reloj=reloj,
+                    entidad_id=eid,
+                    pos_x=pos.x,
+                    pos_y=pos.y,
+                    dims=dims,
+                    ident=ident,
+                    causa=causa_muerte,
+                )
+
+    def _resolver_deceso(
         self,
         gestor: GestorEntidades,
         bus_eventos: BusEventos,
         reloj: Reloj,
         entidad_id: int,
-        identidad: Identidad,
-        pos: Posicion | None,
-        dims: DimensionesFisicas | None,
+        pos_x: int,
+        pos_y: int,
+        dims: DimensionesFisicas,
+        ident: Identidad,
         causa: str,
     ) -> None:
-        """
-        Emite el evento canónico de defunción, deposita la biomasa inerte
-        en el grid mediante crear_necromasa y purga al agente biológico del gestor.
-        """
-        # Instanciar restos orgánicos en el sustrato antes de eliminar el agente vivo
-        if pos is not None and dims is not None:
-            masa_seca = dims.peso * 0.35
-            agua_tisular = dims.peso * 0.65
-            crear_necromasa(
-                gestor=gestor,
-                pos_x=pos.x,
-                pos_y=pos.y,
-                masa_organica=masa_seca,
-                agua_tisular=agua_tisular,
-                origen_especie=identidad.especie.value,
-                tasa_putrefaccion=0.05,
-            )
+        """Instancia la necromasa, emite el evento Muerte con coordenadas y purga la entidad."""
+        masa_seca = dims.peso * 0.35
+        agua_tisular = dims.peso * 0.65
+
+        crear_necromasa(
+            gestor=gestor,
+            pos_x=pos_x,
+            pos_y=pos_y,
+            masa_organica=masa_seca,
+            agua_tisular=agua_tisular,
+            origen_especie=ident.especie.value,
+            tasa_putrefaccion=0.05,
+        )
 
         bus_eventos.emitir(
             Evento(
@@ -187,8 +219,10 @@ class SistemaNecesidades:
                 entidad_id=entidad_id,
                 datos={
                     "causa": causa,
-                    "especie": identidad.especie.value,
-                    "nombre": identidad.nombre,
+                    "especie": ident.especie.value,
+                    "nombre": ident.nombre,
+                    "x": pos_x,
+                    "y": pos_y,
                 },
             )
         )

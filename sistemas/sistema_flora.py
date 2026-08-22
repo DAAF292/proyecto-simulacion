@@ -16,6 +16,7 @@ from componentes.planta import Planta
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_planta
+from nucleo.eventos import BusEventos
 from nucleo.flora import factor_produccion, factor_ribera
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -50,7 +51,7 @@ class SistemaFlora:
         gestor: GestorEntidades,
         mundo: Mundo,
         reloj: Reloj,
-        bus_eventos: Any,
+        bus_eventos: BusEventos,
     ) -> None:
         """
         Ejecuta el ciclo biológico de la flora al inicio de cada día.

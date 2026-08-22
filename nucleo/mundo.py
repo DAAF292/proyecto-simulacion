@@ -31,7 +31,7 @@ class Mundo:
         self.config = config
         self.rng = rng
 
-        # Instanciar el territorio inicial con la configuración y RNG del mapa
+        # Instanciar el territorio inicial propagando config y el generador RNG del mapa
         self.territorio = Territorio(
             ancho=self.ancho,
             alto=self.alto,

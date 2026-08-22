@@ -86,6 +86,8 @@ class SistemaCicloVital:
                             "causa": "vejez",
                             "especie": identidad.especie.value,
                             "nombre": identidad.nombre,
+                            "x": pos.x if pos else 0,
+                            "y": pos.y if pos else 0,
                         },
                     )
                 )

@@ -233,6 +233,8 @@ class SistemaDepredacion:
                     "cazador_id": cazador_id,
                     "especie": ident_presa.especie.value,
                     "nombre": ident_presa.nombre,
+                    "x": pos_x,
+                    "y": pos_y,
                 },
             )
         )
