@@ -49,6 +49,18 @@ class SistemaDesastres:
         self.dano_por_tick_en_llamas: float = float(
             cfg_des.get("dano_por_tick_en_llamas", 0.15)
         )
+        self.aporte_ceniza_planta: float = float(
+            cfg_des.get("aporte_ceniza_planta", 0.15)
+        )
+        self.fraccion_masa_seca_quemada: float = float(
+            cfg_des.get("fraccion_masa_seca_quemada", 0.20)
+        )
+        self.fraccion_agua_tisular_quemada: float = float(
+            cfg_des.get("fraccion_agua_tisular_quemada", 0.05)
+        )
+        self.tasa_putrefaccion_calcinada: float = float(
+            cfg_des.get("tasa_putrefaccion_calcinada", 0.15)
+        )
 
         cfg_clima = cfg_des.get("multiplicador_riesgo_por_clima", {})
         self.mult_riesgo_clima: dict[str, float] = {
@@ -60,7 +72,6 @@ class SistemaDesastres:
         self.techo_fertilidad: float = float(
             self.config.get("abono", {}).get("techo_fertilidad", 1.0)
         )
-        self.aporte_ceniza_planta: float = 0.15
 
     def ejecutar(
         self,
@@ -80,7 +91,6 @@ class SistemaDesastres:
 
         prob_efectiva = self.prob_ignicion_base * mult_clima
 
-        # Chequeo estocástico de ignición en bioma Bosque
         for y in range(zona.alto):
             for x in range(zona.ancho):
                 celda = zona.obtener_celda(x, y)
@@ -119,18 +129,15 @@ class SistemaDesastres:
         if not celdas_en_llamas:
             return
 
-        # 1. Propagación a celdas vecinas inflamables
         nuevos_focos: list[tuple[int, int]] = []
         extinciones: list[tuple[int, int]] = []
 
         direcciones = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 
         for fx, fy in celdas_en_llamas:
-            # Chequeo de extinción
             if self.rng.random() < self.prob_extincion:
                 extinciones.append((fx, fy))
 
-            # Chequeo de propagación
             for dx, dy in direcciones:
                 nx, ny = fx + dx, fy + dy
                 if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
@@ -149,14 +156,13 @@ class SistemaDesastres:
         for nx, ny in nuevos_focos:
             zona.obtener_celda(nx, ny).en_llamas = True
 
-        # 2. Destrucción de Flora en celdas ardiendo -> Ceniza edáfica
+        # 1. Flora en llamas -> Ceniza mineralizada
         plantas_a_purgar: list[int] = []
         for planta_id in sorted(gestor.entidades_con(Planta, Posicion)):
             pos_p = gestor.obtener_componente(planta_id, Posicion)
             if pos_p is not None:
                 celda_p = zona.obtener_celda(pos_p.x, pos_p.y)
                 if celda_p.en_llamas:
-                    # La quema mineraliza la planta y aporta fertilidad inmediata
                     celda_p.fertilidad = min(
                         self.techo_fertilidad,
                         celda_p.fertilidad + self.aporte_ceniza_planta,
@@ -166,8 +172,10 @@ class SistemaDesastres:
         for pid in plantas_a_purgar:
             gestor.eliminar_entidad(pid)
 
-        # 3. Daño térmico a Criaturas vivas -> Restos calcinados
-        criaturas = sorted(gestor.entidades_con(Posicion, PoolFisico, DimensionesFisicas, Identidad))
+        # 2. Criaturas vivas en llamas -> Necromasa calcinada
+        criaturas = sorted(
+            gestor.entidades_con(Posicion, PoolFisico, DimensionesFisicas, Identidad)
+        )
         for cid in criaturas:
             pos_c = gestor.obtener_componente(cid, Posicion)
             pool_c = gestor.obtener_componente(cid, PoolFisico)
@@ -179,14 +187,14 @@ class SistemaDesastres:
 
             celda_c = zona.obtener_celda(pos_c.x, pos_c.y)
             if celda_c.en_llamas:
-                # Daño fraccional a vitalidad
                 dano_neto = self.dano_por_tick_en_llamas * dims_c.vitalidad_maxima
                 pool_c.vitalidad = max(0.0, pool_c.vitalidad - dano_neto)
 
                 if pool_c.vitalidad <= 0.0:
-                    # Depósito de necromasa calcinada (poca agua tisular restante)
-                    masa_seca_quemada = dims_c.peso * 0.20
-                    agua_tisular_restante = dims_c.peso * 0.05
+                    masa_seca_quemada = dims_c.peso * self.fraccion_masa_seca_quemada
+                    agua_tisular_restante = (
+                        dims_c.peso * self.fraccion_agua_tisular_quemada
+                    )
                     crear_necromasa(
                         gestor=gestor,
                         pos_x=pos_c.x,
@@ -194,7 +202,7 @@ class SistemaDesastres:
                         masa_organica=masa_seca_quemada,
                         agua_tisular=agua_tisular_restante,
                         origen_especie=ident_c.especie.value,
-                        tasa_putrefaccion=0.15,
+                        tasa_putrefaccion=self.tasa_putrefaccion_calcinada,
                     )
 
                     bus_eventos.emitir(

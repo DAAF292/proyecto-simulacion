@@ -1,687 +1,554 @@
-"""Persistencia (paso 10): unica pieza que conoce SQLite -- el resto del
-nucleo no debe importar sqlite3 ni saber que esta tabla existe.
-
-Dos patrones de escritura distintos, segun la naturaleza del dato:
-
-- Incrementales (nunca se sobrescriben de golpe): `entidades` (una fila
-  por entidad que alguna vez existio -- viva=1 al nacer, viva=0 al morir,
-  nunca se borra) y `cronica_eventos` (append-only, solo NOTABLE/
-  HISTORICO -- RUIDO no se persiste). Se escriben en el momento en que
-  ocurre el hecho, no en un volcado periodico.
-- Snapshot (se sobrescriben por completo en cada guardado):
-  `componentes_estado`, `celdas_estado`, `configuracion_ejecucion`. No
-  importa el historico, solo el valor actual.
-
-tipo_terreno de las celdas NO se persiste -- se regenera con la misma
-semilla al cargar (generar_zona_bioma es determinista). Intencion
-tampoco -- SistemaDecision la recalcula sola en el primer tick tras
-cargar, a partir de las necesidades (que si estan guardadas).
-
-Nota sobre el generador aleatorio: aunque el paso 10 del orden de
-construccion solo pide guardar "semilla y tick_actual", eso no basta
-para reanudar de verdad -- si al cargar se resembrara el rng de partida
-desde la semilla, el flujo de numeros aleatorios se reiniciaria desde
-cero en vez de continuar donde se quedo, y una partida cargada divergiria
-de como habria seguido la misma ejecucion sin interrupcion. Por eso
-tambien se persiste el estado completo del rng de partida
-(random.getstate(), serializado con pickle). El rng usado SOLO para
-generar el mapa es independiente y siempre se resiembra desde la
-semilla (fresco), porque generar_zona_bioma es una funcion pura que no
-necesita continuidad -- volver a llamarla da siempre el mismo mapa.
 """
+nucleo/persistencia.py
+
+Capa de serialización y persistencia SQLite del estado de simulación.
+Gestiona el guardado y carga incremental de crónica y snapshots atómicos de:
+  - Entidades biológicas (criaturas vivas)
+  - Entidades vegetales (flora)
+  - Entidades inertes (necromasa / detritos orgánicos)
+  - Celdas y estado del generador pseudoaleatorio (RNG)
+"""
+
+from __future__ import annotations
+
 import json
-import os
 import pickle
+import random
 import sqlite3
+from pathlib import Path
+from typing import Any
 
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
+from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
-from componentes.intencion import Intencion
+from componentes.intencion import Accion, Intencion
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
+from componentes.necromasa import Necromasa
 from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
-from componentes.gestacion import Gestacion
 from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
+from nucleo.celda import Celda
 from nucleo.entidad import GestorEntidades
-from nucleo.eventos import Severidad
+from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.mundo import Mundo
+from nucleo.reloj import Reloj
 
-_ESQUEMA = """
-CREATE TABLE IF NOT EXISTS entidades (
-    id INTEGER PRIMARY KEY,
-    especie TEXT NOT NULL,
-    nombre TEXT,
-    viva INTEGER NOT NULL,
-    tick_nacimiento INTEGER NOT NULL DEFAULT 0,
-    id_madre INTEGER,
-    id_padre INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS componentes_estado (
-    entidad_id INTEGER PRIMARY KEY,
-    x INTEGER NOT NULL,
-    y INTEGER NOT NULL,
-    saciedad REAL NOT NULL,
-    energia REAL NOT NULL,
-    seguridad REAL NOT NULL,
-    hidratacion REAL NOT NULL,
-    aliviado REAL NOT NULL,
-    impulso_reproductivo REAL NOT NULL DEFAULT 1.0,
-    peso REAL NOT NULL,
-    fuerza REAL NOT NULL,
-    agilidad REAL NOT NULL,
-    vitalidad_maxima REAL NOT NULL,
-    resistencia_maxima REAL NOT NULL,
-    curacion REAL NOT NULL,
-    recuperacion REAL NOT NULL,
-    valentia REAL NOT NULL,
-    sociabilidad REAL NOT NULL,
-    agresividad REAL NOT NULL,
-    dominancia REAL NOT NULL,
-    empatia REAL NOT NULL,
-    lealtad REAL NOT NULL,
-    fe REAL NOT NULL,
-    curiosidad REAL NOT NULL,
-    inteligencia REAL NOT NULL,
-    memoria REAL NOT NULL,
-    voluntad REAL NOT NULL,
-    resiliencia REAL NOT NULL,
-    estabilidad_mental_maxima REAL NOT NULL,
-    consciencia REAL NOT NULL,
-    altura REAL NOT NULL,
-    longevidad REAL NOT NULL,
-    velocidad REAL NOT NULL,
-    resistencia_enfermedad REAL NOT NULL,
-    agudeza_sensorial REAL NOT NULL,
-    vitalidad_actual REAL NOT NULL,
-    resistencia_actual REAL NOT NULL,
-    estabilidad_mental_actual REAL NOT NULL,
-    sexo TEXT NOT NULL DEFAULT 'hembra',
-    duracion_gestacion_dias REAL NOT NULL DEFAULT 0,
-    tick_inicio_gestacion INTEGER,
-    gestacion_padre_id INTEGER,
-    gestacion_padre_snapshot TEXT,
-    recuerdos TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE TABLE IF NOT EXISTS cronica_eventos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tick INTEGER NOT NULL,
-    tipo TEXT NOT NULL,
-    severidad TEXT NOT NULL,
-    entidad_id INTEGER,
-    datos TEXT
-);
-
-CREATE TABLE IF NOT EXISTS configuracion_ejecucion (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    semilla INTEGER NOT NULL,
-    tick_actual INTEGER NOT NULL,
-    version_esquema TEXT NOT NULL,
-    rng_estado BLOB
-);
-
-CREATE TABLE IF NOT EXISTS celdas_estado (
-    x INTEGER NOT NULL,
-    y INTEGER NOT NULL,
-    recursos TEXT NOT NULL,
-    fertilidad REAL NOT NULL DEFAULT 0.0,
-    en_llamas INTEGER NOT NULL DEFAULT 0,
-    tiene_recurso INTEGER NOT NULL DEFAULT 0,
-    tipo_recurso TEXT NOT NULL DEFAULT '',
-    profundidad_charco REAL NOT NULL DEFAULT 0.0,
-    PRIMARY KEY (x, y)
-);
-
-CREATE TABLE IF NOT EXISTS plantas_estado (
-    entidad_id INTEGER PRIMARY KEY,
-    x INTEGER NOT NULL,
-    y INTEGER NOT NULL,
-    especie TEXT NOT NULL,
-    etapa REAL NOT NULL
-);
-"""
-
-# 0.2: Bloque B del plan de migracion a criatura.docx -- componentes_estado
-# separa DimensionesFisicas (peso, fuerza, agilidad) de Temperamento
-# (valentia, sociabilidad, agresividad), sustituyendo a la vieja columna
-# unica de Categoria (que incluia ademas 'resistencia', retirada -- ver
-# sistema_depredacion.py para su reemplazo por fuerza+agilidad).
-# 0.3: Bloque C1 -- se anaden las dimensiones fijas vitalidad_maxima,
-# resistencia_maxima, curacion, recuperacion (DimensionesFisicas) y el
-# componente dinamico PoolFisico (vitalidad_actual, resistencia_actual).
-# Sin mecanica de consumo todavia (Bloque C2, pendiente): estos valores
-# se persisten para que el sustrato quede completo, aunque hoy no hay
-# nada que los haga variar mas alla de la regeneracion pasiva.
-# 0.4: Bloque D1 -- se anade hidratacion a Necesidades (segunda necesidad
-# fisica nueva tras saciedad, resuelta bebiendo en terreno Ribera).
-# 0.5: Bloque D2 -- se anade aliviado a Necesidades (tercera necesidad
-# fisica nueva, resuelta in situ sin buscar ningun recurso). oxigenacion
-# y confort_termico (Bloque D3) NO se persisten -- declaradas sin
-# mecanica, nada las muta, cargar siempre reconstruye el mismo valor
-# por defecto.
-# 0.6: Bloque E -- se anaden a Temperamento dominancia, empatia, lealtad,
-# fe y curiosidad. A diferencia de D3, estas SI se persisten: se sortean
-# por individuo al nacer y deben sobrevivir a guardar/cargar aunque
-# ningun sistema las lea todavia.
-# 0.7: Bloque F1 -- componente CapacidadMental nuevo (inteligencia,
-# memoria, voluntad, resiliencia, estabilidad_mental_maxima, consciencia)
-# y componente dinamico PoolMental (estabilidad_mental_actual). Mismo
-# criterio que Temperamento: se sortean/mutan por individuo, se
-# persisten aunque casi ningun sistema los lea todavia.
-# 0.8: Abono (celdas_estado gana fertilidad) -- a diferencia de
-# tipo_terreno/tiene_agua (Bloque agua), fertilidad SI se persiste: es
-# estado mutado por la partida real (Accion.ALIVIARSE + decaimiento por
-# dia), no derivable de la semilla del mundo.
-# 0.9: Bloque G -- componentes_estado gana las 5 dimensiones fisicas fijas
-# restantes de criatura.docx 3.3 (altura, longevidad, velocidad,
-# resistencia_enfermedad, agudeza_sensorial). Mismo criterio que Bloque E/
-# F1: se sortean por individuo al nacer y deben sobrevivir a guardar/
-# cargar aunque ningun sistema las lea todavia (ver dimensiones_fisicas.py
-# para el detalle de cuales tienen dato real de referencia y cuales son
-# provisionales por analogia).
-# 0.10: Ciclo vital, paso 1 (fundamento de edad, ver
-# componentes/identidad.py) -- entidades gana tick_nacimiento. Vive en
-# `entidades` (no en componentes_estado) porque es dato de nacimiento
-# inmutable, mismo criterio que especie/nombre -- no una edad que se
-# recalcule o resetee, se persiste una unica vez al crear la entidad y
-# nunca se vuelve a escribir.
-# 0.11: Ciclo vital, 6.3 paso 1 (componentes/reproduccion.py) --
-# componentes_estado gana sexo y duracion_gestacion_dias. A diferencia de
-# tick_nacimiento, SI viven en componentes_estado (no en `entidades`):
-# aunque son fijos de por vida como el resto del plano fisico/
-# temperamento/capacidad mental, siguen ese mismo patron de persistencia
-# por consistencia con como se guarda el resto de rango-racial-y-sorteo,
-# no por ninguna necesidad de mutabilidad futura.
-# 0.12: Ciclo vital, 6.3 paso 2 (componentes/gestacion.py) --
-# componentes_estado gana tick_inicio_gestacion, NULLABLE (a diferencia de
-# todo lo demas de esta tabla): Gestacion es el primer componente
-# verdaderamente opcional del motor, solo existe en hembras gestando ahora
-# mismo. NULL significa "no gestando", no un valor por defecto sin
-# sentido -- omitirlo del todo habria perdido embarazos reales al
-# guardar/cargar, que es justo el tipo de estado mutado por la partida que
-# esta tabla existe para no perder.
-# 0.15: Fase terreno 4 (flora como entidad con crecimiento -- ver
-# componentes/planta.py, sistemas/sistema_flora.py). Dos cambios:
-# (a) tabla nueva `plantas_estado`, patron SNAPSHOT (como celdas_estado,
-#     no como entidades/componentes_estado): una Planta no tiene
-#     identidad individual que importe conservar historicamente (a
-#     diferencia de un gnomo o un lobo con nombre y linaje) -- si se
-#     destruye y otra brota en su lugar manana, no es un hecho narrable
-#     distinto. Por eso NO se registra en la tabla `entidades` (pensada
-#     para especie/nombre/tick_nacimiento/parentesco de una criatura, no
-#     encaja) -- entidad_id sigue viniendo del mismo contador global de
-#     GestorEntidades (los ids de planta y de criatura conviven en el
-#     mismo espacio de numeros, nunca colisionan), pero su ciclo de vida
-#     entero vive en esta tabla aparte. cargar_partida() tiene que
-#     considerar el MAXIMO id de AMBAS tablas (entidades y
-#     plantas_estado) para no arriesgarse a reciclar un id de planta al
-#     crear una entidad nueva tras cargar.
-# (b) celdas_estado gana tiene_recurso (INTEGER 0/1): dejo de ser
-#     derivable de la semilla del mundo en el momento en que
-#     sistema_flora.py empezo a poder mutarlo en juego (propagacion lo
-#     activa, un incendio lo desactiva -- ver nucleo/celda.py,
-#     redefinicion del campo) -- mismo criterio que fertilidad/en_llamas.
-# 0.14: Fase terreno 1 (estaciones, clima, desastres -- ver nucleo/clima.py,
-# sistemas/sistema_clima.py, sistemas/sistema_desastres.py). celdas_estado
-# gana en_llamas (INTEGER 0/1, mismo patron booleano-como-entero que el
-# resto del esquema): es estado mutado por la partida real (un incendio en
-# curso), no derivable de la semilla, mismo criterio que fertilidad. NO se
-# anade columna para clima_actual/estacion_previa (ZonaBioma) -- decision
-# deliberada, documentada en nucleo/zona_bioma.py: se resiembran en el
-# primer corte de dia tras cargar, mismo estatus de imprecision aceptada
-# que ya tiene Intencion.
-# 0.13: Ciclo vital, 6.3 paso 3 (nacimiento -- herencia y parentesco).
-# Dos cambios de esquema distintos para dos datos distintos:
-# (a) `entidades` gana id_madre/id_padre (NULLABLE): parentesco, dato de
-#     nacimiento inmutable como tick_nacimiento -- vive junto a el, no en
-#     componentes_estado, por el mismo criterio documentado en
-#     componentes/identidad.py. NULL = "generacion cero" (poblacion
-#     inicial o entidad de antes de este bloque), no "desconocido".
-# (b) `componentes_estado` gana gestacion_padre_id (INTEGER) y
-#     gestacion_padre_snapshot (TEXT, JSON): la instantanea del padre que
-#     componentes/gestacion.py fija en la concepcion (dimensiones,
-#     temperamento, capacidad_mental, duracion_gestacion_padre). Se
-#     serializa como UN campo JSON en vez de explotar en ~30 columnas
-#     planas nuevas (una por atributo heredable x3 componentes) -- el
-#     resto de la tabla sigue el patron de columnas planas porque esos
-#     valores se leen y escriben individualmente por muchos sistemas; esta
-#     instantanea, en cambio, solo se escribe una vez (al concebir) y solo
-#     se lee una vez completa (al nacer, siempre los 3 componentes juntos),
-#     asi que no hay ninguna ventaja en tener columnas sueltas y si un
-#     coste real de legibilidad del esquema. Ambas columnas NULLABLE,
-#     mismo criterio que tick_inicio_gestacion: NULL junto con
-#     tick_inicio_gestacion NULL significa "no gestando ahora mismo".
-# 0.16: Correccion biomas/especies (posterior a fase terreno 4, discutida
-# y confirmada con Diego -- ver nucleo/celda.py, componentes/planta.py,
-# nucleo/flora.py). Tres cambios de esquema:
-# (a) `plantas_estado.tipo_terreno` renombrada a `especie` (TEXT, mismo
-#     tipo): una Planta ya no lleva su bioma, lleva la clave de su especie
-#     en el catalogo config/constantes.yaml (flora.especies) -- ya no hay
-#     conversion a/desde TipoTerreno al guardar/cargar, especie es un
-#     string plano de punta a punta.
-# (b) `celdas_estado.recursos` cambia de REAL a TEXT: pasa a guardar un
-#     objeto JSON {nombre_recurso: cantidad} en vez de un unico float --
-#     una especie puede producir mas de un recurso de categoria alimento a
-#     la vez (hierba_silvestre: raices Y hierba), asi que la celda necesita
-#     poder llevar varias cantidades simultaneas. Mismo patron JSON-en-TEXT
-#     que gestacion_padre_snapshot (0.13).
-# (c) `celdas_estado` gana `tipo_recurso` (TEXT, mismo campo y mismo
-#     motivo que en Celda -- ver nucleo/celda.py): que ESPECIE ocupa la
-#     celda ahora mismo, dato DINAMICO (propagacion lo activa, un incendio
-#     lo desactiva), no derivable de la semilla -- un bioma puede alojar
-#     mas de una especie, asi que el bioma solo ya no basta para saber cual
-#     hay en una celda concreta.
-# 0.17: Memoria espacial (nucleo/memoria.py, discutida y confirmada con
-# Diego -- ver componentes/memoria_espacial.py). `componentes_estado`
-# gana `recuerdos` (TEXT, JSON) -- mismo patron JSON-en-TEXT que
-# `recursos`/`gestacion_padre_snapshot`: un diccionario {tipo_recuerdo:
-# [[x, y], ...]}, no columnas planas, porque el numero de claves no esta
-# cerrado (hoy solo 'comida'/'agua', pensado para crecer sin migrar el
-# esquema otra vez -- ver docstring de MemoriaEspacial). SI se persiste,
-# a diferencia de datos deterministas de celda -- es experiencia
-# acumulada de una vida entera, perderla al recargar seria una
-# inconsistencia real, no una imprecision aceptable como Intencion.
-# 0.18: impulso_reproductivo (componentes/necesidades.py, diseno conjunto
-# de reproduccion 2026-08-20 -- ver sistema_reproduccion.py y sistema_
-# decision.py). `componentes_estado` gana `impulso_reproductivo` (REAL,
-# DEFAULT 1.0) -- mismo patron que saciedad/energia/hidratacion/aliviado:
-# es estado que evoluciona por tick y no se puede derivar del entorno al
-# recargar (a diferencia de oxigenacion/confort_termico, que SI se
-# recalculan y por eso nunca tuvieron columna propia).
-# 0.19: Charcos efimeros (pieza 3 de la revision del sistema de agua,
-# 2026-08-21 -- ver nucleo/celda.py:profundidad_charco y sistemas/
-# sistema_recursos.py). `celdas_estado` gana `profundidad_charco` (REAL,
-# DEFAULT 0.0) -- SI se persiste, mismo motivo que fertilidad/tiene_
-# recurso/en_llamas (estado mutado por la partida real, no derivable de
-# la semilla del mundo): a diferencia de profundidad_agua (geografica,
-# nunca se muta en juego, por eso nunca tuvo columna propia), un charco
-# sube y baja por clima/consumo, perderlo al recargar borraria una
-# tormenta a medio evaporar sin motivo.
-_VERSION_ESQUEMA = "0.19-fase0"
+VERSION_ESQUEMA = "0.20-fase0"
 
 
-def _conectar(ruta_db: str) -> sqlite3.Connection:
-    directorio = os.path.dirname(ruta_db)
-    if directorio:
-        os.makedirs(directorio, exist_ok=True)
-    conn = sqlite3.connect(ruta_db)
-    conn.executescript(_ESQUEMA)
-    return conn
+class Persistencia:
+    """Gestiona la base de datos SQLite para snapshots y crónica histórica."""
 
+    def __init__(self, ruta_db: Path) -> None:
+        self.ruta_db = ruta_db
+        self.ruta_db.parent.mkdir(parents=True, exist_ok=True)
+        self._inicializar_tablas()
 
-def registrar_entidad_nueva(
-    ruta_db: str, id_entidad: int, especie: str, nombre, tick_nacimiento: int = 0,
-    id_madre: int | None = None, id_padre: int | None = None,
-) -> None:
-    with _conectar(ruta_db) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO entidades (id, especie, nombre, viva, tick_nacimiento, id_madre, id_padre) "
-            "VALUES (?, ?, ?, 1, ?, ?, ?)",
-            (id_entidad, especie, nombre, tick_nacimiento, id_madre, id_padre),
-        )
+    def _conectar(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.ruta_db)
 
+    def _inicializar_tablas(self) -> None:
+        """Crea el esquema relacional si no existe."""
+        with self._conectar() as con:
+            cur = con.cursor()
 
-def marcar_entidad_muerta(ruta_db: str, id_entidad: int) -> None:
-    with _conectar(ruta_db) as conn:
-        conn.execute("UPDATE entidades SET viva = 0 WHERE id = ?", (id_entidad,))
-
-
-def registrar_eventos(ruta_db: str, eventos: list) -> None:
-    narrables = [e for e in eventos if e.severidad != Severidad.RUIDO]
-    if not narrables:
-        return
-    with _conectar(ruta_db) as conn:
-        conn.executemany(
-            "INSERT INTO cronica_eventos (tick, tipo, severidad, entidad_id, datos) VALUES (?, ?, ?, ?, ?)",
-            [
-                (e.tick, e.tipo, e.severidad.value, e.entidad_id, json.dumps(e.datos, ensure_ascii=False))
-                for e in narrables
-            ],
-        )
-
-
-def guardar_estado(ruta_db: str, semilla: int, tick_actual: int, gestor, zona, rng_juego) -> None:
-    with _conectar(ruta_db) as conn:
-        conn.execute("DELETE FROM componentes_estado")
-        conn.execute("DELETE FROM celdas_estado")
-        conn.execute("DELETE FROM plantas_estado")
-        conn.execute("DELETE FROM configuracion_ejecucion")
-
-        filas_componentes = []
-        for id_entidad in gestor.entidades_con(
-            Posicion, Necesidades, DimensionesFisicas, Temperamento, PoolFisico,
-            CapacidadMental, PoolMental, Reproduccion, MemoriaEspacial,
-        ):
-            pos = gestor.obtener_componente(id_entidad, Posicion)
-            nec = gestor.obtener_componente(id_entidad, Necesidades)
-            dim = gestor.obtener_componente(id_entidad, DimensionesFisicas)
-            tem = gestor.obtener_componente(id_entidad, Temperamento)
-            pool = gestor.obtener_componente(id_entidad, PoolFisico)
-            cap = gestor.obtener_componente(id_entidad, CapacidadMental)
-            pool_m = gestor.obtener_componente(id_entidad, PoolMental)
-            rep = gestor.obtener_componente(id_entidad, Reproduccion)
-            mem = gestor.obtener_componente(id_entidad, MemoriaEspacial)
-            gest = gestor.obtener_componente(id_entidad, Gestacion)
-            if gest is not None:
-                snapshot_padre = json.dumps({
-                    "dimensiones": vars(gest.dimensiones_padre),
-                    "temperamento": vars(gest.temperamento_padre),
-                    "capacidad_mental": vars(gest.capacidad_mental_padre),
-                    "duracion_gestacion_padre": gest.duracion_gestacion_padre,
-                    # tamano_camada (2026-08-21, ver componentes/gestacion.py):
-                    # se guarda dentro de este mismo snapshot en vez de
-                    # anadir una columna nueva -- es un dato fijado en la
-                    # CONCEPCION, exactamente el mismo momento que el resto
-                    # de este diccionario, no una columna independiente con
-                    # su propia semantica de NULL.
-                    "tamano_camada": gest.tamano_camada,
-                }, ensure_ascii=False)
-            else:
-                snapshot_padre = None
-            filas_componentes.append((
-                id_entidad, pos.x, pos.y,
-                nec.saciedad, nec.energia, nec.seguridad, nec.hidratacion, nec.aliviado,
-                nec.impulso_reproductivo,
-                dim.peso, dim.fuerza, dim.agilidad,
-                dim.vitalidad_maxima, dim.resistencia_maxima, dim.curacion, dim.recuperacion,
-                tem.valentia, tem.sociabilidad, tem.agresividad,
-                tem.dominancia, tem.empatia, tem.lealtad, tem.fe, tem.curiosidad,
-                cap.inteligencia, cap.memoria, cap.voluntad, cap.resiliencia,
-                cap.estabilidad_mental_maxima, cap.consciencia,
-                dim.altura, dim.longevidad, dim.velocidad,
-                dim.resistencia_enfermedad, dim.agudeza_sensorial,
-                pool.vitalidad, pool.resistencia, pool_m.estabilidad,
-                rep.sexo.value, rep.duracion_gestacion_dias,
-                gest.tick_inicio if gest is not None else None,
-                gest.id_padre if gest is not None else None,
-                snapshot_padre,
-                json.dumps(mem.recuerdos, ensure_ascii=False),
-            ))
-        conn.executemany(
-            """INSERT INTO componentes_estado
-               (entidad_id, x, y, saciedad, energia, seguridad, hidratacion, aliviado,
-                impulso_reproductivo, peso, fuerza,
-                agilidad, vitalidad_maxima, resistencia_maxima, curacion, recuperacion,
-                valentia, sociabilidad, agresividad, dominancia, empatia, lealtad, fe, curiosidad,
-                inteligencia, memoria, voluntad, resiliencia, estabilidad_mental_maxima, consciencia,
-                altura, longevidad, velocidad, resistencia_enfermedad, agudeza_sensorial,
-                vitalidad_actual, resistencia_actual, estabilidad_mental_actual,
-                sexo, duracion_gestacion_dias, tick_inicio_gestacion,
-                gestacion_padre_id, gestacion_padre_snapshot, recuerdos)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            filas_componentes,
-        )
-
-        filas_celdas = [
-            (
-                x, y, json.dumps(celda.recursos), celda.fertilidad,
-                int(celda.en_llamas), int(celda.tiene_recurso), celda.tipo_recurso,
-                celda.profundidad_charco,
+            # 1. Registro permanente de entidades históricas
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS entidades (
+                    id INTEGER PRIMARY KEY,
+                    especie TEXT NOT NULL,
+                    nombre TEXT,
+                    viva BOOLEAN NOT NULL,
+                    tick_nacimiento INTEGER NOT NULL,
+                    id_madre INTEGER,
+                    id_padre INTEGER
+                )
+                """
             )
-            for x, y, celda in zona.celdas()
+
+            # 2. Snapshot de criaturas vivas
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS componentes_estado (
+                    entidad_id INTEGER PRIMARY KEY,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    saciedad REAL NOT NULL,
+                    energia REAL NOT NULL,
+                    seguridad REAL NOT NULL,
+                    hidratacion REAL NOT NULL,
+                    aliviado REAL NOT NULL,
+                    oxigenacion REAL NOT NULL,
+                    confort_termico REAL NOT NULL,
+                    impulso_reproductivo REAL NOT NULL,
+                    peso REAL NOT NULL,
+                    altura REAL NOT NULL,
+                    longevidad REAL NOT NULL,
+                    fuerza REAL NOT NULL,
+                    agilidad REAL NOT NULL,
+                    velocidad REAL NOT NULL,
+                    resistencia_enfermedad REAL NOT NULL,
+                    agudeza_sensorial REAL NOT NULL,
+                    vitalidad_maxima REAL NOT NULL,
+                    resistencia_maxima REAL NOT NULL,
+                    curacion REAL NOT NULL,
+                    recuperacion REAL NOT NULL,
+                    vitalidad REAL NOT NULL,
+                    resistencia REAL NOT NULL,
+                    valentia REAL NOT NULL,
+                    sociabilidad REAL NOT NULL,
+                    agresividad REAL NOT NULL,
+                    dominancia REAL NOT NULL,
+                    empatia REAL NOT NULL,
+                    lealtad REAL NOT NULL,
+                    fe REAL NOT NULL,
+                    curiosidad REAL NOT NULL,
+                    inteligencia REAL NOT NULL,
+                    memoria REAL NOT NULL,
+                    voluntad REAL NOT NULL,
+                    resiliencia REAL NOT NULL,
+                    estabilidad_mental_maxima REAL NOT NULL,
+                    consciencia REAL NOT NULL,
+                    estabilidad REAL NOT NULL,
+                    sexo TEXT NOT NULL,
+                    duracion_gestacion_dias REAL NOT NULL,
+                    tick_inicio_gestacion INTEGER,
+                    gestacion_padre_id INTEGER,
+                    gestacion_padre_snapshot TEXT,
+                    recuerdos TEXT
+                )
+                """
+            )
+
+            # 3. Snapshot de flora
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS plantas_estado (
+                    entidad_id INTEGER PRIMARY KEY,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    especie TEXT NOT NULL,
+                    etapa REAL NOT NULL
+                )
+                """
+            )
+
+            # 4. Snapshot de necromasa
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS necromasa_estado (
+                    entidad_id INTEGER PRIMARY KEY,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    masa_organica REAL NOT NULL,
+                    agua_tisular REAL NOT NULL,
+                    tasa_putrefaccion REAL NOT NULL,
+                    origen_especie TEXT NOT NULL
+                )
+                """
+            )
+
+            # 5. Snapshot dinámico de celdas
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS celdas_estado (
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    fertilidad REAL NOT NULL,
+                    profundidad_charco REAL NOT NULL,
+                    en_llamas BOOLEAN NOT NULL,
+                    recursos TEXT NOT NULL,
+                    PRIMARY KEY (x, y)
+                )
+                """
+            )
+
+            # 6. Crónica de eventos (incremental)
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cronica_eventos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tick INTEGER NOT NULL,
+                    tipo TEXT NOT NULL,
+                    severidad TEXT NOT NULL,
+                    entidad_id INTEGER,
+                    datos TEXT
+                )
+                """
+            )
+
+            # 7. Configuración y generador RNG
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS configuracion_ejecucion (
+                    clave TEXT PRIMARY KEY,
+                    valor BLOB
+                )
+                """
+            )
+            con.commit()
+
+    def registrar_entidad_nueva(self, entidad_id: int, datos: dict[str, Any]) -> None:
+        """Registra una entidad recién nacida en la tabla histórica."""
+        with self._conectar() as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO entidades (id, especie, nombre, viva, tick_nacimiento, id_madre, id_padre)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entidad_id,
+                    datos.get("especie", ""),
+                    datos.get("nombre"),
+                    True,
+                    datos.get("tick_nacimiento", 0),
+                    datos.get("id_madre"),
+                    datos.get("id_padre"),
+                ),
+            )
+            con.commit()
+
+    def persistir_eventos(self, eventos: list[Evento]) -> None:
+        """Persiste eventos notables e históricos."""
+        filas = [
+            (
+                ev.tick,
+                ev.tipo,
+                ev.severidad.value,
+                ev.entidad_id,
+                json.dumps(ev.datos) if ev.datos else None,
+            )
+            for ev in eventos
+            if ev.severidad in (Severidad.NOTABLE, Severidad.HISTORICO)
         ]
-        conn.executemany(
-            """INSERT INTO celdas_estado (x, y, recursos, fertilidad, en_llamas, tiene_recurso, tipo_recurso, profundidad_charco)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            filas_celdas,
-        )
+        if not filas:
+            return
+        with self._conectar() as con:
+            cur = con.cursor()
+            cur.executemany(
+                """
+                INSERT INTO cronica_eventos (tick, tipo, severidad, entidad_id, datos)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                filas,
+            )
+            con.commit()
 
-        filas_plantas = []
-        for id_planta in gestor.entidades_con(Posicion, Planta):
-            pos = gestor.obtener_componente(id_planta, Posicion)
-            planta = gestor.obtener_componente(id_planta, Planta)
-            filas_plantas.append((id_planta, pos.x, pos.y, planta.especie, planta.etapa))
-        conn.executemany(
-            "INSERT INTO plantas_estado (entidad_id, x, y, especie, etapa) VALUES (?, ?, ?, ?, ?)",
-            filas_plantas,
-        )
+    def guardar_snapshot(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        rng_juego: random.Random,
+    ) -> None:
+        """Serializa el estado completo en una transacción atómica."""
+        zona = mundo.territorio.zonas[0]
 
-        conn.execute(
-            """INSERT INTO configuracion_ejecucion (id, semilla, tick_actual, version_esquema, rng_estado)
-               VALUES (1, ?, ?, ?, ?)""",
-            (semilla, tick_actual, _VERSION_ESQUEMA, pickle.dumps(rng_juego.getstate())),
-        )
+        with self._conectar() as con:
+            cur = con.cursor()
 
+            # A. Criaturas
+            cur.execute("DELETE FROM componentes_estado")
+            filas_criaturas = []
+            for eid in sorted(gestor.entidades_con(Identidad, Posicion, Necesidades, DimensionesFisicas)):
+                pos = gestor.obtener_componente(eid, Posicion)
+                nec = gestor.obtener_componente(eid, Necesidades)
+                dims = gestor.obtener_componente(eid, DimensionesFisicas)
+                pf = gestor.obtener_componente(eid, PoolFisico)
+                temp = gestor.obtener_componente(eid, Temperamento)
+                cm = gestor.obtener_componente(eid, CapacidadMental)
+                pm = gestor.obtener_componente(eid, PoolMental)
+                rep = gestor.obtener_componente(eid, Reproduccion)
+                gest = gestor.obtener_componente(eid, Gestacion)
+                mem = gestor.obtener_componente(eid, MemoriaEspacial)
 
-def hay_partida_guardada(ruta_db: str) -> bool:
-    if not os.path.exists(ruta_db):
-        return False
-    with _conectar(ruta_db) as conn:
-        fila = conn.execute("SELECT 1 FROM configuracion_ejecucion LIMIT 1").fetchone()
-        return fila is not None
+                if pos and nec and dims and pf and temp and cm and pm and rep:
+                    filas_criaturas.append(
+                        (
+                            eid,
+                            pos.x,
+                            pos.y,
+                            nec.saciedad,
+                            nec.energia,
+                            nec.seguridad,
+                            nec.hidratacion,
+                            nec.aliviado,
+                            nec.oxigenacion,
+                            nec.confort_termico,
+                            nec.impulso_reproductivo,
+                            dims.peso,
+                            dims.altura,
+                            dims.longevidad,
+                            dims.fuerza,
+                            dims.agilidad,
+                            dims.velocidad,
+                            dims.resistencia_enfermedad,
+                            dims.agudeza_sensorial,
+                            dims.vitalidad_maxima,
+                            dims.resistencia_maxima,
+                            dims.curacion,
+                            dims.recuperacion,
+                            pf.vitalidad,
+                            pf.resistencia,
+                            temp.valentia,
+                            temp.sociabilidad,
+                            temp.agresividad,
+                            temp.dominancia,
+                            temp.empatia,
+                            temp.lealtad,
+                            temp.fe,
+                            temp.curiosidad,
+                            cm.inteligencia,
+                            cm.memoria,
+                            cm.voluntad,
+                            cm.resiliencia,
+                            cm.estabilidad_mental_maxima,
+                            cm.consciencia,
+                            pm.estabilidad,
+                            rep.sexo.value,
+                            rep.duracion_gestacion_dias,
+                            gest.tick_inicio if gest else None,
+                            gest.padre_id if gest else None,
+                            json.dumps(gest.padre_snapshot) if gest and gest.padre_snapshot else None,
+                            json.dumps(mem.recuerdos) if mem else None,
+                        )
+                    )
+            cur.executemany(
+                """
+                INSERT INTO componentes_estado VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?
+                )
+                """,
+                filas_criaturas,
+            )
 
+            # B. Flora
+            cur.execute("DELETE FROM plantas_estado")
+            filas_flora = []
+            for pid in sorted(gestor.entidades_con(Planta, Posicion)):
+                planta = gestor.obtener_componente(pid, Planta)
+                pos_p = gestor.obtener_componente(pid, Posicion)
+                if planta and pos_p:
+                    filas_flora.append((pid, pos_p.x, pos_p.y, planta.especie, planta.etapa))
+            cur.executemany("INSERT INTO plantas_estado VALUES (?, ?, ?, ?, ?)", filas_flora)
 
-def _reconstruir_gestacion(tick_inicio_gestacion, gestacion_padre_id, gestacion_padre_snapshot) -> list:
-    """tick_inicio_gestacion es NULL exactamente cuando la entidad no
-    esta gestando (ver 0.12 en el historico de _VERSION_ESQUEMA) --
-    gestacion_padre_id/snapshot viajan siempre junto con el, nunca por
-    separado, asi que basta comprobar el primero. Devuelve una lista de
-    0 o 1 elementos para poder sumarla con + a la lista de componentes
-    fijos, mismo patron que ya usaba esta funcion antes de extraerse."""
-    if tick_inicio_gestacion is None:
-        return []
-    snapshot = json.loads(gestacion_padre_snapshot)
-    return [Gestacion(
-        tick_inicio=tick_inicio_gestacion,
-        id_padre=gestacion_padre_id,
-        dimensiones_padre=DimensionesFisicas(**snapshot["dimensiones"]),
-        temperamento_padre=Temperamento(**snapshot["temperamento"]),
-        capacidad_mental_padre=CapacidadMental(**snapshot["capacidad_mental"]),
-        duracion_gestacion_padre=snapshot["duracion_gestacion_padre"],
-        # tamano_camada (2026-08-21): .get() con default 1, no acceso
-        # directo -- una partida guardada ANTES de este cambio no tiene
-        # esta clave en el snapshot; 1 reproduce el comportamiento previo
-        # a esta pieza para esas gestaciones ya en curso, en vez de
-        # romper la carga.
-        tamano_camada=snapshot.get("tamano_camada", 1),
-    )]
+            # C. Necromasa
+            cur.execute("DELETE FROM necromasa_estado")
+            filas_necromasa = []
+            for nid in sorted(gestor.entidades_con(Necromasa, Posicion)):
+                nec_comp = gestor.obtener_componente(nid, Necromasa)
+                pos_n = gestor.obtener_componente(nid, Posicion)
+                if nec_comp and pos_n:
+                    filas_necromasa.append(
+                        (
+                            nid,
+                            pos_n.x,
+                            pos_n.y,
+                            nec_comp.masa_organica,
+                            nec_comp.agua_tisular,
+                            nec_comp.tasa_putrefaccion,
+                            nec_comp.origen_especie,
+                        )
+                    )
+            cur.executemany("INSERT INTO necromasa_estado VALUES (?, ?, ?, ?, ?, ?, ?)", filas_necromasa)
 
+            # D. Celdas dinámicas
+            cur.execute("DELETE FROM celdas_estado")
+            filas_celdas = []
+            for y in range(zona.alto):
+                for x in range(zona.ancho):
+                    celda = zona.obtener_celda(x, y)
+                    filas_celdas.append(
+                        (
+                            x,
+                            y,
+                            celda.fertilidad,
+                            celda.profundidad_charco,
+                            celda.en_llamas,
+                            json.dumps(celda.recursos),
+                        )
+                    )
+            cur.executemany("INSERT INTO celdas_estado VALUES (?, ?, ?, ?, ?, ?)", filas_celdas)
 
-def _reconstruir_recuerdos(recuerdos_json) -> dict:
-    """JSON no distingue tuplas de listas -- [x, y] vuelve como lista tras
-    json.loads(), pero nucleo/memoria.py y sistema_movimiento.py comparan
-    y deduplican posiciones como tuplas (misma convencion que el resto
-    del motor, Posicion.x/y aparte). Sin esta reconstruccion, `posicion
-    in lista` en recordar() nunca encontraria una coincidencia tras
-    cargar una partida -- [3, 4] != (3, 4) en Python -- y cada visita a un
-    sitio ya conocido duplicaria el recuerdo en vez de refrescarlo.
-    '{}' si la columna esta vacia (fila de antes de este bloque, o
-    entidad recien creada sin nada grabado todavia)."""
-    if not recuerdos_json:
-        return {}
-    bruto = json.loads(recuerdos_json)
-    return {tipo: [tuple(p) for p in posiciones] for tipo, posiciones in bruto.items()}
+            # E. Metadatos de ejecución y RNG
+            cur.execute("REPLACE INTO configuracion_ejecucion VALUES ('tick_actual', ?)", (reloj.tick_actual,))
+            cur.execute("REPLACE INTO configuracion_ejecucion VALUES ('version_esquema', ?)", (VERSION_ESQUEMA,))
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('rng_juego_state', ?)",
+                (pickle.dumps(rng_juego.getstate()),),
+            )
 
+            con.commit()
 
-def cargar_partida(ruta_db: str):
-    """Devuelve (semilla, tick_actual, gestor_reconstruido, rng_estado) o
-    None si no hay partida guardada. rng_estado es el blob pickled listo
-    para rng_juego.setstate(pickle.loads(...)) -- None si la partida es
-    de antes de que existiera esta columna. No genera el mapa: eso lo
-    hace quien llame, con generar_zona_bioma() y la semilla devuelta
-    aqui, igual que en una partida nueva."""
-    if not hay_partida_guardada(ruta_db):
-        return None
+    def cargar_snapshot(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        rng_juego: random.Random,
+    ) -> bool:
+        """Restaura el estado completo desde la base de datos."""
+        zona = mundo.territorio.zonas[0]
 
-    with _conectar(ruta_db) as conn:
-        fila_config = conn.execute(
-            "SELECT semilla, tick_actual, rng_estado FROM configuracion_ejecucion WHERE id = 1"
-        ).fetchone()
-        if fila_config is None:
-            return None
-        semilla, tick_actual, rng_estado_blob = fila_config
+        with self._conectar() as con:
+            cur = con.cursor()
 
-        filas = conn.execute(
-            """SELECT e.id, e.especie, e.nombre, e.tick_nacimiento, e.id_madre, e.id_padre,
-                      c.x, c.y, c.saciedad, c.energia, c.seguridad,
-                      c.hidratacion, c.aliviado, c.impulso_reproductivo,
-                      c.peso, c.fuerza, c.agilidad, c.vitalidad_maxima,
-                      c.resistencia_maxima, c.curacion, c.recuperacion, c.valentia,
-                      c.sociabilidad, c.agresividad, c.dominancia, c.empatia, c.lealtad, c.fe,
-                      c.curiosidad, c.inteligencia, c.memoria, c.voluntad, c.resiliencia,
-                      c.estabilidad_mental_maxima, c.consciencia, c.altura, c.longevidad,
-                      c.velocidad, c.resistencia_enfermedad, c.agudeza_sensorial,
-                      c.vitalidad_actual, c.resistencia_actual, c.estabilidad_mental_actual,
-                      c.sexo, c.duracion_gestacion_dias, c.tick_inicio_gestacion,
-                      c.gestacion_padre_id, c.gestacion_padre_snapshot, c.recuerdos
-               FROM entidades e JOIN componentes_estado c ON c.entidad_id = e.id
-               WHERE e.viva = 1"""
-        ).fetchall()
+            cur.execute("SELECT valor FROM configuracion_ejecucion WHERE clave = 'tick_actual'")
+            fila_tick = cur.fetchone()
+            if not fila_tick:
+                return False
+            reloj._tick_actual = int(fila_tick[0])
 
-        fila_max = conn.execute("SELECT MAX(id) FROM entidades").fetchone()
-        max_id_criaturas = fila_max[0] if fila_max and fila_max[0] is not None else -1
-        # Plantas no viven en `entidades` (ver 0.15 en el historico de
-        # _VERSION_ESQUEMA) -- su propio maximo hay que consultarlo aparte
-        # y quedarse con el mayor de los dos, o un id de planta reciente
-        # podria reciclarse al crear la siguiente entidad tras cargar.
-        fila_max_plantas = conn.execute("SELECT MAX(entidad_id) FROM plantas_estado").fetchone()
-        max_id_plantas = fila_max_plantas[0] if fila_max_plantas and fila_max_plantas[0] is not None else -1
-        max_id = max(max_id_criaturas, max_id_plantas)
+            cur.execute("SELECT valor FROM configuracion_ejecucion WHERE clave = 'rng_juego_state'")
+            fila_rng = cur.fetchone()
+            if fila_rng:
+                rng_juego.setstate(pickle.loads(fila_rng[0]))
 
-        filas_plantas = conn.execute("SELECT entidad_id, x, y, especie, etapa FROM plantas_estado").fetchall()
+            # Limpiar gestor en memoria
+            for eid in list(gestor.entidades_con(Posicion)):
+                gestor.eliminar_entidad(eid)
 
-    gestor = GestorEntidades()
-    for (id_e, especie, nombre, tick_nacimiento, id_madre, id_padre,
-         x, y, saciedad, energia, seguridad, hidratacion, aliviado, impulso_reproductivo,
-         peso, fuerza, agilidad, vitalidad_maxima, resistencia_maxima,
-         curacion, recuperacion, valentia, sociabilidad, agresividad,
-         dominancia, empatia, lealtad, fe, curiosidad,
-         inteligencia, memoria, voluntad, resiliencia, estabilidad_mental_maxima, consciencia,
-         altura, longevidad, velocidad, resistencia_enfermedad, agudeza_sensorial,
-         vitalidad_actual, resistencia_actual, estabilidad_mental_actual,
-         sexo, duracion_gestacion_dias, tick_inicio_gestacion,
-         gestacion_padre_id, gestacion_padre_snapshot, recuerdos_json) in filas:
-        gestor.anadir_entidad_existente(id_e, [
-            Posicion(x=x, y=y),
-            Necesidades(
-                saciedad=saciedad, energia=energia, seguridad=seguridad,
-                hidratacion=hidratacion, aliviado=aliviado,
-                impulso_reproductivo=impulso_reproductivo,
-            ),
-            Identidad(
-                especie=Especie(especie), nombre=nombre, tick_nacimiento=tick_nacimiento,
-                id_madre=id_madre, id_padre=id_padre,
-            ),
-            DimensionesFisicas(
-                peso=peso, fuerza=fuerza, agilidad=agilidad,
-                vitalidad_maxima=vitalidad_maxima, resistencia_maxima=resistencia_maxima,
-                curacion=curacion, recuperacion=recuperacion,
-                altura=altura, longevidad=longevidad, velocidad=velocidad,
-                resistencia_enfermedad=resistencia_enfermedad,
-                agudeza_sensorial=agudeza_sensorial,
-            ),
-            Temperamento(
-                valentia=valentia, sociabilidad=sociabilidad, agresividad=agresividad,
-                dominancia=dominancia, empatia=empatia, lealtad=lealtad, fe=fe,
-                curiosidad=curiosidad,
-            ),
-            CapacidadMental(
-                inteligencia=inteligencia, memoria=memoria, voluntad=voluntad,
-                resiliencia=resiliencia, estabilidad_mental_maxima=estabilidad_mental_maxima,
-                consciencia=consciencia,
-            ),
-            PoolFisico(vitalidad=vitalidad_actual, resistencia=resistencia_actual),
-            PoolMental(estabilidad=estabilidad_mental_actual),
-            Intencion(),  # valor por defecto -- SistemaDecision la recalcula en el siguiente tick
-            Reproduccion(sexo=Sexo(sexo), duracion_gestacion_dias=duracion_gestacion_dias),
-            MemoriaEspacial(recuerdos=_reconstruir_recuerdos(recuerdos_json)),
-        ] + _reconstruir_gestacion(tick_inicio_gestacion, gestacion_padre_id, gestacion_padre_snapshot))
+            # 1. Cargar celdas
+            cur.execute("SELECT x, y, fertilidad, profundidad_charco, en_llamas, recursos FROM celdas_estado")
+            for x, y, fert, prof_ch, fuego, rec_json in cur.fetchall():
+                celda = zona.obtener_celda(x, y)
+                celda.fertilidad = float(fert)
+                celda.profundidad_charco = float(prof_ch)
+                celda.en_llamas = bool(fuego)
+                celda.recursos = json.loads(rec_json)
 
-    for id_planta, x, y, especie, etapa in filas_plantas:
-        gestor.anadir_entidad_existente(id_planta, [
-            Posicion(x=x, y=y),
-            Planta(especie=especie, etapa=etapa),
-        ])
+            # 2. Cargar entidades biológicas
+            cur.execute(
+                """
+                SELECT c.*, e.especie, e.nombre, e.tick_nacimiento, e.id_madre, e.id_padre
+                FROM componentes_estado c
+                JOIN entidades e ON c.entidad_id = e.id
+                """
+            )
+            for fila in cur.fetchall():
+                eid = fila[0]
+                gestor.anadir_componente(eid, Posicion(x=fila[1], y=fila[2]))
+                gestor.anadir_componente(
+                    eid,
+                    Necesidades(
+                        saciedad=fila[3],
+                        energia=fila[4],
+                        seguridad=fila[5],
+                        hidratacion=fila[6],
+                        aliviado=fila[7],
+                        oxigenacion=fila[8],
+                        confort_termico=fila[9],
+                        impulso_reproductivo=fila[10],
+                    ),
+                )
+                dims = DimensionesFisicas(
+                    peso=fila[11],
+                    altura=fila[12],
+                    longevidad=fila[13],
+                    fuerza=fila[14],
+                    agilidad=fila[15],
+                    velocidad=fila[16],
+                    resistencia_enfermedad=fila[17],
+                    agudeza_sensorial=fila[18],
+                    vitalidad_maxima=fila[19],
+                    resistencia_maxima=fila[20],
+                    curacion=fila[21],
+                    recuperacion=fila[22],
+                )
+                gestor.anadir_componente(eid, dims)
+                gestor.anadir_componente(eid, PoolFisico(vitalidad=fila[23], resistencia=fila[24]))
+                gestor.anadir_componente(
+                    eid,
+                    Temperamento(
+                        valentia=fila[25],
+                        sociabilidad=fila[26],
+                        agresividad=fila[27],
+                        dominancia=fila[28],
+                        empatia=fila[29],
+                        lealtad=fila[30],
+                        fe=fila[31],
+                        curiosidad=fila[32],
+                    ),
+                )
+                cm = CapacidadMental(
+                    inteligencia=fila[33],
+                    memoria=fila[34],
+                    voluntad=fila[35],
+                    resiliencia=fila[36],
+                    estabilidad_mental_maxima=fila[37],
+                    consciencia=fila[38],
+                )
+                gestor.anadir_componente(eid, cm)
+                gestor.anadir_componente(eid, PoolMental(estabilidad=fila[39]))
+                gestor.anadir_componente(
+                    eid,
+                    Reproduccion(
+                        sexo=Sexo(fila[40]),
+                        duracion_gestacion_dias=fila[41],
+                    ),
+                )
 
-    if max_id >= 0:
-        gestor.registrar_id_existente(max_id)
+                if fila[42] is not None:
+                    padre_snap = json.loads(fila[44]) if fila[44] else {}
+                    gestor.anadir_componente(
+                        eid,
+                        Gestacion(
+                            tick_inicio=fila[42],
+                            padre_id=fila[43],
+                            padre_snapshot=padre_snap,
+                        ),
+                    )
 
-    return semilla, tick_actual, gestor, rng_estado_blob
+                recuerdos_dict = json.loads(fila[45]) if fila[45] else {}
+                gestor.anadir_componente(eid, MemoriaEspacial(recuerdos=recuerdos_dict))
+                gestor.anadir_componente(eid, Intencion(accion=Accion.DEAMBULAR))
+                gestor.anadir_componente(
+                    eid,
+                    Identidad(
+                        especie=Especie(fila[46]),
+                        nombre=fila[47],
+                        tick_nacimiento=fila[48],
+                        id_madre=fila[49],
+                        id_padre=fila[50],
+                    ),
+                )
 
+            # 3. Cargar Flora
+            cur.execute("SELECT entidad_id, x, y, especie, etapa FROM plantas_estado")
+            for pid, px, py, esp, etapa in cur.fetchall():
+                gestor.anadir_componente(pid, Posicion(x=px, y=py))
+                gestor.anadir_componente(pid, Planta(especie=esp, etapa=float(etapa)))
 
-def contar_eventos_por_tipo(ruta_db: str, tipo: str) -> int:
-    """Cuenta el total historico de eventos de un tipo dado, consultando
-    la cronica persistida -- no un contador en memoria, para que el
-    resultado sea correcto aunque la partida se haya cargado y guardado
-    en varias sesiones distintas."""
-    if not os.path.exists(ruta_db):
-        return 0
-    with _conectar(ruta_db) as conn:
-        fila = conn.execute(
-            "SELECT COUNT(*) FROM cronica_eventos WHERE tipo = ?", (tipo,)
-        ).fetchone()
-        return fila[0] if fila else 0
+            # 4. Cargar Necromasa
+            cur.execute("SELECT entidad_id, x, y, masa_organica, agua_tisular, tasa_putrefaccion, origen_especie FROM necromasa_estado")
+            for nid, nx, ny, masa, agua, tasa, orig in cur.fetchall():
+                gestor.anadir_componente(nid, Posicion(x=nx, y=ny))
+                gestor.anadir_componente(
+                    nid,
+                    Necromasa(
+                        masa_organica=float(masa),
+                        agua_tisular=float(agua),
+                        tasa_putrefaccion=float(tasa),
+                        origen_especie=str(orig),
+                    ),
+                )
 
+            # Ajustar siguiente id autoincremental
+            cur.execute("SELECT MAX(id) FROM entidades")
+            max_id_ent = cur.fetchone()[0] or 0
+            cur.execute("SELECT MAX(entidad_id) FROM plantas_estado")
+            max_id_plant = cur.fetchone()[0] or 0
+            cur.execute("SELECT MAX(entidad_id) FROM necromasa_estado")
+            max_id_nec = cur.fetchone()[0] or 0
 
-def contar_muertes_por_causa(ruta_db: str) -> dict:
-    """Desglose de la crónica de eventos Muerte por su campo 'causa' (por
-    ejemplo 'inanicion', 'depredacion' -- paso 12.3). Lee el JSON de
-    datos guardado con cada evento; una fila sin 'causa' legible se
-    cuenta como 'desconocida' en vez de romper el conteo."""
-    if not os.path.exists(ruta_db):
-        return {}
-    with _conectar(ruta_db) as conn:
-        filas = conn.execute(
-            "SELECT datos FROM cronica_eventos WHERE tipo = 'Muerte'"
-        ).fetchall()
-    desglose: dict = {}
-    for (datos_json,) in filas:
-        causa = "desconocida"
-        if datos_json:
-            try:
-                causa = json.loads(datos_json).get("causa", "desconocida")
-            except json.JSONDecodeError:
-                pass
-        desglose[causa] = desglose.get(causa, 0) + 1
-    return desglose
-
-
-def contar_entidades_totales(ruta_db: str, especie: str | None = None) -> int:
-    """Total de entidades que existieron alguna vez (vivas o muertas).
-    Sin reproduccion (fase 0), esto equivale siempre a la poblacion
-    inicial real de esa especie, independientemente de en cuantas
-    sesiones se haya jugado. especie=None cuenta todas las especies
-    juntas (uso: informativo general, no el criterio de fase 1, que es
-    especifico de gnomo)."""
-    if not os.path.exists(ruta_db):
-        return 0
-    with _conectar(ruta_db) as conn:
-        if especie is None:
-            fila = conn.execute("SELECT COUNT(*) FROM entidades").fetchone()
-        else:
-            fila = conn.execute(
-                "SELECT COUNT(*) FROM entidades WHERE especie = ?", (especie,)
-            ).fetchone()
-        return fila[0] if fila else 0
-
-
-def aplicar_recursos_guardados(ruta_db: str, zona) -> None:
-    """No-op si no hay celdas_estado guardadas (partida nueva). Nombre
-    historico ("recursos") -- desde el Bloque de abono tambien aplica
-    fertilidad, mismo motivo: es estado mutado por la partida real, no
-    derivable de la semilla (a diferencia de tipo_terreno/tiene_agua).
-
-    recursos viaja como JSON (correccion biomas/especies, 0.16) -- se
-    deserializa aqui a dict, mismo patron que gestacion_padre_snapshot.
-    tipo_recurso viaja como columna nueva, mismo criterio dinamico que
-    tiene_recurso. profundidad_charco (0.19, charcos efimeros) igual --
-    estado mutado por la partida real, no derivable de la semilla."""
-    with _conectar(ruta_db) as conn:
-        filas = conn.execute(
-            "SELECT x, y, recursos, fertilidad, en_llamas, tiene_recurso, tipo_recurso, profundidad_charco "
-            "FROM celdas_estado"
-        ).fetchall()
-    for x, y, recursos_json, fertilidad, en_llamas, tiene_recurso, tipo_recurso, profundidad_charco in filas:
-        if 0 <= x < zona.ancho and 0 <= y < zona.alto:
-            celda = zona.celda(x, y)
-            celda.recursos = json.loads(recursos_json) if recursos_json else {}
-            celda.fertilidad = fertilidad
-            celda.en_llamas = bool(en_llamas)
-            celda.tiene_recurso = bool(tiene_recurso)
-            celda.tipo_recurso = tipo_recurso or ""
-            celda.profundidad_charco = profundidad_charco or 0.0
+            gestor._siguiente_id = max(max_id_ent, max_id_plant, max_id_nec) + 1
+            return True

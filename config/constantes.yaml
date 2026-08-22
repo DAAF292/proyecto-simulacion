@@ -92,17 +92,29 @@ desastres:
   prob_propagacion_por_tick: 0.08
   prob_extincion_por_tick: 0.35
   dano_por_tick_en_llamas: 0.15
+  aporte_ceniza_planta: 0.15
+  fraccion_masa_seca_quemada: 0.20
+  fraccion_agua_tisular_quemada: 0.05
+  tasa_putrefaccion_calcinada: 0.15
 
 # ------------------------------------------------------------------------------
-# 4. Botánica y Recursos Edáficos
+# 4. Botánica, Descomposición y Fertilidad Edáfica
 # ------------------------------------------------------------------------------
 abono:
   incremento_fertilidad_por_aliviarse: 0.2
   techo_fertilidad: 1.0
   decaimiento_fertilidad_por_dia: 0.1
 
+descomposicion:
+  constante_degradacion_base: 0.08
+  masa_referencia_fertilidad: 10.0
+  umbral_purga_masa: 0.05
+  factor_humedad_lluvia: 1.3
+  factor_humedad_seco: 0.8
+
 flora:
   bono_produccion_ribera: 0.2
+  tasa_retorno_mantillo: 0.05
   especies:
     hierba_silvestre:
       biomas: [pradera, bosque]

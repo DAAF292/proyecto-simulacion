@@ -4,10 +4,11 @@ main.py
 Punto de entrada y orquestador del bucle de simulación de "Un mundo vivo".
 Implementa un pipeline trifásico desacoplado por tick y cadencias biológicas diarias:
   - Fase 1: Percepción y Toma de Decisiones (SistemaDecision)
-  - Fase 2: Acción, Cinemática y Contacto Físico (SistemaMovimiento, SistemaDepredacion)
+  - Fase 2: Acción, Cinemática, Fuego y Contacto Físico (SistemaMovimiento, 
+            SistemaDesastres [tick], SistemaDepredacion)
   - Fase 3: Metabolismo, Recursos y Resolución Vital (SistemaRecursos, SistemaNecesidades,
             SistemaCapacidadFisica, SistemaCapacidadMental, SistemaReproduccion)
-  - Corte de Día: Descomposición, Clima, Flora, Ciclo Vital y Desastres
+  - Corte de Día: Descomposición, Clima, Flora, Ciclo Vital y Desastres [ignición]
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from sistemas.sistema_necesidades import SistemaNecesidades
 from sistemas.sistema_recursos import SistemaRecursos
 from sistemas.sistema_reproduccion import SistemaReproduccion
 
-CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion", "deshidratacion", "ahogamiento", "vejez"}
+CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion", "deshidratacion", "ahogamiento", "vejez", "incendio"}
 
 
 def cargar_configuracion(ruta: Path) -> dict[str, Any]:
@@ -63,6 +64,7 @@ def instanciar_sistemas(
     return {
         "decision": SistemaDecision(config, rng_juego),
         "movimiento": SistemaMovimiento(config, rng_juego),
+        "desastres": SistemaDesastres(config, rng_juego),
         "depredacion": SistemaDepredacion(config, rng_juego),
         "recursos": SistemaRecursos(config, rng_juego),
         "necesidades": SistemaNecesidades(config, rng_juego),
@@ -73,7 +75,6 @@ def instanciar_sistemas(
         "descomposicion": SistemaDescomposicion(config, rng_juego),
         "flora": SistemaFlora(config, rng_juego),
         "ciclo_vital": SistemaCicloVital(config, rng_juego),
-        "desastres": SistemaDesastres(config, rng_juego),
     }
 
 
@@ -140,6 +141,7 @@ def ejecutar_tick(
     # FASE 2: ACCIÓN, CINEMÁTICA Y CONTACTO FÍSICO
     # ---------------------------------------------------------
     sistemas["movimiento"].ejecutar(gestor, mundo)
+    sistemas["desastres"].procesar_fuego_tick(gestor, mundo, reloj, bus_eventos)
     sistemas["depredacion"].ejecutar(gestor, bus_eventos)
 
     # ---------------------------------------------------------

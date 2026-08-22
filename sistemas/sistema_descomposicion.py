@@ -31,19 +31,35 @@ class SistemaDescomposicion:
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
-        """Extrae y tipa los coeficientes de degradación edáfica."""
+        """Extrae y tipa los coeficientes de degradación edáfica desde constantes.yaml."""
         cfg_abono = self.config.get("abono", {})
         self.techo_fertilidad: float = float(cfg_abono.get("techo_fertilidad", 1.0))
-        
+
         cfg_charco = self.config.get("charcos", {})
         self.techo_profundidad_charco: float = float(
             cfg_charco.get("techo_profundidad_charco", 0.03)
         )
 
-        # Parámetros físicos de descomposición
-        self.constante_degradacion_base: float = 0.08  # 8% diario base
-        self.masa_referencia_fertilidad: float = 10.0   # 10 kg saturan fertilidad base
-        self.umbral_purga_masa: float = 0.05           # 50 gramos (mineralización)
+        cfg_desc = self.config.get("descomposicion", {})
+        self.constante_degradacion_base: float = float(
+            cfg_desc.get("constante_degradacion_base", 0.08)
+        )
+        self.masa_referencia_fertilidad: float = float(
+            cfg_desc.get("masa_referencia_fertilidad", 10.0)
+        )
+        self.umbral_purga_masa: float = float(
+            cfg_desc.get("umbral_purga_masa", 0.05)
+        )
+        self.factor_humedad_lluvia: float = float(
+            cfg_desc.get("factor_humedad_lluvia", 1.3)
+        )
+        self.factor_humedad_seco: float = float(
+            cfg_desc.get("factor_humedad_seco", 0.8)
+        )
+
+        self.metros_por_celda: float = float(
+            self.config.get("mundo", {}).get("metros_por_celda", 10)
+        )
 
     def ejecutar(
         self,
@@ -60,9 +76,12 @@ class SistemaDescomposicion:
         clima_actual = getattr(zona, "clima_actual", None)
         nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
 
-        # Factores ambientales (Temperatura y Humedad)
-        factor_humedad = 1.3 if nombre_clima in ("lluvioso", "tormenta") else 0.8
-        factor_temperatura = 1.0  # Base neutra estacional
+        factor_humedad = (
+            self.factor_humedad_lluvia
+            if nombre_clima in ("lluvioso", "tormenta")
+            else self.factor_humedad_seco
+        )
+        factor_temperatura = 1.0
 
         entidades_necromasa = sorted(gestor.entidades_con(Necromasa, Posicion))
 
@@ -75,7 +94,7 @@ class SistemaDescomposicion:
 
             celda = zona.obtener_celda(pos.x, pos.y)
 
-            # 1. Cálculo de tasa efectiva de degradación
+            # 1. Tasa efectiva de degradación
             tasa_efectiva = (
                 self.constante_degradacion_base
                 * factor_temperatura
@@ -84,7 +103,7 @@ class SistemaDescomposicion:
             )
             tasa_efectiva = min(1.0, tasa_efectiva)
 
-            # 2. Transferencia de biomasa seca a fertilidad edáfica
+            # 2. Transferencia de biomasa seca a fertilidad
             delta_masa = nec.masa_organica * tasa_efectiva
             nec.masa_organica = max(0.0, nec.masa_organica - delta_masa)
 
@@ -93,21 +112,18 @@ class SistemaDescomposicion:
                 self.techo_fertilidad, celda.fertilidad + aporte_fertilidad
             )
 
-            # 3. Liberación de agua tisular a la superficie
+            # 3. Lisis hídrica y liberación a superficie
             if nec.agua_tisular > 0.0:
                 delta_agua = nec.agua_tisular * tasa_efectiva
                 nec.agua_tisular = max(0.0, nec.agua_tisular - delta_agua)
-                
-                # Conversión de litros a metros equivalentes sobre celda (escala aproximada)
-                aporte_charco_m = (delta_agua * 0.001) / float(
-                    self.config.get("mundo", {}).get("metros_por_celda", 10) ** 2
-                )
+
+                aporte_charco_m = (delta_agua * 0.001) / (self.metros_por_celda ** 2)
                 celda.profundidad_charco = min(
                     self.techo_profundidad_charco,
                     celda.profundidad_charco + aporte_charco_m,
                 )
 
-            # 4. Mineralización completa y purga de la entidad inerte
+            # 4. Mineralización completa
             if nec.masa_organica <= self.umbral_purga_masa:
                 bus_eventos.emitir(
                     Evento(

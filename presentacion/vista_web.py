@@ -1,339 +1,247 @@
-"""Vista web: primera capa de presentacion mas alla de la terminal
-(discutida y confirmada con Diego -- ver tambien config/constantes.yaml,
-seccion 'visual'). Mapa en tiempo real en el navegador, coloreado por
-bioma+elevacion+agua+fuego+recurso, con las criaturas encima como emoji
-por especie -- mismo espiritu que _simbolo_celda/_estilo_celda de
-main.py (funciones puras que leen Celda y deciden como mostrarla), solo
-que aqui el resultado es JSON para que lo pinte el navegador, no texto
-para una terminal.
-
-Arquitectura, deliberadamente minima (coherente con "sin frameworks
-pesados"): SOLO libreria estandar. Un ThreadingHTTPServer sirve dos
-cosas -- la pagina HTML/CSS/JS (estatica, incrustada aqui mismo, sin
-build step) en "/", y la ultima instantanea del mundo como JSON en
-"/estado". La pagina hace fetch() a "/estado" cada pocos milisegundos y
-repinta un <canvas> -- polling simple, no WebSockets: esta simulacion no
-corre a fotogramas por segundo, un tick nuevo cada X decimas de segundo
-(ver 'visual.segundos_por_tick') es sobradamente lento para que preguntar
-en vez de que nos avisen sea indistinguible en la practica.
-
-Quien avanza el tiempo real NO es este modulo -- eso vive en main.py (un
-tercer modo de ejecucion, 'modo visual', distinto de interactivo/
-headless: avanza solo, a una cadencia fija de reloj, en vez de esperar
-Enter o correr a maxima velocidad). Este modulo solo construye
-instantaneas (funcion pura, sin tocar gestor/zona) y las sirve; nunca
-llama a gestor.entidades_con(...) para escribir nada, ni conoce ningun
-sistema del motor -- mismo desacople que ya tenia presentacion/narrador.py
-respecto a como se muestra el texto que genera.
-
-Simbolo por especie (tabla EMOJI_POR_ESPECIE): deliberadamente una tabla,
-no un if/else -- anadir una especie nueva (la proxima criatura que se
-diseñe) es una linea aqui, no logica nueva. Nivel de detalle visual
-elegido con Diego para esta primera pasada: emoji via canvas fillText, ni
-formas geometricas (mas pobre visualmente) ni sprites de verdad (asset
-grafico real, fuera de alcance ahora) -- intencion declarada de Diego a
-largo plazo: mundo en pixel art con animaciones. Esta arquitectura no
-compromete esa evolucion futura: el separador entre "que hay en el mundo"
-(instantanea JSON) y "como se dibuja" (la funcion JS de pintado) es
-exactamente el punto donde algun dia se enchufarian sprites en vez de
-emoji, sin tocar el resto.
 """
+presentacion/vista_web.py
+
+Servidor HTTP integrado para monitoreo visual en tiempo real del mundo en el navegador.
+Serializa el estado completo en un payload JSON puro consumido por polling desde el canvas.
+"""
+
+from __future__ import annotations
+
+import http.server
 import json
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
+from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
+from componentes.intencion import Intencion
+from componentes.necesidades import Necesidades
+from componentes.necromasa import Necromasa
+from componentes.pool_fisico import PoolFisico
+from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
+from nucleo.entidad import GestorEntidades
+from nucleo.mundo import Mundo
+from nucleo.reloj import Reloj
 
-EMOJI_POR_ESPECIE = {
-    "gnomo": "\U0001F9D1",  # 🧑
-    "lobo": "\U0001F43A",   # 🐺
-    "conejo": "\U0001F430",  # 🐰 (2026-08-20, introduccion de conejo/ardilla)
-    "ardilla": "\U0001F43F",  # 🐿️
-}
-
-
-def construir_instantanea(gestor, zona, reloj, config, cronica=()) -> dict:
-    """Funcion pura: lee gestor/zona/reloj, no los muta. Mismo criterio
-    que presentacion/narrador.py -- decide QUE se representa, no como se
-    pinta (eso es la pagina HTML/JS de abajo).
-
-    cronica (correccion posterior, a peticion de Diego: "que en la
-    interfaz haya un apartado donde el narrador vaya contando que pasa"):
-    lista de frases YA narradas (presentacion/narrador.py:narrar) que
-    main.py acumula tick a tick -- este modulo no las genera ni las
-    guarda, solo las traslada al JSON tal cual se le pasan. La
-    acumulacion/limite de tamano vive en main.py (deque acotado), no
-    aqui, para que esta funcion siga siendo pura y sin estado propio."""
-    from nucleo.clima import estacion_actual
-
-    celdas = []
-    for x, y, celda in zona.celdas():
-        celdas.append({
-            "x": x, "y": y,
-            "bioma": celda.tipo_terreno.value,
-            "elevacion": round(celda.elevacion, 3),
-            "tipo_agua": celda.tipo_agua,
-            "tiene_recurso": celda.tiene_recurso,
-            "en_llamas": celda.en_llamas,
-        })
-
-    entidades = []
-    for id_e in gestor.entidades_con(Posicion, Identidad):
-        pos = gestor.obtener_componente(id_e, Posicion)
-        identidad = gestor.obtener_componente(id_e, Identidad)
-        entidades.append({"id": id_e, "x": pos.x, "y": pos.y, "especie": identidad.especie.value})
-
-    return {
-        "ancho": zona.ancho, "alto": zona.alto,
-        "tick": reloj.tick_actual, "dia": reloj.dia, "anio": reloj.anio,
-        "estacion": estacion_actual(reloj.estacion).value,
-        "clima": zona.clima_actual.value,
-        "celdas": celdas,
-        "entidades": entidades,
-        "cronica": list(cronica),
-    }
-
-
-class _EstadoCompartido:
-    """Unico punto de mutacion concurrente de este modulo: main.py escribe
-    una instantanea nueva cada tick (hilo principal), el servidor HTTP la
-    lee cada vez que el navegador hace fetch() (hilo del servidor) -- un
-    Lock basta, la frecuencia de ambos lados es baja (ticks cada decimas
-    de segundo, polling cada pocos cientos de milisegundos)."""
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._instantanea: dict | None = None
-
-    def actualizar(self, instantanea: dict) -> None:
-        with self._lock:
-            self._instantanea = instantanea
-
-    def leer(self) -> dict | None:
-        with self._lock:
-            return self._instantanea
-
-
-class _ManejadorVista(BaseHTTPRequestHandler):
-    estado: _EstadoCompartido = None  # inyectado por iniciar_servidor() via subclase dinamica
-
-    def log_message(self, formato, *args):
-        pass  # silencia el log por defecto (una linea por peticion) -- no aporta nada aqui, es puro ruido
-
-    def do_GET(self):
-        if self.path in ("/", "/index.html"):
-            self._responder(200, "text/html; charset=utf-8", _PAGINA_HTML.encode("utf-8"))
-        elif self.path == "/estado":
-            instantanea = self.estado.leer()
-            cuerpo = json.dumps(instantanea if instantanea is not None else {}).encode("utf-8")
-            self._responder(200, "application/json; charset=utf-8", cuerpo)
-        else:
-            self._responder(404, "text/plain; charset=utf-8", b"no encontrado")
-
-    def _responder(self, codigo: int, tipo_contenido: str, cuerpo: bytes) -> None:
-        self.send_response(codigo)
-        self.send_header("Content-Type", tipo_contenido)
-        self.send_header("Content-Length", str(len(cuerpo)))
-        self.end_headers()
-        self.wfile.write(cuerpo)
-
-
-class ServidorVista:
-    """Envoltorio fino sobre ThreadingHTTPServer -- expone solo lo que
-    main.py necesita (actualizar la instantanea, conocer la URL), oculta
-    el resto (hilo, socket, manejador)."""
-
-    def __init__(self, servidor_http: ThreadingHTTPServer, estado: _EstadoCompartido, puerto: int):
-        self._servidor_http = servidor_http
-        self._estado = estado
-        self.url = f"http://localhost:{puerto}"
-
-    def actualizar(self, instantanea: dict) -> None:
-        self._estado.actualizar(instantanea)
-
-
-def iniciar_servidor(puerto: int) -> ServidorVista:
-    """Arranca el servidor en un hilo daemon (muere solo al salir el
-    proceso principal, sin necesidad de un apagado explicito -- coherente
-    con que main.py no tiene hoy ningun otro recurso que cerrar
-    ordenadamente al terminar, ver el finally de main())."""
-    estado = _EstadoCompartido()
-    manejador = type("_ManejadorVistaConEstado", (_ManejadorVista,), {"estado": estado})
-    servidor_http = ThreadingHTTPServer(("localhost", puerto), manejador)
-    hilo = threading.Thread(target=servidor_http.serve_forever, daemon=True)
-    hilo.start()
-    return ServidorVista(servidor_http, estado, puerto)
-
-
-# Colores por bioma en RGB base (paleta real, no la de 16 colores ANSI de
-# la terminal) -- JS los oscurece/aclara segun la elevacion de cada celda
-# (ver _sombrear en el JS de abajo) para dar sensacion de relieve sin
-# necesitar ningun dato nuevo, solo el campo de elevacion que ya existe.
-_PAGINA_HTML = """<!DOCTYPE html>
+HTML_VISOR = """<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<title>Un mundo vivo</title>
-<style>
-  body { background: #111; color: #ddd; font-family: monospace; padding: 16px; }
-  #fila-superior { display: flex; gap: 24px; }
-  canvas { image-rendering: pixelated; border: 1px solid #444; }
-  #hud div { margin-bottom: 4px; }
-  #hud h2 { font-size: 14px; margin: 12px 0 4px; color: #9c9; }
-  #cronica-wrap { margin-top: 16px; max-width: 900px; }
-  #cronica-wrap h2 { font-size: 14px; margin: 0 0 4px; color: #9c9; }
-  #cronica {
-    height: 180px; overflow-y: auto; background: #1a1a1a; border: 1px solid #444;
-    padding: 8px; font-size: 13px; line-height: 1.5;
-  }
-  #cronica div { color: #bbb; }
-  #cronica div:last-child { color: #eee; }
-</style>
+  <meta charset="UTF-8">
+  <title>Un Mundo Vivo - Vista Web</title>
+  <style>
+    body { background: #1a1a1a; color: #e0e0e0; font-family: monospace; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+    #contenedor { display: flex; gap: 20px; max-width: 1200px; width: 100%; }
+    #canvas-mapa { border: 2px solid #333; background: #000; }
+    #panel-lateral { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    .card { background: #242424; border: 1px solid #3a3a3a; padding: 10px; border-radius: 4px; font-size: 12px; }
+    #cronica { height: 280px; overflow-y: auto; display: flex; flex-direction: column-reverse; background: #181818; padding: 8px; border: 1px solid #333; font-size: 11px; }
+    .linea-cronica { margin-bottom: 4px; line-height: 1.3; border-bottom: 1px solid #222; padding-bottom: 2px; }
+    .tag { font-weight: bold; padding: 2px 4px; border-radius: 2px; }
+    .tag-gnomo { color: #5dade2; }
+    .tag-lobo { color: #e74c3c; }
+    .tag-conejo { color: #f39c12; }
+    .tag-ardilla { color: #2ecc71; }
+    .tag-necromasa { color: #95a5a6; }
+  </style>
 </head>
 <body>
-  <div id="fila-superior">
-    <canvas id="mapa"></canvas>
-    <div id="hud">
-      <h2>Estado</h2>
-      <div id="tick">tick=-</div>
-      <div id="fecha">dia=- anio=-</div>
-      <div id="clima">estacion=- clima=-</div>
-      <h2>Poblacion</h2>
-      <div id="poblacion"></div>
+  <h2>🌲 Un Mundo Vivo — Panel de Simulación</h2>
+  <div id="contenedor">
+    <canvas id="canvas-mapa" width="560" height="560"></canvas>
+    <div id="panel-lateral">
+      <div class="card" id="info-mundo">Cargando...</div>
+      <div class="card" id="info-poblacion">Población: -</div>
+      <div class="card">
+        <strong>📜 Crónica en Vivo:</strong>
+        <div id="cronica"></div>
+      </div>
     </div>
   </div>
-  <div id="cronica-wrap">
-    <h2>Cronica</h2>
-    <div id="cronica"></div>
-  </div>
-<script>
-const TAM_CELDA = 22;
-const COLOR_BIOMA = {
-  pradera: [163, 177, 82],
-  bosque: [45, 106, 79],
-  desierto: [214, 189, 118],
-  montana: [120, 120, 128],
-  tundra: [226, 232, 235],
-};
-const COLOR_AGUA = {
-  rio: "rgba(66, 135, 245, 0.8)",
-  lago: "rgba(30, 80, 160, 0.8)",
-  poza: "rgba(100, 180, 200, 0.85)",
-};
-const EMOJI_POR_ESPECIE = { gnomo: "\\u{1F9D1}", lobo: "\\u{1F43A}", conejo: "\\u{1F430}", ardilla: "\\u{1F43F}" };
 
-const lienzo = document.getElementById("mapa");
-const ctx = lienzo.getContext("2d");
-let dimensionado = false;
+  <script>
+    const canvas = document.getElementById('canvas-mapa');
+    const ctx = canvas.getContext('2d');
+    const COLORES_TERRENO = {
+      'bosque': '#1e4d2b', 'pradera': '#4a7c29', 'montana': '#7f8c8d',
+      'desierto': '#d4ac0d', 'tundra': '#aeb6bf', 'agua': '#2980b9'
+    };
+    const GLIFOS = { 'gnomo': '🧙', 'lobo': '🐺', 'conejo': '🐇', 'ardilla': '🐿️', 'necromasa': '🦴' };
 
-function sombrear([r, g, b], elevacion) {
-  // aclara/oscurece el color base de bioma segun la elevacion [0,1] --
-  // da sensacion de relieve reutilizando un dato que ya existe, sin
-  // inventar ninguna textura ni sprite.
-  const factor = 0.65 + 0.55 * elevacion;
-  return `rgb(${Math.min(255, r * factor) | 0}, ${Math.min(255, g * factor) | 0}, ${Math.min(255, b * factor) | 0})`;
-}
+    async function actualizar() {
+      try {
+        const resp = await fetch('/estado.json');
+        if (!resp.ok) return;
+        const data = await resp.json();
 
-function dibujar(estado) {
-  if (!estado.celdas) return;
-  if (!dimensionado) {
-    lienzo.width = estado.ancho * TAM_CELDA;
-    lienzo.height = estado.alto * TAM_CELDA;
-    dimensionado = true;
-  }
+        document.getElementById('info-mundo').innerHTML = 
+          `<strong>Tick:</strong> ${data.tick} | <strong>Día:</strong> ${data.dia} | <strong>Estación:</strong> ${data.estacion}<br>` +
+          `<strong>Clima:</strong> ${data.clima}`;
 
-  const ahora = Date.now();
-  const pulso = 0.6 + 0.4 * Math.abs(Math.sin(ahora / 220));  // parpadeo del fuego
+        document.getElementById('info-poblacion').innerHTML = 
+          `<strong>Vivos:</strong> Gnomos: ${data.censo.gnomo || 0} | Lobos: ${data.censo.lobo || 0} | ` +
+          `Conejos: ${data.censo.conejo || 0} | Ardillas: ${data.censo.ardilla || 0} | ` +
+          `<strong>Restos (Necromasa):</strong> ${data.censo.necromasa || 0}`;
 
-  for (const celda of estado.celdas) {
-    const px = celda.x * TAM_CELDA;
-    const py = celda.y * TAM_CELDA;
+        const celdas = data.grid;
+        const tam = canvas.width / data.ancho;
 
-    ctx.fillStyle = sombrear(COLOR_BIOMA[celda.bioma] || [80, 80, 80], celda.elevacion);
-    ctx.fillRect(px, py, TAM_CELDA, TAM_CELDA);
+        for (let y = 0; y < data.alto; y++) {
+          for (let x = 0; x < data.ancho; x++) {
+            const c = celdas[y][x];
+            ctx.fillStyle = c.en_llamas ? '#c0392b' : (c.tiene_agua ? COLORES_TERRENO['agua'] : (COLORES_TERRENO[c.terreno] || '#111'));
+            ctx.fillRect(x * tam, y * tam, tam, tam);
 
-    if (celda.tiene_recurso) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
-      ctx.beginPath();
-      ctx.arc(px + TAM_CELDA - 5, py + TAM_CELDA - 5, 2.5, 0, Math.PI * 2);
-      ctx.fill();
+            if (c.profundidad_charco > 0 && !c.tiene_agua) {
+              ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
+              ctx.fillRect(x * tam, y * tam, tam, tam);
+            }
+          }
+        }
+
+        ctx.font = `${tam * 0.7}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        data.entidades.forEach(e => {
+          const glifo = GLIFOS[e.tipo] || '❓';
+          ctx.fillText(glifo, e.x * tam + tam / 2, e.y * tam + tam / 2);
+        });
+
+        const divCronica = document.getElementById('cronica');
+        divCronica.innerHTML = data.cronica.map(l => `<div class="linea-cronica">${l}</div>`).join('');
+
+      } catch (err) {
+        console.error("Error al actualizar instantánea:", err);
+      }
     }
-
-    if (celda.tipo_agua) {
-      ctx.fillStyle = COLOR_AGUA[celda.tipo_agua] || "rgba(66,135,245,0.8)";
-      ctx.fillRect(px, py, TAM_CELDA, TAM_CELDA);
-    }
-
-    if (celda.en_llamas) {
-      ctx.fillStyle = `rgba(230, 80, 20, ${pulso})`;
-      ctx.fillRect(px, py, TAM_CELDA, TAM_CELDA);
-    }
-  }
-
-  ctx.font = `${TAM_CELDA - 4}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const poblacion = {};
-  for (const e of (estado.entidades || [])) {
-    const emoji = EMOJI_POR_ESPECIE[e.especie] || "?";
-    ctx.fillText(emoji, e.x * TAM_CELDA + TAM_CELDA / 2, e.y * TAM_CELDA + TAM_CELDA / 2);
-    poblacion[e.especie] = (poblacion[e.especie] || 0) + 1;
-  }
-
-  document.getElementById("tick").textContent = `tick=${estado.tick}`;
-  document.getElementById("fecha").textContent = `dia=${estado.dia} anio=${estado.anio}`;
-  document.getElementById("clima").textContent = `estacion=${estado.estacion} clima=${estado.clima}`;
-  document.getElementById("poblacion").innerHTML = Object.entries(poblacion)
-    .map(([especie, n]) => `${EMOJI_POR_ESPECIE[especie] || "?"} ${especie}: ${n}`)
-    .join("<br>");
-}
-
-function escaparHtml(texto) {
-  const d = document.createElement("div");
-  d.textContent = texto;
-  return d.innerHTML;
-}
-
-function actualizarCronica(estado) {
-  // Solo se llama cuando llega una instantanea NUEVA del servidor (dentro
-  // de actualizar(), no del redibujado a 100ms) -- si se re-renderizara
-  // a ese ritmo se perderia la posicion de scroll cada vez que alguien
-  // intenta leer hacia atras. cercaDelFondo: solo auto-scrollea si el
-  // usuario ya estaba viendo lo mas reciente, para no arrastrarlo hacia
-  // abajo mientras revisa la cronica pasada.
-  const contenedor = document.getElementById("cronica");
-  const cercaDelFondo = contenedor.scrollHeight - contenedor.scrollTop - contenedor.clientHeight < 40;
-  contenedor.innerHTML = (estado.cronica || []).map(f => `<div>${escaparHtml(f)}</div>`).join("");
-  if (cercaDelFondo) {
-    contenedor.scrollTop = contenedor.scrollHeight;
-  }
-}
-
-let ultimaInstantanea = null;
-
-async function actualizar() {
-  try {
-    const resp = await fetch("/estado");
-    ultimaInstantanea = await resp.json();
-    actualizarCronica(ultimaInstantanea);
-  } catch (e) {
-    // servidor no listo todavia o main.py aun no ha producido la primera
-    // instantanea -- se reintenta solo en el siguiente intervalo, sin
-    // ruido en consola por cada fallo transitorio del primer segundo.
-  }
-}
-
-// dos ritmos distintos a proposito: 'actualizar' pregunta al servidor
-// solo cada 250ms (no hace falta mas, un tick nuevo tarda bastante mas
-// que eso); 'dibujar' repinta a 100ms usando la ULTIMA instantanea
-// conocida, para que el parpadeo del fuego (que depende del reloj del
-// navegador, no de si llego un tick nuevo) se vea fluido sin machacar la
-// red con peticiones innecesarias.
-setInterval(actualizar, 250);
-setInterval(() => { if (ultimaInstantanea) dibujar(ultimaInstantanea); }, 100);
-actualizar();
-</script>
+    setInterval(actualizar, 250);
+  </script>
 </body>
 </html>
 """
+
+
+class ManejadorWeb(http.server.BaseHTTPRequestHandler):
+    """Manejador HTTP simple sin librerías externas."""
+
+    servidor_ref: ServidorWeb | None = None
+
+    def do_GET(self) -> None:
+        if self.path in ("/", "/index.html"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(HTML_VISOR.encode("utf-8"))
+        elif self.path == "/estado.json":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            payload = self.servidor_ref.instantanea_json if self.servidor_ref else "{}"
+            self.wfile.write(payload.encode("utf-8"))
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+class ServidorWeb:
+    """Servidor multihilo desacoplado en background."""
+
+    def __init__(self, puerto: int = 8765) -> None:
+        self.puerto = puerto
+        self.instantanea_json: str = "{}"
+        ManejadorWeb.servidor_ref = self
+        self._httpd = http.server.ThreadingHTTPServer(("0.0.0.0", self.puerto), ManejadorWeb)
+        self._hilo: threading.Thread | None = None
+
+    def iniciar(self) -> None:
+        self._hilo = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._hilo.start()
+
+    def detener(self) -> None:
+        self._httpd.shutdown()
+        self._httpd.server_close()
+
+    def actualizar_instantanea(self, payload: dict[str, Any]) -> None:
+        self.instantanea_json = json.dumps(payload)
+
+
+def construir_instantanea(
+    mundo: Mundo,
+    gestor: GestorEntidades,
+    reloj: Reloj,
+    cronica: list[str],
+) -> dict[str, Any]:
+    """Construye el DTO serializable para la interfaz web."""
+    zona = mundo.territorio.zonas[0]
+    censo: dict[str, int] = {}
+
+    lista_entidades: list[dict[str, Any]] = []
+
+    # 1. Entidades Biológicas Vivas
+    for eid in sorted(gestor.entidades_con(Identidad, Posicion)):
+        ident = gestor.obtener_componente(eid, Identidad)
+        pos = gestor.obtener_componente(eid, Posicion)
+        if ident and pos:
+            esp = ident.especie.value
+            censo[esp] = censo.get(esp, 0) + 1
+            lista_entidades.append(
+                {
+                    "id": eid,
+                    "tipo": esp,
+                    "x": pos.x,
+                    "y": pos.y,
+                    "nombre": ident.nombre,
+                }
+            )
+
+    # 2. Entidades Inertes (Necromasa)
+    for nid in sorted(gestor.entidades_con(Necromasa, Posicion)):
+        nec = gestor.obtener_componente(nid, Necromasa)
+        pos_n = gestor.obtener_componente(nid, Posicion)
+        if nec and pos_n:
+            censo["necromasa"] = censo.get("necromasa", 0) + 1
+            lista_entidades.append(
+                {
+                    "id": nid,
+                    "tipo": "necromasa",
+                    "x": pos_n.x,
+                    "y": pos_n.y,
+                    "masa": round(nec.masa_organica, 2),
+                    "origen": nec.origen_especie,
+                }
+            )
+
+    grid_data: list[list[dict[str, Any]]] = []
+    for y in range(zona.alto):
+        fila: list[dict[str, Any]] = []
+        for x in range(zona.ancho):
+            c = zona.obtener_celda(x, y)
+            fila.append(
+                {
+                    "terreno": c.tipo_terreno.value,
+                    "tiene_agua": c.tiene_agua,
+                    "profundidad_charco": round(c.profundidad_charco, 3),
+                    "en_llamas": c.en_llamas,
+                    "fertilidad": round(c.fertilidad, 2),
+                }
+            )
+        grid_data.append(fila)
+
+    clima_actual = getattr(zona, "clima_actual", None)
+
+    return {
+        "tick": reloj.tick_actual,
+        "dia": reloj.dia,
+        "estacion": reloj.estacion.value,
+        "clima": clima_actual.value if clima_actual else "despejado",
+        "ancho": zona.ancho,
+        "alto": zona.alto,
+        "censo": censo,
+        "entidades": lista_entidades,
+        "grid": grid_data,
+        "cronica": cronica,
+    }

@@ -16,7 +16,6 @@ from componentes.planta import Planta
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_planta
-from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.flora import factor_produccion, factor_ribera
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -33,21 +32,25 @@ class SistemaFlora:
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
-        """Extrae el catálogo de especies de flora y coeficientes de abono."""
+        """Extrae el catálogo de especies de flora y coeficientes de abono y mantillo."""
         self.cfg_flora = self.config.get("flora", {})
         self.especies_cfg: dict[str, Any] = self.cfg_flora.get("especies", {})
-        self.bono_ribera: float = float(self.cfg_flora.get("bono_produccion_ribera", 0.2))
+        self.bono_ribera: float = float(
+            self.cfg_flora.get("bono_produccion_ribera", 0.2)
+        )
+        self.tasa_retorno_mantillo: float = float(
+            self.cfg_flora.get("tasa_retorno_mantillo", 0.05)
+        )
 
         cfg_abono = self.config.get("abono", {})
         self.techo_fertilidad: float = float(cfg_abono.get("techo_fertilidad", 1.0))
-        self.tasa_retorno_mantillo: float = 0.05  # 5% de la biomasa no cosechada retorna al suelo
 
     def ejecutar(
         self,
         gestor: GestorEntidades,
         mundo: Mundo,
         reloj: Reloj,
-        bus_eventos: BusEventos,
+        bus_eventos: Any,
     ) -> None:
         """
         Ejecuta el ciclo biológico de la flora al inicio de cada día.
@@ -71,7 +74,7 @@ class SistemaFlora:
 
             celda = zona.obtener_celda(pos.x, pos.y)
 
-            # 1. Crecimiento ontogénico (si no ha alcanzado madurez plena)
+            # 1. Crecimiento ontogénico
             if planta.etapa < 1.0:
                 tasa_crec = float(cfg_esp.get("tasa_crecimiento_por_dia", 0.1))
                 planta.etapa = min(1.0, planta.etapa + tasa_crec)
@@ -100,19 +103,22 @@ class SistemaFlora:
 
                 cant_actual = celda.recursos.get(nombre_rec, 0.0)
                 incremento = tasa_reg * eficiencia_total
-                
-                # Restitución de mantillo: si el recurso está colmado, el excedente fertiliza la celda
+
                 if cant_actual >= cap_max:
-                    aporte_mantillo = (incremento * self.tasa_retorno_mantillo)
-                    celda.fertilidad = min(self.techo_fertilidad, celda.fertilidad + aporte_mantillo)
+                    aporte_mantillo = incremento * self.tasa_retorno_mantillo
+                    celda.fertilidad = min(
+                        self.techo_fertilidad, celda.fertilidad + aporte_mantillo
+                    )
                 else:
                     nueva_cant = min(cap_max, cant_actual + incremento)
                     celda.recursos[nombre_rec] = nueva_cant
 
-            # 3. Propagación espacial a celdas contiguas compatibles
+            # 3. Propagación espacial a celdas vecinas
             prob_prop = float(cfg_esp.get("prob_propagacion_por_dia", 0.02))
             if self.rng.random() < prob_prop:
-                self._intentar_propagacion(gestor, zona, pos.x, pos.y, planta.especie, cfg_esp)
+                self._intentar_propagacion(
+                    gestor, zona, pos.x, pos.y, planta.especie, cfg_esp
+                )
 
     def _intentar_propagacion(
         self,
@@ -123,12 +129,13 @@ class SistemaFlora:
         especie_nombre: str,
         especie_cfg: dict[str, Any],
     ) -> None:
-        """Coloniza una celda adyacente desprovista de flora si el bioma es afín."""
+        """Coloniza una celda adyacente compatible inicializando sus recursos en 0.0."""
         vecinos = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         self.rng.shuffle(vecinos)
 
         biomas_compatibles = [
-            TipoTerreno(b.lower()) for b in especie_cfg.get("biomas", [])
+            TipoTerreno(b.lower())
+            for b in especie_cfg.get("biomas", [])
             if b.lower() in TipoTerreno._value2member_map_
         ]
 
@@ -137,7 +144,6 @@ class SistemaFlora:
             if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
                 celda_dest = zona.obtener_celda(nx, ny)
                 if celda_dest.tipo_terreno in biomas_compatibles:
-                    # Comprobar que no exista ya otra planta en la celda
                     hay_planta = any(
                         gestor.obtener_componente(pid, Posicion).x == nx  # type: ignore
                         and gestor.obtener_componente(pid, Posicion).y == ny  # type: ignore
@@ -145,5 +151,9 @@ class SistemaFlora:
                     )
                     if not hay_planta:
                         crear_planta(gestor, especie_nombre, nx, ny, etapa=0.1)
-                        celda_dest.tipo_recurso = especie_nombre
+                        # Inicialización explícita del diccionario de recursos de la celda
+                        for r_cfg in especie_cfg.get("recursos", []):
+                            nom = r_cfg.get("nombre")
+                            if nom and nom not in celda_dest.recursos:
+                                celda_dest.recursos[nom] = 0.0
                         break
