@@ -235,12 +235,13 @@ def main() -> None:
     # charcos, fuego, recursos) -- el TERRENO (tipo de celda, relieve) lo
     # sigue generando Mundo() a partir de la semilla de config, así que
     # continuar una partida exige no haber cambiado semilla_por_defecto
-    # entre arranques. Esto no está validado con un smoke test dedicado
-    # todavía (pendiente honesto, no una garantía).
+    # entre arranques -- ahora detectado (no solo documentado): si la
+    # semilla guardada no coincide con la actual, cargar_snapshot avisa
+    # por stderr en vez de fallar en silencio (ver su propio docstring).
     continuar_partida = os.environ.get("BOSQUE_CONTINUAR") == "1"
     partida_restaurada = False
     if continuar_partida:
-        partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego)
+        partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
 
     if not partida_restaurada:
         sembrar_poblacion_inicial(gestor, mundo, config, rng_juego, persistencia)
@@ -298,7 +299,7 @@ def main() -> None:
             bus_eventos.limpiar()
 
             if guardar_cada_ticks > 0 and reloj.tick_actual % guardar_cada_ticks == 0:
-                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego)
+                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
 
     except KeyboardInterrupt:
         pass
@@ -310,7 +311,7 @@ def main() -> None:
         # guardado, un autoguardado periódico que aún no llegó a su
         # cadencia dejaría la BD desactualizada respecto al último estado
         # real simulado.
-        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego)
+        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
 
 
 if __name__ == "__main__":
