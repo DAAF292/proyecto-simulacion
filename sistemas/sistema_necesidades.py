@@ -3,8 +3,8 @@ sistemas/sistema_necesidades.py
 
 Sistema de metabolismo y necesidades biológicas (Fase 3: Metabolismo y Resolución).
 Gestiona el desgaste pasivo de necesidades, la reposición de energía por sueño,
-el drenaje de oxigenación por inmersión y la resolución estocástica de mortalidad
-por fallo multiorgánico (inanición, deshidratación y asfixia).
+el drenaje de oxigenación por inmersión, la resolución estocástica de mortalidad
+(inanición, deshidratación, asfixia) y la instanciación de restos orgánicos (necromasa).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from nucleo.agua import profundidad_agua_potable
-from nucleo.entidad import GestorEntidades
+from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -44,10 +44,10 @@ class SistemaNecesidades:
         }
 
         self.tasa_recuperacion_dormir: float = float(
-            cfg_nec.get("tasa_recuperacion_energia_dormir", 0.05)
+            cfg_nec.get("tasa_recuperacion_energia_al_dormir", 0.05)
         )
         self.tasa_perdida_oxigenacion: float = float(
-            cfg_nec.get("tasa_perdida_oxigenacion_por_inmersion", 0.2)
+            cfg_nec.get("tasa_perdida_oxigenacion_por_inmersion", 0.5)
         )
         self.prob_muerte_ahogamiento: float = float(
             cfg_nec.get("probabilidad_muerte_ahogamiento", 0.5)
@@ -84,7 +84,6 @@ class SistemaNecesidades:
         nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
         ajuste_confort = self.ajustes_confort.get(nombre_clima, 0.0)
 
-        # Iteración determinista ordenada por identificador
         entidades = sorted(gestor.entidades_con(Necesidades, Identidad))
 
         for entidad_id in entidades:
@@ -100,11 +99,11 @@ class SistemaNecesidades:
             especie_str = identidad.especie.value
 
             # 1. Parámetros de desgaste racial
-            tasa_hambre = self._obtener_parametro(especie_str, "tasa_hambre_por_tick")
-            tasa_energia = self._obtener_parametro(especie_str, "tasa_energia_por_tick")
+            tasa_hambre = self._obtener_parametro(especie_str, "tasa_perdida_saciedad_por_tick")
+            tasa_energia = self._obtener_parametro(especie_str, "tasa_perdida_energia_por_tick")
             tasa_hidratacion = self._obtener_parametro(especie_str, "tasa_perdida_hidratacion_por_tick")
-            tasa_aliviado = self._obtener_parametro(especie_str, "tasa_aliviado_por_tick")
-            tasa_reproductivo = self._obtener_parametro(especie_str, "tasa_decaimiento_impulso_reproductivo")
+            tasa_aliviado = self._obtener_parametro(especie_str, "tasa_perdida_aliviado_por_tick")
+            tasa_reproductivo = self._obtener_parametro(especie_str, "tasa_perdida_impulso_reproductivo_por_tick")
             prob_muerte_saciedad = self._obtener_parametro(especie_str, "probabilidad_muerte_saciedad_critica")
 
             # 2. Desgaste metabólico pasivo
@@ -128,13 +127,13 @@ class SistemaNecesidades:
                 celda = zona.obtener_celda(pos.x, pos.y)
                 prof_agua = profundidad_agua_potable(celda)
                 
-                # Asfixia si la cota de agua excede la estatura física del individuo
+                # Asfixia si la cota de agua excede la estatura corporal
                 if prof_agua > dims.altura:
                     nec.oxigenacion = max(0.0, nec.oxigenacion - self.tasa_perdida_oxigenacion)
                 else:
-                    nec.oxigenacion = 1.0  # Recuperación instantánea en superficie
+                    nec.oxigenacion = 1.0
 
-            # 6. Evaluación de Mortalidad Estocástica por Necesidades Críticas
+            # 6. Evaluación de Mortalidad Estocástica
             muerto = False
             causa_muerte = ""
 
@@ -149,7 +148,7 @@ class SistemaNecesidades:
                 causa_muerte = "inanicion"
 
             if muerto:
-                self._procesar_muerte(gestor, bus_eventos, reloj, entidad_id, identidad, causa_muerte)
+                self._procesar_muerte(gestor, bus_eventos, reloj, entidad_id, identidad, pos, dims, causa_muerte)
 
     def _procesar_muerte(
         self,
@@ -158,9 +157,28 @@ class SistemaNecesidades:
         reloj: Reloj,
         entidad_id: int,
         identidad: Identidad,
+        pos: Posicion | None,
+        dims: DimensionesFisicas | None,
         causa: str,
     ) -> None:
-        """Emite el evento canónico de defunción y purga la entidad del gestor en memoria."""
+        """
+        Emite el evento canónico de defunción, deposita la biomasa inerte
+        en el grid mediante crear_necromasa y purga al agente biológico del gestor.
+        """
+        # Instanciar restos orgánicos en el sustrato antes de eliminar el agente vivo
+        if pos is not None and dims is not None:
+            masa_seca = dims.peso * 0.35
+            agua_tisular = dims.peso * 0.65
+            crear_necromasa(
+                gestor=gestor,
+                pos_x=pos.x,
+                pos_y=pos.y,
+                masa_organica=masa_seca,
+                agua_tisular=agua_tisular,
+                origen_especie=identidad.especie.value,
+                tasa_putrefaccion=0.05,
+            )
+
         bus_eventos.emitir(
             Evento(
                 tipo="Muerte",

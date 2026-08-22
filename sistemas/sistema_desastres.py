@@ -1,180 +1,226 @@
-"""SistemaDesastres (fase terreno 1, informe tecnico 7.3 -- primera
-pasada, deliberadamente acotada).
-
-7.3 describe dos modos: "en detalle completo se propaga por el grid; en
-abstraido, un unico chequeo agregado con perdida proporcional, mas evento
-HISTORICO". El "nivel de detalle" (informe tecnico, seccion 4) no existe
-todavia en el motor -- solo hay un territorio, siempre en detalle
-completo -- asi que este sistema SOLO implementa esa rama. La rama
-abstraida queda pendiente honesto, no simulada a medias.
-
-Catalogo de desastres: 7.3 pide "un perfil de riesgo por bioma", no un
-catalogo cerrado de tipos. Esta pasada implementa UN unico tipo
-(incendio) como instancia concreta del mecanismo generico -- mismo
-criterio que se aplico con Especie/conejo: el mecanismo (riesgo por
-bioma, propagacion, extincion, dano) es lo que hay que validar ahora;
-anadir un segundo tipo de desastre (inundacion, plaga...) despues es
-contenido sobre un mecanismo ya probado, no una fuente de complejidad
-nueva. Documentado como alcance deliberado, no como limitacion tecnica.
-
-Riesgo por bioma: reutiliza TipoTerreno en vez de inventar un campo de
-riesgo aparte -- solo Bosque (mas combustible que el resto, ver
-nucleo/celda.py) puede prender; antes de la correccion biomas/especies
-este chequeo miraba TipoTerreno.ESPESURA, que ya no existe como valor
-propio (ver nucleo/celda.py y componentes/planta.py). Clima modula el
-riesgo diario (despejado = mas riesgo, lluvioso = mucho menos, mismo
-enganche de nucleo/clima.py que ya usan sistema_necesidades.py y
-sistema_recursos.py, tercer consumidor del mismo dato).
-
-Dos cadencias en el mismo sistema (igual que sistema_recursos.py mezcla
-regeneracion a cadencia de dia con consumo a cadencia de tick):
-- Ignicion: chequeo de riesgo a cadencia de DIA, una tirada por celda
-  Espesura no encendida. Es la "comprobacion de riesgo" que pide 7.3.
-- Propagacion, extincion y dano: a cadencia de TICK, mientras dure el
-  incendio -- el fuego en si es un fenomeno rapido, la decision de si
-  arranca no lo es.
-
-Dano a entidades: mismo patron de escalares de techo que
-sistema_depredacion.py (dano_fraccional = dano_bruto / vitalidad_maxima)
--- no se inventa un segundo mecanismo de salud, se reutiliza el pool de
-vitalidad ya existente. Una entidad que llega a vitalidad 0.0 por fuego
-muere aqui mismo, mismo criterio de "muerte = vitalidad <= 0.0" que ya
-usa sistema_depredacion.py.
-
-Evento: HISTORICO al encenderse un incendio (7.3 pide explicitamente
-"mas evento HISTORICO"; se emite en la ignicion, momento narrativamente
-significativo, no en cada tick que arde -- mismo principio que
-CrisisMental/CambioEstacion, se narra la transicion, no la duracion).
 """
+sistemas/sistema_desastres.py
+
+Sistema de desastres naturales y dinámicas de perturbación ambiental (Corte de Día / Fase 2).
+Gestiona la ignición de incendios condicionada por clima a cadencia diaria,
+la propagación/extinción por tick, el daño térmico a criaturas vivas con depósito
+de necromasa calcinada y la conversión de flora quemada en ceniza edáfica.
+"""
+
+from __future__ import annotations
+
+import random
+from typing import Any
+
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
-from nucleo.celda import TipoTerreno
+from nucleo.bioma import TipoTerreno
+from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
-from nucleo.zona_bioma import vecinos
 
 
-def _celdas_en_llamas(zona):
-    return [(x, y, celda) for x, y, celda in zona.celdas() if celda.en_llamas]
+class SistemaDesastres:
+    """
+    Simula eventos catastróficos locales y su propagación física en el grid.
+    """
 
+    def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
+        self.config = config
+        self.rng = rng
+        self._cachear_configuracion()
 
-def _chequear_ignicion(zona, config_desastres: dict, rng, bus: BusEventos, tick_actual: int) -> None:
-    prob_base = config_desastres["prob_ignicion_base_bosque"]
-    mult_clima = config_desastres["multiplicador_riesgo_por_clima"][zona.clima_actual.value]
-    prob = prob_base * mult_clima
-
-    for x, y, celda in zona.celdas():
-        if celda.en_llamas or celda.tipo_terreno != TipoTerreno.BOSQUE:
-            continue
-        if rng.random() < prob:
-            celda.en_llamas = True
-            bus.emitir(
-                Evento(
-                    tipo="Desastre",
-                    severidad=Severidad.HISTORICO,
-                    tick=tick_actual,
-                    entidad_id=None,
-                    datos={"tipo_desastre": "incendio", "x": x, "y": y, "clima": zona.clima_actual.value},
-                )
-            )
-
-
-def _propagar_y_extinguir(zona, config_desastres: dict, rng) -> None:
-    prob_propagacion = config_desastres["prob_propagacion_por_tick"]
-    prob_extincion = config_desastres["prob_extincion_por_tick"]
-
-    focos_actuales = _celdas_en_llamas(zona)
-    if not focos_actuales:
-        return
-
-    nuevas_ignitas = set()
-    for x, y, _ in focos_actuales:
-        for nx, ny in vecinos(x, y, zona.ancho, zona.alto):
-            vecina = zona.celda(nx, ny)
-            if vecina.en_llamas or vecina.tipo_terreno != TipoTerreno.BOSQUE:
-                continue
-            if rng.random() < prob_propagacion:
-                nuevas_ignitas.add((nx, ny))
-
-    for x, y in nuevas_ignitas:
-        celda = zona.celda(x, y)
-        celda.en_llamas = True
-        for nombre in celda.recursos:
-            celda.recursos[nombre] = 0.0
-
-    for x, y, celda in focos_actuales:
-        # se destruye la vegetacion en pie mientras arde, no solo al
-        # prender -- ahora sobre TODOS los recursos de la celda (dict),
-        # no un unico float (ver nucleo/celda.py)
-        for nombre in celda.recursos:
-            celda.recursos[nombre] = 0.0
-        if rng.random() < prob_extincion:
-            celda.en_llamas = False
-
-
-def _danar_entidades_en_llamas(gestor, zona, config_desastres: dict, bus: BusEventos, tick_actual: int) -> None:
-    dano_bruto = config_desastres["dano_por_tick_en_llamas"]
-
-    for id_entidad in list(gestor.entidades_con(Posicion, PoolFisico, DimensionesFisicas)):
-        posicion = gestor.obtener_componente(id_entidad, Posicion)
-        if not zona.celda(posicion.x, posicion.y).en_llamas:
-            continue
-
-        dimensiones = gestor.obtener_componente(id_entidad, DimensionesFisicas)
-        pool = gestor.obtener_componente(id_entidad, PoolFisico)
-        dano_fraccional = dano_bruto / dimensiones.vitalidad_maxima
-        pool.vitalidad = max(0.0, pool.vitalidad - dano_fraccional)
-
-        if pool.vitalidad > 0.0:
-            continue
-
-        identidad = gestor.obtener_componente(id_entidad, Identidad)
-        datos_muerte = {"causa": "incendio"}
-        if identidad is not None:
-            datos_muerte["especie"] = identidad.especie.value
-            if identidad.nombre:
-                datos_muerte["nombre"] = identidad.nombre
-        datos_muerte["x"] = posicion.x
-        datos_muerte["y"] = posicion.y
-
-        gestor.eliminar_entidad(id_entidad)
-        bus.emitir(
-            Evento(
-                tipo="Muerte",
-                severidad=Severidad.NOTABLE,
-                tick=tick_actual,
-                entidad_id=id_entidad,
-                datos=datos_muerte,
-            )
+    def _cachear_configuracion(self) -> None:
+        """Extrae y tipa los parámetros de ignición, propagación y daño por fuego."""
+        cfg_des = self.config.get("desastres", {})
+        self.prob_ignicion_base: float = float(
+            cfg_des.get("prob_ignicion_base_bosque", 0.0015)
+        )
+        self.prob_propagacion: float = float(
+            cfg_des.get("prob_propagacion_por_tick", 0.08)
+        )
+        self.prob_extincion: float = float(
+            cfg_des.get("prob_extincion_por_tick", 0.35)
+        )
+        self.dano_por_tick_en_llamas: float = float(
+            cfg_des.get("dano_por_tick_en_llamas", 0.15)
         )
 
+        cfg_clima = cfg_des.get("multiplicador_riesgo_por_clima", {})
+        self.mult_riesgo_clima: dict[str, float] = {
+            "despejado": float(cfg_clima.get("despejado", 1.5)),
+            "lluvioso": float(cfg_clima.get("lluvioso", 0.2)),
+            "tormenta": float(cfg_clima.get("tormenta", 1.0)),
+        }
 
-def _destruir_plantas_en_llamas(gestor, zona) -> None:
-    """Fase terreno 4 (sistema_flora.py): una planta no sobrevive a que
-    su celda arda -- se elimina la entidad Planta y se marca
-    tiene_recurso=False Y tipo_recurso="" (ya no hay nada produciendo
-    ahi ni ninguna especie que reclamar, ver redefinicion de esos campos
-    en componentes/planta.py, nucleo/celda.py y sistema_flora.py). Sin
-    esto, una celda quemada seguiria mostrando tiene_recurso=True (o un
-    tipo_recurso obsoleto) aunque la planta que lo justificaba ya no
-    exista -- el mismo tipo de inconsistencia que el proyecto evita en
-    otros sitios (nunca dejar un campo mintiendo sobre el estado real)."""
-    for id_planta in list(gestor.entidades_con(Posicion, Planta)):
-        pos = gestor.obtener_componente(id_planta, Posicion)
-        if zona.celda(pos.x, pos.y).en_llamas:
-            celda = zona.celda(pos.x, pos.y)
-            celda.tiene_recurso = False
-            celda.tipo_recurso = ""
-            gestor.eliminar_entidad(id_planta)
+        self.techo_fertilidad: float = float(
+            self.config.get("abono", {}).get("techo_fertilidad", 1.0)
+        )
+        self.aporte_ceniza_planta: float = 0.15
 
+    def ejecutar(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        bus_eventos: BusEventos,
+    ) -> None:
+        """
+        Punto de entrada para la evaluación diaria de ignición.
+        Invocado al inicio de cada día en el orquestador principal.
+        """
+        zona = mundo.territorio.zonas[0]
+        clima_actual = getattr(zona, "clima_actual", None)
+        nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
+        mult_clima = self.mult_riesgo_clima.get(nombre_clima, 1.0)
 
-def actualizar(gestor, zona, config: dict, rng, bus: BusEventos, tick_actual: int) -> None:
-    config_desastres = config["desastres"]
-    if tick_actual % Reloj.TICKS_POR_DIA == 0:
-        _chequear_ignicion(zona, config_desastres, rng, bus, tick_actual)
-    _propagar_y_extinguir(zona, config_desastres, rng)
-    _danar_entidades_en_llamas(gestor, zona, config_desastres, bus, tick_actual)
-    _destruir_plantas_en_llamas(gestor, zona)
+        prob_efectiva = self.prob_ignicion_base * mult_clima
+
+        # Chequeo estocástico de ignición en bioma Bosque
+        for y in range(zona.alto):
+            for x in range(zona.ancho):
+                celda = zona.obtener_celda(x, y)
+                if celda.tipo_terreno == TipoTerreno.BOSQUE and not celda.en_llamas:
+                    if self.rng.random() < prob_efectiva:
+                        celda.en_llamas = True
+                        bus_eventos.emitir(
+                            Evento(
+                                tipo="IncendioIniciado",
+                                severidad=Severidad.HISTORICO,
+                                tick=reloj.tick_actual,
+                                datos={"x": x, "y": y, "clima": nombre_clima},
+                            )
+                        )
+
+    def procesar_fuego_tick(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        bus_eventos: BusEventos,
+    ) -> None:
+        """
+        Propaga llamas, extingue focos y aplica daño térmico a criaturas y flora.
+        Debe ejecutarse a cadencia de tick en la Fase 2 del ciclo.
+        """
+        zona = mundo.territorio.zonas[0]
+        celdas_en_llamas: list[tuple[int, int]] = []
+
+        for y in range(zona.alto):
+            for x in range(zona.ancho):
+                celda = zona.obtener_celda(x, y)
+                if celda.en_llamas:
+                    celdas_en_llamas.append((x, y))
+
+        if not celdas_en_llamas:
+            return
+
+        # 1. Propagación a celdas vecinas inflamables
+        nuevos_focos: list[tuple[int, int]] = []
+        extinciones: list[tuple[int, int]] = []
+
+        direcciones = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+
+        for fx, fy in celdas_en_llamas:
+            # Chequeo de extinción
+            if self.rng.random() < self.prob_extincion:
+                extinciones.append((fx, fy))
+
+            # Chequeo de propagación
+            for dx, dy in direcciones:
+                nx, ny = fx + dx, fy + dy
+                if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
+                    vecina = zona.obtener_celda(nx, ny)
+                    if (
+                        vecina.tipo_terreno == TipoTerreno.BOSQUE
+                        and not vecina.en_llamas
+                        and (nx, ny) not in nuevos_focos
+                    ):
+                        if self.rng.random() < self.prob_propagacion:
+                            nuevos_focos.append((nx, ny))
+
+        for ex, ey in extinciones:
+            zona.obtener_celda(ex, ey).en_llamas = False
+
+        for nx, ny in nuevos_focos:
+            zona.obtener_celda(nx, ny).en_llamas = True
+
+        # 2. Destrucción de Flora en celdas ardiendo -> Ceniza edáfica
+        plantas_a_purgar: list[int] = []
+        for planta_id in sorted(gestor.entidades_con(Planta, Posicion)):
+            pos_p = gestor.obtener_componente(planta_id, Posicion)
+            if pos_p is not None:
+                celda_p = zona.obtener_celda(pos_p.x, pos_p.y)
+                if celda_p.en_llamas:
+                    # La quema mineraliza la planta y aporta fertilidad inmediata
+                    celda_p.fertilidad = min(
+                        self.techo_fertilidad,
+                        celda_p.fertilidad + self.aporte_ceniza_planta,
+                    )
+                    plantas_a_purgar.append(planta_id)
+
+        for pid in plantas_a_purgar:
+            gestor.eliminar_entidad(pid)
+
+        # 3. Daño térmico a Criaturas vivas -> Restos calcinados
+        criaturas = sorted(gestor.entidades_con(Posicion, PoolFisico, DimensionesFisicas, Identidad))
+        for cid in criaturas:
+            pos_c = gestor.obtener_componente(cid, Posicion)
+            pool_c = gestor.obtener_componente(cid, PoolFisico)
+            dims_c = gestor.obtener_componente(cid, DimensionesFisicas)
+            ident_c = gestor.obtener_componente(cid, Identidad)
+
+            if pos_c is None or pool_c is None or dims_c is None or ident_c is None:
+                continue
+
+            celda_c = zona.obtener_celda(pos_c.x, pos_c.y)
+            if celda_c.en_llamas:
+                # Daño fraccional a vitalidad
+                dano_neto = self.dano_por_tick_en_llamas * dims_c.vitalidad_maxima
+                pool_c.vitalidad = max(0.0, pool_c.vitalidad - dano_neto)
+
+                if pool_c.vitalidad <= 0.0:
+                    # Depósito de necromasa calcinada (poca agua tisular restante)
+                    masa_seca_quemada = dims_c.peso * 0.20
+                    agua_tisular_restante = dims_c.peso * 0.05
+                    crear_necromasa(
+                        gestor=gestor,
+                        pos_x=pos_c.x,
+                        pos_y=pos_c.y,
+                        masa_organica=masa_seca_quemada,
+                        agua_tisular=agua_tisular_restante,
+                        origen_especie=ident_c.especie.value,
+                        tasa_putrefaccion=0.15,
+                    )
+
+                    bus_eventos.emitir(
+                        Evento(
+                            tipo="Muerte",
+                            severidad=Severidad.HISTORICO,
+                            tick=reloj.tick_actual,
+                            entidad_id=cid,
+                            datos={
+                                "causa": "incendio",
+                                "especie": ident_c.especie.value,
+                                "nombre": ident_c.nombre,
+                            },
+                        )
+                    )
+                    gestor.eliminar_entidad(cid)
+                else:
+                    bus_eventos.emitir(
+                        Evento(
+                            tipo="Herida",
+                            severidad=Severidad.NOTABLE,
+                            tick=reloj.tick_actual,
+                            entidad_id=cid,
+                            datos={
+                                "causa": "fuego",
+                                "vitalidad_restante": pool_c.vitalidad,
+                            },
+                        )
+                    )

@@ -2,10 +2,12 @@
 main.py
 
 Punto de entrada y orquestador del bucle de simulación de "Un mundo vivo".
-Implementa un pipeline trifásico por tick:
+Implementa un pipeline trifásico desacoplado por tick y cadencias biológicas diarias:
   - Fase 1: Percepción y Toma de Decisiones (SistemaDecision)
   - Fase 2: Acción, Cinemática y Contacto Físico (SistemaMovimiento, SistemaDepredacion)
-  - Fase 3: Metabolismo, Recursos y Resolución Vital (SistemaRecursos, SistemaNecesidades, SistemaReproduccion)
+  - Fase 3: Metabolismo, Recursos y Resolución Vital (SistemaRecursos, SistemaNecesidades,
+            SistemaCapacidadFisica, SistemaCapacidadMental, SistemaReproduccion)
+  - Corte de Día: Descomposición, Clima, Flora, Ciclo Vital y Desastres
 """
 
 from __future__ import annotations
@@ -13,7 +15,6 @@ from __future__ import annotations
 import collections
 import os
 import random
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,7 @@ from componentes.identidad import Especie, Identidad
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura
-from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo.persistencia import Persistencia
 from nucleo.reloj import Reloj
@@ -38,26 +39,27 @@ from sistemas.sistema_clima import SistemaClima
 from sistemas.sistema_decision import SistemaDecision
 from sistemas.sistema_depredacion import SistemaDepredacion
 from sistemas.sistema_desastres import SistemaDesastres
+from sistemas.sistema_descomposicion import SistemaDescomposicion
 from sistemas.sistema_flora import SistemaFlora
 from sistemas.sistema_movimiento import SistemaMovimiento
 from sistemas.sistema_necesidades import SistemaNecesidades
 from sistemas.sistema_recursos import SistemaRecursos
 from sistemas.sistema_reproduccion import SistemaReproduccion
 
-CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion"}
+CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion", "deshidratacion", "ahogamiento", "vejez"}
 
 
 def cargar_configuracion(ruta: Path) -> dict[str, Any]:
-    """Carga y parsea el archivo de configuración YAML."""
+    """Carga y parsea el archivo de configuración YAML central."""
     with open(ruta, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def instanciar_sistemas(
     config: dict[str, Any],
-    rng_juego: random.Random
+    rng_juego: random.Random,
 ) -> dict[str, Any]:
-    """Instancia todos los sistemas del motor inyectando configuración y generador pseudoaleatorio."""
+    """Instancia todos los sistemas del motor inyectando configuración y generador determinista."""
     return {
         "decision": SistemaDecision(config, rng_juego),
         "movimiento": SistemaMovimiento(config, rng_juego),
@@ -68,6 +70,7 @@ def instanciar_sistemas(
         "capacidad_mental": SistemaCapacidadMental(config),
         "reproduccion": SistemaReproduccion(config, rng_juego),
         "clima": SistemaClima(config, rng_juego),
+        "descomposicion": SistemaDescomposicion(config, rng_juego),
         "flora": SistemaFlora(config, rng_juego),
         "ciclo_vital": SistemaCicloVital(config, rng_juego),
         "desastres": SistemaDesastres(config, rng_juego),
@@ -78,9 +81,9 @@ def sembrar_poblacion_inicial(
     gestor: GestorEntidades,
     mundo: Mundo,
     config: dict[str, Any],
-    rng_juego: random.Random
+    rng_juego: random.Random,
 ) -> None:
-    """Instancia la población inicial en biomas compatibles según la configuración."""
+    """Instancia la población fundadora en biomas compatibles según la configuración."""
     zona = mundo.territorio.zonas[0]
     poblacion_cfg = config.get("poblacion", {})
 
@@ -95,14 +98,18 @@ def sembrar_poblacion_inicial(
             elif celda.tipo_terreno == TipoTerreno.PRADERA:
                 celdas_pradera.append((x, y))
 
-    # Respaldo ante ausencia de celdas de Bosque
+    # Respaldo de seguridad ante semillas con escasa generación de bosque
     candidatas_bosque = celdas_bosque if celdas_bosque else celdas_pradera
 
     especies_spawn = [
-        (Especie.GNOMO, poblacion_cfg.get("gnomos_iniciales", 6), candidatas_bosque),
-        (Especie.LOBO, poblacion_cfg.get("lobos_iniciales", 2), candidatas_bosque),
-        (Especie.ARDILLA, poblacion_cfg.get("ardillas_iniciales", 10), candidatas_bosque),
-        (Especie.CONEJO, poblacion_cfg.get("conejos_iniciales", 10), celdas_pradera if celdas_pradera else candidatas_bosque),
+        (Especie.GNOMO, poblacion_cfg.get("gnomos_iniciales", 18), candidatas_bosque),
+        (Especie.LOBO, poblacion_cfg.get("lobos_iniciales", 6), candidatas_bosque),
+        (Especie.ARDILLA, poblacion_cfg.get("ardillas_iniciales", 30), candidatas_bosque),
+        (
+            Especie.CONEJO,
+            poblacion_cfg.get("conejos_iniciales", 30),
+            celdas_pradera if celdas_pradera else candidatas_bosque,
+        ),
     ]
 
     for especie, cantidad, celdas_candidatas in especies_spawn:
@@ -121,7 +128,8 @@ def ejecutar_tick(
     sistemas: dict[str, Any],
 ) -> None:
     """
-    Ejecuta un ciclo completo de simulación estructurado en tres fases desacopladas.
+    Ejecuta un ciclo completo de simulación estructurado en tres fases desacopladas
+    y resuelve el corte de día si corresponde.
     """
     # ---------------------------------------------------------
     # FASE 1: PERCEPCIÓN Y TOMA DE DECISIONES
@@ -150,17 +158,18 @@ def ejecutar_tick(
 
     if reloj.es_inicio_de_dia():
         sistemas["clima"].ejecutar(gestor, mundo, reloj, bus_eventos)
+        sistemas["descomposicion"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["flora"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["ciclo_vital"].ejecutar(gestor, reloj, bus_eventos)
         sistemas["desastres"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
 
 def main() -> None:
-    """Punto de entrada principal."""
+    """Punto de entrada principal del simulador."""
     ruta_base = Path(__file__).parent
     config = cargar_configuracion(ruta_base / "config" / "constantes.yaml")
 
-    semilla = config.get("semilla", 42)
+    semilla = config.get("semilla_por_defecto", 42)
     rng_mapa = random.Random(semilla)
     rng_juego = random.Random(semilla)
 
@@ -169,8 +178,8 @@ def main() -> None:
     gestor = GestorEntidades()
     persistencia = Persistencia(ruta_base / "datos" / "bosque.db")
 
-    ancho = config.get("mundo", {}).get("ancho", 20)
-    alto = config.get("mundo", {}).get("alto", 20)
+    ancho = int(config.get("mundo", {}).get("grid_ancho", 28))
+    alto = int(config.get("mundo", {}).get("grid_alto", 28))
     mundo = Mundo(ancho, alto, config, rng_mapa)
 
     sembrar_poblacion_inicial(gestor, mundo, config, rng_juego)
@@ -178,12 +187,12 @@ def main() -> None:
 
     modo_visual = os.environ.get("BOSQUE_MODO_VISUAL") == "1"
     auto_ticks = int(os.environ.get("BOSQUE_AUTO_TICKS", "0"))
-    max_lineas_cronica = config.get("visual", {}).get("max_lineas_cronica", 50)
+    max_lineas_cronica = int(config.get("visual", {}).get("max_lineas_cronica", 200))
     cola_cronica: collections.deque[str] = collections.deque(maxlen=max_lineas_cronica)
 
     servidor_web: ServidorWeb | None = None
     if modo_visual:
-        puerto = int(config.get("visual", {}).get("puerto", 8080))
+        puerto = int(config.get("visual", {}).get("puerto", 8765))
         servidor_web = ServidorWeb(puerto)
         servidor_web.iniciar()
 
@@ -211,7 +220,7 @@ def main() -> None:
             if modo_visual and servidor_web is not None:
                 instantanea = construir_instantanea(mundo, gestor, reloj, list(cola_cronica))
                 servidor_web.actualizar_instantanea(instantanea)
-                time.sleep(float(config.get("visual", {}).get("segundos_por_tick", 0.1)))
+                time.sleep(float(config.get("visual", {}).get("segundos_por_tick", 0.4)))
 
             bus_eventos.limpiar()
 

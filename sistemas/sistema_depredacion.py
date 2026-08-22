@@ -3,8 +3,8 @@ sistemas/sistema_depredacion.py
 
 Sistema de resolución de depredación y combate interespecífico (Fase 2).
 Resuelve el contacto físico en la misma celda entre cazador y presa,
-computando probabilidad de captura, daño a la vitalidad y transferencia
-de biomasa proporcional a la masa corporal relativa.
+computando probabilidad de captura, daño a la vitalidad, transferencia
+de biomasa proporcional y depósito de necromasa residual en el grid.
 """
 
 from __future__ import annotations
@@ -20,14 +20,14 @@ from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
 from nucleo.disposicion import magnitud_disposicion_por_tamano
-from nucleo.entidad import GestorEntidades
+from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 
 
 class SistemaDepredacion:
     """
-    Evalúa colisiones espaciales de combate y resuelve capturas, heridas
-    y balances metabólicos por transferencia de biomasa.
+    Evalúa colisiones espaciales de combate y resuelve capturas, heridas,
+    balances metabólicos por transferencia de biomasa y depósito de restos.
     """
 
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
@@ -38,7 +38,7 @@ class SistemaDepredacion:
     def _cachear_configuracion(self) -> None:
         """Extrae y tipa los parámetros de combate y rendimiento biológico."""
         cfg_dep = self.config.get("depredacion", {})
-        self.captura_prob_min: float = float(cfg_dep.get("captura_prob_min", 0.1))
+        self.captura_prob_min: float = float(cfg_dep.get("captura_prob_min", 0.05))
         self.captura_prob_max: float = float(cfg_dep.get("captura_prob_max", 0.5))
         self.factor_agresividad_resistencia: float = float(
             cfg_dep.get("factor_agresividad_resistencia", 0.2)
@@ -94,10 +94,9 @@ class SistemaDepredacion:
                 if not presas_candidatas:
                     continue
 
-                # Selección determinista por menor identificador
                 presa_id = min(presas_candidatas)
                 muerte_presa = self._resolver_ataque(
-                    gestor, bus_eventos, cazador_id, presa_id
+                    gestor, bus_eventos, cazador_id, presa_id, x, y
                 )
 
                 if muerte_presa:
@@ -130,10 +129,12 @@ class SistemaDepredacion:
         bus_eventos: BusEventos,
         cazador_id: int,
         presa_id: int,
+        pos_x: int,
+        pos_y: int,
     ) -> bool:
         """
-        Calcula el desenlace del ataque, aplica daño a la vitalidad de la presa
-        y transfiere biomasa y saciedad al cazador si hay captura letal.
+        Calcula el desenlace del ataque, aplica daño a la vitalidad de la presa,
+        transfiere biomasa al cazador y deposita el remanente como necromasa.
         """
         dims_cazador = gestor.obtener_componente(cazador_id, DimensionesFisicas)
         dims_presa = gestor.obtener_componente(presa_id, DimensionesFisicas)
@@ -153,7 +154,7 @@ class SistemaDepredacion:
         ):
             return False
 
-        # 1. Probabilidad de éxito del ataque
+        # 1. Probabilidad estocástica de éxito del ataque
         disp = magnitud_disposicion_por_tamano(dims_cazador.peso, dims_presa.peso)
         agr = temp_cazador.agresividad if temp_cazador else 0.5
         val = temp_presa.valentia if temp_presa else 0.5
@@ -169,7 +170,7 @@ class SistemaDepredacion:
         dano_neto = dano_proporcional * dims_presa.vitalidad_maxima
         pool_presa.vitalidad = max(0.0, pool_presa.vitalidad - dano_neto)
 
-        # 3. Resolución: Herida vs Muerte
+        # 3. Resolución de estado de salud intermedio: Herida
         if pool_presa.vitalidad > 0.0:
             bus_eventos.emitir(
                 Evento(
@@ -185,16 +186,42 @@ class SistemaDepredacion:
             )
             return False
 
-        # 4. Captura letal: Transferencia de biomasa
+        # 4. Captura letal: Balance de masa y transferencia metabólica
+        masa_seca_total = dims_presa.peso * 0.35
+        agua_tisular_total = dims_presa.peso * 0.65
+
+        fraccion_consumida = 0.0
         if nec_cazador is not None:
+            deficit_saciedad = 1.0 - nec_cazador.saciedad
             ratio_biomasa = dims_presa.peso / max(0.1, dims_cazador.peso)
-            aporte_saciedad = ratio_biomasa * self.eficiencia_biomasa_saciedad
-            aporte_hidratacion = ratio_biomasa * self.eficiencia_biomasa_hidratacion
+            aporte_maximo = ratio_biomasa * self.eficiencia_biomasa_saciedad
 
-            nec_cazador.saciedad = min(1.0, nec_cazador.saciedad + aporte_saciedad)
-            nec_cazador.hidratacion = min(1.0, nec_cazador.hidratacion + aporte_hidratacion)
+            if aporte_maximo > 0.0:
+                aporte_real = min(deficit_saciedad, aporte_maximo)
+                fraccion_consumida = min(1.0, aporte_real / aporte_maximo)
+            else:
+                fraccion_consumida = 1.0
 
-        # 5. Emisión de defunción y eliminación de la entidad
+            nec_cazador.saciedad = min(1.0, nec_cazador.saciedad + aporte_maximo)
+            aporte_hidrico = ratio_biomasa * self.eficiencia_biomasa_hidratacion * fraccion_consumida
+            nec_cazador.hidratacion = min(1.0, nec_cazador.hidratacion + aporte_hidrico)
+
+        # 5. Depósito de biomasa no consumida como Necromasa
+        masa_residual = masa_seca_total * (1.0 - fraccion_consumida)
+        agua_residual = agua_tisular_total * (1.0 - fraccion_consumida)
+
+        if masa_residual > 0.05:
+            crear_necromasa(
+                gestor=gestor,
+                pos_x=pos_x,
+                pos_y=pos_y,
+                masa_organica=masa_residual,
+                agua_tisular=agua_residual,
+                origen_especie=ident_presa.especie.value,
+                tasa_putrefaccion=0.05,
+            )
+
+        # 6. Emisión de defunción y purga de la entidad biológica activa
         bus_eventos.emitir(
             Evento(
                 tipo="Muerte",
