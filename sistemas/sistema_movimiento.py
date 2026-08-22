@@ -55,6 +55,16 @@ ramas de abajo que lo mencionan como "radio de percepcion".
   uno existente) exactamente en el momento en que la rama hace `continue`
   porque ya esta sobre el recurso -- solo se recuerda lo que se ha usado
   de verdad, no todo lo que se ha percibido de pasada.
+
+  Charcos efimeros (2026-08-21, pieza 3 -- ver nucleo/agua.py:
+  hay_agua_potable): beber de un charco se recuerda exactamente igual que
+  beber de agua permanente, sin distincion. Decidido a proposito, no un
+  descuido: la memoria ya es imprecisa por diseno (error proporcional a
+  distancia), y un individuo puede volver a un sitio recordado donde la
+  comida ya se agoto o se quemo sin que exista mecanica especial para
+  eso -- un charco que se evaporo desde entonces es la misma categoria de
+  "el mundo cambio desde que lo recuerdo", no un caso nuevo que necesite
+  su propia regla.
 - cazar (paso 12.2): busca, dentro del mismo radio de percepcion, el
   individuo mas cercano que perciba como presa valida (nucleo/disposicion.py:
   mas pequeno + magnitud_disposicion_por_tamano por encima del umbral) y
@@ -74,6 +84,24 @@ ramas de abajo que lo mencionan como "radio de percepcion".
 - dormir: sin movimiento -- no existe refugio/nido todavia.
 - aliviarse (Bloque D2): sin movimiento, igual que dormir -- no depende
   de ningun terreno ni recurso, se resuelve entero en sistema_necesidades.py.
+- buscar_pareja (2026-08-20, diseno conjunto de reproduccion tras la
+  investigacion de por que la reproduccion casi nunca ocurria -- ver
+  sistema_decision.py y sistema_reproduccion.py): busca, dentro del mismo
+  radio de percepcion, el conspecifico de sexo opuesto ELEGIBLE (adulto,
+  no gestando -- MISMO criterio exacto que sistema_reproduccion.py:
+  _macho_elegible_en_contacto, reutilizado via nucleo/ciclo_vital.py:
+  es_adulto en vez de reinventar la elegibilidad aqui) mas cercano, y
+  camina hacia el. DIFERENCIA CLAVE frente al sesgo gregario de
+  sociabilidad (dentro de deambular, mas abajo): ese se detiene a
+  distancia_deseada_conspecifico (1 celda) porque "mantenerse cerca" ya
+  le basta; buscar_pareja necesita CONTACTO real (distancia 0, mismo
+  criterio de celda compartida que sistema_reproduccion.py exige para
+  evaluar concepcion) -- se sigue caminando hasta pisar la misma celda,
+  no hasta quedar adyacente. Sin pareja elegible percibida, cae al mismo
+  patron que comer/beber/cazar/huir: sigue hasta el bloque de deambular
+  de mas abajo (con su propio sesgo gregario, que SI puede acercar a un
+  conspecifico no elegible -- mejor que un paso puramente aleatorio,
+  aunque no resuelva nada por si solo).
 - crisis mental (Bloque F3, discutida y confirmada con Diego): anula todo
   lo anterior -- SistemaDecision ya la puso por encima de la Utility AI
   normal, aqui solo se resuelve el movimiento de cada tipo.
@@ -123,12 +151,54 @@ ramas de abajo que lo mencionan como "radio de percepcion".
   para eso, es la misma competencia de utilidad que ya describe el
   docstring de Temperamento. Se aplica igual a gnomo y lobo desde ya (el
   lobo ya tiene su propio rango racial de sociabilidad) -- sin gating por
-  consciencia, ese bloque sigue sin disenarse.
+  consciencia (a diferencia del sesgo de territorio, ver mas abajo, que
+  SI lo tiene): el instinto de mantenerse cerca de los tuyos no parece
+  distinto entre una especie consciente y una que no lo es, mientras que
+  explorar mas alla de lo conocido si podria serlo -- esa es la distincion
+  que separa ambos sesgos, no una omision.
 
   provisional (calibracion numerica, no diseno): la probabilidad se toma
   como sociabilidad directa (sin escalar) y distancia_deseada_conspecifico
   = 1 celda (config/constantes.yaml, seccion social) -- hipotesis de
   partida razonada, sin observar el motor en marcha todavia.
+
+  Sesgo de territorio (2026-08-21, propuesta de Diego -- "a nivel
+  biologico lo comun es mantenerse cerca de las fuentes de alimentacion,
+  agua y seguridad" -- confirmada tras discutir el mecanismo en cascada y
+  el gating por consciencia): tercer escalon dentro de deambular, EN
+  CASCADA despues del sesgo gregario (se prueba uno, si no se dispara o
+  no encuentra a nadie se prueba el otro, no compiten por una misma
+  tirada). Reutiliza objetivo_recordado (nucleo/memoria.py), el mismo
+  mecanismo que ya usan COMER/BEBER como su propio tercer escalon --
+  ninguna mecanica nueva, un consumidor nuevo de algo que ya existia.
+
+  Gating por CapacidadMental.consciencia (primer consumidor real de este
+  atributo -- declarado desde el Bloque F1 sin ningun uso hasta ahora):
+  solo aplica por debajo de decision.umbral_consciencia_agencia. Gnomo
+  (rango racial [0.6, 0.9]) queda fuera -- conserva el deambular libre de
+  siempre, se le asume agencia para explorar mas alla de lo ya conocido.
+  Las tres especies de fauna (todas por debajo de 0.2 hoy) quedan dentro
+  -- no exploran por iniciativa propia sin una necesidad concreta que lo
+  pida, vuelven a la zona de comida o agua que ya conocen, igual que un
+  animal real rara vez se aleja sin motivo de su area de campeo.
+
+  Trampa de recurso (riesgo senalado explicitamente por Diego al proponer
+  esto, no resuelto en esta pasada): un sitio recordado que ya se agoto
+  sigue tirando del individuo igual que uno vigente -- mismo criterio ya
+  aceptado en COMER/BEBER (ver docstring de nucleo/memoria.py, "un
+  recuerdo equivocado que no se corrige nunca es, en si mismo, un
+  comportamiento razonable de una memoria imperfecta"). No se anade logica
+  de "abandonar un recuerdo que falla repetidamente" -- si en la practica
+  se observa a la fauna quedarse pegada a una zona ya vacia en vez de
+  descubrir una nueva, es la primera pieza a revisar.
+
+  provisional (calibracion numerica, no diseno): distancia_deseada_
+  territorio = 1 celda (mismo valor y mismo criterio que distancia_
+  deseada_conspecifico, config/constantes.yaml seccion social) y
+  decision.umbral_consciencia_agencia = 0.3 (separa con margen a ambos
+  lados el rango racial de gnomo, minimo 0.6, del maximo de cualquier
+  fauna hoy, 0.2) -- hipotesis de partida razonada, sin observar el motor
+  en marcha todavia.
 
 Por que un radio y no busqueda global: con conocimiento global del mapa,
 mientras exista un solo recurso (o una sola presa) en cualquier parte,
@@ -165,11 +235,15 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.capacidad_mental import CapacidadMental
+from componentes.gestacion import Gestacion
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
+from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
+from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
+from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.disposicion import posicion_mas_cercana_por_disposicion
 from nucleo.memoria import capacidad_memoria, objetivo_recordado, recordar
 from nucleo.percepcion import celda_percibida, radio_individual
@@ -210,8 +284,13 @@ def _mover_si_posible(zona, config_relieve: dict, pos_actual: tuple, pos_propues
     celda_actual = zona.celda(*pos_actual)
     celda_destino = zona.celda(*pos_propuesta)
 
-    ya_en_profundo = celda_actual.profundidad_agua > dimensiones.altura
-    si_en_profundo = celda_destino.profundidad_agua > dimensiones.altura
+    # 2026-08-21 (pieza 3, charcos efimeros): profundidad_agua_potable en
+    # vez de solo profundidad_agua -- en la practica un charco (tope 3 cm,
+    # config.charcos.techo_profundidad_charco) nunca deberia superar la
+    # altura de nadie, pero se calcula con la misma formula que agua
+    # permanente en vez de asumirlo, ver docstring de nucleo/agua.py.
+    ya_en_profundo = profundidad_agua_potable(celda_actual) > dimensiones.altura
+    si_en_profundo = profundidad_agua_potable(celda_destino) > dimensiones.altura
     if si_en_profundo and not ya_en_profundo:
         return pos_actual  # demasiado hondo para este individuo -- no se mueve este tick
 
@@ -253,6 +332,47 @@ def _conspecifico_mas_cercano(gestor, id_propio: int, especie_propia, x: int, y:
             continue
         identidad_candidato = gestor.obtener_componente(id_candidato, Identidad)
         if identidad_candidato.especie != especie_propia:
+            continue
+        pos_candidato = gestor.obtener_componente(id_candidato, Posicion)
+        dist = abs(pos_candidato.x - x) + abs(pos_candidato.y - y)
+        if dist > radio:
+            continue
+        if mejor_dist is None or dist < mejor_dist:
+            mejor_dist = dist
+            mejor = (pos_candidato.x, pos_candidato.y)
+    return mejor
+
+
+def _pareja_mas_cercana(
+    gestor, id_propio: int, especie_propia, sexo_propio, x: int, y: int, radio: int,
+    tick_actual: int, rangos_raciales: dict,
+):
+    """Posicion (x, y) del conspecifico de sexo opuesto, adulto y no
+    gestando, mas cercano dentro del radio de percepcion -- MISMOS
+    criterios de elegibilidad que sistema_reproduccion.py:
+    _macho_elegible_en_contacto (misma especie, sexo opuesto, adulto),
+    mas "no gestando" (una hembra ya gestando no es un objetivo valido).
+    A diferencia de _conspecifico_mas_cercano (usado por el sesgo
+    gregario de deambular, que solo mira Identidad.especie), este SI
+    filtra por elegibilidad reproductiva completa -- caminar hasta
+    tocar a cualquier conspecifico no serviria de nada si no puede
+    concebir/fecundar con el ese mismo tick."""
+    mejor = None
+    mejor_dist = None
+    for id_candidato in gestor.entidades_con(Posicion, Identidad, Reproduccion):
+        if id_candidato == id_propio:
+            continue
+        identidad_candidato = gestor.obtener_componente(id_candidato, Identidad)
+        if identidad_candidato.especie != especie_propia:
+            continue
+        rep_candidato = gestor.obtener_componente(id_candidato, Reproduccion)
+        if rep_candidato.sexo == sexo_propio:
+            continue
+        if gestor.obtener_componente(id_candidato, Gestacion) is not None:
+            continue
+        edad_candidato = edad_ticks(identidad_candidato.tick_nacimiento, tick_actual)
+        fraccion_madurez = rangos_raciales[identidad_candidato.especie.value]["fraccion_madurez"]
+        if not es_adulto(edad_candidato, identidad_candidato.especie.value, rangos_raciales, fraccion_madurez):
             continue
         pos_candidato = gestor.obtener_componente(id_candidato, Posicion)
         dist = abs(pos_candidato.x - x) + abs(pos_candidato.y - y)
@@ -311,18 +431,35 @@ def _paso_lejos_de(x: int, y: int, ancho: int, alto: int, tx: int, ty: int):
     return max(0, min(ancho - 1, nx)), max(0, min(alto - 1, ny))
 
 
-def actualizar(gestor, zona, config, rng: random.Random) -> None:
+def actualizar(gestor, zona, config, rng: random.Random, tick_actual: int) -> None:
     umbral_disposicion = config["depredacion"]["umbral_disposicion_presa"]
     distancia_deseada_conspecifico = config["social"]["distancia_deseada_conspecifico"]
+    distancia_deseada_territorio = config["social"]["distancia_deseada_territorio"]
+    umbral_consciencia_agencia = config["decision"]["umbral_consciencia_agencia"]
     config_relieve = config["relieve"]
     config_memoria = config["memoria"]
+    rangos_raciales = config["rangos_raciales"]
 
     for id_entidad in gestor.entidades_con(Posicion, Intencion, DimensionesFisicas, PoolFisico):
         posicion = gestor.obtener_componente(id_entidad, Posicion)
         intencion = gestor.obtener_componente(id_entidad, Intencion)
         dimensiones = gestor.obtener_componente(id_entidad, DimensionesFisicas)
         pool = gestor.obtener_componente(id_entidad, PoolFisico)
+        identidad = gestor.obtener_componente(id_entidad, Identidad)
         radio = radio_individual(dimensiones.agudeza_sensorial, config["percepcion"])
+
+        # Dieta (2026-08-20, saldando la deuda tecnica declarada en
+        # sistema_recursos.py -- ver tambien config/constantes.yaml,
+        # rangos_raciales.gnomo, para el porque de que dieta viva alli):
+        # lista de nombres de recurso que esta especie acepta comer. Solo
+        # tiene sentido para quien recolecta (Accion.COMER, ver
+        # sistema_decision.py:medio_alimentacion) -- lobo (cazar) no tiene
+        # entrada "dieta" en su rango racial, .get(..., []) lo deja vacio
+        # sin fallar, mismo criterio permisivo que el resto del motor.
+        dieta = (
+            rangos_raciales[identidad.especie.value].get("dieta", [])
+            if identidad is not None else []
+        )
 
         # Filtro de relieve (nucleo/relieve.py, discutido y confirmado con
         # Diego): CUALQUIER paso propuesto en el resto de esta funcion pasa
@@ -393,12 +530,19 @@ def actualizar(gestor, zona, config, rng: random.Random) -> None:
             continue
 
         if intencion.accion == Accion.COMER:
-            if any(cantidad > 0 for cantidad in zona.celda(posicion.x, posicion.y).recursos.values()):
+            # Dieta restringida (2026-08-20): antes se aceptaba cualquier
+            # recurso con existencias, sin mirar cual prefiere quien come
+            # (deuda tecnica declarada en sistema_recursos.py). Ahora se
+            # filtra por la lista `dieta` de la propia especie -- gnomo
+            # sigue aceptando todo lo que ya existia (dieta sin restringir
+            # a proposito, ver config/constantes.yaml), conejo/ardilla
+            # quedan limitados a lo suyo.
+            if any(zona.celda(posicion.x, posicion.y).recursos.get(nombre, 0) > 0 for nombre in dieta):
                 recordar_si_procede("comida", posicion.x, posicion.y)
                 continue
             objetivo = celda_percibida(
                 zona, posicion.x, posicion.y, radio,
-                lambda c: any(cantidad > 0 for cantidad in c.recursos.values()),
+                lambda c: any(c.recursos.get(nombre, 0) > 0 for nombre in dieta),
             )
             if objetivo is None:
                 # nada dentro del radio de percepcion -> intenta un
@@ -410,7 +554,16 @@ def actualizar(gestor, zona, config, rng: random.Random) -> None:
             # no percibe ni recuerda ningun recurso -> cae a deambular
 
         if intencion.accion == Accion.BEBER:
-            if zona.celda(posicion.x, posicion.y).tiene_agua:
+            # 2026-08-21 (pieza 3, charcos efimeros -- ver docstring del
+            # modulo y nucleo/agua.py): hay_agua_potable/profundidad_agua_
+            # potable en vez de tiene_agua/profundidad_agua a secas, para
+            # que un charco cuente igual que agua permanente en las tres
+            # ramas de abajo (ya sobre agua / vadeable cercana / cualquier
+            # agua cercana). Un charco recordado que ya se evaporo puede
+            # llevar a un individuo a un sitio seco -- ver docstring del
+            # modulo, nota "Charcos efimeros" bajo Memoria espacial:
+            # decidido, no un descuido.
+            if hay_agua_potable(zona.celda(posicion.x, posicion.y)):
                 recordar_si_procede("agua", posicion.x, posicion.y)
                 continue
             # preferencia por agua vadeable (ver docstring del modulo) --
@@ -418,12 +571,12 @@ def actualizar(gestor, zona, config, rng: random.Random) -> None:
             # celda vadeable esta dentro del radio.
             objetivo = celda_percibida(
                 zona, posicion.x, posicion.y, radio,
-                lambda c: c.tiene_agua and c.profundidad_agua <= dimensiones.altura,
+                lambda c: hay_agua_potable(c) and profundidad_agua_potable(c) <= dimensiones.altura,
             )
             if objetivo is None:
                 objetivo = celda_percibida(
                     zona, posicion.x, posicion.y, radio,
-                    lambda c: c.tiene_agua,
+                    lambda c: hay_agua_potable(c),
                 )
             if objetivo is None:
                 # nada dentro del radio de percepcion -> intenta un
@@ -460,9 +613,27 @@ def actualizar(gestor, zona, config, rng: random.Random) -> None:
                 continue
             # no percibe ninguna amenaza (se alejo justo este tick) -> deambula
 
-        # deambular (accion explicita, o comer/cazar/huir sin nada percibido cerca)
+        if intencion.accion == Accion.BUSCAR_PAREJA:
+            objetivo = None
+            reproduccion = gestor.obtener_componente(id_entidad, Reproduccion)
+            if reproduccion is not None and identidad is not None:
+                objetivo = _pareja_mas_cercana(
+                    gestor, id_entidad, identidad.especie, reproduccion.sexo,
+                    posicion.x, posicion.y, radio, tick_actual, rangos_raciales,
+                )
+            if objetivo is not None:
+                if objetivo == (posicion.x, posicion.y):
+                    # ya en contacto -- sistema_reproduccion.py (corre
+                    # despues de este sistema) resuelve la concepcion,
+                    # aqui no hay nada mas que mover este tick.
+                    continue
+                posicion.x, posicion.y = mover(_paso_hacia(posicion.x, posicion.y, *objetivo))
+                continue
+            # ninguna pareja elegible percibida -> cae a deambular
+
+        # deambular (accion explicita, o comer/cazar/huir/buscar_pareja sin nada percibido cerca)
+        # identidad ya se obtuvo al principio del bucle (para dieta)
         temperamento = gestor.obtener_componente(id_entidad, Temperamento)
-        identidad = gestor.obtener_componente(id_entidad, Identidad)
         if temperamento is not None and identidad is not None and rng.random() < temperamento.sociabilidad:
             objetivo = _conspecifico_mas_cercano(
                 gestor, id_entidad, identidad.especie, posicion.x, posicion.y, radio
@@ -474,5 +645,62 @@ def actualizar(gestor, zona, config, rng: random.Random) -> None:
                     continue
                 # ya esta a distancia deseada -> "mantenerse cerca" sale gratis
                 # de no seguir tirando hacia el, cae al paso aleatorio de abajo
+
+        # Sesgo de territorio (2026-08-21, propuesta de Diego -- "a nivel
+        # biologico lo comun es mantenerse cerca de las fuentes de
+        # alimentacion, agua y seguridad, no deambular de forma erratica"):
+        # tercer escalon dentro de DEAMBULAR, despues del sesgo gregario
+        # (en cascada, confirmado con Diego -- no compiten, se prueba uno
+        # y despues el otro) y antes del paso aleatorio puro. Reutiliza
+        # objetivo_recordado (nucleo/memoria.py) tal cual, el mismo
+        # mecanismo que ya usan COMER/BEBER como tercer escalon propio --
+        # ninguna mecanica nueva, solo un consumidor nuevo de algo que ya
+        # existia.
+        #
+        # Gating por CapacidadMental.consciencia (2026-08-21, primer
+        # consumidor real de este atributo -- declarado desde el Bloque F1
+        # sin ningun uso hasta ahora, exactamente para esto: diferenciar
+        # grados de consciencia entre criaturas, confirmado con Diego):
+        # solo por debajo de decision.umbral_consciencia_agencia. Una
+        # criatura consciente (gnomo, rango racial [0.6, 0.9]) conserva el
+        # deambular libre de siempre -- se asume agencia para explorar mas
+        # alla de lo ya conocido. La fauna (rango racial de las tres
+        # especies hoy, todas por debajo de 0.2) no explora por iniciativa
+        # propia sin necesidad concreta -- vuelve a la zona que ya conoce
+        # como fuente fiable de comida o agua, igual que un animal real
+        # rara vez se aleja sin motivo de su area de campeo.
+        #
+        # Sin recuerdo todavia (fauna recien nacida, o que nunca encontro
+        # nada) -> cae exactamente igual que antes al paso aleatorio de
+        # abajo -- esta pieza no cambia nada para quien no tiene memoria
+        # util todavia, solo sesga a quien ya la tiene.
+        #
+        # Trampa de recurso (riesgo senalado explicitamente, no resuelto
+        # aqui): un sitio recordado que ya se agoto sigue tirando del
+        # individuo igual -- mismo criterio ya aceptado en COMER/BEBER
+        # ("un recuerdo equivocado que no se corrige nunca es, en si
+        # mismo, un comportamiento razonable de una memoria imperfecta",
+        # ver nucleo/memoria.py). No se anade logica de "abandonar un
+        # recuerdo que falla repetidamente" en esta pasada -- señalado
+        # como posible ajuste futuro si en la practica se ve al individuo
+        # quedarse pegado a una zona ya vacia en vez de descubrir una
+        # nueva.
+        if capacidad_mental is not None and capacidad_mental.consciencia < umbral_consciencia_agencia:
+            objetivo_territorio = None
+            mejor_dist = None
+            for tipo_recuerdo in ("comida", "agua"):
+                candidato = recuerdo(tipo_recuerdo)
+                if candidato is None:
+                    continue
+                dist_candidato = abs(candidato[0] - posicion.x) + abs(candidato[1] - posicion.y)
+                if mejor_dist is None or dist_candidato < mejor_dist:
+                    objetivo_territorio = candidato
+                    mejor_dist = dist_candidato
+            if objetivo_territorio is not None and mejor_dist > distancia_deseada_territorio:
+                posicion.x, posicion.y = mover(_paso_hacia(posicion.x, posicion.y, *objetivo_territorio))
+                continue
+                # ya dentro del territorio conocido (o sin recuerdo) ->
+                # cae al paso aleatorio de abajo -- explora libremente su
+                # propia zona en vez de quedarse literalmente quieto.
 
         posicion.x, posicion.y = mover(_paso_aleatorio(zona, rng, posicion.x, posicion.y))

@@ -178,25 +178,51 @@ def generar_zona_bioma(
     # Bosque) no compitan por la misma celda -- el orden del catalogo
     # decide quien tiene primera opcion, sin ninguna razon ecologica
     # detras del orden, solo el orden de config/constantes.yaml.
+    # CORRECCION 2026-08-20 (pedida por Diego: hierba tiene que ser "la
+    # gran mayoria de la pradera" -- ver config/constantes.yaml,
+    # flora.especies.hierba_silvestre.proporcion): antes se combinaban
+    # TODOS los biomas compatibles de una especie en un unico conjunto de
+    # candidatas y se aplicaba una sola proporcion escalar sobre ese
+    # conjunto -- con una especie en dos biomas (hierba_silvestre en
+    # pradera Y bosque), no habia forma de subir su abundancia en un
+    # bioma sin subirla tambien en el otro (hierba va primera en el
+    # catalogo, con primera opcion de celda sobre manzano en bosque).
+    # Ahora se itera especie x bioma por separado, cada bioma con su
+    # propio conjunto de candidatas y su propia proporcion -- proporcion
+    # puede seguir siendo un escalar (aplicado igual a todos los biomas
+    # de esa especie, comportamiento identico al de antes para cualquier
+    # especie de un solo bioma) o un diccionario {bioma: proporcion} para
+    # el caso -- hoy solo hierba_silvestre -- que necesita valores
+    # distintos por bioma. num_manchas se aplica tambien POR bioma ahora
+    # (antes era un reparto sobre el conjunto combinado) -- efecto
+    # colateral aceptado: una especie en N biomas puede generar hasta N x
+    # num_manchas grupos en vez de un reparto de num_manchas entre todos,
+    # sin calibrar, mismo estatus "hipotesis de partida" que el resto de
+    # esta seccion.
     especie_por_celda = {}
     celdas_ya_asignadas = set()
     for especie_key, especie_cfg in config_flora["especies"].items():
-        biomas_compatibles = {TipoTerreno(b) for b in especie_cfg["biomas"]}
-        candidatas = {
-            p for p in todas_las_celdas
-            if biomas[p] in biomas_compatibles and p not in celdas_ya_asignadas
-        }
-        objetivo = int(len(candidatas) * especie_cfg["proporcion"])
-        mancha = _generar_manchas(
-            ancho, alto, rng,
-            celdas_candidatas=candidatas,
-            num_manchas=especie_cfg["num_manchas"],
-            objetivo_absoluto=objetivo,
-            prob_expansion=config_generacion["recurso_prob_expansion"],
-        )
-        for p in mancha:
-            especie_por_celda[p] = especie_key
-        celdas_ya_asignadas |= mancha
+        proporcion_cfg = especie_cfg["proporcion"]
+        for bioma_nombre in especie_cfg["biomas"]:
+            bioma = TipoTerreno(bioma_nombre)
+            candidatas = {
+                p for p in todas_las_celdas
+                if biomas[p] == bioma and p not in celdas_ya_asignadas
+            }
+            proporcion = (
+                proporcion_cfg[bioma_nombre] if isinstance(proporcion_cfg, dict) else proporcion_cfg
+            )
+            objetivo = int(len(candidatas) * proporcion)
+            mancha = _generar_manchas(
+                ancho, alto, rng,
+                celdas_candidatas=candidatas,
+                num_manchas=especie_cfg["num_manchas"],
+                objetivo_absoluto=objetivo,
+                prob_expansion=config_generacion["recurso_prob_expansion"],
+            )
+            for p in mancha:
+                especie_por_celda[p] = especie_key
+            celdas_ya_asignadas |= mancha
 
     grid = [[None] * alto for _ in range(ancho)]
     for x in range(ancho):

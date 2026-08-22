@@ -99,14 +99,24 @@ posible, deja de ser la norma. Decision confirmada con Diego tras
 presentarle los datos, no una correccion silenciosa.
 
 hidratacion (Bloque D1): baja cada tick a tasa_perdida_hidratacion_por_tick,
-mismo patron que saciedad -- pero sin regla de muerte propia (a
-diferencia de saciedad, que si la tiene desde el paso 6-y-medio). No es
-una inconsistencia nueva: seguridad tampoco mata directamente por si
-sola, solo saciedad lo hace hoy. Nota para una conversacion futura, no
-resuelta aqui: con el pool de vitalidad ya existente (Bloque C2), tiene
-sentido preguntarse si la muerte por inanicion/deshidratacion deberia
-pasar a drenar vitalidad en vez de tener su propia tirada de probabilidad
-independiente -- se deja anotado, no se decide en este bloque.
+mismo patron que saciedad.
+
+CORRECCION 2026-08-21 (Diego, cuarta pieza de la revision del sistema de
+agua -- "la sed deberia matar como mata el hambre"): gana regla de
+muerte propia, MISMO patron exacto que inanicion desde el paso
+6-y-medio (umbral hidratacion=0.0 sostenido + probabilidad fija por
+tick, ver probabilidad_muerte_deshidratacion en config/constantes.yaml)
+-- ya no hay asimetria entre las dos necesidades de "ingesta". A
+diferencia de inanicion, la probabilidad es mayor (deshidratarse mata en
+dias reales, no en semanas, ver el razonamiento completo en config) --
+mismo criterio relativo que ya separaba oxigenacion (mucho mas urgente
+que inanicion) de inanicion misma, aplicado aqui a una magnitud
+intermedia. Nota para una conversacion futura, no resuelta aqui: con el
+pool de vitalidad ya existente (Bloque C2), tiene sentido preguntarse si
+la muerte por inanicion/deshidratacion/ahogamiento deberia pasar a
+drenar vitalidad en vez de tener cada una su propia tirada de
+probabilidad independiente -- se deja anotado, no se decide en este
+bloque.
 
 Resolucion del dormir (paso 8): hueco real que no cubria ninguno de los
 12 pasos originales -- solo comer tenia contraparte (SistemaRecursos).
@@ -128,6 +138,23 @@ no en decenas): a diferencia de dormir, aliviarse no representa un
 descanso sostenido, es un acto breve. Universal para todas las especies,
 sin restriccion documentada. Sin regla de muerte propia, igual criterio
 que hidratacion y seguridad.
+
+impulso_reproductivo (2026-08-20, diseno conjunto de reproduccion --
+ver componentes/necesidades.py y sistema_reproduccion.py): baja cada
+tick a tasa_perdida_impulso_reproductivo_por_tick, MISMO patron y MISMO
+mecanismo _tasa (defecto + override opcional por especie en config.
+necesidades) que saciedad/energia/hidratacion/aliviado -- no se le crea
+un bloque de configuracion nuevo en rangos_raciales, porque es una tasa
+de decaimiento por tick, exactamente el tipo de dato que ya vive en
+config.necesidades para las otras cinco necesidades. Sin gating por
+consciencia (se aplica a las cuatro especies por igual, ver componentes/
+necesidades.py). Sin regla de muerte propia -- igual criterio que
+hidratacion/aliviado/seguridad, llegar a 0.0 solo empuja la utilidad de
+Accion.BUSCAR_PAREJA (sistema_decision.py) al maximo. La reposicion a
+1.0 NO ocurre aqui -- pasa en sistema_reproduccion.py en el momento de
+una Concepcion, no como una accion de Intencion que este sistema deba
+resolver (a diferencia de DORMIR/ALIVIARSE, no hay una Accion cuyo mero
+mantenimiento repare el impulso; lo repara un evento puntual).
 """
 import random
 
@@ -136,6 +163,7 @@ from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
+from nucleo.agua import profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.clima import estacion_actual, objetivo_confort_termico
 from nucleo.eventos import BusEventos, Evento, Severidad
@@ -212,12 +240,19 @@ def actualizar(
         tasa_perdida_oxigenacion = _tasa(config_necesidades, especie, "tasa_perdida_oxigenacion_por_inmersion")
         tasa_recuperacion_oxigenacion = _tasa(config_necesidades, especie, "tasa_recuperacion_oxigenacion")
         prob_muerte_ahogamiento = _tasa(config_necesidades, especie, "probabilidad_muerte_ahogamiento")
+        prob_muerte_deshidratacion = _tasa(config_necesidades, especie, "probabilidad_muerte_deshidratacion")
+        tasa_perdida_impulso_reproductivo = _tasa(
+            config_necesidades, especie, "tasa_perdida_impulso_reproductivo_por_tick"
+        )
 
         necesidades = gestor.obtener_componente(id_entidad, Necesidades)
         necesidades.saciedad = max(0.0, necesidades.saciedad - tasa_perdida_saciedad)
         necesidades.energia = max(0.0, necesidades.energia - tasa_perdida_energia)
         necesidades.hidratacion = max(0.0, necesidades.hidratacion - tasa_perdida_hidratacion)
         necesidades.aliviado = max(0.0, necesidades.aliviado - tasa_perdida_aliviado)
+        necesidades.impulso_reproductivo = max(
+            0.0, necesidades.impulso_reproductivo - tasa_perdida_impulso_reproductivo
+        )
 
         # confort_termico: deriva hacia objetivo_confort (estacion+clima),
         # nunca salta de golpe -- tasa_deriva_confort es la MISMA para
@@ -251,8 +286,12 @@ def actualizar(
             # de su cabeza" se resuelve comparando la profundidad de la
             # celda ACTUAL contra su propia altura -- ni la especie ni
             # ninguna otra magnitud entra aqui, solo geometria directa.
+            # 2026-08-21 (pieza 3, charcos efimeros): profundidad_agua_
+            # potable en vez de solo profundidad_agua, por consistencia
+            # con sistema_movimiento.py -- en la practica un charco (tope
+            # 3 cm) nunca deberia disparar esto, ver nucleo/agua.py.
             celda_actual = zona.celda(posicion.x, posicion.y)
-            if celda_actual.profundidad_agua > dimensiones.altura:
+            if profundidad_agua_potable(celda_actual) > dimensiones.altura:
                 necesidades.oxigenacion = max(0.0, necesidades.oxigenacion - tasa_perdida_oxigenacion)
             else:
                 necesidades.oxigenacion = min(1.0, necesidades.oxigenacion + tasa_recuperacion_oxigenacion)
@@ -263,6 +302,14 @@ def actualizar(
         # de volver a consultar el gestor.
         if necesidades.saciedad <= 0.0 and rng.random() < prob_muerte:
             _registrar_muerte(gestor, bus, tick_actual, id_entidad, identidad, posicion, "inanicion")
+            continue  # entidad ya eliminada -- no comprobar el resto este tick
+
+        # deshidratacion (2026-08-21, Diego: "la sed deberia matar como
+        # mata el hambre" -- ver docstring del modulo, seccion
+        # hidratacion): mismo patron exacto que inanicion, probabilidad
+        # mayor -- ver config/constantes.yaml para el razonamiento.
+        if necesidades.hidratacion <= 0.0 and rng.random() < prob_muerte_deshidratacion:
+            _registrar_muerte(gestor, bus, tick_actual, id_entidad, identidad, posicion, "deshidratacion")
             continue  # entidad ya eliminada -- no comprobar tambien ahogamiento este tick
 
         # ahogamiento (pieza 4, ver docstring del modulo): mismo patron

@@ -48,6 +48,8 @@ from componentes.posicion import Posicion
 EMOJI_POR_ESPECIE = {
     "gnomo": "\U0001F9D1",  # 🧑
     "lobo": "\U0001F43A",   # 🐺
+    "conejo": "\U0001F430",  # 🐰 (2026-08-20, introduccion de conejo/ardilla)
+    "ardilla": "\U0001F43F",  # 🐿️
 }
 
 
@@ -219,7 +221,7 @@ const COLOR_AGUA = {
   lago: "rgba(30, 80, 160, 0.8)",
   poza: "rgba(100, 180, 200, 0.85)",
 };
-const EMOJI_POR_ESPECIE = { gnomo: "\\u{1F9D1}", lobo: "\\u{1F43A}" };
+const EMOJI_POR_ESPECIE = { gnomo: "\\u{1F9D1}", lobo: "\\u{1F43A}", conejo: "\\u{1F430}", ardilla: "\\u{1F43F}" };
 
 const lienzo = document.getElementById("mapa");
 const ctx = lienzo.getContext("2d");

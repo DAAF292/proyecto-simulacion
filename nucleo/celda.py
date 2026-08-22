@@ -150,16 +150,45 @@ class Celda:
     en rio/lago). NO se persiste, mismo motivo que tiene_agua -- estatico
     de por vida una vez generado el mundo."""
     profundidad_agua: float = 0.0
-    """Profundidad del agua de esta celda, en METROS -- unica magnitud de
-    Celda con unidad real en vez de escala normalizada [0,1], a proposito:
-    para que sea comparable con DimensionesFisicas.altura (tambien en
-    metros) cuando exista la mecanica de ahogamiento (pieza 4 de la
-    secuencia de fisica de terreno/agua acordada con Diego, todavia sin
-    construir). 0.0 si tipo_agua == "" (sin agua). Para lago/poza, se
-    deriva de la MISMA geometria de cuenca que ya genera su forma
-    (nucleo/agua.py:_profundidades_cuenca) -- mas profunda cerca del
-    centro, casi nula en el borde, un gradiente que emerge de la cuenca
-    en vez de asignarse a mano. Para rio, valor FIJO uniforme
-    (config.agua.profundidad_metros_rio) -- simplificacion declarada, ver
-    docstring de nucleo/agua.py. NO se persiste, mismo motivo que
-    tipo_agua/tiene_agua."""
+    """Profundidad del agua PERMANENTE de esta celda, en METROS -- unica
+    magnitud de Celda con unidad real en vez de escala normalizada [0,1],
+    a proposito: comparable con DimensionesFisicas.altura (tambien en
+    metros), consumida por ahogamiento (sistema_necesidades.py) y por el
+    bloqueo de agua profunda en el movimiento (sistema_movimiento.py:
+    _mover_si_posible). 0.0 si tipo_agua == "" (sin agua). Se deriva de la
+    MISMA geometria de cuenca (nucleo/agua.py:_profundidades_cuenca) para
+    los tres tipos -- lago/poza/rio -- mas profunda cerca del centro de su
+    cuenca (o de la orilla, para rio, ver _generar_riberas_rio), casi nula
+    en el borde: un gradiente que emerge del relieve real en vez de
+    asignarse a mano (CORRECCION DE DISENO 2026-08-21, ver docstring de
+    nucleo/agua.py para el detalle completo -- version anterior de esta
+    nota, que hablaba de "pieza 4 sin construir" y de rio con valor FIJO,
+    quedo obsoleta con esa correccion). NO se persiste: determinista a
+    partir del campo de elevacion y la semilla del mundo, igual que
+    tipo_agua/tiene_agua -- nunca se muta en juego, no hay erosion ni
+    sequias todavia.
+
+    Distinto de profundidad_charco (mas abajo): esta es agua PERMANENTE
+    y geografica; profundidad_charco es agua EFIMERA y climatica. Donde
+    haga falta tratar "cualquier agua bebible ahora mismo" sin importar
+    el origen, usar nucleo/agua.py:hay_agua_potable/profundidad_efectiva
+    en vez de comparar este campo solo."""
+    profundidad_charco: float = 0.0
+    """Charco efimero (pieza 3 de la revision del sistema de agua pedida
+    por Diego, 2026-08-21 -- "quizas la tormenta y lluvia podrian generar
+    charcos en las celdas y estos despues se agotarian o se evaporan"),
+    en METROS, mismo criterio de unidad que profundidad_agua. A
+    diferencia de esta, es agua EFIMERA y climatica, no geografica: sube
+    mientras zona.clima_actual es lluvioso/tormenta, baja por evaporacion
+    pasiva cuando no llueve, y se agota especificamente por consumo
+    (Accion.BEBER) cuando es la unica agua presente en la celda -- ver
+    sistemas/sistema_recursos.py (_generar_charcos, _evaporar_charcos,
+    _beber). Deliberadamente NUNCA tan profundo como para ahogar a nadie
+    ni bloquear un paso (config.charcos.techo_profundidad_charco muy por
+    debajo de cualquier altura racial actual) -- un charco, por
+    definicion fisica, no es un cuerpo de agua hondo; no es una regla
+    pensada contra ninguna especie en concreto (mismo criterio neutro que
+    ya se aplico al redisenar profundidad_agua). SI se persiste -- estado
+    mutado por la partida real, mismo motivo que fertilidad/tiene_recurso/
+    en_llamas, NO el mismo motivo que profundidad_agua/tiene_agua (esos
+    son deterministas de la semilla; esto no)."""

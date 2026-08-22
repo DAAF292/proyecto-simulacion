@@ -19,6 +19,23 @@ el nacimiento -- el padre podria morir durante la gestacion (inanicion,
 depredacion, vejez...) y el nacimiento no deberia depender de que siga
 vivo entonces. La genetica se fija en la concepcion, no en el parto.
 
+tamano_camada (2026-08-21, investigacion "sostenibilidad de caza del
+lobo" -- ver sistema_depredacion.py y config/constantes.yaml, seccion
+'depredacion', para el diagnostico completo que llevo hasta aqui): igual
+que el resto de esta clase, se sortea y se fija en la CONCEPCION, no en
+el parto -- es un hecho biologico real que una camada tiene un tamano
+determinado desde que se concibe, no algo que se decida al nacer. Antes
+de este cambio, _resolver_nacimientos() de sistema_reproduccion.py creaba
+exactamente UN hijo por gestacion resuelta, para cualquier especie --
+simplificacion que nunca se habia cuestionado hasta que el diagnostico de
+2026-08-21 encontro que era la pieza que rompia la sostenibilidad del
+ecosistema a CUALQUIER tamano de mapa o poblacion: la presion de caza
+escala con el numero de cazadores, pero un solo hijo por concepcion no
+compensaba ni de lejos esa presion en las especies presa reales (un
+conejo real no concibe una cria, concibe varias). rango racial
+'camada' (config/constantes.yaml) razonado por especie contra datos
+reales, no una cifra inventada.
+
 La MADRE no necesita instantanea equivalente: si muriera durante la
 gestacion, eliminar_entidad() se lleva Gestacion con ella (vive en el
 mismo diccionario de componentes que el resto) -- "la madre sigue viva"
@@ -50,3 +67,4 @@ class Gestacion:
     temperamento_padre: Temperamento
     capacidad_mental_padre: CapacidadMental
     duracion_gestacion_padre: float
+    tamano_camada: int

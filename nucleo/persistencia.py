@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS componentes_estado (
     seguridad REAL NOT NULL,
     hidratacion REAL NOT NULL,
     aliviado REAL NOT NULL,
+    impulso_reproductivo REAL NOT NULL DEFAULT 1.0,
     peso REAL NOT NULL,
     fuerza REAL NOT NULL,
     agilidad REAL NOT NULL,
@@ -132,6 +133,7 @@ CREATE TABLE IF NOT EXISTS celdas_estado (
     en_llamas INTEGER NOT NULL DEFAULT 0,
     tiene_recurso INTEGER NOT NULL DEFAULT 0,
     tipo_recurso TEXT NOT NULL DEFAULT '',
+    profundidad_charco REAL NOT NULL DEFAULT 0.0,
     PRIMARY KEY (x, y)
 );
 
@@ -284,7 +286,23 @@ CREATE TABLE IF NOT EXISTS plantas_estado (
 # a diferencia de datos deterministas de celda -- es experiencia
 # acumulada de una vida entera, perderla al recargar seria una
 # inconsistencia real, no una imprecision aceptable como Intencion.
-_VERSION_ESQUEMA = "0.17-fase0"
+# 0.18: impulso_reproductivo (componentes/necesidades.py, diseno conjunto
+# de reproduccion 2026-08-20 -- ver sistema_reproduccion.py y sistema_
+# decision.py). `componentes_estado` gana `impulso_reproductivo` (REAL,
+# DEFAULT 1.0) -- mismo patron que saciedad/energia/hidratacion/aliviado:
+# es estado que evoluciona por tick y no se puede derivar del entorno al
+# recargar (a diferencia de oxigenacion/confort_termico, que SI se
+# recalculan y por eso nunca tuvieron columna propia).
+# 0.19: Charcos efimeros (pieza 3 de la revision del sistema de agua,
+# 2026-08-21 -- ver nucleo/celda.py:profundidad_charco y sistemas/
+# sistema_recursos.py). `celdas_estado` gana `profundidad_charco` (REAL,
+# DEFAULT 0.0) -- SI se persiste, mismo motivo que fertilidad/tiene_
+# recurso/en_llamas (estado mutado por la partida real, no derivable de
+# la semilla del mundo): a diferencia de profundidad_agua (geografica,
+# nunca se muta en juego, por eso nunca tuvo columna propia), un charco
+# sube y baja por clima/consumo, perderlo al recargar borraria una
+# tormenta a medio evaporar sin motivo.
+_VERSION_ESQUEMA = "0.19-fase0"
 
 
 def _conectar(ruta_db: str) -> sqlite3.Connection:
@@ -355,12 +373,20 @@ def guardar_estado(ruta_db: str, semilla: int, tick_actual: int, gestor, zona, r
                     "temperamento": vars(gest.temperamento_padre),
                     "capacidad_mental": vars(gest.capacidad_mental_padre),
                     "duracion_gestacion_padre": gest.duracion_gestacion_padre,
+                    # tamano_camada (2026-08-21, ver componentes/gestacion.py):
+                    # se guarda dentro de este mismo snapshot en vez de
+                    # anadir una columna nueva -- es un dato fijado en la
+                    # CONCEPCION, exactamente el mismo momento que el resto
+                    # de este diccionario, no una columna independiente con
+                    # su propia semantica de NULL.
+                    "tamano_camada": gest.tamano_camada,
                 }, ensure_ascii=False)
             else:
                 snapshot_padre = None
             filas_componentes.append((
                 id_entidad, pos.x, pos.y,
                 nec.saciedad, nec.energia, nec.seguridad, nec.hidratacion, nec.aliviado,
+                nec.impulso_reproductivo,
                 dim.peso, dim.fuerza, dim.agilidad,
                 dim.vitalidad_maxima, dim.resistencia_maxima, dim.curacion, dim.recuperacion,
                 tem.valentia, tem.sociabilidad, tem.agresividad,
@@ -378,7 +404,8 @@ def guardar_estado(ruta_db: str, semilla: int, tick_actual: int, gestor, zona, r
             ))
         conn.executemany(
             """INSERT INTO componentes_estado
-               (entidad_id, x, y, saciedad, energia, seguridad, hidratacion, aliviado, peso, fuerza,
+               (entidad_id, x, y, saciedad, energia, seguridad, hidratacion, aliviado,
+                impulso_reproductivo, peso, fuerza,
                 agilidad, vitalidad_maxima, resistencia_maxima, curacion, recuperacion,
                 valentia, sociabilidad, agresividad, dominancia, empatia, lealtad, fe, curiosidad,
                 inteligencia, memoria, voluntad, resiliencia, estabilidad_mental_maxima, consciencia,
@@ -386,7 +413,7 @@ def guardar_estado(ruta_db: str, semilla: int, tick_actual: int, gestor, zona, r
                 vitalidad_actual, resistencia_actual, estabilidad_mental_actual,
                 sexo, duracion_gestacion_dias, tick_inicio_gestacion,
                 gestacion_padre_id, gestacion_padre_snapshot, recuerdos)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             filas_componentes,
         )
 
@@ -394,12 +421,13 @@ def guardar_estado(ruta_db: str, semilla: int, tick_actual: int, gestor, zona, r
             (
                 x, y, json.dumps(celda.recursos), celda.fertilidad,
                 int(celda.en_llamas), int(celda.tiene_recurso), celda.tipo_recurso,
+                celda.profundidad_charco,
             )
             for x, y, celda in zona.celdas()
         ]
         conn.executemany(
-            """INSERT INTO celdas_estado (x, y, recursos, fertilidad, en_llamas, tiene_recurso, tipo_recurso)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO celdas_estado (x, y, recursos, fertilidad, en_llamas, tiene_recurso, tipo_recurso, profundidad_charco)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             filas_celdas,
         )
 
@@ -445,6 +473,12 @@ def _reconstruir_gestacion(tick_inicio_gestacion, gestacion_padre_id, gestacion_
         temperamento_padre=Temperamento(**snapshot["temperamento"]),
         capacidad_mental_padre=CapacidadMental(**snapshot["capacidad_mental"]),
         duracion_gestacion_padre=snapshot["duracion_gestacion_padre"],
+        # tamano_camada (2026-08-21): .get() con default 1, no acceso
+        # directo -- una partida guardada ANTES de este cambio no tiene
+        # esta clave en el snapshot; 1 reproduce el comportamiento previo
+        # a esta pieza para esas gestaciones ya en curso, en vez de
+        # romper la carga.
+        tamano_camada=snapshot.get("tamano_camada", 1),
     )]
 
 
@@ -485,7 +519,8 @@ def cargar_partida(ruta_db: str):
         filas = conn.execute(
             """SELECT e.id, e.especie, e.nombre, e.tick_nacimiento, e.id_madre, e.id_padre,
                       c.x, c.y, c.saciedad, c.energia, c.seguridad,
-                      c.hidratacion, c.aliviado, c.peso, c.fuerza, c.agilidad, c.vitalidad_maxima,
+                      c.hidratacion, c.aliviado, c.impulso_reproductivo,
+                      c.peso, c.fuerza, c.agilidad, c.vitalidad_maxima,
                       c.resistencia_maxima, c.curacion, c.recuperacion, c.valentia,
                       c.sociabilidad, c.agresividad, c.dominancia, c.empatia, c.lealtad, c.fe,
                       c.curiosidad, c.inteligencia, c.memoria, c.voluntad, c.resiliencia,
@@ -512,7 +547,7 @@ def cargar_partida(ruta_db: str):
 
     gestor = GestorEntidades()
     for (id_e, especie, nombre, tick_nacimiento, id_madre, id_padre,
-         x, y, saciedad, energia, seguridad, hidratacion, aliviado,
+         x, y, saciedad, energia, seguridad, hidratacion, aliviado, impulso_reproductivo,
          peso, fuerza, agilidad, vitalidad_maxima, resistencia_maxima,
          curacion, recuperacion, valentia, sociabilidad, agresividad,
          dominancia, empatia, lealtad, fe, curiosidad,
@@ -526,6 +561,7 @@ def cargar_partida(ruta_db: str):
             Necesidades(
                 saciedad=saciedad, energia=energia, seguridad=seguridad,
                 hidratacion=hidratacion, aliviado=aliviado,
+                impulso_reproductivo=impulso_reproductivo,
             ),
             Identidad(
                 especie=Especie(especie), nombre=nombre, tick_nacimiento=tick_nacimiento,
@@ -633,12 +669,14 @@ def aplicar_recursos_guardados(ruta_db: str, zona) -> None:
     recursos viaja como JSON (correccion biomas/especies, 0.16) -- se
     deserializa aqui a dict, mismo patron que gestacion_padre_snapshot.
     tipo_recurso viaja como columna nueva, mismo criterio dinamico que
-    tiene_recurso."""
+    tiene_recurso. profundidad_charco (0.19, charcos efimeros) igual --
+    estado mutado por la partida real, no derivable de la semilla."""
     with _conectar(ruta_db) as conn:
         filas = conn.execute(
-            "SELECT x, y, recursos, fertilidad, en_llamas, tiene_recurso, tipo_recurso FROM celdas_estado"
+            "SELECT x, y, recursos, fertilidad, en_llamas, tiene_recurso, tipo_recurso, profundidad_charco "
+            "FROM celdas_estado"
         ).fetchall()
-    for x, y, recursos_json, fertilidad, en_llamas, tiene_recurso, tipo_recurso in filas:
+    for x, y, recursos_json, fertilidad, en_llamas, tiene_recurso, tipo_recurso, profundidad_charco in filas:
         if 0 <= x < zona.ancho and 0 <= y < zona.alto:
             celda = zona.celda(x, y)
             celda.recursos = json.loads(recursos_json) if recursos_json else {}
@@ -646,3 +684,4 @@ def aplicar_recursos_guardados(ruta_db: str, zona) -> None:
             celda.en_llamas = bool(en_llamas)
             celda.tiene_recurso = bool(tiene_recurso)
             celda.tipo_recurso = tipo_recurso or ""
+            celda.profundidad_charco = profundidad_charco or 0.0

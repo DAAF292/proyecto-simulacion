@@ -65,6 +65,21 @@ explicitamente sin mecanica: "depende del futuro sistema de clima y
 estaciones", que no existe todavia (Reloj ya deriva estacion, pero
 ningun sistema la consume). Tampoco se persiste, mismo motivo que
 oxigenacion.
+
+impulso_reproductivo (2026-08-20, diseno conjunto tras la investigacion
+de por que la reproduccion casi nunca ocurria -- ver sistema_
+reproduccion.py): misma convencion que el resto, 1.0=recien satisfecho,
+decae hacia 0.0 con el tiempo desde la ultima concepcion/fecundacion.
+Universal para las cuatro especies actuales, SIN gatear por consciencia
+-- es un impulso biologico basico (un lobo o un conejo se reproducen en
+la realidad igual que un gnomo), no una necesidad superior de las que
+criatura.docx apaga bajo el umbral de consciencia. Se repone a 1.0 en el
+momento de una Concepcion (hembra Y macho -- ver sistema_reproduccion.py
+para la simplificacion aceptada de resetear tambien al macho, que en
+la realidad podria fecundar varias veces sin ese "coste"). No dispara
+ninguna muerte por si solo, a diferencia de saciedad/oxigenacion --
+llegar a 0.0 solo significa maxima urgencia por buscar pareja
+(Accion.BUSCAR_PAREJA, sistema_decision.py), nunca una condicion letal.
 """
 from dataclasses import dataclass
 
@@ -78,3 +93,4 @@ class Necesidades:
     aliviado: float = 1.0
     oxigenacion: float = 1.0
     confort_termico: float = 0.5
+    impulso_reproductivo: float = 1.0

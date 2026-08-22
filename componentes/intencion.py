@@ -17,6 +17,15 @@ class Accion(Enum):
     HUIR = "huir"     # paso 12.4: exclusiva de quien puede ser presa (gnomo)
     BEBER = "beber"   # Bloque D1: universal, todas las especies la necesitan
     ALIVIARSE = "aliviarse"   # Bloque D2: universal, sin recurso en el mapa
+    # BUSCAR_PAREJA (2026-08-20, diseno conjunto de reproduccion -- ver
+    # sistema_decision.py, sistema_movimiento.py, sistema_reproduccion.py):
+    # universal para las cuatro especies, igual que BEBER/ALIVIARSE -- se
+    # activa cuando Necesidades.impulso_reproductivo baja lo bastante Y hay
+    # un conspecifico adulto de sexo opuesto elegible dentro del radio de
+    # percepcion. Mueve a distancia 0 del conspecifico elegido (a
+    # diferencia del sesgo gregario de DEAMBULAR, que se detiene a
+    # distancia 1) -- ver sistema_movimiento.py.
+    BUSCAR_PAREJA = "buscar_pareja"
     # Bloque F3 (crisis mental, discutida y confirmada con Diego): anulan
     # la Utility AI normal mientras PoolMental.estabilidad este en crisis
     # -- ver sistema_decision.py para el disparador y sistema_movimiento.py

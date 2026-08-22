@@ -41,6 +41,17 @@ from enum import Enum
 class Especie(Enum):
     GNOMO = "gnomo"
     LOBO = "lobo"
+    # CONEJO/ARDILLA (introduccion de fauna adicional, 2026-08-20):
+    # motivacion doble -- mas presas perceptibles para lobo (ver
+    # sistema_depredacion.py, "LIMITE CONOCIDO": un lobo percibe presa en
+    # menos del 10% de los ticks con solo gnomo como objetivo) y primer
+    # caso real de mas de dos especies, lo que disparo la fusion de
+    # crear_gnomo/crear_lobo en una sola fabrica (ver nucleo/entidad.py:
+    # crear_criatura). Ninguna de las dos es consciente -- mismo patron
+    # de fauna que lobo (Temperamento/CapacidadMental completos pero con
+    # rango racial de consciencia bajo/cero), no una tercera categoria.
+    CONEJO = "conejo"
+    ARDILLA = "ardilla"
 
 
 @dataclass

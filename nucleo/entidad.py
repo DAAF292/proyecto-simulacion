@@ -27,6 +27,7 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
+from nucleo.ciclo_vital import TICKS_POR_ANIO
 
 
 class GestorEntidades:
@@ -105,6 +106,25 @@ class GestorEntidades:
         self.registrar_id_existente(id_entidad)
         for componente in componentes:
             self.anadir_componente(id_entidad, componente)
+
+
+def _sortear_edad_inicial_ticks(
+    rng: random.Random, longevidad_individual_anios: float, techo_fraccion: float,
+) -> int:
+    """Edad inicial de un fundador (2026-08-21, ver docstring extenso de
+    crear_criatura). Uniforme entre 0 (recien nacido) y una fraccion de
+    la longevidad PROPIA de este individuo (ya sorteada, no el minimo
+    racial) -- techo_fraccion viene de config['poblacion']
+    ['techo_fraccion_edad_inicial_longevidad'], para no generar
+    fundadores ya al borde mismo de la muerte por vejez (una fraccion
+    < 1.0 a proposito). No modela una piramide de edades real (mas
+    jovenes que viejos, por mortalidad acumulada) -- eso es una curva de
+    supervivencia completa, una fuente de complejidad real que nadie ha
+    pedido todavia; uniforme es la hipotesis de partida mas simple que ya
+    resuelve el problema medido (adultos de ambos sexos presentes desde
+    el principio), marcada como provisional."""
+    edad_maxima_ticks = longevidad_individual_anios * TICKS_POR_ANIO * techo_fraccion
+    return int(rng.uniform(0, edad_maxima_ticks))
 
 
 def _sortear_dimensiones_fisicas(rng: random.Random, rango_racial: dict) -> DimensionesFisicas:
@@ -235,86 +255,90 @@ def _heredar_reproduccion(
     return Reproduccion(sexo=sexo, duracion_gestacion_dias=duracion)
 
 
-def crear_gnomo(
+def crear_criatura(
     gestor: GestorEntidades,
     rng: random.Random,
     x: int,
     y: int,
+    especie: Especie,
     rangos_raciales: dict,
     tick_actual: int = 0,
+    techo_fraccion_edad_inicial: float = 0.0,
 ) -> int:
-    """Funcion fabrica: no devuelve un objeto Gnomo, devuelve un id con
-    sus componentes ya repartidos en el gestor. Mismo patron que usa
-    nacer_gnomo() (mas abajo) para los nacimientos por reproduccion,
-    cambiando la fuente de valores de DimensionesFisicas/Temperamento/
-    CapacidadMental/Reproduccion del sorteo uniforme racial puro al
-    promedio de los progenitores + mutacion (ver _heredar_valor).
+    """Fabrica generica: no devuelve un objeto Gnomo/Lobo/Conejo/Ardilla,
+    devuelve un id con sus componentes ya repartidos en el gestor.
+
+    FUSION (2026-08-20, introduccion de conejo/ardilla): hasta ahora
+    existian crear_gnomo/crear_lobo, dos copias casi identicas -- el
+    propio docstring de crear_lobo ya marcaba el momento correcto para
+    fusionarlas: "si aparece una tercera especie, este es el momento de
+    fusionarlas en una sola fabrica parametrizada por Especie en vez de
+    duplicar de nuevo". Con conejo y ardilla llegando a la vez (tercera y
+    cuarta), tocaba. Ninguna logica cambia -- especie.value indexa
+    rangos_raciales exactamente como antes lo hacia el string "gnomo"/
+    "lobo" a mano.
+
+    Mismo patron que usa nacer_criatura() (mas abajo) para los
+    nacimientos por reproduccion, cambiando la fuente de valores de
+    DimensionesFisicas/Temperamento/CapacidadMental/Reproduccion del
+    sorteo uniforme racial puro al promedio de los progenitores +
+    mutacion (ver _heredar_valor).
 
     tick_actual (fundamento de ciclo vital, ver componentes/identidad.py):
     se guarda como Identidad.tick_nacimiento. Parametro con default 0 (no
     obligatorio en la firma) para no romper otras llamadas/pruebas
     existentes que no le dan importancia a la edad todavia -- en
-    produccion (main.py) siempre se pasa explicitamente."""
+    produccion (main.py) siempre se pasa explicitamente.
+
+    Edad inicial variable (2026-08-21, investigacion "por que gnomo y
+    lobo no se reproducen nunca" -- ver sistema_reproduccion.py y config/
+    constantes.yaml seccion 'poblacion' para el diagnostico completo):
+    ANTES de este cambio, tick_nacimiento se fijaba siempre en
+    tick_actual -- TODA la poblacion fundadora nacia en el mismo instante,
+    como si un mundo real empezara poblado unicamente de recien nacidos.
+    Se investigo con el motor en marcha (nucleo/percepcion.py, muestreo de
+    adultos vivos por sexo) y se confirmo: con gnomo tardando 2160 ticks
+    en madurar, NINGUN gnomo llegaba a adulto antes de ese tick en
+    ninguna semilla probada, y para cuando alguno lo hacia, la
+    depredacion ya habia reducido la cohorte superviviente a 1-6
+    individuos -- con asignacion de sexo 50/50 al nacer, una cohorte tan
+    pequena tiene una probabilidad real de salir entera de un solo sexo
+    por puro azar, dejando el emparejamiento matematicamente imposible
+    pese a que BUSCAR_PAREJA se elegia con normalidad. No es un bug de
+    la Utility AI ni del criterio de contacto -- es que una poblacion
+    fundadora entera de recien nacidos no es como empieza ninguna
+    poblacion real: un censo tomado en cualquier momento tiene individuos
+    de todas las edades a la vez, no una unica generacion sincronizada.
+    Se sortea aqui la edad inicial de cada individuo, no en main.py --
+    misma razon que el resto de esta funcion, mantener la fabrica
+    autocontenida. techo_fraccion_edad_inicial con default 0.0 (mismo
+    criterio que tick_actual=0 arriba): cualquier llamada existente que
+    no lo pase explicitamente conserva el comportamiento anterior a este
+    cambio (edad inicial siempre 0) en vez de romperse."""
+    rango_racial = rangos_raciales[especie.value]
     id_entidad = gestor.crear_entidad()
     gestor.anadir_componente(id_entidad, Posicion(x=x, y=y))
     gestor.anadir_componente(id_entidad, Necesidades())
-    gestor.anadir_componente(
-        id_entidad, Identidad(especie=Especie.GNOMO, tick_nacimiento=tick_actual)
+    dimensiones = _sortear_dimensiones_fisicas(rng, rango_racial)
+    tick_nacimiento = tick_actual - _sortear_edad_inicial_ticks(
+        rng, dimensiones.longevidad, techo_fraccion_edad_inicial
     )
     gestor.anadir_componente(
-        id_entidad, _sortear_dimensiones_fisicas(rng, rangos_raciales["gnomo"])
+        id_entidad, Identidad(especie=especie, tick_nacimiento=tick_nacimiento)
     )
+    gestor.anadir_componente(id_entidad, dimensiones)
     gestor.anadir_componente(
-        id_entidad, _sortear_temperamento(rng, rangos_raciales["gnomo"])
+        id_entidad, _sortear_temperamento(rng, rango_racial)
     )
     gestor.anadir_componente(id_entidad, PoolFisico())
     gestor.anadir_componente(
-        id_entidad, _sortear_capacidad_mental(rng, rangos_raciales["gnomo"])
+        id_entidad, _sortear_capacidad_mental(rng, rango_racial)
     )
     gestor.anadir_componente(id_entidad, PoolMental())
     gestor.anadir_componente(id_entidad, Intencion())
     gestor.anadir_componente(id_entidad, MemoriaEspacial())
     gestor.anadir_componente(
-        id_entidad, _sortear_reproduccion(rng, rangos_raciales["gnomo"])
-    )
-    return id_entidad
-
-
-def crear_lobo(
-    gestor: GestorEntidades,
-    rng: random.Random,
-    x: int,
-    y: int,
-    rangos_raciales: dict,
-    tick_actual: int = 0,
-) -> int:
-    """Misma fabrica que crear_gnomo, para la otra especie de fase 0
-    (informe de implementacion: 'crear_lobo cuando llegue el paso 12').
-    No hay una tercera funcion generica todavia porque solo hay dos
-    especies -- si aparece una tercera, este es el momento de fusionarlas
-    en una sola fabrica parametrizada por Especie en vez de duplicar de
-    nuevo. tick_actual: mismo criterio que en crear_gnomo."""
-    id_entidad = gestor.crear_entidad()
-    gestor.anadir_componente(id_entidad, Posicion(x=x, y=y))
-    gestor.anadir_componente(id_entidad, Necesidades())
-    gestor.anadir_componente(
-        id_entidad, Identidad(especie=Especie.LOBO, tick_nacimiento=tick_actual)
-    )
-    gestor.anadir_componente(
-        id_entidad, _sortear_dimensiones_fisicas(rng, rangos_raciales["lobo"])
-    )
-    gestor.anadir_componente(
-        id_entidad, _sortear_temperamento(rng, rangos_raciales["lobo"])
-    )
-    gestor.anadir_componente(id_entidad, PoolFisico())
-    gestor.anadir_componente(
-        id_entidad, _sortear_capacidad_mental(rng, rangos_raciales["lobo"])
-    )
-    gestor.anadir_componente(id_entidad, PoolMental())
-    gestor.anadir_componente(id_entidad, Intencion())
-    gestor.anadir_componente(id_entidad, MemoriaEspacial())
-    gestor.anadir_componente(
-        id_entidad, _sortear_reproduccion(rng, rangos_raciales["lobo"])
+        id_entidad, _sortear_reproduccion(rng, rango_racial)
     )
     return id_entidad
 
@@ -332,21 +356,27 @@ def crear_planta(gestor: GestorEntidades, x: int, y: int, especie: str, etapa: f
     return id_entidad
 
 
-def nacer_gnomo(
+def nacer_criatura(
     gestor: GestorEntidades,
     rng: random.Random,
     x: int,
     y: int,
+    especie: Especie,
     rangos_raciales: dict,
     tick_actual: int,
     id_madre: int,
     gestacion: Gestacion,
     mutacion_fraccion: float,
 ) -> int:
-    """Fabrica de nacimiento (6.3 Reproduccion, ultima pieza -- herencia de
-    atributos y parentesco), NO de poblacion inicial ni de sistema_test.
-    Llamada exclusivamente desde sistema_reproduccion.py al resolverse una
-    gestacion completa.
+    """Fabrica de nacimiento generica (6.3 Reproduccion, ultima pieza --
+    herencia de atributos y parentesco), NO de poblacion inicial ni de
+    sistema_test. Llamada exclusivamente desde sistema_reproduccion.py al
+    resolverse una gestacion completa.
+
+    FUSION (2026-08-20, misma razon que crear_criatura arriba): sustituye
+    a nacer_gnomo/nacer_lobo -- especie llega explicita desde quien llama
+    (identidad_madre.especie en sistema_reproduccion.py) en vez de estar
+    fija en el nombre de la funcion.
 
     Lee a la madre EN VIVO (gestor.obtener_componente(id_madre, ...)) y al
     padre desde la instantanea de Gestacion (que puede ya no estar vivo --
@@ -360,7 +390,7 @@ def nacer_gnomo(
     temperamento_madre = gestor.obtener_componente(id_madre, Temperamento)
     capacidad_madre = gestor.obtener_componente(id_madre, CapacidadMental)
     rep_madre = gestor.obtener_componente(id_madre, Reproduccion)
-    rango_racial = rangos_raciales["gnomo"]
+    rango_racial = rangos_raciales[especie.value]
 
     id_entidad = gestor.crear_entidad()
     gestor.anadir_componente(id_entidad, Posicion(x=x, y=y))
@@ -368,71 +398,7 @@ def nacer_gnomo(
     gestor.anadir_componente(
         id_entidad,
         Identidad(
-            especie=Especie.GNOMO,
-            tick_nacimiento=tick_actual,
-            id_madre=id_madre,
-            id_padre=gestacion.id_padre,
-        ),
-    )
-    gestor.anadir_componente(
-        id_entidad,
-        _heredar_dimensiones_fisicas(
-            rng, rango_racial, dimensiones_madre, gestacion.dimensiones_padre, mutacion_fraccion
-        ),
-    )
-    gestor.anadir_componente(
-        id_entidad,
-        _heredar_temperamento(
-            rng, rango_racial, temperamento_madre, gestacion.temperamento_padre, mutacion_fraccion
-        ),
-    )
-    gestor.anadir_componente(id_entidad, PoolFisico())
-    gestor.anadir_componente(
-        id_entidad,
-        _heredar_capacidad_mental(
-            rng, rango_racial, capacidad_madre, gestacion.capacidad_mental_padre, mutacion_fraccion
-        ),
-    )
-    gestor.anadir_componente(id_entidad, PoolMental())
-    gestor.anadir_componente(id_entidad, Intencion())
-    gestor.anadir_componente(id_entidad, MemoriaEspacial())
-    gestor.anadir_componente(
-        id_entidad,
-        _heredar_reproduccion(
-            rng, rango_racial, rep_madre.duracion_gestacion_dias,
-            gestacion.duracion_gestacion_padre, mutacion_fraccion,
-        ),
-    )
-    return id_entidad
-
-
-def nacer_lobo(
-    gestor: GestorEntidades,
-    rng: random.Random,
-    x: int,
-    y: int,
-    rangos_raciales: dict,
-    tick_actual: int,
-    id_madre: int,
-    gestacion: Gestacion,
-    mutacion_fraccion: float,
-) -> int:
-    """Misma fabrica que nacer_gnomo, para lobo -- mismo criterio de
-    duplicacion deliberada que crear_gnomo/crear_lobo (dos especies, sin
-    fusionar en una fabrica generica todavia)."""
-    dimensiones_madre = gestor.obtener_componente(id_madre, DimensionesFisicas)
-    temperamento_madre = gestor.obtener_componente(id_madre, Temperamento)
-    capacidad_madre = gestor.obtener_componente(id_madre, CapacidadMental)
-    rep_madre = gestor.obtener_componente(id_madre, Reproduccion)
-    rango_racial = rangos_raciales["lobo"]
-
-    id_entidad = gestor.crear_entidad()
-    gestor.anadir_componente(id_entidad, Posicion(x=x, y=y))
-    gestor.anadir_componente(id_entidad, Necesidades())
-    gestor.anadir_componente(
-        id_entidad,
-        Identidad(
-            especie=Especie.LOBO,
+            especie=especie,
             tick_nacimiento=tick_actual,
             id_madre=id_madre,
             id_padre=gestacion.id_padre,

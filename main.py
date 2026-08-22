@@ -53,7 +53,7 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from nucleo import persistencia
 from nucleo.celda import TipoTerreno
-from nucleo.entidad import GestorEntidades, crear_gnomo, crear_lobo, crear_planta
+from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -76,6 +76,19 @@ from sistemas import (
 )
 
 console = Console()
+
+# Color por especie en el mapa interactivo (2026-08-20, introduccion de
+# conejo/ardilla): antes era un if binario (lobo=rojo, cualquier otra
+# cosa=amarillo) que asumia sin querer que solo habria dos especies.
+# Generalizado a un mapa -- .get() con default amarillo si algun dia se
+# anade una especie sin entrada aqui, mismo criterio permisivo que el
+# resto del motor.
+_ESTILO_POR_ESPECIE = {
+    Especie.GNOMO: "bold yellow",
+    Especie.LOBO: "bold red",
+    Especie.CONEJO: "bold white",
+    Especie.ARDILLA: "bold magenta",
+}
 
 
 def _tiene_recurso_disponible(celda) -> bool:
@@ -206,7 +219,8 @@ def imprimir_mapa(zona, posiciones: dict) -> None:
     print(f"  {resumen}")
     console.print(
         "  leyenda: [bold green]con recurso[/] · [dim]sin recurso[/] · "
-        "[cyan]~[/] agua · [bold yellow]cifra[/] gnomo · [bold red]cifra[/] lobo\n"
+        "[cyan]~[/] agua · [bold yellow]cifra[/] gnomo · [bold red]cifra[/] lobo · "
+        "[bold white]cifra[/] conejo · [bold magenta]cifra[/] ardilla\n"
     )
 
 
@@ -225,14 +239,11 @@ def _poblacion_por_especie(gestor, especie: Especie) -> int:
 def imprimir_resumen_final(reloj, gestor) -> None:
     # El criterio de fase 1 (informe tecnico, seccion 15) habla de
     # "5-8 gnomos" -- se definio antes de que existiera el lobo (paso 12),
-    # asi que aqui hay que contar solo gnomos. Antes de esta correccion,
-    # contar_entidades_totales() y entidades_con(Necesidades) mezclaban
-    # ambas especies, lo que habria hecho el criterio incorrecto en cuanto
-    # se creara la primera manada.
-    poblacion_inicial = persistencia.contar_entidades_totales(RUTA_DB, especie=Especie.GNOMO.value)
-    poblacion_final = _poblacion_por_especie(gestor, Especie.GNOMO)
-    lobos_inicial = persistencia.contar_entidades_totales(RUTA_DB, especie=Especie.LOBO.value)
-    lobos_final = _poblacion_por_especie(gestor, Especie.LOBO)
+    # asi que la condicion de EXITO sigue mirando solo gnomos. El resto
+    # de especies (lobo, y desde 2026-08-20 conejo/ardilla) se reportan
+    # como dato informativo -- antes eran dos bloques identicos escritos
+    # a mano (gnomo, lobo); generalizado a un bucle sobre Especie para no
+    # anadir un tercer/cuarto bloque igual de duplicado.
     muertes_naturales = persistencia.contar_eventos_por_tipo(RUTA_DB, "Muerte")
     desglose_causas = persistencia.contar_muertes_por_causa(RUTA_DB)
     causas_disparadas = {c for c, n in desglose_causas.items() if n >= 1}
@@ -242,8 +253,10 @@ def imprimir_resumen_final(reloj, gestor) -> None:
 
     print("\n=== Resumen de la ejecucion ===")
     print(f"Ticks completados: {reloj.tick_actual}")
-    print(f"Poblacion gnomos: {poblacion_inicial}  ->  final: {poblacion_final}  (dato informativo, no condicion de exito)")
-    print(f"Poblacion lobos:  {lobos_inicial}  ->  final: {lobos_final}  (dato informativo, no condicion de exito)")
+    for especie in Especie:
+        inicial = persistencia.contar_entidades_totales(RUTA_DB, especie=especie.value)
+        final = _poblacion_por_especie(gestor, especie)
+        print(f"Poblacion {especie.value}: {inicial}  ->  final: {final}  (dato informativo, no condicion de exito)")
     desglose_str = ", ".join(f"{causa}={n}" for causa, n in sorted(desglose_causas.items())) or "ninguna"
     print(f"Muertes totales (todas las especies): {muertes_naturales}  ({desglose_str})")
     print("\nCriterio de \"fase 1 completa\" (informe tecnico, seccion 15, revisado tras el paso 12 --")
@@ -256,6 +269,39 @@ def imprimir_resumen_final(reloj, gestor) -> None:
         print("\n  -> Criterio numerico CUMPLIDO (pendiente la parte del narrador).")
     else:
         print("\n  -> Criterio numerico NO cumplido todavia.")
+
+
+def _crear_poblacion_inicial(
+    gestor, rng_juego, especie: Especie, n: int, celdas: list,
+    rangos_raciales: dict, tick_actual: int, ruta_db: str,
+    techo_fraccion_edad_inicial: float = 0.0,
+) -> list:
+    """Puebla n individuos de una especie en celdas elegidas al azar de la
+    lista dada, registrandolos en persistencia. Extraido (2026-08-20,
+    introduccion de conejo/ardilla) de lo que antes eran dos bloques
+    identicos escritos a mano para gnomo y lobo -- con cuatro especies
+    partiendo de dos habitats distintos (Bosque, Pradera) duplicar de
+    nuevo ya no era razonable. Devuelve la lista de ids creados.
+
+    techo_fraccion_edad_inicial (2026-08-21, ver docstring extenso de
+    nucleo/entidad.py:crear_criatura): default 0.0 preserva el
+    comportamiento anterior (fundadores siempre recien nacidos) para
+    quien llame a esta funcion sin pasarlo -- main() SI lo pasa siempre,
+    leido de config['poblacion']['techo_fraccion_edad_inicial_longevidad']."""
+    ids = []
+    for _ in range(n):
+        x, y = rng_juego.choice(celdas)
+        id_e = crear_criatura(
+            gestor, rng_juego, x=x, y=y, especie=especie,
+            rangos_raciales=rangos_raciales, tick_actual=tick_actual,
+            techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+        )
+        identidad = gestor.obtener_componente(id_e, Identidad)
+        persistencia.registrar_entidad_nueva(
+            ruta_db, id_e, identidad.especie.value, identidad.nombre, identidad.tick_nacimiento
+        )
+        ids.append(id_e)
+    return ids
 
 
 def main() -> None:
@@ -339,35 +385,53 @@ def main() -> None:
             ]
             print("AVISO: esta semilla no genero ninguna celda de Bosque -- poblacion inicial en Pradera en su lugar.")
 
-        n_gnomos = config["poblacion"]["gnomos_iniciales"]
-        gnomos_ids = []
-        for _ in range(n_gnomos):
-            x, y = rng_juego.choice(celdas_bosque)
-            id_g = crear_gnomo(
-                gestor, rng_juego, x=x, y=y, rangos_raciales=config["rangos_raciales"],
-                tick_actual=reloj.tick_actual,
-            )
-            identidad = gestor.obtener_componente(id_g, Identidad)
-            persistencia.registrar_entidad_nueva(
-                RUTA_DB, id_g, identidad.especie.value, identidad.nombre, identidad.tick_nacimiento
-            )
-            gnomos_ids.append(id_g)
-        print(f"Poblacion creada: {n_gnomos} gnomos (ids {gnomos_ids}), en Bosque.")
+        # Pradera para conejo (2026-08-20, introduccion de conejo/ardilla
+        # -- confirmado con Diego: conejo nace en Pradera, ardilla en
+        # Bosque, mismo conjunto ya usado por gnomo/lobo). Pradera es el
+        # bioma "por defecto" del arbol de decision de nucleo/bioma.py
+        # (cualquier celda que no cae en Montana/Tundra/Desierto/Bosque
+        # cae aqui) -- muchisimo mas improbable que salga vacia que
+        # Bosque, pero se guarda el mismo fallback por honestidad y
+        # consistencia, esta vez cayendo sobre celdas_bosque (que para
+        # este punto ya esta garantizado no vacia por el fallback de
+        # arriba).
+        celdas_pradera = [
+            (x, y) for x, y, celda in zona.celdas()
+            if celda.tipo_terreno == TipoTerreno.PRADERA
+        ]
+        if not celdas_pradera:
+            celdas_pradera = celdas_bosque
+            print("AVISO: esta semilla no genero ninguna celda de Pradera -- poblacion inicial de conejo en Bosque en su lugar.")
 
-        n_lobos = config["poblacion"]["lobos_iniciales"]
-        lobos_ids = []
-        for _ in range(n_lobos):
-            x, y = rng_juego.choice(celdas_bosque)
-            id_l = crear_lobo(
-                gestor, rng_juego, x=x, y=y, rangos_raciales=config["rangos_raciales"],
-                tick_actual=reloj.tick_actual,
-            )
-            identidad = gestor.obtener_componente(id_l, Identidad)
-            persistencia.registrar_entidad_nueva(
-                RUTA_DB, id_l, identidad.especie.value, identidad.nombre, identidad.tick_nacimiento
-            )
-            lobos_ids.append(id_l)
-        print(f"Manada creada: {n_lobos} lobos (ids {lobos_ids}), en Bosque.")
+        techo_fraccion_edad_inicial = config["poblacion"]["techo_fraccion_edad_inicial_longevidad"]
+
+        gnomos_ids = _crear_poblacion_inicial(
+            gestor, rng_juego, Especie.GNOMO, config["poblacion"]["gnomos_iniciales"],
+            celdas_bosque, config["rangos_raciales"], reloj.tick_actual, RUTA_DB,
+            techo_fraccion_edad_inicial,
+        )
+        print(f"Poblacion creada: {len(gnomos_ids)} gnomos (ids {gnomos_ids}), en Bosque.")
+
+        lobos_ids = _crear_poblacion_inicial(
+            gestor, rng_juego, Especie.LOBO, config["poblacion"]["lobos_iniciales"],
+            celdas_bosque, config["rangos_raciales"], reloj.tick_actual, RUTA_DB,
+            techo_fraccion_edad_inicial,
+        )
+        print(f"Manada creada: {len(lobos_ids)} lobos (ids {lobos_ids}), en Bosque.")
+
+        conejos_ids = _crear_poblacion_inicial(
+            gestor, rng_juego, Especie.CONEJO, config["poblacion"]["conejos_iniciales"],
+            celdas_pradera, config["rangos_raciales"], reloj.tick_actual, RUTA_DB,
+            techo_fraccion_edad_inicial,
+        )
+        print(f"Poblacion creada: {len(conejos_ids)} conejos (ids {conejos_ids}), en Pradera.")
+
+        ardillas_ids = _crear_poblacion_inicial(
+            gestor, rng_juego, Especie.ARDILLA, config["poblacion"]["ardillas_iniciales"],
+            celdas_bosque, config["rangos_raciales"], reloj.tick_actual, RUTA_DB,
+            techo_fraccion_edad_inicial,
+        )
+        print(f"Poblacion creada: {len(ardillas_ids)} ardillas (ids {ardillas_ids}), en Bosque.")
 
         # Fase terreno 4 (sistema_flora.py): siembra inicial -- una
         # entidad Planta YA MADURA (etapa=1.0) por cada celda que la
@@ -384,7 +448,7 @@ def main() -> None:
                 n_plantas += 1
         print(f"Flora sembrada: {n_plantas} plantas maduras (una por celda con recurso inicial).")
 
-        poblacion_ids = gnomos_ids + lobos_ids
+        poblacion_ids = gnomos_ids + lobos_ids + conejos_ids + ardillas_ids
     else:
         poblacion_ids = gestor.entidades_con(Necesidades)
         if not poblacion_ids:
@@ -441,7 +505,7 @@ def main() -> None:
             sistema_ciclo_vital.actualizar(gestor, config, rng_juego, bus, reloj.tick_actual)
             sistema_capacidad_fisica.actualizar(gestor, config)
             sistema_decision.actualizar(gestor, config, bus, reloj.tick_actual)
-            sistema_movimiento.actualizar(gestor, zona, config, rng_juego)
+            sistema_movimiento.actualizar(gestor, zona, config, rng_juego, reloj.tick_actual)
             sistema_depredacion.actualizar(gestor, config, rng_juego, bus, reloj.tick_actual)
             # 6.3 emparejamiento: por contacto (misma celda), igual que
             # depredacion -- necesita las posiciones ya actualizadas de
@@ -500,7 +564,7 @@ def main() -> None:
                 for id_e in vivos:
                     pos = gestor.obtener_componente(id_e, Posicion)
                     identidad = gestor.obtener_componente(id_e, Identidad)
-                    estilo = "bold red" if identidad.especie == Especie.LOBO else "bold yellow"
+                    estilo = _ESTILO_POR_ESPECIE.get(identidad.especie, "bold yellow")
                     posiciones[(pos.x, pos.y)] = (str(id_e % 10), estilo)
                 limpiar_pantalla()
                 print(f"Mapa de '{territorio.nombre}':\n")

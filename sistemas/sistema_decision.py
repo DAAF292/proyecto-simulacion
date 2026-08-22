@@ -9,18 +9,36 @@ ver informe de implementacion para el razonamiento de por que se dejan
 fuera de esta primera version). Bajo la convencion nueva la urgencia de
 una necesidad es (1.0 - valor), no el valor crudo -- una necesidad plena
 (1.0) no debe competir por atencion, una en crisis (0.0) si:
-  Gnomo:  utilidad(huir)      = 1.0 - seguridad (prioridad maxima en empate)
-          utilidad(comer)     = 1.0 - saciedad
-          utilidad(beber)     = 1.0 - hidratacion
-          utilidad(dormir)    = 1.0 - energia
-          utilidad(aliviarse) = 1.0 - aliviado
-          utilidad(deambular) = utilidad_deambular_base (constante, config)
-  Lobo:   utilidad(huir)      = 1.0 - seguridad (prioridad maxima en empate)
-          utilidad(cazar)     = 1.0 - saciedad
-          utilidad(beber)     = 1.0 - hidratacion
-          utilidad(dormir)    = 1.0 - energia
-          utilidad(aliviarse) = 1.0 - aliviado
-          utilidad(deambular) = utilidad_deambular_base (misma constante)
+  Cualquier especie: utilidad(huir)      = 1.0 - seguridad (prioridad maxima en empate)
+                      utilidad(alimentarse) = 1.0 - saciedad -- Accion.CAZAR o
+                        Accion.COMER segun medio_alimentacion de la raza (ver mas abajo)
+                      utilidad(beber)     = 1.0 - hidratacion
+                      utilidad(dormir)    = 1.0 - energia
+                      utilidad(aliviarse) = 1.0 - aliviado
+                      utilidad(buscar_pareja) = 1.0 - impulso_reproductivo,
+                        forzada a 0.0 si no es adulto o si ya gestando
+                        (ver "BUSCAR_PAREJA" mas abajo)
+                      utilidad(deambular) = utilidad_deambular_base (constante, config)
+
+CORRECCION 2026-08-20 (introduccion de conejo/ardilla, observacion de
+Diego): cazar y comer NO son necesidades distintas compitiendo por
+prioridad -- son el MISMO medio de satisfacer la MISMA necesidad
+(saciedad) resuelto por vias distintas segun la especie. La version
+anterior de este sistema calculaba utilidad_cazar y utilidad_comer con
+la formula identica (1.0 - saciedad) y decidia cual de las dos
+candidatas activar con un `if identidad.especie == Especie.LOBO` --
+una rama codificada a mano por especie, cuando lo que de verdad varia
+por especie es el MEDIO (cazar vs recolectar), no la necesidad ni su
+utilidad. Ahora se lee rangos_raciales[especie].medio_alimentacion
+(config/constantes.yaml) y se genera una unica candidata "alimentarse"
+con la Accion que corresponda -- gnomo/conejo/ardilla resuelven a
+Accion.COMER (con dieta restringida, ver sistema_movimiento.py y
+sistema_recursos.py), lobo a Accion.CAZAR, sin ninguna rama por especie
+en este archivo. Sienta la base para cuando existan razas conscientes
+con mas de un medio a la vez (agricultura, pastoreo, caza dirigida --
+informe tecnico, seccion 20) -- ese caso multi-medio NO esta resuelto
+aqui todavia (exigiria decidir el medio segun percepcion real, no una
+utilidad fija), queda aparcado a proposito hasta que haga falta.
 
 Simetria lobo/gnomo (revision tras la fase de huida-de-amenazas,
 discutida y confirmada con Diego): hasta este cambio el lobo no tenia
@@ -64,23 +82,20 @@ la jerarquia tipo Maslow que el propio tecnico describe (las necesidades
 superiores esperan a que las fisicas criticas esten resueltas; seguridad
 es la mas fisica y urgente de las tres cuando hay una amenaza real).
 
-Nota de alcance: la rama por especie de aqui abajo es una simplificacion
-deliberada, no el "rol ecologico" generico que sugieren las fichas de
-criatura (deprededor/presa/omnivoro/etc). Con solo dos especies en fase 0
-un if directo es mas honesto que construir una abstraccion para un caso
-de uso que todavia no existe -- si aparece una tercera especie con un
-perfil de necesidades distinto, ese es el momento de generalizar esto en
-vez de seguir anadiendo ramas.
-
 Agotamiento (Bloque C2 del plan de adaptacion a criatura.docx, propuesta
 discutida y confirmada con Diego): con PoolFisico.resistencia agotada
 (<= 0.0), la utilidad de CAZAR/HUIR se fuerza a 0.0 -- ambas son las
 acciones de "esfuerzo fisico sostenido" que consumen resistencia en
-sistema_capacidad_fisica.py. Un lobo agotado deja de poder sostener la
-persecucion y cae a deambular; un gnomo agotado deja de poder huir y
-cae a comer/dormir/deambular segun toque, incluso con una amenaza real
+sistema_capacidad_fisica.py (_ACCIONES_DE_ESFUERZO). Un cazador agotado
+(hoy, lobo) deja de poder sostener la persecucion y cae a deambular; un
+recolector agotado (gnomo/conejo/ardilla) deja de poder huir y cae a
+alimentarse/dormir/deambular segun toque, incluso con una amenaza real
 delante -- consecuencia emergente de la competencia de utilidad, no una
-regla especial escrita para este caso.
+regla especial escrita para este caso. El gating por agotamiento se
+aplica a la candidata "alimentarse" SOLO si su medio es cazar (ver
+correccion 2026-08-20 arriba) -- recolectar nunca se vio afectado por
+agotamiento ni antes ni ahora, mismo comportamiento que ya tenia el
+gnomo.
 
 Crisis mental (Bloque F3, propuesta discutida y confirmada con Diego --
 criatura.docx dejaba esto como hueco de diseno explicito, "el tipo
@@ -112,13 +127,39 @@ Se emite un Evento "CrisisMental" (NOTABLE) SOLO al entrar en crisis (no
 en cada tick que dura, para no inundar la cronica) -- se detecta
 comparando la Intencion de este tick contra la del tick anterior, antes
 de sobreescribirla.
+
+BUSCAR_PAREJA (2026-08-20, diseno conjunto de reproduccion tras la
+investigacion de por que la reproduccion casi nunca ocurria -- ver
+sistema_movimiento.py y sistema_reproduccion.py): utilidad = 1.0 -
+Necesidades.impulso_reproductivo, MISMO patron que el resto de
+necesidades fisicas de esta tupla -- pero con dos gates adicionales que
+la fuerzan a 0.0 (no compite, cae a otra candidata) en vez de intentar
+codificar la elegibilidad dentro de la formula de utilidad:
+  1. no adulto (nucleo/ciclo_vital.py:es_adulto(), MISMO minimo racial de
+     longevidad que ya usa muerte por vejez y sistema_reproduccion.py --
+     fraccion_madurez ahora vive por especie en rangos_raciales, ver
+     config/constantes.yaml, en vez de un unico valor global).
+  2. hembra ya gestando (componentes/gestacion.py) -- no tiene sentido
+     buscar pareja mientras se gesta. No se comprueba en el macho porque
+     Gestacion solo se anade a la hembra (ver sistema_reproduccion.py).
+Colocada justo antes de deambular, despues de aliviarse -- ultima entre
+las necesidades fisicas "activas": impulso_reproductivo nunca mata por
+si solo (a diferencia de saciedad/oxigenacion, ver componentes/
+necesidades.py), asi que no tiene sentido que compita por delante de
+comer/beber/dormir/aliviarse, todas con alguna consecuencia mas
+inmediata si se ignoran. Sin gating por agotamiento (a diferencia de
+cazar) -- buscar pareja no es un esfuerzo fisico sostenido equivalente,
+es basicamente caminar, la misma accion de base que deambular.
 """
-from componentes.identidad import Especie, Identidad
+from componentes.gestacion import Gestacion
+from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
+from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
+from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.eventos import BusEventos, Evento, Severidad
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
@@ -136,9 +177,10 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
     base_deambular = config["decision"]["utilidad_deambular_base"]
     config_crisis = config["crisis_mental"]
     umbral_crisis = config_crisis["umbral_estabilidad_crisis"]
+    rangos_raciales = config["rangos_raciales"]
 
     for id_entidad in gestor.entidades_con(
-        Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento
+        Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento, Reproduccion
     ):
         necesidades = gestor.obtener_componente(id_entidad, Necesidades)
         intencion = gestor.obtener_componente(id_entidad, Intencion)
@@ -168,25 +210,41 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
             continue  # override completo -- no compite en la Utility AI normal
 
         utilidad_huir = 0.0 if agotado else (1.0 - necesidades.seguridad)
-        if identidad.especie == Especie.LOBO:
-            utilidad_cazar = 0.0 if agotado else (1.0 - necesidades.saciedad)
-            candidatas = (
-                (utilidad_huir, Accion.HUIR),
-                (utilidad_cazar, Accion.CAZAR),
-                (1.0 - necesidades.hidratacion, Accion.BEBER),
-                (1.0 - necesidades.energia, Accion.DORMIR),
-                (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
-                (base_deambular, Accion.DEAMBULAR),
-            )
-        else:
-            candidatas = (
-                (utilidad_huir, Accion.HUIR),
-                (1.0 - necesidades.saciedad, Accion.COMER),
-                (1.0 - necesidades.hidratacion, Accion.BEBER),
-                (1.0 - necesidades.energia, Accion.DORMIR),
-                (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
-                (base_deambular, Accion.DEAMBULAR),
-            )
+
+        # Correccion 2026-08-20: el medio (cazar vs recolectar) es una
+        # propiedad de la raza en config, no una rama codificada por
+        # Especie -- ver docstring del modulo. El agotamiento solo apaga
+        # la candidata cuando el medio es cazar (esfuerzo sostenido, ver
+        # sistema_capacidad_fisica.py:_ACCIONES_DE_ESFUERZO); recolectar
+        # nunca se vio afectado.
+        medio_alimentacion = rangos_raciales[identidad.especie.value]["medio_alimentacion"]
+        accion_alimentarse = Accion.CAZAR if medio_alimentacion == "cazar" else Accion.COMER
+        utilidad_alimentarse = (
+            0.0 if (agotado and medio_alimentacion == "cazar")
+            else (1.0 - necesidades.saciedad)
+        )
+
+        # BUSCAR_PAREJA (2026-08-20, ver docstring del modulo): gateada a
+        # 0.0 si no es adulto o si ya gestando (solo la hembra puede
+        # gestar) -- fraccion_madurez es ahora por especie (rangos_
+        # raciales), no un unico valor global.
+        edad = edad_ticks(identidad.tick_nacimiento, tick_actual)
+        fraccion_madurez = rangos_raciales[identidad.especie.value]["fraccion_madurez"]
+        adulto = es_adulto(edad, identidad.especie.value, rangos_raciales, fraccion_madurez)
+        gestando = gestor.obtener_componente(id_entidad, Gestacion) is not None
+        utilidad_buscar_pareja = (
+            0.0 if (not adulto or gestando) else (1.0 - necesidades.impulso_reproductivo)
+        )
+
+        candidatas = (
+            (utilidad_huir, Accion.HUIR),
+            (utilidad_alimentarse, accion_alimentarse),
+            (1.0 - necesidades.hidratacion, Accion.BEBER),
+            (1.0 - necesidades.energia, Accion.DORMIR),
+            (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
+            (utilidad_buscar_pareja, Accion.BUSCAR_PAREJA),
+            (base_deambular, Accion.DEAMBULAR),
+        )
         # max() con esta lista respeta el orden de prioridad en empates
         # porque conserva el primer maximo encontrado.
         _, elegida = max(candidatas, key=lambda par: par[0])
