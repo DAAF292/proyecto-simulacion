@@ -62,6 +62,15 @@ class ZonaBioma:
     def celda(self, x: int, y: int) -> Celda:
         return self.grid[x][y]
 
+    # Alias (2026-08-23): la inmensa mayoría de sistemas consumidores
+    # (main.py, sistema_movimiento.py, sistema_recursos.py, etc.) llaman
+    # a `zona.obtener_celda(x, y)` -- solo nucleo/percepcion.py usa el
+    # nombre corto `celda`. Renombrar cualquiera de los dos rompería al
+    # otro consumidor sin necesidad; se conservan ambos nombres para el
+    # mismo método en vez de forzar una convención sobre once llamadas ya
+    # escritas.
+    obtener_celda = celda
+
     def celdas(self):
         """Itera todas las celdas junto a su posicion: (x, y, Celda)."""
         for x in range(self.ancho):

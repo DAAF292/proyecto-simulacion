@@ -33,6 +33,28 @@ from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.reloj import Reloj
 
 
+class SistemaClima:
+    """
+    Envoltorio de clase (2026-08-23, mismo motivo que los sistemas
+    hermanos): quedó como función suelta `actualizar()`, pero main.py ya
+    instancia `SistemaClima(config, rng_juego)` y llama
+    `.ejecutar(gestor, mundo, reloj, bus_eventos)`. `actualizar()` opera
+    sobre la ZONA, no sobre el gestor de entidades (el clima es estado de
+    la zona, no de ninguna criatura) -- se deriva aquí de `mundo`, mismo
+    criterio que ya usa sistema_movimiento.py (`mundo.territorio.zonas[0]`).
+    `gestor` se recibe y se ignora a propósito, por simetría de firma con
+    el resto de sistemas de la Fase 3/corte de día.
+    """
+
+    def __init__(self, config: dict, rng: random.Random) -> None:
+        self.config = config
+        self.rng = rng
+
+    def ejecutar(self, gestor, mundo, reloj: Reloj, bus_eventos: BusEventos) -> None:
+        zona = mundo.territorio.zonas[0]
+        actualizar(zona, reloj, self.config, self.rng, bus_eventos, reloj.tick_actual)
+
+
 def actualizar(zona, reloj: Reloj, config: dict, rng: random.Random, bus: BusEventos, tick_actual: int) -> None:
     if tick_actual % Reloj.TICKS_POR_DIA != 0:
         return

@@ -173,6 +173,31 @@ def _tipo_crisis(temperamento: Temperamento, config_crisis: dict) -> Accion:
     return Accion.CATATONIA
 
 
+class SistemaDecision:
+    """
+    Envoltorio de clase (2026-08-23, mismo motivo que SistemaCapacidadFisica):
+    este sistema quedó como función suelta `actualizar()` sin migrar al
+    patrón de clase que main.py:instanciar_sistemas()/ejecutar_tick() ya
+    asumen para todos sus sistemas.
+
+    A diferencia del envoltorio de capacidad física (puramente mecánico),
+    aquí main.py llamaba a `sistemas["decision"].ejecutar(gestor, mundo)`
+    -- ni bus_eventos ni tick_actual, que `actualizar()` sí necesita de
+    verdad (para emitir el Evento "CrisisMental" con su tick). `mundo` no
+    lo usa esta lógica (la decisión no consulta el terreno, solo pools y
+    necesidades). Se corrige aquí Y en la llamada de main.py, para que la
+    emisión de eventos de crisis mental deje de perderse silenciosamente.
+    """
+
+    def __init__(self, config: dict, rng) -> None:
+        self.config = config
+        self.rng = rng  # sin consumidor en actualizar() hoy -- se conserva
+        # por si una futura decisión estocástica (p.ej. desempate) lo necesita.
+
+    def ejecutar(self, gestor, reloj, bus_eventos: BusEventos) -> None:
+        actualizar(gestor, self.config, bus_eventos, reloj.tick_actual)
+
+
 def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
     base_deambular = config["decision"]["utilidad_deambular_base"]
     config_crisis = config["crisis_mental"]

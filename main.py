@@ -113,12 +113,28 @@ def sembrar_poblacion_inicial(
         ),
     ]
 
+    # Edad inicial variable de la población fundadora (2026-08-21, ver
+    # nucleo/entidad.py:_sortear_edad_inicial_ticks): solo se aplica aquí,
+    # a la siembra en tick=0 -- nunca a nacimientos posteriores.
+    techo_fraccion_edad_inicial = float(
+        poblacion_cfg.get("techo_fraccion_edad_inicial_longevidad", 0.0)
+    )
+
     for especie, cantidad, celdas_candidatas in especies_spawn:
         if not celdas_candidatas:
             continue
         for _ in range(cantidad):
             pos_x, pos_y = rng_juego.choice(celdas_candidatas)
-            crear_criatura(gestor, especie, pos_x, pos_y, config, rng_juego, tick_actual=0)
+            crear_criatura(
+                gestor,
+                especie,
+                pos_x,
+                pos_y,
+                config,
+                rng_juego,
+                tick_actual=0,
+                techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+            )
 
 
 def ejecutar_tick(
@@ -135,7 +151,7 @@ def ejecutar_tick(
     # ---------------------------------------------------------
     # FASE 1: PERCEPCIÓN Y TOMA DE DECISIONES
     # ---------------------------------------------------------
-    sistemas["decision"].ejecutar(gestor, mundo)
+    sistemas["decision"].ejecutar(gestor, reloj, bus_eventos)
 
     # ---------------------------------------------------------
     # FASE 2: ACCIÓN, CINEMÁTICA Y CONTACTO FÍSICO
@@ -156,9 +172,15 @@ def ejecutar_tick(
     # ---------------------------------------------------------
     # CIERRE DE TICK Y CADENCIAS TEMPORALES
     # ---------------------------------------------------------
-    reloj.avanzar_tick()
+    # (2026-08-23) Reloj (nucleo/reloj.py) solo expone avanzar() y las
+    # propiedades derivadas dia/estacion/anio -- no tiene avanzar_tick()
+    # ni es_inicio_de_dia(), que este archivo era el único en llamar.
+    # "Inicio de día" se deriva igual que ya hace sistema_clima.py
+    # internamente (tick_actual % TICKS_POR_DIA == 0), en vez de añadir un
+    # método nuevo a Reloj para una comprobación que cabe en una línea.
+    reloj.avanzar()
 
-    if reloj.es_inicio_de_dia():
+    if reloj.tick_actual % Reloj.TICKS_POR_DIA == 0:
         sistemas["clima"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["descomposicion"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["flora"].ejecutar(gestor, mundo, reloj, bus_eventos)

@@ -12,6 +12,7 @@ from typing import Any, Type, TypeVar
 
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
+from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.memoria_espacial import MemoriaEspacial
@@ -23,6 +24,7 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
+from nucleo.ciclo_vital import TICKS_POR_ANIO
 
 T = TypeVar("T")
 
@@ -77,6 +79,44 @@ def _sortear_valor(rng: random.Random, rango: list[float] | tuple[float, float])
     return rng.uniform(rango[0], rango[1])
 
 
+def _sortear_edad_inicial_ticks(
+    rng: random.Random,
+    longevidad_individual_anios: float,
+    techo_fraccion: float,
+) -> int:
+    """
+    Sortea la edad (en ticks) con la que nace un fundador de la población
+    inicial, como fracción uniforme de SU PROPIA longevidad individual
+    (ya sorteada, no el rango racial).
+
+    Diagnóstico que motiva esto (2026-08-21, investigación "cero adultos
+    coexistiendo" en gnomo): con techo_fraccion=0.0 (comportamiento previo,
+    implícito), TODOS los fundadores de una especie nacen en tick=0 como
+    recién nacidos simultáneos. Para una especie de maduración lenta
+    (gnomo, fraccion_madurez=0.1 sobre ~45 años de longevidad mínima =~
+    4.5 años =~ 2160 ticks) eso significa que, hasta ese primer umbral de
+    madurez, la población entera es infantil a la vez -- cero parejas
+    fértiles posibles durante miles de ticks, y para cuando maduran, las
+    pérdidas por depredación/inanición ya pueden haber diezmado la
+    cohorte. No es un fallo de la regla de madurez (es neutra, correcta);
+    es que la generación de la población fundadora no reflejaba una
+    demografía real, donde una población fundadora tiene edades
+    distribuidas, no una generación única sincronizada.
+
+    techo_fraccion (config: poblacion.techo_fraccion_edad_inicial_longevidad,
+    provisional=0.7): cada fundador sortea su edad como
+    uniforme(0, techo_fraccion * longevidad_individual). No se usa 1.0
+    para no generar fundadores a las puertas de la muerte por vejez en
+    tick=0. Es una decisión de generación de la población inicial
+    únicamente -- no afecta a ningún nacimiento posterior de la
+    simulación, que sigue naciendo siempre en tick_nacimiento=tick_actual.
+    """
+    if techo_fraccion <= 0.0:
+        return 0
+    longevidad_ticks = longevidad_individual_anios * TICKS_POR_ANIO
+    return int(rng.uniform(0.0, techo_fraccion * longevidad_ticks))
+
+
 def crear_necromasa(
     gestor: GestorEntidades,
     pos_x: int,
@@ -112,25 +152,24 @@ def crear_criatura(
     rng: random.Random,
     tick_actual: int = 0,
     nombre: str | None = None,
+    techo_fraccion_edad_inicial: float = 0.0,
 ) -> int:
     """
     Fábrica ECS: Instancia un organismo vivo completo con sus 11 componentes de datos.
+
+    techo_fraccion_edad_inicial (2026-08-21, ver _sortear_edad_inicial_ticks
+    arriba): únicamente relevante para la siembra de la población fundadora
+    en tick_actual=0 (main.py la lee de poblacion.techo_fraccion_edad_inicial_longevidad
+    y la pasa explícitamente en esas llamadas). Los nacimientos normales
+    durante la simulación (sistemas/sistema_reproduccion.py) NUNCA la pasan
+    -- usan el valor por defecto 0.0, de modo que un recién nacido real
+    sigue naciendo con edad cero, como corresponde.
     """
     cfg_esp = config.get("rangos_raciales", {}).get(especie.value, {})
     entidad_id = gestor.crear_entidad()
 
-    # 1. Identidad y Posición
-    gestor.anadir_componente(
-        entidad_id,
-        Identidad(
-            especie=especie,
-            nombre=nombre if nombre else f"{especie.value}_{entidad_id}",
-            tick_nacimiento=tick_actual,
-        ),
-    )
-    gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y))
-
-    # 2. Dimensiones Físicas
+    # 2. Dimensiones Físicas (se sortea ANTES que Identidad porque
+    # tick_nacimiento depende de dims.longevidad cuando hay edad inicial).
     dims = DimensionesFisicas(
         peso=_sortear_valor(rng, cfg_esp.get("peso", [1.0, 2.0])),
         altura=_sortear_valor(rng, cfg_esp.get("altura", [0.5, 1.0])),
@@ -146,6 +185,20 @@ def crear_criatura(
         recuperacion=_sortear_valor(rng, cfg_esp.get("recuperacion", [0.05, 0.1])),
     )
     gestor.anadir_componente(entidad_id, dims)
+
+    # 1. Identidad y Posición
+    tick_nacimiento = tick_actual - _sortear_edad_inicial_ticks(
+        rng, dims.longevidad, techo_fraccion_edad_inicial
+    )
+    gestor.anadir_componente(
+        entidad_id,
+        Identidad(
+            especie=especie,
+            nombre=nombre if nombre else f"{especie.value}_{entidad_id}",
+            tick_nacimiento=tick_nacimiento,
+        ),
+    )
+    gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y))
 
     # 3. Temperamento
     temp = Temperamento(
@@ -214,3 +267,177 @@ def crear_planta(
         Planta(especie=especie, etapa=max(0.0, min(1.0, etapa))),
     )
     return planta_id
+
+
+def _heredar_valor(
+    rng: random.Random,
+    valor_madre: float,
+    valor_padre: float,
+    minimo_racial: float,
+    maximo_racial: float,
+    mutacion_fraccion: float,
+) -> float:
+    """
+    Recuperada de commit 249793e ("commit 2", 2026-08-20), perdida en el
+    refactor posterior de necromasa/pipeline trifásico (2140243) sin que
+    mediara ningún commit intermedio que la protegiera -- ver informe a
+    Diego sobre la reconstrucción de 2026-08-23.
+
+    Promedio de ambos progenitores + mutación uniforme pequeña, acotado al
+    rango racial (informe técnico, 6.3, literal: "herencia de atributos,
+    promedio de progenitores + mutación, acotado al rango racial").
+    mutacion_fraccion (config: reproduccion.mutacion_fraccion) es la
+    amplitud de la perturbación como fracción del rango racial COMPLETO,
+    no del valor en sí -- así un rango racial estrecho muta poco en
+    términos absolutos y uno ancho muta más, en vez de una amplitud fija
+    que sería desproporcionada según la especie.
+    """
+    promedio = (valor_madre + valor_padre) / 2.0
+    amplitud_mutacion = mutacion_fraccion * (maximo_racial - minimo_racial)
+    mutado = promedio + rng.uniform(-amplitud_mutacion, amplitud_mutacion)
+    return max(minimo_racial, min(maximo_racial, mutado))
+
+
+def nacer_criatura(
+    gestor: GestorEntidades,
+    rng: random.Random,
+    pos_x: int,
+    pos_y: int,
+    especie: Especie,
+    rangos_raciales: dict[str, Any],
+    tick_actual: int,
+    id_madre: int,
+    gestacion: Gestacion,
+    mutacion_fraccion: float,
+) -> int:
+    """
+    Fábrica ECS de nacimiento por reproducción (6.3, última pieza --
+    herencia de atributos y parentesco). NO se usa para la población
+    inicial (eso es crear_criatura, sin progenitores) -- llamada
+    exclusivamente desde sistemas/sistema_reproduccion.py:
+    _resolver_nacimientos, una vez por hijo de la camada.
+
+    RECONSTRUIDA (2026-08-23): existió con este mismo propósito en el
+    commit 249793e, se perdió en el refactor de necromasa/pipeline
+    trifásico (2140243) que reescribió nucleo/entidad.py desde una base
+    anterior sin que hubiera un commit intermedio con este trabajo -- ver
+    informe a Diego. Esta versión NO es una copia literal de aquella: se
+    adapta a las convenciones que crear_criatura ya usa hoy (config con
+    'rangos_raciales' en vez de rangos_raciales suelto donde aplica,
+    Identidad con nombre/id_madre/id_padre, PoolFisico/PoolMental
+    inicializados a los escalares del propio individuo en vez de a sus
+    valores por defecto, Intencion con accion=DEAMBULAR explícito) para
+    no reintroducir una fábrica que diverja en estilo de la que ya existe.
+
+    Lee a la madre EN VIVO (gestor.obtener_componente) y al padre desde la
+    instantánea de Gestacion (que puede ya no estar vivo -- ver
+    componentes/gestacion.py sobre por qué el padre necesita instantánea
+    y la madre no). pos_x/pos_y: la posición de la madre en el instante
+    del parto, la resuelve quien llama (_resolver_nacimientos), no esta
+    función -- misma para todos los hijos de una misma camada.
+
+    Todo atributo heredable pasa por _heredar_valor (promedio de
+    progenitores + mutación, acotado al rango racial) salvo el sexo, que
+    se sortea 50/50 fresco -- ningún documento del proyecto sugiere que el
+    sexo dependa de los progenitores, mismo criterio que crear_criatura.
+    """
+    dimensiones_madre = gestor.obtener_componente(id_madre, DimensionesFisicas)
+    temperamento_madre = gestor.obtener_componente(id_madre, Temperamento)
+    capacidad_madre = gestor.obtener_componente(id_madre, CapacidadMental)
+    rep_madre = gestor.obtener_componente(id_madre, Reproduccion)
+    rango_racial = rangos_raciales[especie.value]
+
+    def heredar(nombre_campo: str, valor_madre_campo: float, valor_padre_campo: float) -> float:
+        minimo, maximo = rango_racial[nombre_campo]
+        return _heredar_valor(rng, valor_madre_campo, valor_padre_campo, minimo, maximo, mutacion_fraccion)
+
+    entidad_id = gestor.crear_entidad()
+
+    dims_padre = gestacion.dimensiones_padre
+    dims = DimensionesFisicas(
+        peso=heredar("peso", dimensiones_madre.peso, dims_padre.peso),
+        altura=heredar("altura", dimensiones_madre.altura, dims_padre.altura),
+        longevidad=heredar("longevidad", dimensiones_madre.longevidad, dims_padre.longevidad),
+        fuerza=heredar("fuerza", dimensiones_madre.fuerza, dims_padre.fuerza),
+        agilidad=heredar("agilidad", dimensiones_madre.agilidad, dims_padre.agilidad),
+        velocidad=heredar("velocidad", dimensiones_madre.velocidad, dims_padre.velocidad),
+        resistencia_enfermedad=heredar(
+            "resistencia_enfermedad", dimensiones_madre.resistencia_enfermedad, dims_padre.resistencia_enfermedad
+        ),
+        agudeza_sensorial=heredar(
+            "agudeza_sensorial", dimensiones_madre.agudeza_sensorial, dims_padre.agudeza_sensorial
+        ),
+        vitalidad_maxima=heredar(
+            "vitalidad_maxima", dimensiones_madre.vitalidad_maxima, dims_padre.vitalidad_maxima
+        ),
+        resistencia_maxima=heredar(
+            "resistencia_maxima", dimensiones_madre.resistencia_maxima, dims_padre.resistencia_maxima
+        ),
+        curacion=heredar("curacion", dimensiones_madre.curacion, dims_padre.curacion),
+        recuperacion=heredar("recuperacion", dimensiones_madre.recuperacion, dims_padre.recuperacion),
+    )
+    gestor.anadir_componente(entidad_id, dims)
+
+    gestor.anadir_componente(
+        entidad_id,
+        Identidad(
+            especie=especie,
+            nombre=f"{especie.value}_{entidad_id}",
+            tick_nacimiento=tick_actual,
+            id_madre=id_madre,
+            id_padre=gestacion.id_padre,
+        ),
+    )
+    gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y))
+
+    temp_padre = gestacion.temperamento_padre
+    temp = Temperamento(
+        valentia=heredar("valentia", temperamento_madre.valentia, temp_padre.valentia),
+        sociabilidad=heredar("sociabilidad", temperamento_madre.sociabilidad, temp_padre.sociabilidad),
+        agresividad=heredar("agresividad", temperamento_madre.agresividad, temp_padre.agresividad),
+        dominancia=heredar("dominancia", temperamento_madre.dominancia, temp_padre.dominancia),
+        empatia=heredar("empatia", temperamento_madre.empatia, temp_padre.empatia),
+        lealtad=heredar("lealtad", temperamento_madre.lealtad, temp_padre.lealtad),
+        fe=heredar("fe", temperamento_madre.fe, temp_padre.fe),
+        curiosidad=heredar("curiosidad", temperamento_madre.curiosidad, temp_padre.curiosidad),
+    )
+    gestor.anadir_componente(entidad_id, temp)
+
+    capacidad_padre = gestacion.capacidad_mental_padre
+    mental = CapacidadMental(
+        inteligencia=heredar("inteligencia", capacidad_madre.inteligencia, capacidad_padre.inteligencia),
+        memoria=heredar("memoria", capacidad_madre.memoria, capacidad_padre.memoria),
+        voluntad=heredar("voluntad", capacidad_madre.voluntad, capacidad_padre.voluntad),
+        resiliencia=heredar("resiliencia", capacidad_madre.resiliencia, capacidad_padre.resiliencia),
+        estabilidad_mental_maxima=heredar(
+            "estabilidad_mental_maxima",
+            capacidad_madre.estabilidad_mental_maxima,
+            capacidad_padre.estabilidad_mental_maxima,
+        ),
+        consciencia=heredar("consciencia", capacidad_madre.consciencia, capacidad_padre.consciencia),
+    )
+    gestor.anadir_componente(entidad_id, mental)
+
+    gestor.anadir_componente(entidad_id, Necesidades())
+    gestor.anadir_componente(
+        entidad_id,
+        PoolFisico(vitalidad=dims.vitalidad_maxima, resistencia=dims.resistencia_maxima),
+    )
+    gestor.anadir_componente(
+        entidad_id,
+        PoolMental(estabilidad=mental.estabilidad_mental_maxima),
+    )
+
+    gestor.anadir_componente(entidad_id, Intencion(accion=Accion.DEAMBULAR))
+    gestor.anadir_componente(entidad_id, MemoriaEspacial())
+
+    sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
+    dur_gestacion = heredar(
+        "duracion_gestacion_dias", rep_madre.duracion_gestacion_dias, gestacion.duracion_gestacion_padre
+    )
+    gestor.anadir_componente(
+        entidad_id,
+        Reproduccion(sexo=sexo, duracion_gestacion_dias=dur_gestacion),
+    )
+
+    return entidad_id

@@ -20,6 +20,7 @@ from componentes.necromasa import Necromasa
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
+from nucleo.clima import estacion_actual
 from nucleo.entidad import GestorEntidades
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -236,7 +237,9 @@ def construir_instantanea(
     return {
         "tick": reloj.tick_actual,
         "dia": reloj.dia,
-        "estacion": reloj.estacion.value,
+        # (2026-08-23) mismo bug que en sistema_necesidades.py/sistema_flora.py:
+        # Reloj.estacion es un int creciente, no el Enum Estacion.
+        "estacion": estacion_actual(reloj.estacion).value,
         "clima": clima_actual.value if clima_actual else "despejado",
         "ancho": zona.ancho,
         "alto": zona.alto,

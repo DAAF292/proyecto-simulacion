@@ -281,6 +281,17 @@ consumo:
 
 decision:
   utilidad_deambular_base: 0.1
+  # Umbral de CapacidadMental.consciencia por debajo del cual una criatura
+  # queda sujeta al sesgo de territorio (sistemas/sistema_movimiento.py):
+  # tiende a permanecer cerca de comida/agua recordadas en vez de
+  # deambular erráticamente sin objetivo (2026-08-22, propuesta de Diego).
+  # PROVISIONAL: 0.3 es una hipótesis de partida razonada, no calibrada
+  # contra el motor en marcha -- separa con margen a lobo/conejo/ardilla
+  # (rango racial de consciencia 0.0-0.2 o 0.0-0.1) de gnomo (0.6-0.9),
+  # de modo que hoy solo gnomo queda EXENTO del sesgo de territorio. Si al
+  # observar el motor conviene que alguna otra especie también quede
+  # exenta o incluida, este umbral es el primer sitio a ajustar.
+  umbral_consciencia_agencia: 0.3
 
 capacidad_fisica:
   tasa_perdida_resistencia_por_esfuerzo: 0.05

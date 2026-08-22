@@ -44,9 +44,16 @@ señalado aqui, no decidido por mi.
 """
 
 
-def radio_individual(agudeza_sensorial: float, config_percepcion: dict) -> int:
-    radio_min = config_percepcion["radio_minimo_celdas"]
-    radio_max = config_percepcion["radio_maximo_celdas"]
+def radio_individual(agudeza_sensorial: float, radio_min: int, radio_max: int) -> int:
+    """
+    (2026-08-23) Firma corregida: recibía un dict `config_percepcion` del
+    que extraía radio_minimo_celdas/radio_maximo_celdas, pero AMBOS
+    consumidores (sistema_movimiento.py, sistema_capacidad_mental.py) la
+    llamaban ya con radio_min/radio_max sueltos -- desfase de firma entre
+    la función y sus dos únicos llamadores, no al revés. Se ajusta la
+    función a lo que ya asumían los dos sitios que la usan, en vez de
+    tocar ambos para adaptarlos a ella.
+    """
     bruto = radio_min + agudeza_sensorial * (radio_max - radio_min)
     return max(radio_min, min(radio_max, round(bruto)))
 

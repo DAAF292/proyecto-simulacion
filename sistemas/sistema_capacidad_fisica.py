@@ -47,6 +47,8 @@ despacio con el mismo esfuerzo bruto. La regeneracion (recuperacion) NO
 se toca -- ya es su propio campo individual para eso, dividir tambien
 ahi duplicaria el mismo concepto dos veces.
 """
+from typing import Any
+
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
@@ -55,20 +57,39 @@ from componentes.pool_fisico import PoolFisico
 _ACCIONES_DE_ESFUERZO = (Accion.CAZAR, Accion.HUIR)
 
 
-def actualizar(gestor, config: dict) -> None:
-    tasa_perdida_resistencia = config["capacidad_fisica"]["tasa_perdida_resistencia_por_esfuerzo"]
+class SistemaCapacidadFisica:
+    """
+    Envoltorio de clase (2026-08-23) sobre la lógica original de este módulo,
+    que quedó como función suelta `actualizar(gestor, config)` mientras el
+    resto de sistemas (SistemaMovimiento, SistemaDecision, etc.) ya seguían
+    el patrón de clase con __init__(config) + ejecutar(gestor) que usan
+    main.py:instanciar_sistemas() y ejecutar_tick(). Esa asimetría impedía
+    que el motor arrancara (ImportError al intentar `from
+    sistemas.sistema_capacidad_fisica import SistemaCapacidadFisica`).
 
-    for id_entidad in gestor.entidades_con(PoolFisico, DimensionesFisicas, Necesidades, Intencion):
-        pool = gestor.obtener_componente(id_entidad, PoolFisico)
-        dimensiones = gestor.obtener_componente(id_entidad, DimensionesFisicas)
-        necesidades = gestor.obtener_componente(id_entidad, Necesidades)
-        intencion = gestor.obtener_componente(id_entidad, Intencion)
+    Arreglo puramente mecánico -- misma lógica exacta, mismo cuerpo, solo
+    envuelta en la forma que ya usan sus sistemas hermanos. Ninguna decisión
+    de diseño ni de calibración numérica involucrada.
+    """
 
-        factor_energia = necesidades.energia
-        pool.vitalidad = min(1.0, pool.vitalidad + dimensiones.curacion * factor_energia)
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
+        self.tasa_perdida_resistencia: float = float(
+            config["capacidad_fisica"]["tasa_perdida_resistencia_por_esfuerzo"]
+        )
 
-        if intencion.accion in _ACCIONES_DE_ESFUERZO:
-            perdida_fraccional = tasa_perdida_resistencia / dimensiones.resistencia_maxima
-            pool.resistencia = max(0.0, pool.resistencia - perdida_fraccional)
-        else:
-            pool.resistencia = min(1.0, pool.resistencia + dimensiones.recuperacion)
+    def ejecutar(self, gestor) -> None:
+        for id_entidad in gestor.entidades_con(PoolFisico, DimensionesFisicas, Necesidades, Intencion):
+            pool = gestor.obtener_componente(id_entidad, PoolFisico)
+            dimensiones = gestor.obtener_componente(id_entidad, DimensionesFisicas)
+            necesidades = gestor.obtener_componente(id_entidad, Necesidades)
+            intencion = gestor.obtener_componente(id_entidad, Intencion)
+
+            factor_energia = necesidades.energia
+            pool.vitalidad = min(1.0, pool.vitalidad + dimensiones.curacion * factor_energia)
+
+            if intencion.accion in _ACCIONES_DE_ESFUERZO:
+                perdida_fraccional = self.tasa_perdida_resistencia / dimensiones.resistencia_maxima
+                pool.resistencia = max(0.0, pool.resistencia - perdida_fraccional)
+            else:
+                pool.resistencia = min(1.0, pool.resistencia + dimensiones.recuperacion)

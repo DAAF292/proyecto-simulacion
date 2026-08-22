@@ -18,6 +18,7 @@ from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from nucleo.agua import profundidad_agua_potable
+from nucleo.clima import estacion_actual
 from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
@@ -135,9 +136,15 @@ class SistemaNecesidades:
                 nec.oxigenacion = min(1.0, nec.oxigenacion + self.tasa_recup_oxigeno)
 
             # 4. Deriva de Confort Térmico estacional
+            # (2026-08-23) Reloj.estacion es un int CRECIENTE, no cíclico
+            # (informe de diseño en nucleo/reloj.py: "dia/estacion/anio son
+            # unidades derivadas") -- hay que reducirlo al ciclo de 4 y
+            # convertirlo al Enum Estacion vía nucleo.clima.estacion_actual()
+            # antes de poder leer .value; este código le pedía .value
+            # directamente a un int.
             obj_termico = float(
                 self.config.get("estaciones", {})
-                .get(reloj.estacion.value, {})
+                .get(estacion_actual(reloj.estacion).value, {})
                 .get("objetivo_confort_termico", 0.5)
             )
             if nec.confort_termico < obj_termico:

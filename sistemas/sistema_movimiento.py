@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
@@ -20,7 +21,12 @@ from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
-from componentes.reproduccion import Gestacion, Reproduccion
+# NOTA (2026-08-23): Gestacion se separó a su propio módulo
+# (componentes/gestacion.py, ver su docstring) para no mezclar el rasgo
+# fijo de por vida (Reproduccion) con el estado de un embarazo concreto.
+# Este import seguía apuntando al módulo antiguo tras esa separación.
+from componentes.gestacion import Gestacion
+from componentes.reproduccion import Reproduccion
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.entidad import GestorEntidades
@@ -67,6 +73,12 @@ class SistemaMovimiento:
         self.dist_deseada_conspecifico: int = int(
             self.config.get("social", {}).get("distancia_deseada_conspecifico", 1)
         )
+        self.dist_deseada_territorio: int = int(
+            self.config.get("social", {}).get("distancia_deseada_territorio", 1)
+        )
+        self.umbral_consciencia_agencia: float = float(
+            self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
 
     def ejecutar(self, gestor: GestorEntidades, mundo: Mundo) -> None:
         """
@@ -84,6 +96,7 @@ class SistemaMovimiento:
             ident = gestor.obtener_componente(eid, Identidad)
             pf = gestor.obtener_componente(eid, PoolFisico)
             mem = gestor.obtener_componente(eid, MemoriaEspacial)
+            cap_mental = gestor.obtener_componente(eid, CapacidadMental)
 
             if intencion is None or pos is None or dims is None or ident is None:
                 continue
@@ -104,13 +117,19 @@ class SistemaMovimiento:
             elif accion == Accion.CAZAR:
                 dx, dy = self._calcular_caza(gestor, eid, pos.x, pos.y, dims.peso, radio)
             elif accion == Accion.COMER:
-                dx, dy = self._calcular_forrajeo(gestor, zona, ident.especie, pos.x, pos.y, radio, mem)
+                dx, dy = self._calcular_forrajeo(
+                    gestor, zona, ident.especie, pos.x, pos.y, radio, mem, cap_mental
+                )
             elif accion == Accion.BEBER:
-                dx, dy = self._calcular_hidratacion(zona, pos.x, pos.y, dims.altura, radio, mem)
+                dx, dy = self._calcular_hidratacion(
+                    zona, pos.x, pos.y, dims.altura, radio, mem, cap_mental
+                )
             elif accion == Accion.BUSCAR_PAREJA:
                 dx, dy = self._calcular_pareja(gestor, eid, ident.especie, pos.x, pos.y, radio)
             elif accion == Accion.DEAMBULAR:
-                dx, dy = self._calcular_deambular(gestor, eid, ident.especie, pos.x, pos.y)
+                dx, dy = self._calcular_deambular(
+                    gestor, eid, ident.especie, pos.x, pos.y, mem, cap_mental
+                )
 
             if dx != 0 or dy != 0:
                 self._aplicar_movimiento(gestor, zona, eid, pos, dims, pf, dx, dy, accion)
@@ -218,6 +237,7 @@ class SistemaMovimiento:
         pos_y: int,
         radio: int,
         mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
     ) -> tuple[int, int]:
         """Busca comida: evalúa necromasa y flora en radio sensorial y memoria."""
         cfg_esp = self.config.get("rangos_raciales", {}).get(especie.value, {})
@@ -255,14 +275,18 @@ class SistemaMovimiento:
             return self._acercarse_a(pos_x, pos_y, tx, ty)
 
         # 2. Búsqueda en memoria espacial amortiguada por distancia
-        if mem is not None:
-            recuerdos = mem.obtener_recuerdos("comida")
-            if recuerdos:
-                rx, ry = recuerdos[-1]
-                tx, ty = objetivo_recordado(
-                    pos_x, pos_y, rx, ry, 0.5, self.factor_error_memoria, self.rng
-                )
-                return self._acercarse_a(pos_x, pos_y, tx, ty)
+        # (2026-08-23) corregido: llamaba a `mem.obtener_recuerdos(tipo)`
+        # (método que MemoriaEspacial no tiene) y luego a
+        # `objetivo_recordado()` con una firma posicional que no coincidía
+        # con la real de nucleo/memoria.py -- código muerto que crashearía
+        # en cuanto se alcanzara (solo no lo había hecho porque el
+        # candidato directo por percepción casi siempre existe antes).
+        if mem is not None and cap_mental is not None:
+            objetivo = objetivo_recordado(
+                mem, "comida", pos_x, pos_y, cap_mental, self.rng, self.config
+            )
+            if objetivo is not None:
+                return self._acercarse_a(pos_x, pos_y, *objetivo)
 
         return self._paso_aleatorio()
 
@@ -274,6 +298,7 @@ class SistemaMovimiento:
         altura: float,
         radio: int,
         mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
     ) -> tuple[int, int]:
         """Busca fuentes de agua potable y vadeables en radio de percepción o memoria."""
         candidatos = []
@@ -291,14 +316,12 @@ class SistemaMovimiento:
             _, tx, ty = candidatos[0]
             return self._acercarse_a(pos_x, pos_y, tx, ty)
 
-        if mem is not None:
-            recuerdos = mem.obtener_recuerdos("agua")
-            if recuerdos:
-                rx, ry = recuerdos[-1]
-                tx, ty = objetivo_recordado(
-                    pos_x, pos_y, rx, ry, 0.5, self.factor_error_memoria, self.rng
-                )
-                return self._acercarse_a(pos_x, pos_y, tx, ty)
+        if mem is not None and cap_mental is not None:
+            objetivo = objetivo_recordado(
+                mem, "agua", pos_x, pos_y, cap_mental, self.rng, self.config
+            )
+            if objetivo is not None:
+                return self._acercarse_a(pos_x, pos_y, *objetivo)
 
         return self._paso_aleatorio()
 
@@ -355,8 +378,64 @@ class SistemaMovimiento:
         especie: Especie,
         pos_x: int,
         pos_y: int,
+        mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
     ) -> tuple[int, int]:
-        """Paso de dispersión aleatoria."""
+        """
+        Paso de dispersión aleatoria, salvo SESGO DE TERRITORIO (2026-08-22,
+        propuesta de Diego, confirmada: "a nivel biológico lo común es
+        mantenerse cerca de las fuentes de alimentación, agua y seguridad").
+
+        Sin objetivo activo (COMER/BEBER/CAZAR/HUIR/BUSCAR_PAREJA), una
+        criatura no debería dispersarse sin rumbo si ya conoce dónde hay
+        recursos -- eso es plausible para un individuo consciente que
+        delibera (gnomo), pero no para fauna sin agencia: lo esperable en
+        fauna real es permanecer dentro de su área de campeo (home range)
+        en torno a comida/agua/seguridad conocidas, no vagar uniformemente.
+
+        Gating por CapacidadMental.consciencia (decision.umbral_consciencia_
+        agencia, PROVISIONAL=0.3): reutiliza el atributo declarado desde el
+        Bloque F1 y sin consumidor hasta ahora (ver componentes/
+        capacidad_mental.py) para diferenciar el grado de agencia -- por
+        debajo del umbral, la criatura queda sujeta al sesgo de territorio;
+        por encima (hoy, solo gnomo: rango racial 0.6-0.9), se asume que su
+        deambular puede reflejar decisiones no reducibles a "quedarse cerca
+        de lo conocido" y se deja el paso aleatorio intacto. Es un mecanismo
+        de gating GENERAL, no un caso especial de especie: el día que otra
+        especie tenga consciencia alta, quedará exenta automáticamente sin
+        tocar este código (leyes neutras, nunca teleológicas).
+
+        Reutiliza nucleo.memoria.objetivo_recordado tal cual existe hoy
+        (memoria, tipo, pos_x, pos_y, cap_mental, rng, config) -- misma
+        función que usan ahora _calcular_forrajeo/_calcular_hidratacion más
+        arriba en este archivo (corregidas el 2026-08-23, mismo cambio:
+        llamaban a `mem.obtener_recuerdos(tipo)`, método que MemoriaEspacial
+        nunca tuvo, seguido de una llamada a objetivo_recordado con una
+        firma posicional que no coincidía con la real -- código muerto que
+        habría crasheado en cuanto se alcanzara. Se detectó al escribir
+        este método y se corrigió también allí, no solo aquí).
+        """
+        if (
+            mem is not None
+            and cap_mental is not None
+            and cap_mental.consciencia < self.umbral_consciencia_agencia
+        ):
+            objetivo: tuple[int, int] | None = None
+            mejor_dist: int | None = None
+            for tipo_recuerdo in ("comida", "agua"):
+                candidato = objetivo_recordado(
+                    mem, tipo_recuerdo, pos_x, pos_y, cap_mental, self.rng, self.config
+                )
+                if candidato is None:
+                    continue
+                dist_candidato = abs(candidato[0] - pos_x) + abs(candidato[1] - pos_y)
+                if mejor_dist is None or dist_candidato < mejor_dist:
+                    objetivo = candidato
+                    mejor_dist = dist_candidato
+
+            if objetivo is not None and mejor_dist is not None and mejor_dist > self.dist_deseada_territorio:
+                return self._acercarse_a(pos_x, pos_y, *objetivo)
+
         return self._paso_aleatorio()
 
     def _acercarse_a(self, ox: int, oy: int, tx: int, ty: int) -> tuple[int, int]:

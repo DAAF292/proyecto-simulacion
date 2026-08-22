@@ -47,9 +47,15 @@ def factor_produccion(
     if rango_temp[0] <= temp_celda <= rango_temp[1]:
         f_temp = 1.0
     else:
+        # (2026-08-23) corregido: referenciaba una variable inexistente
+        # `temp_temp` dentro de una condición que siempre era verdadera
+        # (`"rango_temp" in locals()`, definida justo arriba sin condición)
+        # -- habría lanzado NameError la primera vez que una celda cayera
+        # fuera del rango de temperatura preferido de cualquier especie.
+        # Misma forma que el cálculo de lluvia de arriba.
         dist = min(
             abs(temp_celda - rango_temp[0]),
-            abs(temp_temp - rango_temp[1]) if "rango_temp" in locals() else abs(temp_celda - rango_temp[1]),
+            abs(temp_celda - rango_temp[1]),
         )
         f_temp = max(0.1, 1.0 - (dist * 2.0))
 
@@ -70,6 +76,22 @@ def factor_produccion(
     )
 
     return f_lluvia * f_temp * mod_estacion * mod_clima
+
+
+def recursos_alimento(especie_cfg: dict[str, Any]) -> list:
+    """
+    Todos los recursos de categoría 'alimento' de una especie vegetal
+    (puede ser más de uno -- p.ej. manzano da 'manzanas' de alimento y
+    'madera' de material, ver config/constantes.yaml sección flora).
+    Lista vacía si no produce ninguno.
+
+    RECUPERADA (2026-08-23) de commit 879f3f7 -- se perdió cuando este
+    módulo se reescribió alrededor de factor_produccion/factor_ribera sin
+    que ningún commit intermedio la protegiera; nucleo/zona_bioma.py
+    seguía importándola para poblar la capacidad inicial de cada recurso
+    al sembrar una mancha de flora.
+    """
+    return [r for r in especie_cfg["recursos"] if r["categoria"] == "alimento"]
 
 
 def factor_ribera(celda: Celda, bono_ribera: float = 0.2) -> float:

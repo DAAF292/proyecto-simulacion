@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
@@ -23,6 +24,7 @@ from nucleo.agua import hay_agua_potable
 from nucleo.celda import Celda
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos
+from nucleo.memoria import capacidad_memoria, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 
@@ -98,6 +100,7 @@ class SistemaRecursos:
             nec = gestor.obtener_componente(eid, Necesidades)
             ident = gestor.obtener_componente(eid, Identidad)
             mem = gestor.obtener_componente(eid, MemoriaEspacial)
+            cap_mental = gestor.obtener_componente(eid, CapacidadMental)
 
             if intencion is None or pos is None or nec is None or ident is None:
                 continue
@@ -105,9 +108,9 @@ class SistemaRecursos:
             celda = zona.obtener_celda(pos.x, pos.y)
 
             if intencion.accion == Accion.COMER:
-                self._resolver_comer(gestor, eid, ident, nec, mem, celda, pos.x, pos.y)
+                self._resolver_comer(gestor, eid, ident, nec, mem, cap_mental, celda, pos.x, pos.y)
             elif intencion.accion == Accion.BEBER:
-                self._resolver_beber(nec, mem, celda, pos.x, pos.y)
+                self._resolver_beber(nec, mem, cap_mental, celda, pos.x, pos.y)
             elif intencion.accion == Accion.ALIVIARSE:
                 self._resolver_aliviarse(nec, celda)
 
@@ -132,6 +135,29 @@ class SistemaRecursos:
                 elif celda.profundidad_charco > 0.0:
                     celda.profundidad_charco = max(0.0, celda.profundidad_charco - self.tasa_evaporacion_charco)
 
+    def _registrar_recuerdo_si_procede(
+        self,
+        mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
+        tipo: str,
+        pos_x: int,
+        pos_y: int,
+    ) -> None:
+        """
+        (2026-08-23) Los tres puntos de esta clase que anotaban un
+        recuerdo llamaban a `mem.anadir_recuerdo(tipo, (x, y))`, un método
+        que MemoriaEspacial nunca tuvo -- es un dataclass con un único
+        campo `recuerdos: dict` (ver su docstring). La API real vive en
+        nucleo/memoria.py: registrar_recuerdo(memoria, tipo, x, y,
+        capacidad), con la capacidad derivada de CapacidadMental.memoria
+        (capacidad_memoria()). Centralizado aquí en vez de repetir las
+        mismas tres líneas en cada punto de llamada.
+        """
+        if mem is None or cap_mental is None:
+            return
+        capacidad = capacidad_memoria(cap_mental, self.config)
+        registrar_recuerdo(mem, tipo, pos_x, pos_y, capacidad)
+
     def _resolver_comer(
         self,
         gestor: GestorEntidades,
@@ -139,6 +165,7 @@ class SistemaRecursos:
         identidad: Identidad,
         nec: Necesidades,
         mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
         celda: Celda,
         pos_x: int,
         pos_y: int,
@@ -167,8 +194,7 @@ class SistemaRecursos:
                 nec.saciedad = min(1.0, nec.saciedad + (delta_m * self.eficiencia_biomasa_saciedad))
                 nec.hidratacion = min(1.0, nec.hidratacion + (delta_m * self.eficiencia_biomasa_hidratacion))
 
-                if mem is not None:
-                    mem.anadir_recuerdo("comida", (pos_x, pos_y))
+                self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
 
                 if nec_comp.masa_organica <= 0.05:
                     gestor.eliminar_entidad(nec_id)
@@ -195,13 +221,13 @@ class SistemaRecursos:
             nec.saciedad = min(1.0, nec.saciedad + (consumo * val_nut))
             nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
 
-            if mem is not None:
-                mem.anadir_recuerdo("comida", (pos_x, pos_y))
+            self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
 
     def _resolver_beber(
         self,
         nec: Necesidades,
         mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
         celda: Celda,
         pos_x: int,
         pos_y: int,
@@ -216,8 +242,7 @@ class SistemaRecursos:
         if not celda.tiene_agua and celda.profundidad_charco > 0.0:
             celda.profundidad_charco = max(0.0, celda.profundidad_charco - self.tasa_agotamiento_charco)
 
-        if mem is not None:
-            mem.anadir_recuerdo("agua", (pos_x, pos_y))
+        self._registrar_recuerdo_si_procede(mem, cap_mental, "agua", pos_x, pos_y)
 
     def _resolver_aliviarse(self, nec: Necesidades, celda: Celda) -> None:
         """Evacua residuos orgánicos corporales incrementando la fertilidad del suelo."""

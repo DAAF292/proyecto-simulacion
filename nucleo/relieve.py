@@ -55,9 +55,14 @@ haciendo.
 """
 
 
-def pendiente_maxima_transitable(fuerza: float, config_relieve: dict) -> float:
-    minimo = config_relieve["pendiente_minima_transitable"]
-    maximo = config_relieve["pendiente_maxima_transitable"]
+def pendiente_maxima_transitable(fuerza: float, minimo: float, maximo: float) -> float:
+    """
+    (2026-08-23) Firma corregida: recibía un dict `config_relieve`, pero
+    su único consumidor (sistema_movimiento.py) ya la llamaba con
+    pendiente_minima/maxima_transitable sueltos -- mismo desfase función/
+    llamador que radio_individual() en nucleo/percepcion.py, mismo
+    criterio de arreglo (ajustar la función al único sitio que la usa).
+    """
     return minimo + fuerza * (maximo - minimo)
 
 

@@ -18,6 +18,48 @@ def edad_ticks(tick_nacimiento: int, tick_actual: int) -> int:
     return tick_actual - tick_nacimiento
 
 
+def probabilidad_muerte_vejez(identidad, dims, tick_actual: int, techo_probabilidad: float) -> float:
+    """
+    Probabilidad de morir por vejez EN ESTE CORTE DE DÍA (sistemas/
+    sistema_ciclo_vital.py la muestrea una vez contra rng.random()).
+
+    HUECO DETECTADO Y RELLENADO EL 2026-08-23, no recuperado de commit
+    anterior: a diferencia de nacer_criatura (que sí existió y se pudo
+    reconstruir desde el historial de git), esta función se referenciaba
+    desde sistemas/sistema_ciclo_vital.py (import roto) sin que existiera
+    en NINGÚN commit de todo el historial del proyecto -- confirmado
+    buscando en `git log --all -p`. No es una pérdida por colisión de
+    ediciones concurrentes como nacer_criatura: sencillamente nunca se
+    escribió. PROVISIONAL, criterio propio, sin calibrar contra el motor
+    en marcha -- señalado explícitamente en vez de presentarse como una
+    decisión ya cerrada.
+
+    Diseño: curva de saturación sobre la razón entre edad actual y la
+    longevidad INDIVIDUAL ya sorteada (dims.longevidad, en años -- no el
+    mínimo racial que usa es_adulto(), que es la elegibilidad reproductiva,
+    un concepto distinto). ratio = edad / longevidad:
+      - ratio=0 (recién nacido) -> probabilidad 0.
+      - ratio=1 (llega exactamente a su longevidad individual) ->
+        probabilidad = techo_probabilidad EXACTO.
+      - ratio>1 (sobrevive más allá de su longevidad individual, posible
+        porque longevidad es un sorteo, no un tope duro) -> se satura en
+        techo_probabilidad, no sigue creciendo sin límite.
+    Se eleva al cuadrado (ratio**2, no lineal) para que la mortalidad sea
+    baja durante la mayor parte de la vida y se concentre hacia el final
+    -- mismo tipo de curva no lineal que ya pide nucleo/disposicion.py
+    para su propia magnitud (ahí logarítmica, aquí cuadrática porque el
+    dominio y el comportamiento deseado en los extremos son distintos:
+    aquí SÍ hace falta que llegue a exactamente 1.0 de techo en ratio=1,
+    cosa que una curva log-ratio no garantiza).
+    """
+    longevidad_ticks = dims.longevidad * TICKS_POR_ANIO
+    if longevidad_ticks <= 0:
+        return techo_probabilidad
+    edad_en_ticks = edad_ticks(identidad.tick_nacimiento, tick_actual)
+    ratio = edad_en_ticks / longevidad_ticks
+    return techo_probabilidad * min(1.0, ratio ** 2)
+
+
 def es_adulto(edad_en_ticks: int, especie: str, rangos_raciales: dict, fraccion_madurez: float) -> bool:
     """Elegibilidad para reproducirse (informe tecnico, 6.3: "elegibilidad
     derivada de la esperanza de vida"). Reutiliza el MISMO ancla que la

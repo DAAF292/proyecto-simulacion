@@ -213,6 +213,24 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
         gestor.quitar_componente(id_madre, Gestacion)
 
 
+class SistemaReproduccion:
+    """
+    Envoltorio de clase (2026-08-23, mismo motivo que SistemaCapacidadFisica
+    y SistemaDecision): quedó como función suelta `actualizar()`, pero
+    main.py ya instancia `SistemaReproduccion(config, rng_juego)` y llama
+    `.ejecutar(gestor, reloj, bus_eventos)` -- ambas cosas coinciden
+    exactamente con lo que `actualizar()` necesita (config y rng propios,
+    reloj.tick_actual, bus_eventos), así que no hace falta tocar main.py.
+    """
+
+    def __init__(self, config: dict, rng) -> None:
+        self.config = config
+        self.rng = rng
+
+    def ejecutar(self, gestor, reloj, bus_eventos: BusEventos) -> None:
+        actualizar(gestor, self.config, self.rng, bus_eventos, reloj.tick_actual)
+
+
 def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int) -> None:
     # Correccion 2026-08-20 (ver docstring del modulo, seccion "Cadencia"):
     # ya NO hay gate de "una vez al dia" -- tanto nacimientos como

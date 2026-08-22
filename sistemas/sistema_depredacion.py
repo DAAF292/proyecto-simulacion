@@ -19,7 +19,14 @@ from componentes.necesidades import Necesidades
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
-from nucleo.disposicion import magnitud_disposicion_por_tamano
+from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposicion_por_tamano
+# NOTA (2026-08-23): la función real en nucleo/disposicion.py se llama
+# magnitud_disposicion_por_peso -- este archivo la importaba con un
+# nombre (magnitud_disposicion_por_tamano) que dejó de existir cuando
+# DimensionesFisicas.tamano se renombró a .peso (ver docstring de
+# nucleo/disposicion.py) y la función se renombró con él, sin que este
+# import se actualizara. Se alias en vez de reescribir las llamadas de
+# abajo porque no cambia ningún comportamiento, solo corrige el nombre.
 from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 
