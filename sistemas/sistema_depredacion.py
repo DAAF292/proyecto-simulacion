@@ -1,83 +1,17 @@
-"""SistemaDepredacion (paso 12.3): resuelve la captura cuando quien caza
-(Intencion.CAZAR) ya esta en la misma celda que una presa valida --
-SistemaMovimiento ya hizo el trabajo de acercarlos, este sistema solo
-decide si la caza tiene exito una vez hay contacto. Mismo reparto de
-responsabilidades que comer/SistemaRecursos: movimiento decide adonde ir,
-un sistema aparte resuelve el consumo cuando ya se llego. Aqui la "celda
-con recurso" es, literalmente, otro individuo.
-
-"Presa valida" reutiliza el mismo criterio del paso 12.2 (peso menor +
-magnitud_disposicion_por_peso por encima del umbral) -- no hay una
-segunda nocion de presa en este archivo, para no arriesgarse a que las
-dos definiciones diverjan con el tiempo.
-
-Resolucion de captura: tirada de probabilidad. Base = magnitud de
-disposicion por peso (nucleo/disposicion.py) entre cazador y presa;
-ajuste = (agresividad del cazador - evasion de la presa) * factor de
-config, acotado entre captura_prob_min y captura_prob_max para que ni el
-emparejamiento mas favorable ni el mas desfavorable sea un resultado
-seguro. provisional en su totalidad -- ver config/constantes.yaml.
-
-evasion (Bloque B del plan de migracion a criatura.docx): sustituye a la
-vieja Categoria.resistencia, que no representaba ningun concepto real del
-modelo nuevo. Decision explicita tomada con Diego: escapar de una
-captura depende de forcejear/esquivar, no de un aguante generico, asi que
-evasion = (fuerza + agilidad) / 2 de la presa -- combinacion simetrica y
-simple, marcada como hipotesis de partida, no calibrada contra el motor
-en marcha (mismo estatus que el resto de esta formula).
-
-Un fallo no tiene coste explicito aqui: si la presa sigue en la misma
-celda el siguiente tick (porque su propia intencion no la aleja), el
-cazador simplemente vuelve a intentarlo -- no hace falta cooldown ni
-temporizador, sale solo del bucle normal de decision-movimiento-captura.
-
-Herida en vez de muerte instantanea (Bloque C2 del plan de adaptacion a
-criatura.docx, propuesta discutida y confirmada con Diego -- el
-documento dejaba esto como pendiente explicito, sin mecanica de
-aplicacion definida): un contacto con exito ya no mata directamente,
-inflige dano a la vitalidad de la presa -- dano_bruto = fuerza del
-cazador * factor_dano_captura (config, provisional). La muerte pasa a
-ser vitalidad <= 0.0, resuelta aqui mismo tras aplicar el dano. Reutiliza
-fuerza, que hasta ahora solo alimentaba la evasion, dandole un segundo
-consumidor con sentido: un cazador mas fuerte hiere mas por golpe.
-
-Escalares de techo (correccion posterior, discutida y confirmada con
-Diego -- vitalidad_maxima llevaba desde el Bloque C1 sin ningun
-consumidor real): dano_bruto ya no se aplica directo sobre la escala
-[0,1] del pool, se divide por DimensionesFisicas.vitalidad_maxima DE LA
-PRESA antes de restarlo -- dano_fraccional = dano_bruto /
-vitalidad_maxima. Una presa con vitalidad_maxima alta (mas "aguante
-relativo") absorbe mejor el mismo golpe bruto que una con vitalidad_maxima
-baja. Como ningun individuo llega a vitalidad_maxima=1.0 (rango racial
-tope 0.9), esto amplifica todo el dano respecto a antes de este cambio.
-
-LIMITE CONOCIDO investigado en la fase de calibracion posterior a Bloque G
-(ver config/constantes.yaml, seccion 'depredacion', para el detalle
-completo con datos): se especulo que esta amplificacion obligaria a
-recalibrar factor_dano_captura a la baja -- se probo con el motor en
-marcha (5 semillas, 600 ticks, factor 0.4 vs. 0.13) y NO es asi. El
-cuello de botella real de la sostenibilidad de la caza no es la letalidad
-del golpe, es la frecuencia de contacto: un lobo con intencion CAZAR
-percibe una presa dentro de su radio en menos del 10% de los ticks en
-todas las semillas probadas, incluso llevando su agudeza_sensorial al
-maximo teorico. Densidad de poblacion sobre el tamano de mapa actual, no
-un numero de este archivo -- limite estructural de la fase sin
-reproduccion, no un bug de esta formula.
-
-Una presa que sobrevive herida se queda con la vitalidad reducida y sigue
-en juego -- el cazador puede volver a intentarlo el siguiente tick si
-sigue en contacto, exactamente igual que con un fallo de captura. Se
-emite un evento Herida (NOTABLE) para que quede en la cronica igual que
-una muerte, distinto de Muerte.
-
-Satisfaccion de la saciedad (Bloque A del plan de migracion: convencion
-1.0=pleno/0.0=crisis): solo una captura LETAL deja al cazador con
-saciedad=1.0 -- un golpe que solo hiere no alimenta (no hay todavia
-nocion de "cuanta carne" deja un cadaver concreto, pero comerse una
-presa herida y viva no tiene sentido). provisional, revisar si se siente
-demasiado generoso una vez observada la dinamica de poblacion de ambas
-especies.
 """
+sistemas/sistema_depredacion.py
+
+Sistema de resolución de depredación y combate interespecífico (Fase 2).
+Resuelve el contacto físico en la misma celda entre cazador y presa,
+computando probabilidad de captura, daño a la vitalidad y transferencia
+de biomasa proporcional a la masa corporal relativa.
+"""
+
+from __future__ import annotations
+
+import random
+from typing import Any
+
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
@@ -85,93 +19,195 @@ from componentes.necesidades import Necesidades
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
-from nucleo.disposicion import id_en_contacto_por_disposicion, magnitud_disposicion_por_peso
+from nucleo.disposicion import magnitud_disposicion_por_tamano
+from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
 
 
-def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int) -> None:
-    umbral_disposicion = config["depredacion"]["umbral_disposicion_presa"]
-    factor_ajuste = config["depredacion"]["factor_ajuste_agresividad_evasion"]
-    factor_dano = config["depredacion"]["factor_dano_captura"]
-    p_min = config["depredacion"]["captura_prob_min"]
-    p_max = config["depredacion"]["captura_prob_max"]
+class SistemaDepredacion:
+    """
+    Evalúa colisiones espaciales de combate y resuelve capturas, heridas
+    y balances metabólicos por transferencia de biomasa.
+    """
 
-    # list(...) porque eliminar_entidad() puede mutar los diccionarios
-    # del gestor mientras iteramos (mismo motivo que en SistemaNecesidades).
-    for id_cazador in list(gestor.entidades_con(Posicion, Intencion, DimensionesFisicas, Temperamento, Necesidades)):
-        intencion = gestor.obtener_componente(id_cazador, Intencion)
-        if intencion is None or intencion.accion != Accion.CAZAR:
-            continue
+    def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
+        self.config = config
+        self.rng = rng
+        self._cachear_configuracion()
 
-        posicion = gestor.obtener_componente(id_cazador, Posicion)
-        dimensiones_cazador = gestor.obtener_componente(id_cazador, DimensionesFisicas)
-        temperamento_cazador = gestor.obtener_componente(id_cazador, Temperamento)
-
-        id_presa = id_en_contacto_por_disposicion(
-            gestor, id_cazador, posicion.x, posicion.y,
-            dimensiones_cazador.peso, umbral_disposicion, buscar_mayor=False,
+    def _cachear_configuracion(self) -> None:
+        """Extrae y tipa los parámetros de combate y rendimiento biológico."""
+        cfg_dep = self.config.get("depredacion", {})
+        self.captura_prob_min: float = float(cfg_dep.get("captura_prob_min", 0.1))
+        self.captura_prob_max: float = float(cfg_dep.get("captura_prob_max", 0.5))
+        self.factor_agresividad_resistencia: float = float(
+            cfg_dep.get("factor_agresividad_resistencia", 0.2)
         )
-        if id_presa is None:
-            continue
+        self.umbral_disposicion_caza: float = float(
+            cfg_dep.get("umbral_disposicion_caza", 0.5)
+        )
+        self.eficiencia_biomasa_saciedad: float = float(
+            cfg_dep.get("eficiencia_biomasa_saciedad", 1.5)
+        )
+        self.eficiencia_biomasa_hidratacion: float = float(
+            cfg_dep.get("eficiencia_biomasa_hidratacion", 0.5)
+        )
+        self.factor_dano_base: float = float(cfg_dep.get("factor_dano_base", 0.4))
 
-        dimensiones_presa = gestor.obtener_componente(id_presa, DimensionesFisicas)
-        magnitud = magnitud_disposicion_por_peso(dimensiones_cazador.peso, dimensiones_presa.peso)
-        evasion_presa = (dimensiones_presa.fuerza + dimensiones_presa.agilidad) / 2
-        ajuste = (temperamento_cazador.agresividad - evasion_presa) * factor_ajuste
-        p_captura = max(p_min, min(p_max, magnitud + ajuste))
+    def ejecutar(self, gestor: GestorEntidades, bus_eventos: BusEventos) -> None:
+        """
+        Procesa los encuentros de depredación en el tick actual.
+        Debe invocarse en la Fase 2, posterior a SistemaMovimiento.
+        """
+        posiciones_mapa: dict[tuple[int, int], list[int]] = {}
+        for entidad_id in sorted(gestor.entidades_con(Posicion, DimensionesFisicas)):
+            pos = gestor.obtener_componente(entidad_id, Posicion)
+            if pos is not None:
+                clave = (pos.x, pos.y)
+                if clave not in posiciones_mapa:
+                    posiciones_mapa[clave] = []
+                posiciones_mapa[clave].append(entidad_id)
 
-        if rng.random() >= p_captura:
-            continue  # la presa escapa este intento, se reintenta el siguiente tick
+        entidades_eliminadas: set[int] = set()
 
-        pool_presa = gestor.obtener_componente(id_presa, PoolFisico)
-        dano_bruto = dimensiones_cazador.fuerza * factor_dano
-        dano_fraccional = dano_bruto / dimensiones_presa.vitalidad_maxima
-        pool_presa.vitalidad = max(0.0, pool_presa.vitalidad - dano_fraccional)
+        for (x, y), entidades in posiciones_mapa.items():
+            if len(entidades) < 2:
+                continue
 
-        identidad_presa = gestor.obtener_componente(id_presa, Identidad)
+            cazadores = [
+                eid for eid in entidades
+                if eid not in entidades_eliminadas
+                and self._es_cazador_activo(gestor, eid)
+            ]
 
+            for cazador_id in cazadores:
+                if cazador_id in entidades_eliminadas:
+                    continue
+
+                presas_candidatas = [
+                    eid for eid in entidades
+                    if eid != cazador_id
+                    and eid not in entidades_eliminadas
+                    and self._es_presa_valida(gestor, cazador_id, eid)
+                ]
+
+                if not presas_candidatas:
+                    continue
+
+                # Selección determinista por menor identificador
+                presa_id = min(presas_candidatas)
+                muerte_presa = self._resolver_ataque(
+                    gestor, bus_eventos, cazador_id, presa_id
+                )
+
+                if muerte_presa:
+                    entidades_eliminadas.add(presa_id)
+
+    def _es_cazador_activo(self, gestor: GestorEntidades, entidad_id: int) -> bool:
+        """Verifica si la entidad está ejecutando activamente la acción de cazar."""
+        intencion = gestor.obtener_componente(entidad_id, Intencion)
+        return intencion is not None and intencion.accion == Accion.CAZAR
+
+    def _es_presa_valida(
+        self, gestor: GestorEntidades, cazador_id: int, presa_id: int
+    ) -> bool:
+        """Evalúa si la presa es sustancialmente menor según la ley logarítmica de peso."""
+        dims_cazador = gestor.obtener_componente(cazador_id, DimensionesFisicas)
+        dims_presa = gestor.obtener_componente(presa_id, DimensionesFisicas)
+
+        if dims_cazador is None or dims_presa is None:
+            return False
+
+        if dims_cazador.peso <= dims_presa.peso:
+            return False
+
+        disposicion = magnitud_disposicion_por_tamano(dims_cazador.peso, dims_presa.peso)
+        return disposicion >= self.umbral_disposicion_caza
+
+    def _resolver_ataque(
+        self,
+        gestor: GestorEntidades,
+        bus_eventos: BusEventos,
+        cazador_id: int,
+        presa_id: int,
+    ) -> bool:
+        """
+        Calcula el desenlace del ataque, aplica daño a la vitalidad de la presa
+        y transfiere biomasa y saciedad al cazador si hay captura letal.
+        """
+        dims_cazador = gestor.obtener_componente(cazador_id, DimensionesFisicas)
+        dims_presa = gestor.obtener_componente(presa_id, DimensionesFisicas)
+        temp_cazador = gestor.obtener_componente(cazador_id, Temperamento)
+        temp_presa = gestor.obtener_componente(presa_id, Temperamento)
+        pool_presa = gestor.obtener_componente(presa_id, PoolFisico)
+        nec_cazador = gestor.obtener_componente(cazador_id, Necesidades)
+        ident_cazador = gestor.obtener_componente(cazador_id, Identidad)
+        ident_presa = gestor.obtener_componente(presa_id, Identidad)
+
+        if (
+            dims_cazador is None
+            or dims_presa is None
+            or pool_presa is None
+            or ident_cazador is None
+            or ident_presa is None
+        ):
+            return False
+
+        # 1. Probabilidad de éxito del ataque
+        disp = magnitud_disposicion_por_tamano(dims_cazador.peso, dims_presa.peso)
+        agr = temp_cazador.agresividad if temp_cazador else 0.5
+        val = temp_presa.valentia if temp_presa else 0.5
+
+        prob_exito = disp + (agr - val) * self.factor_agresividad_resistencia
+        prob_exito = max(self.captura_prob_min, min(self.captura_prob_max, prob_exito))
+
+        if self.rng.random() >= prob_exito:
+            return False
+
+        # 2. Impacto sobre el pool de Vitalidad
+        dano_proporcional = self.factor_dano_base * (dims_cazador.fuerza / max(0.1, dims_presa.fuerza))
+        dano_neto = dano_proporcional * dims_presa.vitalidad_maxima
+        pool_presa.vitalidad = max(0.0, pool_presa.vitalidad - dano_neto)
+
+        # 3. Resolución: Herida vs Muerte
         if pool_presa.vitalidad > 0.0:
-            # herida, no muerte -- la presa sigue en el gestor.
-            datos_herida = {"causa": "depredacion", "vitalidad_restante": round(pool_presa.vitalidad, 3)}
-            if identidad_presa is not None:
-                datos_herida["especie"] = identidad_presa.especie.value
-                if identidad_presa.nombre:
-                    datos_herida["nombre"] = identidad_presa.nombre
-            bus.emitir(
+            bus_eventos.emitir(
                 Evento(
                     tipo="Herida",
                     severidad=Severidad.NOTABLE,
-                    tick=tick_actual,
-                    entidad_id=id_presa,
-                    datos=datos_herida,
+                    tick=0,
+                    entidad_id=presa_id,
+                    datos={
+                        "atacante_id": cazador_id,
+                        "vitalidad_restante": pool_presa.vitalidad,
+                    },
                 )
             )
-            continue
+            return False
 
-        # captura letal -- leer identidad ANTES de eliminar (una vez
-        # fuera del gestor nadie puede volver a preguntarle su especie o
-        # nombre, mismo motivo que en SistemaNecesidades).
-        datos_muerte = {"causa": "depredacion"}
-        if identidad_presa is not None:
-            datos_muerte["especie"] = identidad_presa.especie.value
-            if identidad_presa.nombre:
-                datos_muerte["nombre"] = identidad_presa.nombre
-        # posicion del cazador == posicion de la presa (captura es por
-        # contacto, comparten celda) -- para Bloque F2 (presenciar una
-        # muerte dentro del radio de percepcion).
-        datos_muerte["x"] = posicion.x
-        datos_muerte["y"] = posicion.y
+        # 4. Captura letal: Transferencia de biomasa
+        if nec_cazador is not None:
+            ratio_biomasa = dims_presa.peso / max(0.1, dims_cazador.peso)
+            aporte_saciedad = ratio_biomasa * self.eficiencia_biomasa_saciedad
+            aporte_hidratacion = ratio_biomasa * self.eficiencia_biomasa_hidratacion
 
-        gestor.eliminar_entidad(id_presa)
-        bus.emitir(
+            nec_cazador.saciedad = min(1.0, nec_cazador.saciedad + aporte_saciedad)
+            nec_cazador.hidratacion = min(1.0, nec_cazador.hidratacion + aporte_hidratacion)
+
+        # 5. Emisión de defunción y eliminación de la entidad
+        bus_eventos.emitir(
             Evento(
                 tipo="Muerte",
-                severidad=Severidad.NOTABLE,
-                tick=tick_actual,
-                entidad_id=id_presa,
-                datos=datos_muerte,
+                severidad=Severidad.HISTORICO,
+                tick=0,
+                entidad_id=presa_id,
+                datos={
+                    "causa": "depredacion",
+                    "cazador_id": cazador_id,
+                    "especie": ident_presa.especie.value,
+                    "nombre": ident_presa.nombre,
+                },
             )
         )
-
-        necesidades_cazador = gestor.obtener_componente(id_cazador, Necesidades)
-        necesidades_cazador.saciedad = 1.0
+        gestor.eliminar_entidad(presa_id)
+        return True

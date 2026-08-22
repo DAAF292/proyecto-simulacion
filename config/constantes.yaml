@@ -1,848 +1,54 @@
+# ==============================================================================
 # config/constantes.yaml
-# Unico lugar donde viven los numeros ajustables de la fase 0 (informe de
-# implementacion, seccion 4). Todo valor marcado "provisional" es una
-# hipotesis de partida para el Bloque B (calibracion numerica con el motor
-# corriendo) -- no esta validado observando el juego, solo es razonable como
-# punto de arranque.
+# Configuración paramétrica centralizada del motor "Un mundo vivo"
+# ==============================================================================
 
+# ------------------------------------------------------------------------------
+# 1. Configuración Espacial y Topología del Mundo
+# ------------------------------------------------------------------------------
 mundo:
-  # CALIBRACION 2026-08-21 (investigacion "sostenibilidad de la caza del
-  # lobo", ver sistema_depredacion.py y config 'depredacion' mas abajo
-  # para el diagnostico completo): duplicado de 20x20 (400 celdas) a
-  # 28x28 (784 celdas, +96%, la superficie entera mas cercana al doble
-  # exacto manteniendo el mapa cuadrado) -- decision explicita de Diego,
-  # combinada con poblacion inicial x3 (ver bloque 'poblacion' mas abajo).
-  # El diagnostico de hoy no señalaba "duplicar el mapa" como la unica
-  # palanca posible, pero es la que Diego eligio probar primero -- ver
-  # el monitoreo de esta misma corrida (script de diagnostico, no
-  # persistido en el repo) para los resultados. provisional: densidad
-  # resultante (84 individuos / 784 celdas = 0.107) es MAYOR que la
-  # densidad previa (28/400 = 0.07), no menor -- duplicar superficie
-  # mientras la poblacion se triplica sube la densidad neta, no la baja.
   grid_ancho: 28
   grid_alto: 28
-  # Escala espacial: cuanto mide el lado de una celda en el mundo real.
-  # No gobierna ninguna mecanica por si sola -- es la unidad que ancla
-  # decisiones que si dependen de distancia real, como el radio de
-  # percepcion de abajo. provisional: 10m, razonado como entorno inmediato
-  # de recoleccion para un punado de gnomos, sin viajes de dias.
   metros_por_celda: 10
-
-# --- Vista web (presentacion/vista_web.py, discutida y confirmada con
-# Diego): primera capa de presentacion mas alla de la terminal -- mapa en
-# tiempo real en el navegador, servido con la libreria estandar
-# (http.server), sin frameworks nuevos. Activada con la variable de
-# entorno BOSQUE_MODO_VISUAL=1 (mismo patron que BOSQUE_AUTO_TICKS) --
-# tercer modo de ejecucion de main.py, distinto de interactivo (Enter por
-# tick) y headless (maxima velocidad): avanza solo, a la cadencia fija de
-# abajo. provisional en su totalidad, sin calibrar mas alla de probarlo.
-visual:
-  puerto: 8765
-  # segundos reales entre un tick y el siguiente en modo visual --
-  # unico de los tres modos que avanza el tiempo por si solo. provisional:
-  # 0.4s da sensacion de "vivo" sin ser vertiginoso ni desesperante de
-  # mirar; sin control de velocidad desde el navegador todavia (deuda
-  # declarada a proposito para esta primera pasada, ver
-  # presentacion/vista_web.py) -- si hace falta ajustarlo, se cambia aqui.
-  segundos_por_tick: 0.4
-  # cuantas frases de la cronica (presentacion/narrador.py) se acumulan
-  # en memoria para el panel "Cronica" del navegador -- peticion de Diego
-  # tras ver el primer mapa: "un apartado en el que el narrador vaya
-  # contando que pasa". deque acotado en main.py, no una lista sin
-  # limite -- una sesion de horas en modo visual no debe acumular
-  # memoria sin techo. provisional: 200 lineas es mas de lo que cabe en
-  # el panel visible a la vez, pero permite hacer scroll hacia atras un
-  # rato sin gastar memoria de verdad.
-  max_lineas_cronica: 200
-
-# --- Percepcion (paso 11, ampliado tras detectar que un gnomo con
-# conocimiento global del mapa hace la escasez irrelevante: mientras
-# quede un solo recurso en cualquier parte del mapa, todos lo encuentran
-# a tiempo). Un individuo solo "sabe" de recursos/individuos dentro de
-# este radio; si no encuentra nada, cae a deambular en vez de cruzar el
-# mapa a lo seguro.
-#
-# Deuda saldada (Bloque G dejaba esto anotado y deliberadamente sin
-# conectar -- ver componentes/dimensiones_fisicas.py -- Diego pidio
-# afrontarla ya): el radio ya no es un unico entero uniforme entre
-# especies, se deriva de DimensionesFisicas.agudeza_sensorial de cada
-# individuo (nucleo/percepcion.py, radio_individual()). radio_celdas=2
-# (fijado tras el colapso de poblacion observado con radio 1, comentario
-# historico) se sustituye por un RANGO -- min/max -- del que 2 sigue
-# siendo aproximadamente el punto medio, para no desplazar el
-# comportamiento medio ya validado, solo anadir variacion racial/
-# individual alrededor de el. ---
-percepcion:
-  radio_minimo_celdas: 0   # extremo teorico, agudeza_sensorial=0.0 -- ciego mas alla de su propia celda
-  radio_maximo_celdas: 4   # 40m reales -- extremo teorico, agudeza_sensorial=1.0
-  # provisional (calibracion numerica): primero se probo [1, 4] (punto
-  # medio 2.5, igual de cerca del viejo radio_celdas=2), pero con los
-  # rangos raciales actuales de agudeza_sensorial (gnomo [0.3, 0.6], lobo
-  # [0.5, 0.8]) esos bordes daban VARIACION CERO dentro de lobo (el rango
-  # entero caia siempre en el mismo entero redondeado) -- un fallo de
-  # diseno real, detectado simulando la distribucion antes de dar esto
-  # por cerrado, no algo que se dejara pasar. [0, 4] si reparte ambas
-  # especies entre dos valores: gnomo ~25% radio 1 / 75% radio 2, lobo
-  # ~42% radio 2 / 58% radio 3 -- variacion individual real en las dos, y
-  # el promedio global queda igual de cerca del viejo valor unico (2) que
-  # con [1, 4]. Nadie llega en la practica al 0 ni al 4 exactos con los
-  # rangos raciales de hoy (extremos solo teoricos). Si en la fase de
-  # calibracion se quiere mas separacion, el punto a tocar es primero los
-  # rangos raciales de agudeza_sensorial, no estos bordes -- señalado, no
-  # decidido aqui.
-
-# --- Social (sesgo gregario de sociabilidad en deambular, ver
-# sistemas/sistema_movimiento.py -- surgio de pregunta directa de Diego,
-# sin bloque letra asignado en el plan de migracion) ---
-#
-# Efecto observado en pruebas (600 ticks, semillas 42 y 7, comparado por
-# ablacion con la misma tirada de rng forzando sociabilidad=0 en ambas
-# especies): el sesgo gregario adelanta la extincion total de la
-# poblacion (374 vs. 531 ticks en semilla 42; 599 vs. "2 vivos a los 600"
-# en semilla 7) -- congregarse concentra varios individuos sobre el mismo
-# recurso local, que se agota mas rapido de lo que se regenera. Decision
-# de Diego tras plantearselo: dejar la probabilidad tal cual (sociabilidad
-# directa, sin amortiguar) -- moderar el numero especificamente para
-# evitar esta consecuencia seria escribir el resultado a mano en vez de
-# dejar que la regla simple lo produzca (principio 1). La fragilidad de
-# fondo (la poblacion ya sobrevivia por poco, 1 gnomo a los 600 ticks,
-# antes de este bloque) es una cuestion de calibracion de la economia de
-# recursos/necesidades en general, no de este numero en particular --
-# pendiente para una revision mas amplia, probablemente cuando exista
-# reproduccion (main.py ya documenta que sin ella nada garantiza
-# poblacion indefinida).
-social:
-  # celdas de distancia a partir de las cuales un individuo sociable deja
-  # de tirar hacia el conspecifico mas cercano al deambular ("mantenerse
-  # cerca" sin perseguir la celda exacta). provisional: hipotesis de
-  # partida, sin calibrar contra el motor en marcha.
-  distancia_deseada_conspecifico: 1
-  # distancia_deseada_territorio (2026-08-21, sesgo de territorio -- ver
-  # sistema_movimiento.py, docstring del modulo, seccion "Sesgo de
-  # territorio" para el diseno completo): mismo criterio y mismo valor
-  # que distancia_deseada_conspecifico de arriba -- a partir de esta
-  # distancia, un individuo no consciente deja de tirar hacia el sitio de
-  # comida/agua recordado mas cercano y cae al paso aleatorio (explora su
-  # propia zona conocida en vez de perseguir la celda exacta). provisional,
-  # sin calibrar contra el motor en marcha.
-  distancia_deseada_territorio: 1
-
-# --- Depredacion (paso 12) ---
-# umbral de magnitud_disposicion_por_tamano (nucleo/disposicion.py) por
-# encima del cual un individuo mas grande percibe a otro mas pequeno
-# dentro de su radio como presa valida. provisional: elegido observando
-# los propios casos de prueba de la formula -- pares gnomo/lobo caen en
-# 0.58-0.71, pares dentro de la misma especie en 0.29-0.39; 0.5 separa
-# ambos grupos con margen a los dos lados sin necesitar filtrar por
-# especie explicitamente.
-depredacion:
-  # LIMITE CONOCIDO, investigado y documentado (fase de calibracion
-  # posterior a Bloque G, 2026-08-19): la sostenibilidad de la caza como
-  # fuente de alimento del lobo NO se resuelve ajustando ningun numero de
-  # este bloque -- se investigo a fondo y se descarto.
-  #
-  # ACTUALIZACION 2026-08-19 (investigacion posterior, tras cerrar 6.3
-  # Reproduccion -- "que queremos: vidas largas o ciclos cortos"): lo de
-  # arriba SIGUE siendo cierto para el objetivo original (sostener la
-  # caza como fuente de alimento fiable del lobo) -- pero se encontro que
-  # bajar captura_prob_max (mas abajo) SI ayuda a un objetivo distinto y
-  # mas modesto: dar a la poblacion de gnomos margen para sobrevivir hasta
-  # la madurez con la frecuencia suficiente para que la reproduccion
-  # (6.3, cerrada en esta misma sesion) llegue a dispararse alguna vez de
-  # forma natural. No contradice el diagnostico de causa de fondo
-  # (densidad de poblacion sobre tamaño de mapa, sigue sin resolverse) --
-  # solo demuestra que, aunque no se pueda arreglar del todo con un
-  # numero de este archivo, SI se puede aliviar lo suficiente para que el
-  # motor complete un ciclo vital completo alguna vez. Ver
-  # necesidades.defecto.probabilidad_muerte_saciedad_critica para el
-  # razonamiento completo y los datos (40 semillas por configuracion).
-  #
-  # Diagnostico: en pruebas de 600 ticks (5 semillas: 42, 7, 123, 999, 55),
-  # ambos lobos mueren de inanicion en la practica totalidad de las
-  # corridas, a pesar de que la poblacion de gnomos (su unica presa) nunca
-  # llega a cero durante la mayor parte de la partida. La hipotesis inicial
-  # -- que la captura fuera demasiado letal tras los escalares de techo
-  # (ver sistema_depredacion.py) -- se descarto con datos: bajar
-  # factor_dano_captura de 0.4 a 0.13 (recalculado para restaurar los
-  # "3-12 contactos para matar" que el diseno original preveia antes de
-  # dividir por vitalidad_maxima) apenas cambia el resultado en ninguna
-  # semilla.
-  #
-  # El cuello de botella real, instrumentado directamente (contando, tick
-  # a tick, cuantas veces un lobo con intencion CAZAR PERCIBE una presa
-  # dentro de su radio, ver nucleo/percepcion.py): entre 0% y 9.1% de los
-  # ticks cazando. En una de las cinco semillas, ningun lobo percibio una
-  # sola presa en 600 ticks. Se probo tambien ensanchar el rango racial de
-  # agudeza_sensorial del lobo hasta el extremo teorico (radio=4 fijo,
-  # maximo posible con los bordes actuales de percepcion) y el porcentaje
-  # de percepcion NO mejora de forma consistente -- en el caso extremo,
-  # ademas, empeora la supervivencia global del lobo (0 de 5 semillas con
-  # algun lobo vivo a los 600 ticks, frente a 2 de 5 en el caso base),
-  # compatible con una dinamica de sobreexplotacion: mas contactos exitosos
-  # al principio crashean la poblacion de gnomos antes, y sin reproduccion
-  # esa poblacion no se recupera, dejando al lobo sin presa disponible mas
-  # pronto en vez de mas tarde.
-  #
-  # Causa de fondo: un mapa de 400 celdas (20x20) con 4-6 gnomos vivos es
-  # estructuralmente disperso para cualquier radio de percepcion razonable
-  # (radio=4 cubre ~41 celdas, ~10% del mapa -- la expectativa de tener un
-  # gnomo dentro de esa area en un tick dado es de ~0.4). No es un problema
-  # de "cuanto ve" ni de "cuanto pega" el lobo, es densidad de poblacion
-  # sobre el tamano de mapa actual, agravado por la ausencia de
-  # reproduccion (main.py ya documenta que sin ella nada garantiza
-  # poblacion indefinida -- esto confirma que el limite alcanza tambien a
-  # la depredacion como mecanismo alimentario, no solo a la poblacion de
-  # gnomos en general).
-  #
-  # Idea de Diego para revisitar esto MAS ADELANTE (no implementada, no
-  # decidida -- anotada para cuando se retome): anadir una especie de presa
-  # pequena y numerosa (p. ej. "conejo") subiria la densidad real de
-  # objetivos perceptibles sin tocar ningun numero de percepcion o
-  # letalidad -- ataca la causa de fondo (densidad) en vez de sintomas.
-  # Reutilizaria integramente la maquinaria de disposicion/depredacion ya
-  # existente (nucleo/disposicion.py, sistema_depredacion.py) sin inventar
-  # mecanica nueva, pero SI es una especie nueva completa (rango racial,
-  # habitat, si lleva Temperamento/CapacidadMental completos o un perfil
-  # simplificado, como afecta a la formula de disposicion tener tres pesos
-  # en vez de dos) -- una fuente de complejidad real, no un ajuste de
-  # calibracion, y por eso queda fuera de esta fase.
-  umbral_disposicion_presa: 0.5
-  # Resolucion de captura (paso 12.3): probabilidad = magnitud de
-  # disposicion por peso (base), ajustada por la diferencia entre la
-  # agresividad de quien caza y la evasion de la presa -- (fuerza +
-  # agilidad) / 2, sustituye a la vieja Categoria.resistencia en el
-  # Bloque B del plan de migracion a criatura.docx -- acotada para que ni
-  # la combinacion mas favorable ni la mas desfavorable sea un resultado
-  # seguro (deja sitio a la suerte en ambos extremos, igual criterio que
-  # probabilidad_muerte_saciedad_critica). provisional: sin calibrar contra
-  # el motor en marcha en el sentido de p_min/p_max -- pero la pregunta de
-  # fondo ("se sostiene la poblacion de lobos con esta cifra") ya se
-  # investigo (ver bloque de arriba) y la respuesta no depende de este
-  # numero.
-  factor_ajuste_agresividad_evasion: 0.3
-  captura_prob_min: 0.05
-  # CALIBRACION 2026-08-19 (misma investigacion que
-  # necesidades.defecto.probabilidad_muerte_saciedad_critica, ver ese
-  # comentario para el contexto completo): bajado de 0.95 a 0.5 -- el
-  # techo original dejaba una captura casi segura en el mejor caso para
-  # el cazador, lo que junto con la mortalidad original por inanicion
-  # mataba a la poblacion antes de que nadie llegara a la madurez en 8 de
-  # cada 10 semillas probadas, incluso con calendario comprimido. Bajar
-  # SOLO este numero, o SOLO probabilidad_muerte_saciedad_critica, no
-  # bastaba (cero concepciones en 40 semillas cada uno por separado) --
-  # hizo falta ablandar los dos canales de muerte a la vez. No toca
-  # factor_dano_captura (ya investigado y descartado como palanca, ver
-  # comentario debajo) ni captura_prob_min (una caza extremadamente
-  # favorable para el cazador debe poder seguir siendo casi segura en el
-  # otro extremo -- solo se suaviza el CASO GENERAL, no se elimina el
-  # riesgo real de una presa mucho mas pequeña o torpe).
-  captura_prob_max: 0.5
-  # Bloque C2: dano infligido a la vitalidad de la presa por cada contacto
-  # con exito -- dano = fuerza del cazador * este factor. Con fuerza en
-  # [0.2, 0.9] (rangos raciales de gnomo/lobo) y vitalidad partiendo de
-  # 1.0, este factor producia golpes de ~0.08 a ~0.36 -- entre 3 y 12
-  # contactos para matar -- ANTES de los escalares de techo (Bloque
-  # posterior: el dano se divide por vitalidad_maxima de la presa, que
-  # amplifica el golpe real respecto a esta nota original).
-  #
-  # Se especulo en su momento que este factor "probablemente necesitaria
-  # recalibrarse a la baja" tras los escalares de techo -- se probo de
-  # verdad en la fase de calibracion (ver bloque de comentarios de
-  # 'depredacion' arriba) y la especulacion NO se confirmo: bajarlo a 0.13
-  # (recalculado para restaurar el rango de 3-12 contactos con la formula
-  # nueva) no cambia de forma apreciable la supervivencia de gnomos ni de
-  # lobos en ninguna de las 5 semillas probadas. La letalidad del golpe no
-  # es el cuello de botella real -- la frecuencia de contacto lo es. Se
-  # deja en 0.4 (valor original) porque no hay evidencia de que cambiarlo
-  # mejore nada; no es una recalibracion pendiente, es una hipotesis ya
-  # investigada y descartada.
-  factor_dano_captura: 0.4
-
-# --- Capacidad fisica (Bloque C2: coste de resistencia por esfuerzo) ---
-# mientras la intencion sea CAZAR o HUIR, resistencia baja a esta tasa
-# por tick; en cualquier otra intencion, se repone con la dimension
-# individual 'recuperacion' (rangos_raciales). provisional: elegida para
-# que una persecucion o huida sostenida agote el pool en el orden de
-# varias decenas de ticks (1.0 / 0.05 = 20 ticks), no instantaneamente ni
-# nunca -- sin calibrar contra el motor en marcha.
-capacidad_fisica:
-  tasa_perdida_resistencia_por_esfuerzo: 0.05
-
-# --- Capacidad mental (Bloque F2: consumo del pool de estabilidad
-# mental -- estres, discutido y confirmado con Diego, ver
-# sistemas/sistema_capacidad_mental.py). provisional en su totalidad,
-# sin calibrar contra el motor en marcha. ---
-capacidad_mental:
-  # drenaje CONTINUO, proporcional a (1 - seguridad) cada tick -- no un
-  # umbral+contador de N ticks. Con seguridad en 0.0 sostenido (amenaza
-  # constante), el pool se vacia en 1.0 / 0.02 = 50 ticks; con seguridad
-  # a medias (0.5), el doble.
-  tasa_perdida_estabilidad_por_amenaza: 0.02
-  # penalizacion puntual por presenciar una Evento Muerte (cualquier
-  # especie) dentro del radio de percepcion -- como mucho una vez por
-  # tick aunque haya varias muertes cerca. Bastante mas grande que el
-  # drenaje por amenaza porque es un suceso puntual, no un goteo -- del
-  # orden de "una muerte cercana cuesta lo que ~7-8 ticks de amenaza
-  # sostenida".
-  penalizacion_estabilidad_presenciar_muerte: 0.15
-
-# --- Ciclo vital (informe tecnico, seccion 6.1 -- esperanza de vida y
-# envejecimiento; segunda pieza de la secuencia de ciclo vital acordada
-# con Diego el 2026-08-19, tras el fundamento de edad). Ver
-# sistemas/sistema_ciclo_vital.py para la formula completa y su
-# justificacion -- aqui solo el techo de la curva de saturacion. ---
-ciclo_vital:
-  # probabilidad DIARIA (no por tick) hacia la que satura la curva segun
-  # un individuo envejece mas y mas alla del minimo racial de longevidad.
-  # provisional: primera hipotesis de partida, sin calibrar contra el
-  # motor en marcha -- dado que la esperanza de vida minima (45 anios
-  # gnomo, 8 anios lobo) equivale a decenas de miles de ticks con el
-  # calendario actual (Reloj: 1 anio = 1920 ticks), muy por encima de
-  # cualquier corrida de prueba habitual (600-800 ticks) de este proyecto,
-  # esta cifra no se podra calibrar de verdad contra el motor en marcha
-  # hasta que existan partidas mucho mas largas.
-  techo_probabilidad_muerte_vejez: 0.3
-  # fraccion_madurez (elegibilidad para reproducirse, informe tecnico 6.3:
-  # "elegibilidad derivada de la esperanza de vida") MOVIDO a rangos_
-  # raciales.<especie>.fraccion_madurez (2026-08-20, diseno conjunto de
-  # reproduccion -- ver sistemas/sistema_decision.py y sistema_
-  # reproduccion.py). Motivo: la investigacion de por que la reproduccion
-  # casi nunca ocurria encontro que un UNICO valor global (0.2) daba
-  # madurez al gnomo a los 9 anios (minimo racial 45 anios) sin ningun
-  # dato de referencia que lo respalde -- a diferencia del lobo, donde
-  # 0.2 coincidia por casualidad con la edad real de madurez sexual
-  # (~1-2 anios). Con cuatro especies de biologia muy distinta (r-strategy
-  # de conejo/ardilla frente a la K-strategy de gnomo/lobo), un solo
-  # numero ya no tiene sentido -- ver nucleo/ciclo_vital.py:es_adulto(),
-  # que ahora recibe la fraccion como parametro explicito por especie en
-  # vez de leer esta clave global.
-
-# --- Reproduccion (informe tecnico, 6.3 -- emparejamiento, primera pieza
-# conductual de la secuencia de ciclo vital, propuesta discutida y
-# confirmada con Diego el 2026-08-19 antes de escribir codigo). Ver
-# sistemas/sistema_reproduccion.py para la formula completa y las
-# alternativas descartadas (dominancia, dependencia de necesidades
-# fisicas resueltas). ---
-reproduccion:
-  # factor_base_concepcion MOVIDO a rangos_raciales.<especie>.
-  # factor_base_concepcion (2026-08-20, diseno conjunto de reproduccion).
-  # Motivo doble:
-  #   1. Un solo factor no puede representar la diferencia real de
-  #      fecundidad entre un lobo (K-strategy, camada rara) y un conejo
-  #      (r-strategy, reproduccion rapida y frecuente) -- la propia
-  #      investigacion de por que la reproduccion casi nunca ocurria lo
-  #      senalo como hueco al introducir conejo/ardilla sin diferenciarlos
-  #      de gnomo/lobo en este numero.
-  #   2. sistema_reproduccion.py deja de tener cadencia de dia (evaluaba
-  #      una vez al dia si habia contacto) y pasa a evaluar cada tick --
-  #      necesario porque el muestreo diario se demostro que perdia
-  #      contactos reales (una pareja podia tocarse y separarse entre dos
-  #      cortes de dia sin que el sistema lo viera nunca). El valor por
-  #      especie ya esta expresado como probabilidad POR TICK, no diaria
-  #      -- ver rangos_raciales para la conversion y el razonamiento
-  #      numerico completo.
-  # amplitud de la mutacion al heredar un atributo (nucleo/entidad.py:
-  # _heredar_valor), como fraccion del ANCHO del rango racial completo
-  # (maximo - minimo), aplicada como perturbacion uniforme +/- alrededor
-  # del promedio de ambos progenitores, luego acotada de nuevo al rango
-  # racial. provisional: 0.1 -- razonamiento de partida, no observacion:
-  # bastante pequena para que la herencia domine sobre el azar (un hijo
-  # se parece mas a sus padres que un individuo de poblacion inicial
-  # sorteado al azar en todo el rango), pero suficiente para que sucesivas
-  # generaciones puedan derivar hacia los extremos del rango racial en
-  # vez de converger todas al mismo promedio. Sin calibrar contra el motor
-  # en marcha -- requiere observar varias generaciones reales, que la
-  # densidad de poblacion actual (ver limite documentado en
-  # generacion_mapa/depredacion) todavia no produce de forma fiable.
-  mutacion_fraccion: 0.1
-
-poblacion:
-  # CALIBRACION 2026-08-21 (misma investigacion que 'mundo.grid_ancho/
-  # grid_alto' arriba -- ver ese comentario para el contexto completo):
-  # las cuatro poblaciones iniciales x3 respecto al valor original,
-  # decision explicita de Diego. provisional en su totalidad, pendiente
-  # de observar el resultado de esta misma corrida.
-  gnomos_iniciales: 18
-  # provisional: "manada simple" (ficha_lobo.pdf) sin numero cerrado en
-  # ningun documento -- 2 era el minimo que permite observar si dos
-  # lobos convergiendo sobre la misma presa percibida ya produce algo
-  # parecido a comportamiento de manada sin programarlo explicitamente
-  # (paso 12). x3 -> 6, sigue siendo una "manada simple", no una jauria.
-  lobos_iniciales: 6
-  # conejo/ardilla (2026-08-20): motivacion explicita de Diego -- "mas
-  # presas" para que lobo perciba una presa con mas frecuencia que el
-  # <10% de los ticks documentado en sistema_depredacion.py con solo
-  # gnomo como objetivo. Provisional, bastante por encima de gnomos_
-  # iniciales a proposito (la idea es subir densidad real, no un empate
-  # simbolico) -- la investigacion de 2026-08-21 encontro que 10 no
-  # bastaba, la poblacion colapsaba por sobreexplotacion (depredacion
-  # como causa dominante) mucho antes de que la reproduccion pudiera
-  # reponerla -- x3 -> 30 es la primera hipotesis a probar frente a ese
-  # hallazgo concreto, no una repeticion ciega del mismo numero.
-  conejos_iniciales: 30
-  ardillas_iniciales: 30
-  # techo_fraccion_edad_inicial_longevidad (2026-08-21, investigacion
-  # "por que gnomo y lobo no se reproducen nunca" -- ver
-  # nucleo/entidad.py:crear_criatura y sistema_reproduccion.py para el
-  # diagnostico completo): ANTES de este cambio, TODA la poblacion
-  # fundadora nacia en tick_actual=0 -- una unica generacion sincronizada
-  # de recien nacidos, no como empieza ninguna poblacion real (un censo
-  # tomado en cualquier momento tiene individuos de todas las edades a
-  # la vez). Se comprobo con el motor en marcha que esto era la causa
-  # directa de que gnomo (madurez a 2160 ticks) nunca tuviera un macho y
-  # una hembra adultos vivos a la vez en ninguna semilla probada: la
-  # cohorte entera maduraba (o no, por depredacion) junta, y para cuando
-  # alguno llegaba a adulto la poblacion superviviente era tan pequena
-  # (1-6 individuos) que el 50/50 de sexo al nacer producia cohortes de
-  # un solo sexo por puro azar con demasiada frecuencia. Este numero fija
-  # el TECHO de la edad inicial sorteada, como fraccion de la longevidad
-  # PROPIA de cada fundador (no el minimo racial) -- 0.7 deja margen para
-  # que la mayoria de fundadores adultos-o-jovenes convivan desde el
-  # primer tick sin generar individuos ya al borde mismo de la muerte
-  # por vejez (fraccion 1.0 si haria eso). Uniforme entre 0 y ese techo,
-  # no una piramide de edades real con mas jovenes que viejos -- esa
-  # curva de supervivencia completa es una fuente de complejidad real
-  # que nadie ha pedido todavia; uniforme es la hipotesis de partida mas
-  # simple que ya resuelve el problema medido. provisional, pendiente de
-  # observar el resultado con el motor en marcha.
-  techo_fraccion_edad_inicial_longevidad: 0.7
 
 semilla_por_defecto: 42
 
-# --- Generacion procedimental del mapa (paso 1) ---
-# provisional: ver informe de implementacion, seccion 3.5
-#
-# Varianza entre semillas (investigado en la misma fase de calibracion que
-# el bloque 'depredacion' de mas abajo, 2026-08-19): instrumentando cuanto
-# perciben los gnomos comida real mientras tienen intencion COMER, algunas
-# semillas rondan 55-73% de los ticks con comida visible y otras se quedan
-# en 13-28% -- una varianza grande, con las MISMAS proporciones/manchas de
-# recursos de este bloque. Se descarto que fuera el sesgo gregario de
-# sociabilidad concentrando individuos sobre el mismo recurso (ablacion:
-# forzar sociabilidad=0 en ambas especies no cierra la brecha entre
-# semillas "buenas" y "malas" -- ver config/constantes.yaml historial de
-# la seccion 'social' para el mismo tipo de prueba). La varianza es
-# intrinseca a como cae el mapa procedimental para cada semilla concreta,
-# no a ningun comportamiento de las criaturas.
-#
-# Decision de Diego: NO es un problema a corregir -- un mundo generado de
-# verdad al azar puede tocar hostil o fertil, y eso es legitimo (mismo
-# principio que ya aplico a la sociabilidad: no escribir a mano un
-# resultado mas comodo). Se revisitara de forma natural cuando llegue el
-# bloque de biomas/recursos dinamicos (roadmap: terreno, tipos de bioma,
-# fisica, flora -- posterior a las dinamicas base de criatura), momento en
-# el que la generacion de recursos dejara de ser un reparto estatico de
-# manchas fijas al inicio y pasara a ser un sistema vivo -- ese es el
-# lugar natural para revisar esto, no antes.
 generacion_mapa:
-  # Fase terreno 2 (nucleo/campo_continuo.py): separacion, en celdas, entre
-  # los puntos del grid grueso de value noise sobre el que se interpola
-  # elevacion. provisional: con un mapa de 20x20, escala=7 da entre 2 y 4
-  # "colinas" completas visibles a la vez (grid grueso ~ 4x4 puntos) --
-  # elegido por inspeccion visual de un puñado de semillas (ver informe de
-  # implementacion), no por ningun calculo cerrado ni comparacion con una
-  # referencia real de tamano de accidente geografico.
   elevacion_escala_celdas: 7
-  # Fase terreno 3: mismos parametros de escala para lluvia y temperatura
-  # -- reutilizan nucleo/campo_continuo.py, la misma tecnica, con su
-  # propia tirada de rng (ver nucleo/zona_bioma.py, orden fijo de
-  # llamadas). Escalas algo mayores que elevacion (climas cubren zonas
-  # mas extensas que un accidente geografico puntual, decision razonada
-  # por analogia, no por ningun dato) -- provisional, sin calibrar mas
-  # alla de inspeccion visual (ver informe de implementacion).
   lluvia_escala_celdas: 9
   temperatura_escala_celdas: 12
   rio_ancho: 1
-
-  # OBSOLETO desde fase terreno 3 (clasificacion de bioma por elevacion/
-  # lluvia/temperatura, ver nucleo/bioma.py): espesura_num_manchas/
-  # espesura_cobertura_objetivo/espesura_prob_expansion generaban la
-  # vieja asignacion binaria Claro/Espesura por mancha probabilistica.
-  # tipo_terreno ya NO se decide asi -- se deriva de los tres campos
-  # continuos de arriba. Retirados del todo (no dejados comentados como
-  # "por si acaso"): mantener claves muertas en este archivo violaria la
-  # misma honestidad sobre lo pendiente que se le exige al resto del
-  # proyecto -- si aparecen aqui, alguien puede pensar razonablemente que
-  # siguen haciendo algo.
-  #
-  # OBSOLETO tambien (correccion biomas/especies, posterior a fase terreno
-  # 4): raices_num_manchas/raices_proporcion/bayas_num_manchas/
-  # bayas_proporcion vivian aqui como un unico par por terreno. Ahora que
-  # varias especies pueden compartir un mismo bioma (Bosque aloja hierba
-  # silvestre Y manzano), num_manchas/proporcion pasan a ser propios de
-  # CADA especie (ver 'flora.especies' mas abajo) -- retirados de aqui por
-  # el mismo motivo que el parrafo de arriba.
   recurso_prob_expansion: 0.5
 
-# --- Abono (propuesta de Diego: las deposiciones deberian actuar como
-# abono, discutida y confirmada -- ver sistemas/sistema_recursos.py y
-# Celda.fertilidad). Solo acelera regeneracion DENTRO de manchas de
-# recurso existentes, no activa recurso donde no lo habia -- decision
-# explicita de alcance, no un descuido. provisional en su totalidad, sin
-# calibrar contra el motor en marcha. ---
-abono:
-  # cuanto sube Celda.fertilidad cada vez que Accion.ALIVIARSE se resuelve
-  # sobre esa celda (cada tick que la intencion se sostiene, no una unica
-  # vez -- quedarse varios ticks fertiliza mas). Con este valor hacen
-  # falta ~5 ticks seguidos para llegar al techo desde cero.
-  incremento_fertilidad_por_aliviarse: 0.2
-  # techo de fertilidad -- en _regenerar(), tasa_efectiva = tasa_regeneracion
-  # * (1 + fertilidad), asi que el techo es "como mucho duplica la
-  # velocidad de regeneracion de esa celda concreta".
-  techo_fertilidad: 1.0
-  # decaimiento por corte de dia (misma cadencia que _regenerar) -- a este
-  # ritmo, una celda en el techo tarda 10 dias en volver a fertilidad 0
-  # sin nuevas visitas.
-  decaimiento_fertilidad_por_dia: 0.1
+bioma:
+  umbral_elevacion_montana: 0.80
+  umbral_temperatura_tundra: 0.12
+  umbral_lluvia_desierto: 0.15
+  umbral_lluvia_bosque: 0.72
 
-# --- Necesidades fisicas (paso 5, con override por especie desde paso 12.4) ---
-# Convencion unificada (informe tecnico, seccion 8.1 -- migrada en el
-# Bloque A del plan de adaptacion a criatura.docx): 1.0 = necesidad plena,
-# 0.0 = crisis, igual para las tres necesidades implementadas hoy
-# (saciedad, energia, seguridad). Invertida respecto a la convencion
-# original del prototipo. provisional: tasas sin calibrar contra el motor
-# en marcha -- los NUMEROS no cambian con esta migracion, solo el sentido
-# en que se leen (antes "tasa_hambre_por_tick" sumaba hacia el 1.0 critico,
-# ahora "tasa_perdida_saciedad_por_tick" resta hacia el 0.0 critico).
-#
-# Estructura: 'defecto' son los valores que aplican a cualquier especie que
-# no defina los suyos propios; una especie puede sobreescribir solo las
-# tasas que le importan (no hace falta duplicar las seis para cada una).
-# Se necesito por primera vez al ver que el lobo, con el mismo presupuesto
-# de saciedad que el gnomo (~83 ticks), no encontraba comida con suficiente
-# frecuencia para sobrevivir -- un depredador tiene oportunidades de
-# alimentarse mucho mas escasas que un recolector, y biologicamente aguanta
-# mucho mas sin comer (reservas de grasa, ayuno prolongado). El mismo
-# patron que ya usa rangos_raciales para Categoria: SistemaNecesidades
-# sigue sin tener ninguna rama de comportamiento por especie, solo
-# consulta que tasa le toca a la especie de cada entidad.
-necesidades:
-  defecto:
-    tasa_perdida_saciedad_por_tick: 0.012    # ~83 ticks (~3.5 dias) de 1.0 a critico
-    tasa_perdida_energia_por_tick: 0.01      # ~100 ticks (~4 dias) de 1.0 a critico
-    # hidratacion (Bloque D1): misma magnitud de partida que saciedad --
-    # la escasez real que describe criatura.docx (3.1) no esta en esta
-    # tasa, esta en que el agua (Celda.tiene_agua) cubre solo una fraccion
-    # del mapa y hay que encontrarla dentro del radio de percepcion. Sin regla de
-    # muerte propia todavia -- ver sistema_necesidades.py.
-    #
-    # CALIBRACION 2026-08-21 (investigacion "por que no sobrevive ni un
-    # mundo", pedida por Diego tras el cierre del diseno de reproduccion):
-    # esta era la tasa incorrecta a compartir con saciedad. Medido en 10
-    # semillas: la distancia mediana de una celda cualquiera (Pradera O
-    # Bosque) al agua mas cercana es de 6-12 celdas, MUY por encima del
-    # radio de percepcion (0-4, ver 'percepcion' mas arriba) -- el agua
-    # (rios/lagos/pozas, nucleo/agua.py) es estructuralmente escasa en un
-    # mapa de 400 celdas con 1-4 cuerpos de agua por semilla. Consecuencia
-    # medida (harness de 10-15 semillas, instrumentando Intencion tick a
-    # tick): con la tasa compartida de 0.012, BEBER ocupaba ~61% de los
-    # ticks vividos de un conejo aislado (sin depredadores) -- la sed
-    # nunca mata directamente (sigue sin regla de muerte propia), pero
-    # AGOTA EL PRESUPUESTO DE TIEMPO que le queda a comer, y eso SI mata
-    # por inanicion. No es un problema nuevo de conejo/ardilla -- afecta
-    # a las cuatro especies por igual (Bosque tiene la misma escasez de
-    # agua que Pradera, medido igual), simplemente no se habia aislado
-    # como mecanismo especifico hasta ahora (las investigaciones previas
-    # de mortalidad se centraron en saciedad/caza, nunca en el coste de
-    # TIEMPO que impone la sed indirectamente). Prueba de aislamiento (tasa
-    # casi anulada, 0.001): inanicion de ardilla cayo de 78 a 32 muertes,
-    # concepciones de conejo subieron de 10 a 20 y aparecieron nacimientos
-    # de ardilla por primera vez en cualquier barrido -- la palanca mas
-    # fuerte de cuantas se probaron (radio de percepcion, fuerza/relieve,
-    # velocidad de regeneracion de flora, tasa de consumo al comer:
-    # ninguna de esas movio el numero de forma notable). 0.004 (bajada a
-    # un tercio, no casi anulada) es una CORRECCION MODERADA deliberada --
-    # el objetivo no es que la sed deje de importar (seguiria siendo un
-    # motivo real para desplazarse hacia el agua), solo que deje de
-    # consumir la mayoria del tiempo de vida de un individuo. Sigue sin
-    # resolver la extincion total por si sola (ver 'depredacion' y la nota
-    # LIMITE CONOCIDO de density de poblacion/tamano de mapa) -- reduce
-    # inanicion pero desplaza parte de la mortalidad a depredacion (mas
-    # tiempo activo deambulando/comiendo es mas tiempo visible para un
-    # cazador). provisional: primera correccion basada en datos reales del
-    # motor, no una hipotesis de partida sin observar -- pero el numero
-    # exacto (0.004 frente a, por ejemplo, 0.006 u 0.003) SI sigue siendo
-    # arbitrario dentro del rango que ya se demostro que funciona en la
-    # direccion correcta.
-    tasa_perdida_hidratacion_por_tick: 0.004
-    # Regla de muerte por deshidratacion (2026-08-21, pieza 2 de la revision
-    # del sistema de agua pedida por Diego -- "la sed deberia matar como
-    # mata el hambre", ver sistemas/sistema_necesidades.py docstring seccion
-    # hidratacion). MISMO patron exacto que probabilidad_muerte_saciedad_
-    # critica (umbral 0.0 sostenido + probabilidad fija por tick).
-    #
-    # CALIBRACION 2026-08-21 (harness de 10 semillas x 6000 ticks, mismo dia
-    # de escribir esta regla): el razonamiento de partida (deshidratacion
-    # mata en dias reales, inanicion en semanas, luego la probabilidad
-    # deberia ser varias veces mayor -- se probo primero con 0.02, 4x
-    # inanicion) NO sobrevivio al contacto con el motor. Con 0.02,
-    # deshidratacion fue la causa DOMINANTE en las 10/10 semillas (13-22 de
-    # ~28 muertes cada una, muy por encima de inanicion). Bajando a 0.005
-    # (MISMA probabilidad que inanicion, paridad total) deshidratacion
-    # SIGUE siendo comparable o mayor que inanicion en la mayoria de las
-    # semillas (9-18 muertes frente a 5-15 de inanicion) -- es decir, el
-    # numero en si no es la causa del desequilibrio: hidratacion llega a
-    # 0.0 tan a menudo o mas que saciedad, sintoma directo del cuello de
-    # botella de acceso al agua que ya documenta tasa_perdida_hidratacion_
-    # por_tick mas arriba (CALIBRACION 2026-08-21 anterior) y que las
-    # piezas 3 (charcos efimeros por clima) y 4 (dieta aporta hidratacion)
-    # de esta misma revision estan pensadas para aliviar. Se deja en 0.005
-    # (paridad con inanicion) en vez de mas alto: no tiene sentido penalizar
-    # mas fuerte una necesidad que YA se demuestra mas dificil de mantener
-    # que la otra por como esta construido el mapa, mientras la causa de
-    # fondo (escasez de agua) siga sin resolver del todo. provisional:
-    # pendiente de revisar este numero una vez existan piezas 3 y 4 y
-    # hidratacion=0.0 deje de ser tan frecuente -- no calibrado para dar un
-    # reparto de causas concreto, solo para no agravar un desequilibrio ya
-    # detectado.
-    probabilidad_muerte_deshidratacion: 0.005
-    # aliviado (Bloque D2): drena a un ritmo similar al resto, pero se
-    # resuelve en 1-2 ticks (tasa_alivio_al_aliviarse muy por encima de
-    # cualquier otra tasa de reposicion) -- es un acto breve, no un
-    # descanso sostenido como dormir. Sin regla de muerte propia.
-    # provisional, sin calibrar.
-    tasa_perdida_aliviado_por_tick: 0.01
-    tasa_alivio_al_aliviarse: 0.5
-    # Regla de muerte por inanicion (paso 6-y-medio, decidida tras observar
-    # esta misma trayectoria: saciedad llega a critico en el tick ~84).
-    # probabilidad fija por tick mientras saciedad=0.0 sostenida.
-    #
-    # CALIBRACION 2026-08-19 (investigacion "que queremos: vidas largas o
-    # ciclos cortos", posterior al cierre de 6.3 Reproduccion): el valor
-    # original (0.02, ~50 ticks de espera media tras llegar a critico) se
-    # penso en el paso 6, antes de que existiera ciclo vital o reproduccion,
-    # para una ventana de prueba de 600-800 ticks. Con reproduccion ya
-    # construida, se investigo si esa mortalidad daba tiempo real a que
-    # alguien llegara a la madurez (4320 ticks gnomo / 768 lobo, ver
-    # nucleo/reloj.py) -- la respuesta, con datos de 40 semillas por
-    # configuracion: NO, ni siquiera duplicando poblacion inicial y
-    # densidad de recursos (esas dos palancas se probaron y se descartaron
-    # como causa raiz -- el cuello de botella real es que la poblacion
-    # entera muere antes de que nadie madure, no cuanta comida hay).
-    # Se bajo a 0.005 (~250 ticks de espera media tras llegar a critico) EN
-    # CONJUNTO con depredacion.captura_prob_max (bajado a 0.5) -- ninguno
-    # de los dos ajustes por separado producia una sola concepcion en 40
-    # semillas; juntos, dan 2/40 nacimientos naturales (no forzados) en
-    # corridas de 20000 ticks. Sigue siendo un mundo duro: la extincion
-    # total sigue siendo el desenlace mas probable (38/40 semillas), la
-    # reproduccion natural ronda el 5% de las corridas -- deliberado, no un
-    # residuo de no haber ablandado lo suficiente: valores mas bajos
-    # (probados hasta 0.001, mortalidad por hambre casi anulada) NO
-    # mejoraron el resultado de forma consistente, confirmando que el
-    # limite ya no es letalidad sino la misma causa de fondo de siempre
-    # (densidad de poblacion sobre el tamano de mapa, ver LIMITE CONOCIDO
-    # en la seccion 'depredacion' de este archivo).
-    probabilidad_muerte_saciedad_critica: 0.005
-    tasa_recuperacion_energia_al_dormir: 0.05   # provisional: > tasa_perdida_energia_por_tick,
-                                                  # para que dormir compense de verdad
-    # seguridad (paso 12.4): baja si se percibe una amenaza dentro del
-    # radio de percepcion, sube si no. provisional: bajada mucho mas
-    # rapida que saciedad/energia a proposito (el peligro es inmediato,
-    # ~3-4 ticks de amenaza sostenida para llegar a critico) y subida
-    # mas lenta (~20 ticks para calmarse del todo una vez a salvo).
-    tasa_perdida_seguridad_por_amenaza: 0.3
-    tasa_recuperacion_seguridad: 0.05
-    # oxigenacion (pieza 4 de la secuencia de fisica de terreno/agua
-    # acordada con Diego, ver sistemas/sistema_necesidades.py y
-    # nucleo/agua.py para profundidad_agua): mientras la celda actual
-    # tenga profundidad_agua > altura del individuo, drena a esta tasa --
-    # deliberadamente MAS RAPIDA que seguridad (1.0/0.3 ~ 3.3 ticks para
-    # llegar a critico): no poder respirar es mas urgente que cualquier
-    # amenaza percibida. Con 0.5, quedan ~2 ticks sumergido por encima de
-    # la cabeza antes de agotar el aire. provisional en su totalidad, sin
-    # calibrar contra el motor en marcha -- razonado por magnitud relativa
-    # frente a seguridad, no observado.
-    tasa_perdida_oxigenacion_por_inmersion: 0.5
-    # se repone de GOLPE (no gradual) en cuanto deja de estar sumergido
-    # mas alla de su altura -- respirar aire fuera del agua es inmediato,
-    # a diferencia de curar una herida o descansar resistencia. 1.0 =
-    # saturado en un unico tick.
-    tasa_recuperacion_oxigenacion: 1.0
-    # probabilidad POR TICK (no diaria), mismo patron que
-    # probabilidad_muerte_saciedad_critica -- pero deliberadamente mucho
-    # mayor (100x: 0.5 frente a 0.005): ahogarse no da el margen de dias
-    # que da pasar hambre, se juega en un punado de ticks sostenido en
-    # 0.0. provisional en su totalidad, sin calibrar contra el motor en
-    # marcha mas alla de la comprobacion de orden de magnitud de abajo.
-    #
-    # CALIBRACION 2026-08-20 (barrido de 20 semillas x 2000 ticks, mismo
-    # dia de cerrar esta pieza): con la busqueda de BEBER (sistema_
-    # movimiento.py) tomando sin mas la celda de agua mas cercana, esta
-    # probabilidad tan alta hacia que ahogamiento fuera la causa de
-    # muerte DOMINANTE en 6 de las 20 semillas (hasta 8/8 en una) --
-    # mismo patron de supercriticidad no buscada que la propagacion de
-    # incendios (ver seccion 'desastres' mas abajo). NO se toco este
-    # numero para arreglarlo -- se corrigio la causa de fondo en
-    # sistema_movimiento.py (la busqueda de BEBER ahora prefiere agua
-    # vadeable cuando existe, ver su docstring), no el sintoma numerico.
-    # Con esa correccion, el numero se deja tal cual: sigue siendo
-    # correcto que, SI un individuo termina en agua mas honda que su
-    # altura, el riesgo de ahogarse debe ser alto y rapido.
-    probabilidad_muerte_ahogamiento: 0.5
-    # confort_termico (fase terreno 1, informe tecnico 7.1): deriva hacia
-    # nucleo.clima.objetivo_confort_termico (estacion+clima del dia) a esta
-    # tasa fija por tick -- NO por especie (unica tasa en 'defecto', nunca
-    # sobreescrita: es un hecho ambiental, no metabolico). provisional:
-    # elegida para que, ante un cambio de estacion (objetivo puede saltar
-    # hasta ~0.65 de una estacion a otra, ver 'estaciones' mas abajo), la
-    # deriva tarde el orden de un dia (24 ticks) en alcanzarlo -- ni
-    # instantaneo ni imperceptiblemente lento. Sin calibrar contra el motor
-    # en marcha.
-    tasa_deriva_confort_termico: 0.03
-    # impulso_reproductivo (2026-08-20, diseno conjunto de reproduccion --
-    # ver componentes/necesidades.py y sistemas/sistema_necesidades.py):
-    # decae a este ritmo desde la ultima concepcion. provisional: elegida
-    # para llegar a 0.0 en ~200 ticks (~8 dias) desde pleno -- mas rapido
-    # que saciedad/hidratacion (metabolismo diario) pero mas lento que
-    # aliviado (no es un acto breve), del orden del ciclo estral real de
-    # un mamifero pequeno, sin pretender modelarlo con precision. Unica
-    # en 'defecto' por ahora -- la diferenciacion de fecundidad entre
-    # especies vive en factor_base_concepcion (por raza, ver mas abajo),
-    # no aqui: este numero es "cuanto tarda en volver a sentir el
-    # impulso", no "cuantos hijos produce por intento".
-    tasa_perdida_impulso_reproductivo_por_tick: 0.005
-  lobo:
-    # provisional: ~330 ticks (~14 dias) de 1.0 a critico, unas 4 veces el
-    # presupuesto del gnomo -- primera hipotesis de partida, elegida tras
-    # observar que con la tasa compartida los dos lobos morian de hambre
-    # hacia el tick 130-270 casi sin relacion con cuantas presas cazaran,
-    # porque las oportunidades reales de caza son mucho mas escasas que
-    # las de recolectar. energia/seguridad no se sobreescriben: el lobo
-    # nunca elige dormir ni huir (SistemaDecision), asi que esas tasas se
-    # calculan igual pero no influyen en ningun comportamiento suyo.
-    tasa_perdida_saciedad_por_tick: 0.003
+# ------------------------------------------------------------------------------
+# 2. Hidrología y Dinámica de Superficie
+# ------------------------------------------------------------------------------
+agua:
+  umbral_elevacion_nacimiento: 0.70
+  banda_elevacion_lago: 0.03
+  tope_tamano_lago: 8
+  umbral_elevacion_poza: 0.20
+  banda_elevacion_poza: 0.008
+  tope_tamano_poza: 4
+  escala_metros_por_unidad_elevacion: 100.0
+  tope_tamano_orilla_rio: 3
+  piso_banda_rio: 0.001
+  techo_banda_rio: 0.03
 
-# --- Decision (Utility AI, paso 7) ---
-# provisional: umbral de partida sin calibrar contra el motor en marcha.
-decision:
-  utilidad_deambular_base: 0.1   # umbral por debajo del cual, sin nada mas
-                                  # urgente, la entidad deambula en vez de
-                                  # quedarse "vacia"
-  # seguridad no tiene tasa: se mantiene fija hasta que exista una amenaza
-  # real (SistemaDepredacion, paso 12).
+charcos:
+  techo_profundidad_charco: 0.03
+  tasa_evaporacion_charco_por_tick: 0.0006
+  tasa_agotamiento_charco_al_beber: 0.01
 
-# --- Crisis mental (Bloque F3: que pasa al llegar a estabilidad=0.0 --
-# discutido y confirmado con Diego, ver sistemas/sistema_decision.py y
-# sistemas/sistema_movimiento.py). provisional en su totalidad, sin
-# calibrar contra el motor en marcha. ---
-crisis_mental:
-  # umbral bajo el cual el individuo deja de decidir racionalmente --
-  # mismo patron gated-por-pool que resistencia agotada (Bloque C2): sin
-  # contador de duracion, se sale solo cuando el pool se recupera por
-  # encima de este umbral. 0.0 exacto porque el pool ya se acota con
-  # max(0.0, ...) en sistema_capacidad_mental.py -- nunca baja de ahi.
-  umbral_estabilidad_crisis: 0.0
-  # tipologia: valentia < este umbral -> huida erratica; si no,
-  # agresividad > este otro umbral -> crisis violenta; si no, catatonia.
-  # Primera vez que valentia tiene CUALQUIER consumidor en todo el motor.
-  # Con los rangos raciales actuales esto produce una asimetria: el gnomo
-  # (agresividad maxima 0.4) casi nunca llega a violenta; el lobo
-  # (valentia minima 0.5) nunca cae en huida erratica. Senalado, no
-  # corregido -- revisar si se siente como sesgo excesivo en la practica.
-  umbral_valentia_huida_erratica: 0.3
-  umbral_agresividad_violenta: 0.6
-
-# --- Consumo de recursos al comer (paso 8) / al beber (Bloque D1) ---
-# provisional: sin calibrar contra el motor en marcha.
-consumo:
-  tasa_consumo_al_comer: 0.5   # unidades de recurso por tick mientras se come
-  # tasa_consumo_al_beber repone hidratacion directamente (no hay
-  # "unidades de agua" que agotar, a diferencia de comer) -- con 0.2,
-  # beber satura la necesidad en 5 ticks desde 0.0, mucho mas rapido que
-  # comer, coherente con que beber no compite por un recurso finito.
-  tasa_consumo_al_beber: 0.2
-
-
-# --- Atributos con rango racial (paso 2/3; separados en DimensionesFisicas ---
-# y Temperamento desde el Bloque B del plan de migracion a criatura.docx) ---
-# rango [minimo, maximo], sorteo uniforme individual al nacer, fijo de por vida.
-# Un unico diccionario por especie sigue alimentando a ambos componentes --
-# _sortear_dimensiones_fisicas y _sortear_temperamento (nucleo/entidad.py)
-# leen cada uno solo las claves que le corresponden, no hace falta duplicar
-# la estructura en dos secciones separadas.
-#
-# valentia/sociabilidad/agresividad: escala normalizada 0-1 propia de esta
-# implementacion (no una conversion directa de las fichas de criatura, que
-# usan una referencia 0-100 solo para que una persona razone sobre ellas).
-#
-# peso es la excepcion (antes 'tamano'): el tecnico (seccion 8.1) exige que
-# sea comparable ENTRE especies por razon logaritmica ("sin techo fijo"),
-# asi que aqui si usamos la escala absoluta literal de las fichas --
-# normalizarla por especie de forma independiente (como se hizo antes,
-# 0.8-1.2 / 1.0-1.6) rompe esa comparacion: la razon real ficha-a-ficha es
-# de 4x a 11x, la normalizada anterior se quedaba en 0.8x-2x. Corregido en
-# el paso 12 (paso 1: escala de tamano + formula de disposicion), antes de
-# que ninguna formula dependiera del valor equivocado. El Bloque B solo
-# renombra el campo (tamano -> peso) y reutiliza el mismo rango numerico
-# literal -- no son kilogramos reales todavia, la calibracion a una unidad
-# fisica real y el enlace peso -> tasa de saciedad via metabolismo quedan
-# pendientes (ver componentes/dimensiones_fisicas.py).
-#
-# fuerza/agilidad: nuevas en el Bloque B, sustituyen a la vieja
-# Categoria.resistencia en la resolucion de captura (sistema_depredacion.py:
-# evasion de la presa = (fuerza + agilidad) / 2). provisional en su
-# totalidad -- primera hipotesis de partida razonada (un lobo mas fuerte y
-# agil que un gnomo, coherente con su rol de depredador), sin calibrar
-# contra el motor en marcha. Escala normalizada 0-1, mismo criterio que
-# valentia/sociabilidad/agresividad.
-#
-# vitalidad_maxima/resistencia_maxima: nuevas en el Bloque C1. Escalares
-# de "resistencia relativa" en la misma escala 0-1 -- NO son un limite
-# superior del pool dinamico (PoolFisico ya vive en [0,1], igual que
-# Necesidades), son un factor que la futura formula de dano/esfuerzo
-# (Bloque C2, sin disenar todavia) usara para convertir una cantidad
-# bruta en perdida fraccional: un individuo con vitalidad_maxima mas alta
-# encajara peor una misma cantidad de dano. provisional en su totalidad,
-# sin ningun consumidor real todavia -- ver componentes/dimensiones_fisicas.py.
-#
-# curacion/recuperacion: nuevas en el Bloque C1, tasas de reposicion por
-# tick de vitalidad y resistencia respectivamente (sistemas/
-# sistema_capacidad_fisica.py). recuperacion es notablemente mas rapida
-# que curacion, coherente con criatura.docx 3.2: "escala de tiempo mucho
-# mas corta que la de energia". provisional, sin calibrar.
-#
-# dominancia/empatia/lealtad/fe/curiosidad: nuevas en el Bloque E,
-# completan los 8 rasgos de temperamento de criatura.docx (4.1). Ninguna
-# tiene consumidor real todavia (dominancia espera liderazgo de
-# asentamiento, empatia/lealtad esperan vinculos con nombre propio, fe
-# espera magia, curiosidad espera logica de exploracion) -- se sortean y
-# persisten igual que el resto, mismo mecanismo, sin ningun sistema que
-# las lea. provisional en su totalidad, primera hipotesis de partida
-# razonada por especie: el lobo mas dominante y leal (jerarquia y cohesion
-# de manada), el gnomo mas empatico y curioso (coherente con la nota de
-# criatura.docx sobre curiosidad+sociabilidad explicando migracion entre
-# comunidades); fe con rango bajo en el lobo, anticipando que
-# criatura.docx la marca "apagada del todo" bajo el umbral de consciencia
-# -- aunque ese umbral (Bloque F) todavia no existe para hacerlo cumplir.
-#
-# inteligencia/memoria/voluntad/resiliencia/estabilidad_mental_maxima/
-# consciencia: nuevas en el Bloque F1 (criatura.docx 4.2). Ninguna tiene
-# consumidor real todavia salvo resiliencia (repone el pool de
-# estabilidad mental, sistemas/sistema_capacidad_mental.py) -- mismo
-# criterio del resto del bloque: declarar y sortear, sin inventar
-# mecanica donde el documento no la pide. consciencia es la unica con
-# guia explicita del documento: "gnomo con rango alto, lobo con rango
-# bajo o en cero, sin formula ni calibracion" -- el resto (inteligencia,
-# memoria, voluntad, estabilidad_mental_maxima) son hipotesis de partida
-# razonadas por especie, mismo estatus que fuerza/agilidad en el Bloque
-# B: el gnomo algo mas dotado en cognicion abstracta, el lobo con mas
-# aguante mental relativo (coherente con su vitalidad_maxima/
-# resistencia_maxima ya mas altos). provisional en su totalidad.
-# --- Estaciones y clima (fase terreno 1, informe tecnico 7.1 + 7.2 --
-# disenados desde el principio del proyecto, implementados por primera vez
-# en esta pasada, ver nucleo/clima.py y sistemas/sistema_clima.py).
-# provisional en su totalidad, sin calibrar contra el motor en marcha. ---
-#
-# estaciones: 'modificador_regeneracion' es multiplicativo sobre
-# tasa_regeneracion (sistemas/sistema_recursos.py) -- 1.0 = sin cambio,
-# ANTES de este bloque todo el ano regeneraba a ese ritmo constante.
-# 'objetivo_confort_termico' es el valor hacia el que deriva
-# Necesidades.confort_termico (0.5 = ideal, ver componentes/necesidades.py)
-# -- verano/invierno se alejan del ideal a proposito (el frio y el calor
-# extremos son ambos una forma de incomodidad), primavera/otono quedan
-# cerca de 0.5. Orden fijado como hemisferio norte (primavera-verano-
-# otono-invierno) por legibilidad, no por ninguna geografia real del
-# mundo (que no tiene hemisferios definidos todavia).
+# ------------------------------------------------------------------------------
+# 3. Atmósfera, Climatología y Desastres
+# ------------------------------------------------------------------------------
 estaciones:
   primavera:
     modificador_regeneracion: 1.0
@@ -857,229 +63,54 @@ estaciones:
     modificador_regeneracion: 0.5
     objetivo_confort_termico: 0.15
 
-# clima: sorteo diario condicionado por la estacion activa
-# (nucleo.clima.sortear_clima) -- las probabilidades de cada estacion
-# deben sumar 1.0 (no se valida en codigo, responsabilidad de quien
-# calibra este archivo, mismo criterio que el resto de tablas de
-# probabilidad del proyecto). 'efectos' son perturbaciones DIARIAS
-# alrededor de la base de la estacion (aditivas sobre el objetivo de
-# confort, multiplicativas sobre la regeneracion) -- se combinan con
-# 'estaciones' de arriba, no lo sustituyen: la estacion fija el clima
-# medio del periodo, el tiempo de cada dia concreto varia alrededor de
-# el.
 clima:
   probabilidades_por_estacion:
     primavera: {despejado: 0.5, lluvioso: 0.45, tormenta: 0.05}
     verano: {despejado: 0.75, lluvioso: 0.2, tormenta: 0.05}
     otono: {despejado: 0.4, lluvioso: 0.5, tormenta: 0.1}
     invierno: {despejado: 0.55, lluvioso: 0.35, tormenta: 0.1}
-  # tasa_generacion_charco_por_tick (pieza 3 de la revision del sistema de
-  # agua, 2026-08-21 -- ver seccion 'charcos' mas abajo para el resto del
-  # ciclo de vida del charco): cuanto sube Celda.profundidad_charco POR
-  # TICK, uniforme en toda la zona, mientras este sea el clima activo.
-  # Vive aqui (dentro de 'efectos', junto a ajuste_confort/modificador_
-  # regeneracion) en vez de en una tabla nueva porque es exactamente el
-  # mismo tipo de dato: "que efecto tiene este clima" -- despejado no
-  # genera charco (0.0), tormenta genera mas rapido que lluvioso (orden
-  # de magnitud fisico real: un chaparron moja mas rapido que una lluvia
-  # fina). provisional en su totalidad, sin calibrar contra el motor en
-  # marcha.
   efectos:
-    despejado: {ajuste_confort: 0.05, modificador_regeneracion: 1.0, tasa_generacion_charco_por_tick: 0.0}
-    lluvioso: {ajuste_confort: -0.05, modificador_regeneracion: 1.15, tasa_generacion_charco_por_tick: 0.003}
-    tormenta: {ajuste_confort: -0.1, modificador_regeneracion: 0.9, tasa_generacion_charco_por_tick: 0.01}
+    despejado:
+      ajuste_confort: 0.05
+      modificador_regeneracion: 1.0
+      tasa_generacion_charco_por_tick: 0.0
+    lluvioso:
+      ajuste_confort: -0.05
+      modificador_regeneracion: 1.15
+      tasa_generacion_charco_por_tick: 0.003
+    tormenta:
+      ajuste_confort: -0.1
+      modificador_regeneracion: 0.9
+      tasa_generacion_charco_por_tick: 0.01
 
-# --- Desastres naturales (fase terreno 1, informe tecnico 7.3 -- primera
-# pasada, un unico tipo de desastre implementado -- incendio -- como
-# instancia concreta del mecanismo generico de "riesgo por bioma a
-# cadencia de dia + propagacion por grid", ver sistemas/sistema_desastres.py
-# para el razonamiento completo de alcance. Solo Espesura es inflamable
-# (reutiliza TipoTerreno como perfil de riesgo, no se inventa un campo
-# aparte). provisional en su totalidad, sin calibrar contra el motor en
-# marcha mas alla de una comprobacion de orden de magnitud (ver mas
-# abajo). ---
 desastres:
-  # probabilidad de ignicion, por celda Espesura no encendida, en el
-  # chequeo de cadencia de dia -- ANTES de aplicar el multiplicador de
-  # clima. provisional: con ~25% del mapa en Espesura (~100 celdas de
-  # 400), este valor da un incendio nuevo cada varios dias en clima
-  # despejado -- razonado como "raro pero real", no calibrado con datos
-  # de una corrida larga (el calendario comprimido actual, 5 dias por
-  # estacion, hace dificil observar muchos ciclos completos en una
-  # ventana de prueba tipica de 500-800 ticks).
-  # Renombrada (correccion biomas/especies): prob_ignicion_base_espesura
-  # -> prob_ignicion_base_bosque -- mismo valor, ver nucleo/celda.py.
   prob_ignicion_base_bosque: 0.0015
   multiplicador_riesgo_por_clima:
     despejado: 1.5
     lluvioso: 0.2
     tormenta: 1.0
-  # propagacion/extincion, a cadencia de TICK mientras el incendio dura
-  # (no de dia -- ver sistema_desastres.py).
-  #
-  # CALIBRACION 2026-08-19 (probado con harness headless, 30 semillas x
-  # 3000 ticks, ver informe de implementacion): el primer intento
-  # (propagacion=0.35, extincion=0.2) resulto en un proceso de ramificacion
-  # SUPERCRITICO -- con Espesura en manchas densas (cada celda en llamas
-  # tiene tipicamente 2-3 vecinas inflamables), el numero esperado de
-  # nuevos focos por celda ardiendo y por tick (~0.875) superaba con
-  # holgura la probabilidad de que esa misma celda se extinguiera (0.2),
-  # asi que el incendio no se autolimitaba: se observaron corridas donde
-  # 86 de las ~100 celdas de Espesura del mapa ardian a la vez, e incendio
-  # paso a ser la PRIMERA causa de muerte (118 de 239 muertes totales),
-  # por encima de depredacion e inanicion juntas -- un resultado no
-  # buscado, el diseno original (informe tecnico 7.3) describe un riesgo
-  # ocasional, no un evento que arrasa el bioma. Bajado a
-  # propagacion=0.08 / extincion=0.35 para quedar SUBCRITICO (0.08*2.5
-  # vecinos ~ 0.2, por debajo de 0.35): un incendio tipico se queda en un
-  # punado de celdas antes de autoextinguirse en pocos ticks, salvo racha
-  # de mala suerte. No se investigo mas alla de una comprobacion de que
-  # esto arregla la explosividad -- sigue sin calibrar contra un objetivo
-  # numerico de "cuantos incendios por partida es razonable", que
-  # requeriria el mismo tipo de investigacion a fondo que la mortalidad
-  # por inanicion/depredacion (ver 'depredacion' mas arriba), fuera de
-  # alcance de esta pasada.
   prob_propagacion_por_tick: 0.08
   prob_extincion_por_tick: 0.35
-  # dano bruto a la vitalidad de cualquier entidad parada en una celda en
-  # llamas, cada tick que dure -- mismo patron de escalares de techo que
-  # sistema_depredacion.py (se divide por vitalidad_maxima antes de
-  # restarse). Con este valor, quedarse en una celda ardiendo mata en
-  # pocos ticks a la mayoria de individuos -- deliberadamente severo
-  # (un incendio real no es un peligro que se pueda ignorar de pie
-  # encima), la mitigacion esperada es que la entidad huya, no que
-  # sobreviva quieta.
   dano_por_tick_en_llamas: 0.15
 
-# --- Clasificacion de bioma (fase terreno 3, nucleo/bioma.py) ---
-# Umbrales del arbol de decision elevacion -> temperatura -> lluvia.
-# provisional: calibrados por inspeccion de proporciones en varias
-# semillas (harness ad-hoc, ver informe de implementacion) para que
-# Claro+Espesura sigan siendo mayoria del mapa (proporcion similar a la
-# vieja asignacion binaria, ~75/25 combinados) y Montana/Estepa/Tundra
-# queden como terreno minoritario en los extremos -- el objetivo era no
-# deshacer sin querer la calibracion de supervivencia ya validada, no
-# ningun criterio fisico de referencia real.
-bioma:
-  # CALIBRACION 2026-08-19 (harness ad-hoc, 20-25 semillas, ver informe de
-  # implementacion): el primer intento (0.75/0.18/0.28/0.62) daba
-  # claro+espesura=64.9% del mapa combinados, con estepa sobrerrepresentada
-  # (18.4%) -- se ajusto hasta que claro+espesura vuelve a rondar el 84%
-  # (claro 63.9%, espesura 20.1%, proporcion 76/24 DENTRO de ese grupo,
-  # casi identica al reparto binario 75/25 de antes de esta fase) y las
-  # tres nuevas quedan como minoria (montana 6.4%, estepa 7.8%, tundra
-  # 1.9%) -- el objetivo explicito era no deshacer sin querer la
-  # calibracion de supervivencia ya validada (depredacion/necesidades),
-  # no ningun criterio fisico de referencia real.
-  umbral_elevacion_montana: 0.80
-  umbral_temperatura_tundra: 0.12
-  # Renombradas (correccion biomas/especies): umbral_lluvia_estepa ->
-  # umbral_lluvia_desierto, umbral_lluvia_espesura -> umbral_lluvia_bosque
-  # -- mismos valores, mismo umbral, solo el nombre que ya no arrastra
-  # Claro/Espesura como si fueran biomas (ver nucleo/bioma.py y
-  # nucleo/celda.py).
-  umbral_lluvia_desierto: 0.15
-  umbral_lluvia_bosque: 0.72
+# ------------------------------------------------------------------------------
+# 4. Botánica y Recursos Edáficos
+# ------------------------------------------------------------------------------
+abono:
+  incremento_fertilidad_por_aliviarse: 0.2
+  techo_fertilidad: 1.0
+  decaimiento_fertilidad_por_dia: 0.1
 
-# --- Flora (fase terreno 4, sistemas/sistema_flora.py; catalogo de
-# especies posterior a la correccion biomas/especies, discutida y
-# confirmada con Diego -- ver nucleo/flora.py y componentes/planta.py).
-# Cada especie es un organismo concreto (clave del catalogo, usada como
-# Planta.especie y Celda.tipo_recurso), NO un bioma -- 'biomas' es solo la
-# lista de TipoTerreno donde puede crecer, un mismo bioma puede alojar mas
-# de una especie (Bosque: hierba_silvestre y manzano). El orden de este
-# catalogo importa: nucleo/zona_bioma.py reparte celdas por orden de
-# aparicion, sin ninguna razon ecologica detras salvo la del propio
-# archivo (ver docstring de generar_zona_bioma).
-#
-# num_manchas/proporcion: mismo mecanismo de siempre (manchas
-# probabilisticas dentro de las celdas candidatas del bioma), ahora por
-# especie -- reemplazan a los viejos raices_num_manchas/raices_proporcion/
-# bayas_num_manchas/bayas_proporcion (retirados de 'generacion_mapa').
-#
-# tasa_crecimiento_por_dia/prob_propagacion_por_dia: YA NO un unico valor
-# global para toda planta -- ahora por especie (un manzano/arbol tarda mas
-# en madurar y propagarse que la hierba, coherente con "reutiliza antes de
-# inventar": mismo mecanismo campo a campo, solo deja de ser compartido).
-#
-# preferencia_lluvia/preferencia_temperatura: rango [minimo, maximo] en la
-# escala [0,1] de los campos continuos (nucleo/campo_continuo.py). NO
-# decide si la especie PUEDE crecer (eso ya lo decide 'biomas') -- modula
-# CUANTO produce cada dia via factor_produccion (nucleo/flora.py).
-# Hipotesis de partida razonada por afinidad climatica de cada bioma
-# (coherente con los umbrales de 'bioma' mas abajo), sin ningun dato real
-# detras ni calibracion contra el motor en marcha.
-#
-# recursos: lista de {nombre, categoria, ...}. categoria='alimento' lleva
-# capacidad_maxima/tasa_regeneracion/valor_nutricional (consumida por
-# Accion.COMER, sistema_recursos.py); categoria='material' lleva SOLO
-# nombre+categoria, deuda tecnica declarada a proposito (sin mecanica de
-# produccion/recoleccion todavia, ver nucleo/flora.py). Una especie puede
-# tener mas de un recurso 'alimento' a la vez (hierba_silvestre: raices Y
-# hierba, correccion de Diego pensando en un futuro herbivoro de
-# pastoreo que coma hierba en vez de raices -- sin consumidor real hoy).
-# valores 'alimento' de hierba_silvestre (raices) y manzano (manzanas)
-# reutilizan los numeros que antes vivian en el retirado
-# 'recursos_por_terreno' (claro->raices, espesura->bayas) -- mismo valor,
-# mismo efecto neto en un mundo recien generado, solo cambia de que
-# entidad concreta se deriva. El resto (hierba, cactus, liquen, musgo) son
-# hipotesis de partida nuevas, sin ningun consumidor real que las haya
-# ejercitado todavia (liquen/musgo en particular: sin ninguna especie de
-# fauna que hoy viva en Montana/Tundra).
-#
-# valor_hidratacion (pieza 4, ULTIMA de la revision del sistema de agua,
-# 2026-08-21 -- Diego: "la alimentacion proporciona agua a los animales,
-# depende la dieta necesitan mas o menos"): mismo formato que
-# valor_nutricional (escalar por unidad de recurso consumido,
-# sistema_recursos.py:_consumir), pero un EJE DISTINTO -- cuanta agua
-# lleva ese alimento, no cuanta energia. Razonado por contenido de agua
-# real de cada alimento (hipotesis de partida, sin calibrar contra el
-# motor en marcha): fruto_de_cactus mas alto de todos (una tuna/higo
-# chumbo es agua en su mayor parte, motivo real por el que un cactus
-# sirve de fuente de agua en un desierto real); manzanas y hierba fresca
-# tambien altos (ambas mayoritariamente agua); raices, moderado (un
-# tuberculo tiene bastante menos agua que la fruta o la hoja fresca);
-# liquen y musgo, los mas bajos -- vegetacion dura de bioma frio/seco,
-# poca agua libre. Todos por debajo de tasa_consumo_al_beber (0.2) a
-# igual cantidad consumida -- comer complementa la sed, no la sustituye
-# (ver sistema_recursos.py para el razonamiento completo).
 flora:
-  # bono_produccion_ribera (correccion posterior, ver nucleo/flora.py:
-  # factor_ribera -- pregunta directa de Diego al discutir la generacion
-  # de agua): multiplicador adicional sobre el aporte diario de cualquier
-  # celda con agua superficial (rio/lago/poza, ver seccion 'agua' mas
-  # abajo), sea cual sea la especie o el tipo de cuerpo de agua.
-  # provisional: +20% elegido como hipotesis de partida razonable (ni
-  # despreciable ni desproporcionado frente al resto de factores), sin
-  # ningun dato ni calibracion contra el motor en marcha.
   bono_produccion_ribera: 0.2
   especies:
     hierba_silvestre:
       biomas: [pradera, bosque]
       num_manchas: 4
-      # proporcion por bioma (2026-08-20, correccion pedida por Diego --
-      # observacion tras el primer barrido con conejo/ardilla: conejo
-      # murio sobre todo de inanicion, indicio de que hierba era
-      # demasiado escasa para ser la base real de una cadena trofica).
-      # Motivacion ecologica explicita: la hierba es el productor
-      # primario, tiene que ser mucho mas abundante que cualquier
-      # consumidor -- "la gran mayoria de la pradera, no toda" (palabras
-      # de Diego). ANTES esto era un unico escalar (0.2) aplicado al
-      # conjunto COMBINADO pradera+bosque -- con dos biomas compartiendo
-      # una sola cifra, subir la proporcion para llenar pradera se habria
-      # llevado por delante buena parte de Bosque tambien (hierba va
-      # primero en el catalogo, tiene primera opcion de celda sobre
-      # manzano). Separado en un valor por bioma para poder subir pradera
-      # sin tocar lo que ya habia en bosque -- ver nucleo/zona_bioma.py,
-      # ahora itera especie x bioma en vez de combinar los biomas
-      # compatibles en un unico conjunto de candidatas.
-      # provisional: 0.75 en pradera ("gran mayoria, no toda"), bosque
-      # se deja igual que antes (0.2) -- sin observar el motor en marcha
-      # todavia con este cambio concreto.
       proporcion:
         pradera: 0.75
         bosque: 0.2
-      tasa_crecimiento_por_dia: 0.25   # rapida -- pasto anual, no un arbol
+      tasa_crecimiento_por_dia: 0.25
       prob_propagacion_por_dia: 0.06
       preferencia_lluvia: [0.25, 0.85]
       preferencia_temperatura: [0.25, 0.85]
@@ -1088,25 +119,19 @@ flora:
           categoria: alimento
           capacidad_maxima: 10.0
           tasa_regeneracion: 0.5
-          valor_nutricional: 0.15   # abundante, poco nutritivo (valor heredado de 'claro')
-          valor_hidratacion: 0.08   # tuberculo -- menos agua que fruta/hoja fresca
+          valor_nutricional: 0.15
+          valor_hidratacion: 0.08
         - nombre: hierba
           categoria: alimento
-          # NUEVO tras la correccion de Diego -- segundo alimento de la
-          # misma planta, pensado para un futuro herbivoro de pastoreo
-          # (p. ej. caballo) que coma hierba en vez de raices. Sin
-          # consumidor real hoy (cualquier entidad con Accion.COMER puede
-          # tecnicamente consumirlo, deuda dietetica declarada en
-          # nucleo/flora.py) -- valores provisionales, no observados.
           capacidad_maxima: 8.0
           tasa_regeneracion: 0.4
           valor_nutricional: 0.12
-          valor_hidratacion: 0.12   # hoja fresca -- mayoritariamente agua
+          valor_hidratacion: 0.12
     manzano:
       biomas: [bosque]
       num_manchas: 4
       proporcion: 0.15
-      tasa_crecimiento_por_dia: 0.08   # lenta -- arbol, no pasto
+      tasa_crecimiento_por_dia: 0.08
       prob_propagacion_por_dia: 0.02
       preferencia_lluvia: [0.55, 1.0]
       preferencia_temperatura: [0.3, 0.75]
@@ -1115,10 +140,10 @@ flora:
           categoria: alimento
           capacidad_maxima: 5.0
           tasa_regeneracion: 0.2
-          valor_nutricional: 0.4    # escaso, regeneracion lenta, mas nutritivo (valor heredado de 'espesura')
-          valor_hidratacion: 0.15   # fruta -- mayoritariamente agua
+          valor_nutricional: 0.4
+          valor_hidratacion: 0.15
         - nombre: madera
-          categoria: material   # SOLO nombre+categoria -- sin mecanica, ver nucleo/flora.py
+          categoria: material
     cactus:
       biomas: [desierto]
       num_manchas: 3
@@ -1133,13 +158,6 @@ flora:
           capacidad_maxima: 4.0
           tasa_regeneracion: 0.15
           valor_nutricional: 0.35
-          # El mas alto de todos -- una tuna/higo chumpo es agua en su
-          # mayor parte, motivo real por el que un cactus sirve de fuente
-          # de agua en un desierto de verdad. Con tasa_consumo_al_comer
-          # (0.5), da 0.5*0.2=0.1 de hidratacion por tick comiendo -- la
-          # mitad de lo que da BEBER dedicado (0.2/tick), sigue sin
-          # sustituirlo, pero es un alivio real en el bioma con menos
-          # agua superficial del mapa.
           valor_hidratacion: 0.2
         - nombre: fibra
           categoria: material
@@ -1157,7 +175,7 @@ flora:
           capacidad_maxima: 3.0
           tasa_regeneracion: 0.1
           valor_nutricional: 0.2
-          valor_hidratacion: 0.03   # vegetacion dura de bioma frio/seco, poca agua libre
+          valor_hidratacion: 0.03
     musgo:
       biomas: [tundra]
       num_manchas: 2
@@ -1172,268 +190,133 @@ flora:
           capacidad_maxima: 3.0
           tasa_regeneracion: 0.1
           valor_nutricional: 0.2
-          valor_hidratacion: 0.04   # mismo criterio que liquen, algo mas de humedad retenida
+          valor_hidratacion: 0.04
 
-# --- Agua (correccion posterior a fase terreno 4, discutida y confirmada
-# con Diego -- ver nucleo/agua.py). Reemplaza al viejo generador de un
-# unico rio por paseo aleatorio: ahora rio/lago/poza se derivan del campo
-# de elevacion (nucleo/campo_continuo.py, el mismo que ya usa 'bioma' mas
-# abajo) por descenso de pendiente. provisional en su totalidad, sin
-# calibrar contra el motor en marcha mas alla de una comprobacion de que
-# el numero de cuerpos de agua resultante es razonable en varias semillas.
-agua:
-  # umbral de elevacion por encima del cual una celda cuenta como
-  # candidata a NACIMIENTO de rio (ver nucleo/agua.py:_picos) -- cada
-  # componente conexa de celdas por encima de este umbral aporta un unico
-  # nacimiento, en su punto mas alto. provisional: por debajo de
-  # umbral_elevacion_montana (0.80, ver 'bioma' mas abajo) a proposito --
-  # si coincidieran, muy pocas semillas tendrian suficiente terreno sobre
-  # el umbral como para generar ningun rio. Sin calibrar mas alla de
-  # comprobar, en un puñado de semillas, que sale un numero de rios entre
-  # 1 y 4 (ni cero ni una decena).
-  umbral_elevacion_nacimiento: 0.70
-  # banda de elevacion (por encima de la del punto mas bajo) que el
-  # flood-fill de un LAGO puede incorporar, y tope de celdas -- ambos
-  # acotan la cuenca para que no se desborde sobre cualquier ondulacion
-  # cercana del terreno (ver nucleo/agua.py:_flood_fill_banda). provisional.
-  banda_elevacion_lago: 0.03
-  tope_tamano_lago: 8
-  # umbral de elevacion ABSOLUTA por debajo del cual un minimo local no
-  # alcanzado por ningun rio cuenta como POZA -- deliberadamente mas bajo
-  # que umbral_elevacion_nacimiento, para que sean de verdad hondonadas
-  # bajas y no cualquier minimo local de una colina (ver
-  # nucleo/agua.py:_generar_pozas). banda/tope mucho mas pequenos que los
-  # de lago -- una poza es una fuente pequena y aislada, no un cuerpo de
-  # agua mayor. provisional.
-  # CALIBRACION 2026-08-21 (investigacion de inanicion/hidratacion -- ver
-  # 'necesidades' mas arriba): subida MODESTA y deliberadamente parcial
-  # de 0.12 a 0.20. Medido en 15 semillas: la distancia mediana de
-  # cualquier celda a agua baja de 6.9 a 5.7 -- mejora real pero NO
-  # suficiente por si sola para meter la mayoria del mapa dentro del
-  # radio de percepcion (0-4). Subir esto mucho mas (probado hasta 0.6)
-  # SI logra bajar la mediana a ~4, pero multiplica por 4-5 el numero de
-  # celdas con agua del mapa -- deja de ser "una hondonada aislada
-  # ocasional" y empieza a ser "charcos por todo el mapa". Esa magnitud
-  # de cambio altera el caracter del mapa generado -- se deja fuera de
-  # este paso a proposito, sin decidir aqui, senalado para Diego (no es
-  # parte de la correccion de profundidad de mas abajo, son dos ejes
-  # independientes: CUANTAS pozas hay frente a CUAN hondas son).
-  umbral_elevacion_poza: 0.20
-  # banda_elevacion_poza (CORRECCION DE DISENO 2026-08-21, ver nucleo/
-  # agua.py para el razonamiento completo -- Diego senalo que atar la
-  # profundidad a un techo elegido por especie no escala: "y si anadimos
-  # animales mas pequenos aun?"): desde esta correccion, banda YA NO es
-  # solo un radio de busqueda -- multiplicada por escala_metros_por_
-  # unidad_elevacion (mas abajo) determina DIRECTAMENTE la profundidad
-  # real en el punto mas hondo de la cuenca. Bajada de 0.02 a 0.008
-  # -- no para "proteger" a ninguna especie (ese razonamiento es
-  # exactamente el que se acaba de descartar), sino porque una poza
-  # sigue siendo, por definicion GEOMETRICA, una acumulacion de banda
-  # estrecha frente a un lago (banda_elevacion_lago mas abajo, 0.03) --
-  # la diferencia de profundidad tipica entre poza y lago emerge de esa
-  # distincion de tamano que ya existia, no de un segundo numero
-  # inventado para la profundidad en concreto.
-  banda_elevacion_poza: 0.008
-  tope_tamano_poza: 4
-  # Profundidad (pieza 3 de la secuencia de fisica de terreno/agua
-  # acordada con Diego -- ver nucleo/agua.py, seccion PROFUNDIDAD del
-  # docstring, para el razonamiento completo de como se deriva).
-  #
-  # CORRECCION DE DISENO 2026-08-21 (Diego, tras revisar la primera
-  # version de esta correccion: "estas creando normas especificas para
-  # las razas creadas, y si anadimos animales mas pequenos aun? [...] la
-  # profundidad debera variar dependiendo del terreno, no porque nosotros
-  # lo definamos como norma"): los tres techos por tipo de cuerpo de agua
-  # que existian aqui (profundidad_maxima_metros_lago=3.0, profundidad_
-  # maxima_metros_poza -- primero 0.5, corregido a 0.10 en un primer
-  # intento fallido -- y profundidad_metros_rio=0.6 fijo) se ELIMINAN.
-  # Los tres eran, en mayor o menor medida, leyes teleologicas: numeros
-  # elegidos mirando la altura de las especies que existian en cada
-  # momento, condenados a romperse con la siguiente especie mas pequena
-  # (o mas grande). Sustituidos por un UNICO factor de conversion,
-  # aplicado igual a rio, lago y poza, que no menciona ninguna especie
-  # en ningun punto -- la profundidad de cada celda de agua es ahora
-  # relieve real (elevacion_minimo/banda, derivados del campo de
-  # elevacion generado, distinto en cada punto del mapa) convertido a
-  # metros por este factor, nada mas. Rio ademas deja de tener una
-  # profundidad fija -- gana el mismo gradiente de orilla que lago/poza
-  # (ver nucleo/agua.py:_generar_riberas_rio), con la banda de cada
-  # tramo derivada de la caida de elevacion REAL de ese tramo, no de un
-  # numero elegido a mano.
-  #
-  # escala_metros_por_unidad_elevacion: provisional, primera hipotesis
-  # razonada -- 100 (metros por unidad de elevacion normalizada [0,1])
-  # situa la profundidad tipica de un lago lleno (banda_elevacion_lago
-  # 0.03 -> 3.0m en su punto mas hondo) en el orden de un lago pequeno de
-  # tierras bajas, y una poza llena (banda_elevacion_poza 0.008 -> 0.8m
-  # en su punto mas hondo, la mayoria de sus celdas bastante menos por el
-  # propio gradiente) en el de un charco/estanque pequeno -- elegido por
-  # plausibilidad de terreno, sin mirar la altura de ninguna especie. Que
-  # una celda concreta de una poza pequena siga pudiendo superar la
-  # altura de una ardilla en su punto mas hondo es ahora una consecuencia
-  # HONESTA del relieve real de esa cuenca, no un fallo que haya que
-  # parchear -- la seguridad de cada individuo depende de que prefiera
-  # (sistema_movimiento.py ya hace esto) la orilla vadeable en vez del
-  # centro, exactamente igual que ya hacia con lago. Sin observar el
-  # motor en marcha todavia -- primer valor de partida, no calibrado.
-  escala_metros_por_unidad_elevacion: 100.0
-  # tope_tamano_orilla_rio: cuantas celdas como maximo puede alcanzar el
-  # gradiente de orilla de CADA celda del cauce (ver nucleo/agua.py:
-  # _generar_riberas_rio) -- geometrico, no de profundidad (la
-  # profundidad la da la banda local, derivada del propio camino de
-  # descenso). Pequeno a proposito: un rio es angosto por definicion,
-  # no deberia ensancharse hasta parecer un lago. provisional.
-  tope_tamano_orilla_rio: 3
-  # piso_banda_rio: banda minima para la mini-cuenca de una celda de
-  # cauce en un tramo casi llano (donde la caida de elevacion real hacia
-  # la siguiente celda es casi 0) -- sin esto, un tramo perfectamente
-  # llano se quedaria con banda 0.0 exacto y, por tanto, profundidad 0.0
-  # y ninguna orilla: un rio invisible de un solo pixel. No es una
-  # profundidad tipica elegida por especie, es un suelo geometrico para
-  # que CUALQUIER celda de cauce siga contando como "hay agua aqui" por
-  # poco pronunciado que sea el terreno que atraviesa. provisional.
-  piso_banda_rio: 0.001
-  # techo_banda_rio: acota el otro extremo -- un paso de descenso puntual
-  # inusualmente grande (nucleo/relieve.py ya documenta p99~0.16 entre
-  # celdas vecinas cualesquiera) no deberia traducirse en un rio de mas
-  # de diez metros en una sola celda -- eso es geologicamente una
-  # cascada, no un cauce mas hondo (mecanica distinta, no incluida aqui).
-  # 0.03 -- mismo orden que banda_elevacion_lago, un rio no deberia ser
-  # tipicamente mas hondo que un lago lleno. Limite geometrico, no
-  # elegido contra ninguna especie. provisional.
-  techo_banda_rio: 0.03
+# ------------------------------------------------------------------------------
+# 5. Población Inicial y Demografía
+# ------------------------------------------------------------------------------
+poblacion:
+  gnomos_iniciales: 18
+  lobos_iniciales: 6
+  conejos_iniciales: 30
+  ardillas_iniciales: 30
+  techo_fraccion_edad_inicial_longevidad: 0.7
 
-# --- Charcos efimeros (pieza 3 de la revision del sistema de agua, 2026-
-# 08-21 -- Diego: "quizas la tormenta y lluvia podrian generar charcos en
-# las celdas y estos despues se agotarian o se evaporan", ver nucleo/
-# celda.py:profundidad_charco y sistemas/sistema_recursos.py para el ciclo
-# completo). La tasa de GENERACION vive en clima.efectos (seccion
-# 'clima' mas arriba, tasa_generacion_charco_por_tick) -- es un efecto del
-# clima, mismo sitio que ajuste_confort/modificador_regeneracion. Aqui
-# solo lo que NO depende de que clima haga en concreto: cuanto dura un
-# charco una vez existe. provisional en su totalidad, sin calibrar contra
-# el motor en marcha.
-charcos:
-  # techo_profundidad_charco: 3 cm. Un charco, por definicion fisica, no
-  # es un cuerpo de agua hondo -- no es una cifra elegida por debajo de
-  # la altura de ninguna especie (ardilla, la mas baja actual, 0.15-0.25
-  # m), es que un charco de mas de unos pocos centimetros ya no seria un
-  # charco, seria una poza (que ya existe como su propio tipo de agua
-  # permanente). Con este techo, hay_agua_potable/profundidad_agua_
-  # potable (nucleo/agua.py) nunca deberian disparar ahogamiento ni
-  # bloqueo de movimiento por culpa de un charco -- pero se calculan con
-  # la misma formula que agua permanente en vez de asumirlo, por si algun
-  # dia una especie tan pequena hace que deje de ser cierto (mismo
-  # criterio neutro que ya se aplico al redisenar profundidad_agua).
-  techo_profundidad_charco: 0.03
-  # tasa_evaporacion_charco_por_tick: baja mientras NO llueve (clima
-  # despejado). 0.03 techo / 0.0006 por tick ~ 50 ticks (~2 dias) para
-  # que un charco lleno se seque del todo sin lluvia nueva -- un charco
-  # de una tormenta deberia sobrevivir mas que el dia en que cayo, pero
-  # no volverse permanente.
-  tasa_evaporacion_charco_por_tick: 0.0006
-  # tasa_agotamiento_charco_al_beber: a diferencia de agua permanente
-  # ("un rio no se vacia porque alguien beba de el", sistema_recursos.py),
-  # un charco SI es finito -- Diego lo pidio explicitamente ("se
-  # agotarian"). 0.01 por tick de un unico bebedor vacia un charco lleno
-  # (0.03) en 3 ticks; con varios bebedores a la vez se agota mas rapido
-  # todavia -- deliberado, un charco pequeno compartido por varios
-  # individuos sedientos deberia notarse.
-  tasa_agotamiento_charco_al_beber: 0.01
+# ------------------------------------------------------------------------------
+# 6. Biomecánica, Fricción y Cinemática (Fase 2)
+# ------------------------------------------------------------------------------
+percepcion:
+  radio_minimo_celdas: 0
+  radio_maximo_celdas: 4
 
-# --- Relieve (nucleo/relieve.py, discutido y confirmado con Diego --
-# "la altitud no afecta en absoluto a las criaturas"). Conecta el campo
-# de elevacion con el movimiento: una pendiente demasiado empinada para
-# la fuerza del individuo no se puede cruzar; una transitable pero cuesta
-# arriba drena resistencia. provisional en su totalidad.
 relieve:
-  # pendiente_minima/maxima_transitable: extremos del mapeo lineal
-  # fuerza[0,1] -> diferencia de elevacion maxima cruzable en un paso
-  # (nucleo/relieve.py:pendiente_maxima_transitable, mismo patron que
-  # radio_individual en nucleo/percepcion.py). Calibrados observando la
-  # distribucion REAL de diferencias de elevacion entre celdas vecinas en
-  # 10 semillas (mediana ~0.032, p90 ~0.10, p99 ~0.16, maximo observado
-  # ~0.21): con estos bordes, el gnomo mas debil (fuerza~0.2) queda
-  # bloqueado solo en las pendientes mas pronunciadas del mapa (~p85-90),
-  # el lobo mas fuerte (fuerza~0.9) casi nunca (~p99). No calibrado
-  # todavia contra el efecto real sobre el motor en marcha (cuanto cambia
-  # el movimiento/mortalidad de verdad), solo contra la distribucion del
-  # terreno.
   pendiente_minima_transitable: 0.05
   pendiente_maxima_transitable: 0.22
-  # coste bruto de resistencia por unidad de diferencia de elevacion al
-  # subir (se divide por resistencia_maxima antes de restarse, mismo
-  # escalar de techo que sistema_capacidad_fisica.py). provisional: 0.3
-  # elegido para que cruzar la pendiente mas empinada que un individuo
-  # tipico puede transitar (~0.15) cueste un orden de magnitud similar a
-  # un tick de esfuerzo sostenido (CAZAR/HUIR, tasa_perdida_resistencia_
-  # por_esfuerzo=0.05) -- una subida notable, no catastrofica ni gratis.
   costo_resistencia_por_unidad_pendiente: 0.3
 
-# --- Memoria espacial (nucleo/memoria.py, discutida y confirmada con
-# Diego -- "una criatura que encuentra una fuente de alimento o de agua
-# puede recordar relativamente su posicion"). Conecta CapacidadMental.
-# memoria, declarada desde el Bloque F1 sin ningun consumidor real, con
-# su primer uso: recordar sitios de comida/agua ya visitados para volver
-# a ellos cuando la percepcion directa no encuentra nada. provisional en
-# su totalidad, sin calibrar contra el motor en marcha.
+movimiento:
+  coste_resistencia_pendiente: 0.05
+  coste_resistencia_sprint: 0.08
+  umbral_resistencia_agotamiento: 0.05
+
+social:
+  distancia_deseada_conspecifico: 1
+  distancia_deseada_territorio: 1
+
 memoria:
-  # cuantos sitios distintos recuerda un individuo POR categoria (comida,
-  # agua, cada una su propio cupo) -- mapeo lineal de memoria [0,1],
-  # mismo patron que percepcion.radio_minimo/maximo_celdas. provisional:
-  # 1 en el extremo teorico mas bajo (recuerda como minimo el ultimo
-  # sitio, nunca cero -- un cupo de cero seria indistinguible de no tener
-  # memoria en absoluto) hasta 5 en el mas alto, sin ningun dato del
-  # motor en marcha que lo respalde todavia.
   capacidad_minima: 1
   capacidad_maxima: 5
-  # radio_error = distancia_manhattan_al_recuerdo * este factor * (1 -
-  # memoria) -- ver nucleo/memoria.py:objetivo_recordado para el
-  # razonamiento completo (el error tiene que ser relativo a la
-  # distancia, no una cifra fija de celdas, para que el mecanismo siga
-  # teniendo sentido si el mapa crece mucho mas alla del actual 20x20).
-  # provisional: 0.3 dado como hipotesis de partida -- a una distancia de
-  # 10 celdas, un individuo de memoria minima (0.0) erraria hasta +/-3
-  # celdas; uno de memoria maxima (1.0) no erraria nada. Sin observar el
-  # motor en marcha.
   factor_error_por_distancia: 0.3
 
+# ------------------------------------------------------------------------------
+# 7. Combate y Dinámica Trófica (Fase 2)
+# ------------------------------------------------------------------------------
+depredacion:
+  umbral_disposicion_caza: 0.5
+  captura_prob_min: 0.05
+  captura_prob_max: 0.5
+  factor_agresividad_resistencia: 0.2
+  factor_dano_base: 0.4
+  eficiencia_biomasa_saciedad: 1.5
+  eficiencia_biomasa_hidratacion: 0.5
+
+# ------------------------------------------------------------------------------
+# 8. Metabolismo, Necesidades y Estados Críticos (Fase 3)
+# ------------------------------------------------------------------------------
+necesidades:
+  defecto:
+    tasa_perdida_saciedad_por_tick: 0.012
+    tasa_perdida_energia_por_tick: 0.01
+    tasa_perdida_hidratacion_por_tick: 0.004
+    tasa_perdida_aliviado_por_tick: 0.01
+    tasa_alivio_al_aliviarse: 0.5
+    tasa_recuperacion_energia_al_dormir: 0.05
+    tasa_perdida_seguridad_por_amenaza: 0.3
+    tasa_recuperacion_seguridad: 0.05
+    tasa_perdida_oxigenacion_por_inmersion: 0.5
+    tasa_recuperacion_oxigenacion: 1.0
+    tasa_deriva_confort_termico: 0.03
+    tasa_perdida_impulso_reproductivo_por_tick: 0.005
+    probabilidad_muerte_saciedad_critica: 0.005
+    probabilidad_muerte_deshidratacion: 0.005
+    probabilidad_muerte_ahogamiento: 0.5
+  lobo:
+    tasa_perdida_saciedad_por_tick: 0.003
+
+consumo:
+  tasa_consumo_al_comer: 0.5
+  tasa_consumo_al_beber: 0.2
+
+decision:
+  utilidad_deambular_base: 0.1
+
+capacidad_fisica:
+  tasa_perdida_resistencia_por_esfuerzo: 0.05
+
+capacidad_mental:
+  tasa_perdida_estabilidad_por_amenaza: 0.02
+  penalizacion_estabilidad_presenciar_muerte: 0.15
+
+crisis_mental:
+  umbral_estabilidad_crisis: 0.0
+  umbral_valentia_huida_erratica: 0.3
+  umbral_agresividad_violenta: 0.6
+
+# ------------------------------------------------------------------------------
+# 9. Ciclo Vital y Dinámica Poblacional
+# ------------------------------------------------------------------------------
+ciclo_vital:
+  techo_probabilidad_muerte_vejez: 0.3
+
+reproduccion:
+  mutacion_fraccion: 0.1
+
+# ------------------------------------------------------------------------------
+# 10. Arquetipos y Rangos Raciales
+# ------------------------------------------------------------------------------
 rangos_raciales:
   gnomo:
-    # medio_alimentacion/dieta (2026-08-20, saldando la deuda tecnica
-    # declarada en sistema_recursos.py: "sin restriccion dietetica
-    # todavia... se consume el primero con existencias, sin mirar cual
-    # prefiere la especie de quien come"). No son un rango [minimo,
-    # maximo] como el resto de este bloque -- son una regla fija de raza,
-    # no un atributo con sorteo individual, pero viven aqui porque este
-    # es el sitio donde ya vive todo lo demas que caracteriza a una raza.
-    # medio_alimentacion sustituye al `if identidad.especie == Especie.
-    # LOBO` que hasta ahora vivia hardcodeado en sistema_decision.py --
-    # correccion pedida por Diego: cazar y recolectar no son necesidades
-    # distintas compitiendo por prioridad, son el MEDIO por el que la
-    # misma necesidad (saciedad) se satisface, y ese medio es una
-    # propiedad de la especie, no una rama del motor de decision.
-    # gnomo: dieta sin restringir a proposito -- es la unica especie
-    # consciente hoy y ya comia "cualquier alimento que pisara" antes de
-    # que dieta existiera como concepto; se declara ahora como regla en
-    # vez de dejarlo como ausencia de regla, pero el comportamiento no
-    # cambia. Lista == todos los recursos categoria=alimento que existen
-    # hoy en flora.especies (raices, hierba, manzanas, fruto_de_cactus,
-    # liquen, musgo) -- si se anade una especie de planta nueva con un
-    # recurso alimento nuevo, esta lista hay que ampliarla a mano (no hay
-    # ninguna referencia automatica a "todo lo que exista").
     medio_alimentacion: recolectar
     dieta: [raices, hierba, manzanas, fruto_de_cactus, liquen, musgo]
-    peso: [8, 15]       # ficha_gnomo.pdf: "notablemente menor que lobo y humano (ref. 70-100)"
-    valentia: [0.2, 0.6]
-    sociabilidad: [0.4, 0.9]
-    agresividad: [0.1, 0.4]
+    peso: [8, 15]
+    altura: [0.9, 1.2]
+    longevidad: [45, 65]
+    duracion_gestacion_dias: [200, 260]
+    camada: [1, 1]
+    fraccion_madurez: 0.1
+    factor_base_concepcion: 0.0033
     fuerza: [0.2, 0.5]
     agilidad: [0.3, 0.7]
+    velocidad: [0.2, 0.5]
+    resistencia_enfermedad: [0.3, 0.6]
+    agudeza_sensorial: [0.3, 0.6]
     vitalidad_maxima: [0.4, 0.7]
     resistencia_maxima: [0.4, 0.7]
     curacion: [0.005, 0.015]
     recuperacion: [0.05, 0.10]
+    valentia: [0.2, 0.6]
+    sociabilidad: [0.4, 0.9]
+    agresividad: [0.1, 0.4]
     dominancia: [0.2, 0.6]
     empatia: [0.4, 0.8]
     lealtad: [0.4, 0.8]
@@ -1445,301 +328,112 @@ rangos_raciales:
     resiliencia: [0.3, 0.7]
     estabilidad_mental_maxima: [0.4, 0.7]
     consciencia: [0.6, 0.9]
-    # Bloque G. longevidad: ficha_gnomo.pdf seccion 4 "ciclo vital"
-    # (marcado alli "provisional, pendiente de calibracion" -- no
-    # inventado aqui). altura, velocidad, resistencia_enfermedad y
-    # agudeza_sensorial no tienen dato de referencia en la ficha:
-    # razonadas por analogia (gnomo mas bajo/lento/menos agudo que el
-    # lobo, coherente con el resto de rangos raciales ya sorteados).
-    altura: [0.9, 1.2]                 # metros, provisional por analogia
-    longevidad: [45, 65]               # anios, ficha_gnomo.pdf seccion 4
-    velocidad: [0.2, 0.5]              # normalizada, provisional por analogia
-    resistencia_enfermedad: [0.3, 0.6] # normalizada, provisional por analogia
-    agudeza_sensorial: [0.3, 0.6]      # normalizada, provisional por analogia
-    # 6.3 Reproduccion. duracion_gestacion_dias: ficha_gnomo.pdf seccion 4
-    # "ciclo vital" (mismo lugar que longevidad, misma nota de "provisional
-    # pendiente de calibracion" en la propia ficha -- no inventado aqui).
-    duracion_gestacion_dias: [200, 260]
-    # camada (2026-08-21, investigacion "sostenibilidad de caza del lobo"
-    # -- ver componentes/gestacion.py y sistema_reproduccion.py para el
-    # mecanismo completo): numero de hijos por gestacion resuelta,
-    # sorteado en la concepcion. gnomo es la unica especie de este mundo
-    # con un analogo humanoide directo -- un nacimiento multiple natural
-    # (gemelos) en humanos ronda el 1-2% de los partos, la abrumadora
-    # mayoria es un unico hijo. Reflejar esa proporcion con un rango
-    # [min,max] sorteado uniforme distorsionaria la realidad (un [1,2]
-    # uniforme daria 50% de gemelos, muy por encima del dato real) --
-    # se deja determinista en 1, no una omision sino la lectura mas fiel
-    # de la referencia real disponible. Especie K-strategy, coherente con
-    # su factor_base_concepcion (mas abajo) y longevidad alta.
-    camada: [1, 1]
-    # fraccion_madurez (2026-08-20, antes global en ciclo_vital, ver nota
-    # alli sobre el motivo del reparto por especie): BAJADA de 0.2 a 0.1
-    # -- con 0.2 la madurez llegaba a los 9 anios (4320 ticks), mas alla
-    # de cualquier ventana de prueba realista y, segun la investigacion de
-    # reproduccion, la causa raiz de que NINGUN gnomo llegara nunca a
-    # reproducirse en 20 semillas x 4000 ticks. 0.1 la baja a 4.5 anios
-    # (2160 ticks) -- sigue sin dato de referencia externo con el que
-    # contrastarla (a diferencia del lobo), pura calibracion de
-    # jugabilidad: la minima reduccion que hace la madurez alcanzable
-    # dentro de una partida de prueba de duracion habitual, sin pretender
-    # ningun realismo antropologico. provisional, pendiente de validar
-    # con el motor en marcha (tarea de calibracion, no de diseno).
-    fraccion_madurez: 0.1
-    # factor_base_concepcion (2026-08-20, antes global en reproduccion,
-    # ver su nota alli sobre el paso de cadencia diaria a evaluacion por
-    # tick): 0.0033/tick -- equivalente a la probabilidad DIARIA original
-    # (0.08) dividida entre TICKS_POR_DIA (24), para preservar la misma
-    # calibracion ya validada el 2026-08-19 (2/40 nacimientos naturales en
-    # 20000 ticks junto con probabilidad_muerte_saciedad_critica=0.005) en
-    # vez de reabrirla sin necesidad -- evaluar cada tick en vez de una
-    # vez al dia ya por si solo deberia producir MAS contactos detectados,
-    # sin tener que subir tambien esta cifra a la vez (una sola fuente de
-    # cambio por paso, no dos a la vez sin poder distinguir cual pesa).
-    factor_base_concepcion: 0.0033
+
   lobo:
-    # lobo: unico caso de medio_alimentacion=cazar hoy -- sin dieta
-    # (cazar no filtra por tipo de recurso vegetal, filtra por presa
-    # valida via disposicion_por_peso, ver nucleo/disposicion.py).
     medio_alimentacion: cazar
-    peso: [60, 90]      # ficha_lobo.pdf: "mucho mayor que el gnomo; cerca del humano (ref. 70-100)"
+    peso: [60, 90]
+    altura: [0.6, 0.9]
+    longevidad: [8, 14]
+    duracion_gestacion_dias: [60, 75]
+    camada: [4, 6]
+    fraccion_madurez: 0.2
+    factor_base_concepcion: 0.0033
+    fuerza: [0.5, 0.9]
+    agilidad: [0.5, 0.9]
+    velocidad: [0.5, 0.9]
+    resistencia_enfermedad: [0.4, 0.7]
+    agudeza_sensorial: [0.5, 0.8]
+    vitalidad_maxima: [0.6, 0.9]
+    resistencia_maxima: [0.6, 0.9]
+    curacion: [0.01, 0.02]
+    recuperacion: [0.08, 0.15]
     valentia: [0.5, 0.9]
     sociabilidad: [0.3, 0.7]
     agresividad: [0.5, 0.9]
-    fuerza: [0.5, 0.9]
-    agilidad: [0.5, 0.9]
-    vitalidad_maxima: [0.6, 0.9]
-    resistencia_maxima: [0.6, 0.9]
     dominancia: [0.4, 0.8]
     empatia: [0.2, 0.5]
     lealtad: [0.5, 0.9]
     fe: [0.0, 0.3]
     curiosidad: [0.2, 0.5]
-    curacion: [0.01, 0.02]
-    recuperacion: [0.08, 0.15]
     inteligencia: [0.2, 0.5]
     memoria: [0.3, 0.6]
     voluntad: [0.2, 0.5]
     resiliencia: [0.4, 0.7]
     estabilidad_mental_maxima: [0.5, 0.8]
     consciencia: [0.0, 0.2]
-    # Bloque G. longevidad: ficha_lobo.pdf seccion 4 "ciclo vital"
-    # (misma nota que en gnomo: provisional en la ficha, no inventado
-    # aqui). altura, velocidad, resistencia_enfermedad y agudeza_sensorial
-    # razonadas por analogia -- lobo mas alto/rapido/resistente/perceptivo
-    # que el gnomo, coherente con fuerza/agilidad ya sorteadas.
-    altura: [0.6, 0.9]                 # metros, provisional por analogia
-    longevidad: [8, 14]                # anios, ficha_lobo.pdf seccion 4
-    velocidad: [0.5, 0.9]              # normalizada, provisional por analogia
-    resistencia_enfermedad: [0.4, 0.7] # normalizada, provisional por analogia
-    agudeza_sensorial: [0.5, 0.8]      # normalizada, provisional por analogia
-    # 6.3 Reproduccion. duracion_gestacion_dias: ficha_lobo.pdf seccion 4
-    # "ciclo vital" (misma nota que en gnomo).
-    duracion_gestacion_dias: [60, 75]
-    # camada (2026-08-21, ver nota extensa en gnomo mas arriba): el lobo
-    # real (Canis lupus) tiene camadas de 4 a 6 crias de media, con
-    # rango observado de 1 a 15 en casos extremos segun disponibilidad de
-    # presa -- fuente consistente entre International Wolf Center,
-    # California Wolf Center y Smithsonian National Zoo. Se usa el rango
-    # medio [4, 6] en vez de los extremos: es K-strategy en frecuencia de
-    # concepcion (factor_base_concepcion mas abajo, la mas baja de las
-    # cuatro especies) pero NO en tamano de camada -- son ejes distintos
-    # en la biologia real, un lobo pare pocas veces pero no pocas crias
-    # cada vez, y mezclar ambos ejes en una sola cifra baja perderia esa
-    # distincion real.
-    camada: [4, 6]
-    # fraccion_madurez (2026-08-20, antes global): SIN CAMBIO, se queda en
-    # 0.2 -- es el caso donde el valor global original SI coincidia con un
-    # dato real (madurez sexual del lobo real, aprox. 1-2 anios; 0.2 sobre
-    # el minimo racial de 8 anios da 1.6 anios). Mover fraccion_madurez a
-    # rangos_raciales no significaba que todas las especies necesitaran un
-    # valor distinto -- el lobo es la unica que ya tenia respaldo real
-    # para el numero que ya llevaba.
-    fraccion_madurez: 0.2
-    # factor_base_concepcion (CALIBRACION 2026-08-21, la prediccion de la
-    # nota anterior se confirmo con el motor en marcha): la version
-    # 0.0017 (mitad de gnomo, "K-strategy deliberada") partia de un
-    # supuesto que la investigacion de hoy desmintio -- que el contacto
-    # elegible fuera comparable entre especies y solo la probabilidad
-    # de exito debiera diferenciarlas. En la practica, el contacto YA es
-    # muchisimo mas escaso para lobo que para gnomo solo por tener una
-    # poblacion fundadora menor (6 frente a 18) -- penalizar ADEMAS la
-    # probabilidad de exito por tick era castigar la misma desventaja
-    # K-strategy dos veces, una vez via poblacion/contacto (real, se
-    # queda) y otra via este numero (redundante). Instrumentado con
-    # nucleo/entidad.py:_sortear_edad_inicial_ticks ya en marcha (edad
-    # inicial variable, ver seccion 'poblacion' mas abajo): con 0.0017,
-    # 3 semillas de prueba (6000 ticks) dieron 2 concepciones de lobo en
-    # total frente a 14 de gnomo con 0.0033 -- desproporcionado incluso
-    # descontando la diferencia de poblacion. Igualado a 0.0033 (el mismo
-    # valor que gnomo): la diferencia de fecundidad relativa entre ambas
-    # especies sigue existiendo, solo que ahora vive enteramente en la
-    # escasez real de contacto (poblacion fundadora menor, un mapa mas
-    # grande y un mismo radio de percepcion absoluto hacen mas raro que
-    # dos lobos concretos coincidan en la misma celda) en vez de
-    # duplicarse artificialmente en un segundo numero. provisional,
-    # pendiente de una corrida mas larga que confirme nacimientos reales
-    # de lobo (la gestacion, 1440-1800 ticks, no daba tiempo a completarse
-    # en las pruebas cortas de esta sesion).
-    factor_base_concepcion: 0.0033
 
-  # conejo/ardilla (2026-08-20): sin ficha de referencia propia (a
-  # diferencia de gnomo/lobo, que parten de ficha_gnomo.pdf/ficha_lobo.pdf)
-  # -- TODO este bloque es una hipotesis de partida razonada por analogia
-  # con el resto de rangos raciales ya sorteados, sin ningun dato del
-  # motor en marcha. Ambas: fauna, no conscientes (consciencia mas baja
-  # incluso que lobo), medio_alimentacion=recolectar con dieta restringida
-  # (ver nota en rangos_raciales.gnomo sobre por que dieta existe), peso
-  # muy por debajo de gnomo (la especie mas ligera hasta ahora) para que
-  # la disposicion por peso (nucleo/disposicion.py) las deje claramente
-  # del lado de "presa" frente a lobo. duracion_gestacion_dias
-  # deliberadamente mas corta que la de lobo -- estrategia r frente a la
-  # K de un depredador solitario, para que la poblacion de presas pueda
-  # sostener algo de presion de caza -- sin ninguna calibracion todavia:
-  # si dispara una explosion o un colapso de poblacion, es lo primero que
-  # habria que revisar.
   conejo:
     medio_alimentacion: recolectar
     dieta: [hierba, raices]
-    peso: [1.5, 3.0]                   # kg, por analogia (mucho mas ligero que gnomo)
-    # valentia (CALIBRACION 2026-08-21, ver nota extensa en
-    # estabilidad_mental_maxima mas abajo): subida de [0.1, 0.3] a
-    # [0.2, 0.45) -- el rango original caia ENTERO en o por debajo de
-    # decision.umbral_valentia_huida_erratica (0.3), condenando a
-    # practicamente el 100% de los conejos a resolver cualquier crisis
-    # mental como HUIDA_ERRATICA (que anula la Utility AI por completo,
-    # ver sistema_decision.py) -- nunca CATATONIA ni CRISIS_VIOLENTA, sin
-    # ninguna variacion individual real. Medido: un conejo pasaba 36-64%
-    # de sus ticks vividos en algun estado de crisis segun la semilla.
-    # Sigue siendo mas cobarde que gnomo [0.2, 0.6] (presa tipica, no
-    # deberia dejar de serlo) pero ya no 100% determinista.
-    valentia: [0.2, 0.45]              # presa tipica, poco dispuesta a plantar cara
-    sociabilidad: [0.5, 0.9]           # vive en madriguera/grupo, por analogia
-    agresividad: [0.05, 0.2]
+    peso: [1.5, 3.0]
+    altura: [0.2, 0.3]
+    longevidad: [1, 3]
+    duracion_gestacion_dias: [15, 25]
+    camada: [3, 7]
+    fraccion_madurez: 0.3
+    factor_base_concepcion: 0.015
     fuerza: [0.1, 0.3]
-    agilidad: [0.6, 0.9]               # clave para evasion (sistema_depredacion.py)
+    agilidad: [0.6, 0.9]
+    velocidad: [0.5, 0.8]
+    resistencia_enfermedad: [0.2, 0.4]
+    agudeza_sensorial: [0.5, 0.8]
     vitalidad_maxima: [0.2, 0.4]
     resistencia_maxima: [0.3, 0.5]
     curacion: [0.01, 0.02]
     recuperacion: [0.08, 0.15]
+    valentia: [0.2, 0.45]
+    sociabilidad: [0.5, 0.9]
+    agresividad: [0.05, 0.2]
     dominancia: [0.1, 0.3]
     empatia: [0.3, 0.6]
     lealtad: [0.3, 0.6]
-    fe: [0.0, 0.1]                     # fauna, minimo
+    fe: [0.0, 0.1]
     curiosidad: [0.2, 0.5]
     inteligencia: [0.1, 0.3]
     memoria: [0.2, 0.5]
     voluntad: [0.1, 0.3]
     resiliencia: [0.3, 0.6]
-    # estabilidad_mental_maxima (CALIBRACION 2026-08-21, investigacion "por
-    # que no sobrevive ni un mundo" pedida por Diego): subida de
-    # [0.3, 0.5] a [0.4, 0.6]. sistema_capacidad_mental.py divide el
-    # drenaje por estres (amenaza sostenida + presenciar muerte) entre
-    # este propio maximo -- un techo mas bajo que gnomo/lobo [0.4-0.8]
-    # amplifica la MISMA tasa de drenaje nominal, y conejo ahora es presa
-    # real de lobo (antes solo gnomo lo era), asi que sufre mas amenaza
-    # sostenida que cuando se eligio [0.3, 0.5] por pura analogia sin
-    # dato del motor en marcha. Combinado con valentia (ver mas arriba),
-    # la fraccion de tiempo en crisis bajo de 36-64% a 17-35% en las
-    # pruebas -- mejora real pero NO explica por si sola la mortalidad por
-    # inanicion (que se mantuvo casi igual en pruebas aisladas de solo
-    # este cambio) -- ver tasa_perdida_hidratacion_por_tick (seccion
-    # 'necesidades' mas arriba) para el hallazgo que si tuvo efecto
-    # grande. Las dos correcciones se aplican juntas porque cada una
-    # ataca una causa real distinta, no porque una sola bastara.
     estabilidad_mental_maxima: [0.4, 0.6]
-    consciencia: [0.0, 0.1]            # fauna, por debajo incluso de lobo
-    altura: [0.2, 0.3]                 # metros
-    longevidad: [1, 3]                 # anios, ciclo de vida corto (estrategia r)
-    velocidad: [0.5, 0.8]
-    resistencia_enfermedad: [0.2, 0.4]
-    agudeza_sensorial: [0.5, 0.8]      # presa alerta, oido/olfato agudo
-    duracion_gestacion_dias: [15, 25]  # notablemente mas corta que lobo, ver nota arriba
-    # camada (2026-08-21, ver nota extensa en gnomo mas arriba): el
-    # conejo europeo salvaje (Oryctolagus cuniculus) es la especie con
-    # mas variacion entre fuentes consultadas -- desde 3-7 crias por
-    # camada (la cifra que mas se repite) hasta 3-12 en los extremos mas
-    # altos citados. Se usa [3, 7] como lectura conservadora del rango
-    # mas consistente entre fuentes en vez del extremo superior (3-12),
-    # coherente con ser la especie mas r-strategy de las cuatro
-    # (factor_base_concepcion mas abajo, el mas alto) sin irse al caso
-    # mas extremo documentado. provisional: si en la practica sigue sin
-    # bastar para sostener la presion de caza medida, [3,7] es el primer
-    # numero a revisar antes que cualquier otro de este bloque.
-    camada: [3, 7]
-    # fraccion_madurez (2026-08-20): 0.3 -- por analogia con la madurez
-    # sexual real del conejo (aprox. 4-6 meses, ~0.33-0.5 de un ciclo de
-    # vida de referencia de 1 anio, minimo racial de esta especie). Sobre
-    # el minimo racial de 1 anio da madurez a los 0.3 anios (144 ticks) --
-    # deliberadamente rapida, coherente con la estrategia r ya declarada
-    # en la nota de cabecera de este bloque (peso ligero, gestacion corta).
-    # provisional, sin calibrar contra el motor en marcha.
-    fraccion_madurez: 0.3
-    # factor_base_concepcion (2026-08-20): el mas ALTO de las cuatro
-    # especies -- 0.015/tick, unas 4-5 veces el de gnomo (0.0033) --
-    # coherente con la estrategia r (muchas camadas, alta fecundidad
-    # individual) que ya justifica su gestacion corta y su fraccion_
-    # madurez baja. Ademas es la especie que la propia investigacion
-    # senalo con MAS contactos reales entre elegibles (nace en Pradera,
-    # sociabilidad alta) pero pocas concepciones -- el cuello de botella
-    # identificado no era falta de contacto sino la probabilidad de
-    # concepcion en si, asi que aqui es donde mas sentido tiene subir el
-    # numero de partida. provisional, primera hipotesis a validar en la
-    # prueba de extremo a extremo (tarea #87), no una cifra observada.
-    factor_base_concepcion: 0.015
+    consciencia: [0.0, 0.1]
+
   ardilla:
     medio_alimentacion: recolectar
     dieta: [manzanas, raices]
-    peso: [0.3, 0.6]                   # kg, la especie mas ligera del mundo por ahora
-    # valentia/estabilidad_mental_maxima: misma correccion 2026-08-21 y
-    # mismo razonamiento que en conejo -- ver su nota extensa.
-    valentia: [0.2, 0.45]
-    sociabilidad: [0.3, 0.6]           # mas solitaria que conejo, por analogia
-    agresividad: [0.05, 0.2]
+    peso: [0.3, 0.6]
+    altura: [0.15, 0.25]
+    longevidad: [2, 5]
+    duracion_gestacion_dias: [18, 28]
+    camada: [2, 4]
+    fraccion_madurez: 0.4
+    factor_base_concepcion: 0.0067
     fuerza: [0.05, 0.2]
-    agilidad: [0.7, 0.95]              # la mas agil del mundo -- arboricola, por analogia
+    agilidad: [0.7, 0.95]
+    velocidad: [0.5, 0.85]
+    resistencia_enfermedad: [0.2, 0.4]
+    agudeza_sensorial: [0.5, 0.8]
     vitalidad_maxima: [0.15, 0.3]
     resistencia_maxima: [0.25, 0.45]
     curacion: [0.01, 0.02]
     recuperacion: [0.08, 0.15]
+    valentia: [0.2, 0.45]
+    sociabilidad: [0.3, 0.6]
+    agresividad: [0.05, 0.2]
     dominancia: [0.1, 0.3]
     empatia: [0.2, 0.5]
     lealtad: [0.2, 0.5]
     fe: [0.0, 0.1]
-    curiosidad: [0.4, 0.8]             # rasgo distintivo -- forrajeo activo, por analogia
+    curiosidad: [0.4, 0.8]
     inteligencia: [0.15, 0.35]
-    memoria: [0.25, 0.55]              # ligeramente mayor que conejo (analogia con acopio de comida)
+    memoria: [0.25, 0.55]
     voluntad: [0.1, 0.3]
     resiliencia: [0.3, 0.6]
     estabilidad_mental_maxima: [0.4, 0.6]
     consciencia: [0.0, 0.1]
-    altura: [0.15, 0.25]               # metros
-    longevidad: [2, 5]                 # anios
-    velocidad: [0.5, 0.85]
-    resistencia_enfermedad: [0.2, 0.4]
-    agudeza_sensorial: [0.5, 0.8]
-    duracion_gestacion_dias: [18, 28]
-    # camada (2026-08-21, ver nota extensa en gnomo mas arriba): la
-    # ardilla arboricola (p. ej. Sciurus carolinensis) tiene camadas de
-    # 2 a 4 crias de media segun las fuentes consultadas, con hasta 8 en
-    # casos raros -- se usa el rango medio [2, 4] en vez del extremo,
-    # mismo criterio que en lobo (rango tipico documentado, no el maximo
-    # teorico). Mas baja que conejo, coherente con ser algo menos
-    # r-strategy en el resto de sus rangos raciales (sociabilidad menor,
-    # ver nota de cabecera del bloque conejo/ardilla).
-    camada: [2, 4]
-    # fraccion_madurez (2026-08-20): 0.4 -- por analogia con la madurez
-    # real de una ardilla (aprox. 10-12 meses), algo mas tardia que el
-    # conejo en proporcion a su propio minimo racial (2 anios): 0.4 * 2 =
-    # 0.8 anios (384 ticks). Coherente con ser menos prolifica que el
-    # conejo (sociabilidad menor, vive mas, memoria ligeramente mayor --
-    # ver nota de cabecera del bloque) sin llegar a la K-strategy de
-    # gnomo/lobo. provisional, sin calibrar contra el motor en marcha.
-    fraccion_madurez: 0.4
-    # factor_base_concepcion (2026-08-20): 0.0067/tick, intermedio entre
-    # gnomo (0.0033) y conejo (0.015) -- misma logica relativa que el
-    # resto de este bloque: mas prolifica que un recolector omnivoro de
-    # vida larga, menos que el conejo r-strategy. provisional, primera
-    # hipotesis a validar en la tarea #87, no una cifra observada.
-    factor_base_concepcion: 0.0067
 
+# ------------------------------------------------------------------------------
+# 11. Presentación y Monitoreo Web
+# ------------------------------------------------------------------------------
+visual:
+  puerto: 8765
+  segundos_por_tick: 0.4
+  max_lineas_cronica: 200
