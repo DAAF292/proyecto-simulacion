@@ -13,6 +13,14 @@ mundo:
 
 semilla_por_defecto: 42
 
+# ------------------------------------------------------------------------------
+# 1.1 Persistencia (2026-08-23)
+# ------------------------------------------------------------------------------
+persistencia:
+  # PROVISIONAL, sin calibrar contra el coste real de guardar_snapshot a
+  # escala (ver main.py) -- hipótesis de partida, no una cifra medida.
+  guardar_cada_dias: 5
+
 generacion_mapa:
   elevacion_escala_celdas: 7
   lluvia_escala_celdas: 9

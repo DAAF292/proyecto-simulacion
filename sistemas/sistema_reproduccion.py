@@ -196,6 +196,14 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
                 gestor, rng, posicion_madre.x, posicion_madre.y, identidad_madre.especie,
                 rangos_raciales, tick_actual, id_madre, gestacion, mutacion_fraccion,
             )
+            # nombre/tick_nacimiento (2026-08-23): se leen de la Identidad
+            # que nacer_criatura acaba de construir en vez de recomponerlos
+            # aquí -- persistencia.registrar_entidad_nueva() (llamada desde
+            # main.py sobre este mismo evento.datos) es la única vía por la
+            # que la tabla histórica 'entidades' se entera de nombre/tick_
+            # nacimiento; sin estas dos claves quedaban siempre en None/0
+            # para TODA cría nacida en partida, no solo para la fundadora.
+            identidad_hijo = gestor.obtener_componente(id_hijo, Identidad)
             bus.emitir(
                 Evento(
                     tipo="Nacimiento",
@@ -204,6 +212,8 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
                     entidad_id=id_hijo,
                     datos={
                         "especie": identidad_madre.especie.value,
+                        "nombre": identidad_hijo.nombre,
+                        "tick_nacimiento": identidad_hijo.tick_nacimiento,
                         "id_madre": id_madre,
                         "id_padre": gestacion.id_padre,
                         "tamano_camada": gestacion.tamano_camada,

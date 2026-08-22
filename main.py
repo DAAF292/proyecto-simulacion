@@ -83,6 +83,7 @@ def sembrar_poblacion_inicial(
     mundo: Mundo,
     config: dict[str, Any],
     rng_juego: random.Random,
+    persistencia: Persistencia,
 ) -> None:
     """Instancia la población fundadora en biomas compatibles según la configuración."""
     zona = mundo.territorio.zonas[0]
@@ -125,7 +126,7 @@ def sembrar_poblacion_inicial(
             continue
         for _ in range(cantidad):
             pos_x, pos_y = rng_juego.choice(celdas_candidatas)
-            crear_criatura(
+            eid = crear_criatura(
                 gestor,
                 especie,
                 pos_x,
@@ -134,6 +135,27 @@ def sembrar_poblacion_inicial(
                 rng_juego,
                 tick_actual=0,
                 techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+            )
+            # Registro en la tabla histórica 'entidades' (2026-08-23): antes
+            # solo se registraban ahí los nacimientos en partida (evento
+            # Nacimiento, ver sistema_reproduccion.py) -- la población
+            # fundadora nunca entraba en esa tabla, así que el INNER JOIN
+            # de Persistencia.cargar_snapshot() con 'entidades' descartaba
+            # en silencio a todo fundador que siguiera vivo al guardar
+            # (comprobado con un smoke test real: de 15 criaturas vivas
+            # tras 600 ticks, solo las 5 nacidas en partida sobrevivían al
+            # roundtrip guardar/cargar). id_madre/id_padre quedan en None
+            # -- un fundador no tiene progenitores que persistir.
+            identidad_fundador = gestor.obtener_componente(eid, Identidad)
+            persistencia.registrar_entidad_nueva(
+                eid,
+                {
+                    "especie": especie.value,
+                    "nombre": identidad_fundador.nombre,
+                    "tick_nacimiento": identidad_fundador.tick_nacimiento,
+                    "id_madre": None,
+                    "id_padre": None,
+                },
             )
 
 
@@ -206,8 +228,34 @@ def main() -> None:
     alto = int(config.get("mundo", {}).get("grid_alto", 28))
     mundo = Mundo(ancho, alto, config, rng_mapa)
 
-    sembrar_poblacion_inicial(gestor, mundo, config, rng_juego)
+    # Carga opcional de partida guardada (2026-08-23): detrás de una
+    # variable de entorno explícita para no tocar el comportamiento por
+    # defecto (mundo fresco cada arranque) ya validado hoy. Solo el
+    # ESTADO dinámico de las celdas se restaura desde la BD (fertilidad,
+    # charcos, fuego, recursos) -- el TERRENO (tipo de celda, relieve) lo
+    # sigue generando Mundo() a partir de la semilla de config, así que
+    # continuar una partida exige no haber cambiado semilla_por_defecto
+    # entre arranques. Esto no está validado con un smoke test dedicado
+    # todavía (pendiente honesto, no una garantía).
+    continuar_partida = os.environ.get("BOSQUE_CONTINUAR") == "1"
+    partida_restaurada = False
+    if continuar_partida:
+        partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego)
+
+    if not partida_restaurada:
+        sembrar_poblacion_inicial(gestor, mundo, config, rng_juego, persistencia)
+
     sistemas = instanciar_sistemas(config, rng_juego)
+
+    persistencia_cfg = config.get("persistencia", {})
+    # PROVISIONAL (2026-08-23): cadencia de autoguardado sin calibrar
+    # contra el coste real de guardar_snapshot a escala -- 5 días es una
+    # hipótesis de partida razonable (guardar_snapshot es una transacción
+    # con DELETE+INSERT masivo de componentes_estado, no algo a hacer cada
+    # tick), no una cifra medida contra el motor en marcha.
+    guardar_cada_ticks = Reloj.TICKS_POR_DIA * int(
+        persistencia_cfg.get("guardar_cada_dias", 5)
+    )
 
     modo_visual = os.environ.get("BOSQUE_MODO_VISUAL") == "1"
     auto_ticks = int(os.environ.get("BOSQUE_AUTO_TICKS", "0"))
@@ -234,6 +282,7 @@ def main() -> None:
             for ev in eventos_tick:
                 if ev.tipo == "Nacimiento":
                     persistencia.registrar_entidad_nueva(ev.entidad_id, ev.datos)
+            persistencia.persistir_eventos(eventos_tick)
 
             lineas_narradas = narrar(eventos_tick, gestor)
             for linea in lineas_narradas:
@@ -248,11 +297,20 @@ def main() -> None:
 
             bus_eventos.limpiar()
 
+            if guardar_cada_ticks > 0 and reloj.tick_actual % guardar_cada_ticks == 0:
+                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego)
+
     except KeyboardInterrupt:
         pass
     finally:
         if servidor_web is not None:
             servidor_web.detener()
+        # Guardado final incondicional: cubre tanto la interrupción manual
+        # (Ctrl+C) como el fin de una tanda BOSQUE_AUTO_TICKS -- sin este
+        # guardado, un autoguardado periódico que aún no llegó a su
+        # cadencia dejaría la BD desactualizada respecto al último estado
+        # real simulado.
+        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego)
 
 
 if __name__ == "__main__":

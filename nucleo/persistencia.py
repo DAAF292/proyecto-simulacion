@@ -11,6 +11,7 @@ Gestiona el guardado y carga incremental de crónica y snapshots atómicos de:
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import pickle
 import random
@@ -38,11 +39,83 @@ from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 
-VERSION_ESQUEMA = "0.20-fase0"
+def _serializar_snapshot_padre(gest: Gestacion | None) -> dict[str, Any]:
+    """
+    Convierte la instantánea del padre guardada en Gestacion (dimensiones_
+    padre, temperamento_padre, capacidad_mental_padre, duracion_gestacion_
+    padre, tamano_camada) en un dict serializable a JSON.
+
+    CORRECCIÓN (2026-08-23): esta función y su inversa (_reconstruir_
+    gestacion, más abajo) reemplazan un guardado/carga que leía/escribía
+    gest.padre_id y gest.padre_snapshot -- campos que Gestacion nunca tuvo
+    en su forma actual (ver componentes/gestacion.py: es id_padre, y en
+    vez de un único snapshot genérico tiene cuatro campos tipados más
+    tamano_camada). Nunca se detectó en producción porque main.py no
+    invoca guardar_snapshot/cargar_snapshot -- se encontró auditando el
+    código, no por una excepción real. tick_inicio e id_padre SÍ tienen
+    sus propias columnas (no van aquí); todo lo demás de la instantánea
+    del padre se empaqueta en un único blob JSON, igual que antes,
+    evitando así añadir columnas nuevas.
+    """
+    if gest is None:
+        return {}
+    return {
+        "dimensiones_padre": dataclasses.asdict(gest.dimensiones_padre),
+        "temperamento_padre": dataclasses.asdict(gest.temperamento_padre),
+        "capacidad_mental_padre": dataclasses.asdict(gest.capacidad_mental_padre),
+        "duracion_gestacion_padre": gest.duracion_gestacion_padre,
+        "tamano_camada": gest.tamano_camada,
+    }
+
+
+def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, Any]) -> Gestacion:
+    """Inversa de _serializar_snapshot_padre -- ver su docstring."""
+    return Gestacion(
+        tick_inicio=tick_inicio,
+        id_padre=id_padre,
+        dimensiones_padre=DimensionesFisicas(**snapshot["dimensiones_padre"]),
+        temperamento_padre=Temperamento(**snapshot["temperamento_padre"]),
+        capacidad_mental_padre=CapacidadMental(**snapshot["capacidad_mental_padre"]),
+        duracion_gestacion_padre=snapshot["duracion_gestacion_padre"],
+        tamano_camada=snapshot["tamano_camada"],
+    )
+
+
+VERSION_ESQUEMA = "0.21-fase0"
+
+_TABLAS_APP = (
+    "entidades",
+    "componentes_estado",
+    "plantas_estado",
+    "necromasa_estado",
+    "celdas_estado",
+    "cronica_eventos",
+    "configuracion_ejecucion",
+)
 
 
 class Persistencia:
-    """Gestiona la base de datos SQLite para snapshots y crónica histórica."""
+    """Gestiona la base de datos SQLite para snapshots y crónica histórica.
+
+    Versionado de esquema (2026-08-23, feedback ya registrado en memoria del
+    proyecto: "cambio de esquema exige DROP TABLE, no DELETE FROM"):
+    `CREATE TABLE IF NOT EXISTS` nunca migra columnas -- si el código cambia
+    la forma de una tabla (como pasó hoy con componentes_estado y
+    configuracion_ejecucion, verificado con PRAGMA table_info contra un
+    datos/bosque.db real que llevaba varios días de desfase), una base de
+    datos ya existente se queda con el esquema VIEJO para siempre, y
+    cualquier INSERT/SELECT contra las columnas nuevas falla en tiempo de
+    ejecución. Antes de crear las tablas, se compara VERSION_ESQUEMA contra
+    lo que ya hay guardado; si no coincide (o la tabla de control ni
+    siquiera existe todavía, o existe con columnas de una versión anterior
+    a este propio versionado), se hace DROP explícito de las siete tablas
+    de la aplicación antes de recrearlas. No hay migración de datos entre
+    versiones de esquema -- en esta fase del proyecto (todavía sin
+    campañas reales que conservar) perder una partida guardada al cambiar
+    el modelo de datos es aceptable; lo que NO es aceptable es que la app
+    siga funcionando en apariencia mientras escribe o lee contra columnas
+    equivocadas.
+    """
 
     def __init__(self, ruta_db: Path) -> None:
         self.ruta_db = ruta_db
@@ -52,10 +125,31 @@ class Persistencia:
     def _conectar(self) -> sqlite3.Connection:
         return sqlite3.connect(self.ruta_db)
 
+    def _version_desactualizada(self, cur: sqlite3.Cursor) -> bool:
+        """True si hay que purgar el esquema antes de (re)crear las tablas:
+        la tabla de control no existe, existe pero con columnas de una
+        versión anterior a este versionado (OperationalError), o su valor
+        guardado no coincide con VERSION_ESQUEMA."""
+        try:
+            cur.execute("SELECT valor FROM configuracion_ejecucion WHERE clave = 'version_esquema'")
+            fila = cur.fetchone()
+            return fila is None or fila[0] != VERSION_ESQUEMA
+        except sqlite3.OperationalError:
+            return True
+
+    def _purgar_esquema_anterior(self, cur: sqlite3.Cursor) -> None:
+        for tabla in _TABLAS_APP:
+            cur.execute(f"DROP TABLE IF EXISTS {tabla}")
+
     def _inicializar_tablas(self) -> None:
-        """Crea el esquema relacional si no existe."""
+        """Crea el esquema relacional si no existe, purgando primero
+        cualquier versión anterior incompatible (ver docstring de la clase)."""
         with self._conectar() as con:
             cur = con.cursor()
+
+            if self._version_desactualizada(cur):
+                self._purgar_esquema_anterior(cur)
+                con.commit()
 
             # 1. Registro permanente de entidades históricas
             cur.execute(
@@ -192,6 +286,14 @@ class Persistencia:
                 )
                 """
             )
+            # Registrar la versión ya aquí (no solo al primer guardar_snapshot):
+            # una base de datos recién creada que nunca llega a guardar una
+            # partida no debería purgarse en cada arranque solo porque la
+            # tabla de control está vacía.
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('version_esquema', ?)",
+                (VERSION_ESQUEMA,),
+            )
             con.commit()
 
     def registrar_entidad_nueva(self, entidad_id: int, datos: dict[str, Any]) -> None:
@@ -315,8 +417,8 @@ class Persistencia:
                             rep.sexo.value,
                             rep.duracion_gestacion_dias,
                             gest.tick_inicio if gest else None,
-                            gest.padre_id if gest else None,
-                            json.dumps(gest.padre_snapshot) if gest and gest.padre_snapshot else None,
+                            gest.id_padre if gest else None,
+                            json.dumps(_serializar_snapshot_padre(gest)) if gest else None,
                             json.dumps(mem.recuerdos) if mem else None,
                         )
                     )
@@ -406,7 +508,16 @@ class Persistencia:
             fila_tick = cur.fetchone()
             if not fila_tick:
                 return False
-            reloj._tick_actual = int(fila_tick[0])
+            # CORRECCIÓN (2026-08-23): Reloj.tick_actual es un atributo de
+            # instancia plano fijado en __init__ (nucleo/reloj.py), NO una
+            # property respaldada por _tick_actual -- escribir en
+            # reloj._tick_actual creaba un atributo nuevo sin efecto real,
+            # dejando el reloj congelado en tick 0 tras cada carga aunque
+            # cargar_snapshot devolviera True. Bug preexistente, no
+            # introducido en la reescritura de hoy; detectado al probar el
+            # roundtrip guardar/cargar por primera vez (nunca se había
+            # ejecutado antes porque main.py no llamaba a cargar_snapshot).
+            reloj.tick_actual = int(fila_tick[0])
 
             cur.execute("SELECT valor FROM configuracion_ejecucion WHERE clave = 'rng_juego_state'")
             fila_rng = cur.fetchone()
@@ -498,14 +609,10 @@ class Persistencia:
                 )
 
                 if fila[42] is not None:
-                    padre_snap = json.loads(fila[44]) if fila[44] else {}
+                    snapshot_padre = json.loads(fila[44]) if fila[44] else {}
                     gestor.anadir_componente(
                         eid,
-                        Gestacion(
-                            tick_inicio=fila[42],
-                            padre_id=fila[43],
-                            padre_snapshot=padre_snap,
-                        ),
+                        _reconstruir_gestacion(tick_inicio=fila[42], id_padre=fila[43], snapshot=snapshot_padre),
                     )
 
                 recuerdos_dict = json.loads(fila[45]) if fila[45] else {}

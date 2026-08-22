@@ -21,6 +21,7 @@ from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
+from componentes.temperamento import Temperamento
 # NOTA (2026-08-23): Gestacion se separó a su propio módulo
 # (componentes/gestacion.py, ver su docstring) para no mezclar el rasgo
 # fijo de por vida (Reproduccion) con el estado de un embarazo concreto.
@@ -97,6 +98,7 @@ class SistemaMovimiento:
             pf = gestor.obtener_componente(eid, PoolFisico)
             mem = gestor.obtener_componente(eid, MemoriaEspacial)
             cap_mental = gestor.obtener_componente(eid, CapacidadMental)
+            temperamento = gestor.obtener_componente(eid, Temperamento)
 
             if intencion is None or pos is None or dims is None or ident is None:
                 continue
@@ -128,7 +130,7 @@ class SistemaMovimiento:
                 dx, dy = self._calcular_pareja(gestor, eid, ident.especie, pos.x, pos.y, radio)
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
-                    gestor, eid, ident.especie, pos.x, pos.y, mem, cap_mental
+                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
                 )
 
             if dx != 0 or dy != 0:
@@ -371,6 +373,45 @@ class SistemaMovimiento:
 
         return self._paso_aleatorio()
 
+    def _buscar_conspecifico_mas_cercano(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        especie: Especie,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+    ) -> tuple[int, int] | None:
+        """
+        Posición del individuo de la MISMA especie más cercano dentro del
+        radio de percepción (cualquier sexo/edad -- a diferencia de
+        _calcular_pareja, esto es agrupamiento social, no búsqueda de
+        pareja reproductiva). None si no percibe ninguno. Mismo patrón de
+        búsqueda lineal ya usado en _calcular_caza/_calcular_pareja de este
+        archivo -- O(N) por individuo, aceptable a la escala de población
+        actual (decenas de individuos), señalado como límite conocido de
+        escalabilidad si la población crece en órdenes de magnitud.
+        """
+        candidatos = []
+        for eid in gestor.entidades_con(Identidad, Posicion):
+            if eid == entidad_id:
+                continue
+            ident_c = gestor.obtener_componente(eid, Identidad)
+            if ident_c is None or ident_c.especie != especie:
+                continue
+            pos_c = gestor.obtener_componente(eid, Posicion)
+            if pos_c is None:
+                continue
+            dist = abs(pos_c.x - pos_x) + abs(pos_c.y - pos_y)
+            if dist <= radio:
+                candidatos.append((dist, pos_c.x, pos_c.y))
+
+        if not candidatos:
+            return None
+        candidatos.sort()
+        _, cx, cy = candidatos[0]
+        return (cx, cy)
+
     def _calcular_deambular(
         self,
         gestor: GestorEntidades,
@@ -378,43 +419,83 @@ class SistemaMovimiento:
         especie: Especie,
         pos_x: int,
         pos_y: int,
+        radio: int,
         mem: MemoriaEspacial | None,
         cap_mental: CapacidadMental | None,
+        temperamento: Temperamento | None,
     ) -> tuple[int, int]:
         """
-        Paso de dispersión aleatoria, salvo SESGO DE TERRITORIO (2026-08-22,
-        propuesta de Diego, confirmada: "a nivel biológico lo común es
-        mantenerse cerca de las fuentes de alimentación, agua y seguridad").
+        Cascada de sesgos sobre el paso de dispersión, evaluados en este
+        orden: SESGO GREGARIO -> SESGO DE TERRITORIO -> paso aleatorio.
 
-        Sin objetivo activo (COMER/BEBER/CAZAR/HUIR/BUSCAR_PAREJA), una
-        criatura no debería dispersarse sin rumbo si ya conoce dónde hay
-        recursos -- eso es plausible para un individuo consciente que
-        delibera (gnomo), pero no para fauna sin agencia: lo esperable en
-        fauna real es permanecer dentro de su área de campeo (home range)
-        en torno a comida/agua/seguridad conocidas, no vagar uniformemente.
+        SESGO GREGARIO (reconstruido 2026-08-23 desde su propia
+        documentación -- ver nota de reconstrucción más abajo): con
+        probabilidad = Temperamento.sociabilidad DIRECTA, sin escalar (así
+        lo describe sistema_reproduccion.py al contrastarse con
+        factor_base_concepcion: "el sesgo gregario de sociabilidad... SI
+        usa sociabilidad directa, sin escalar"), la criatura busca al
+        conspecífico más cercano en su radio de percepción y avanza hacia
+        él si está a más de social.distancia_deseada_conspecifico. Sin
+        gating por consciencia -- a diferencia del sesgo de territorio,
+        el agrupamiento social no se documentó nunca como exclusivo de
+        fauna sin agencia; es plausible tanto para gnomo como para el
+        resto. Si la tirada de sociabilidad no dispara el sesgo, o no hay
+        ningún conspecífico perceptible, se cae al siguiente nivel de la
+        cascada.
 
-        Gating por CapacidadMental.consciencia (decision.umbral_consciencia_
-        agencia, PROVISIONAL=0.3): reutiliza el atributo declarado desde el
-        Bloque F1 y sin consumidor hasta ahora (ver componentes/
+        SESGO DE TERRITORIO (2026-08-22, propuesta de Diego, confirmada:
+        "a nivel biológico lo común es mantenerse cerca de las fuentes de
+        alimentación, agua y seguridad"). Sin objetivo activo (COMER/
+        BEBER/CAZAR/HUIR/BUSCAR_PAREJA), una criatura no debería
+        dispersarse sin rumbo si ya conoce dónde hay recursos -- eso es
+        plausible para un individuo consciente que delibera (gnomo), pero
+        no para fauna sin agencia: lo esperable en fauna real es
+        permanecer dentro de su área de campeo (home range) en torno a
+        comida/agua/seguridad conocidas, no vagar uniformemente. Gating
+        por CapacidadMental.consciencia (decision.umbral_consciencia_
+        agencia, PROVISIONAL=0.3): reutiliza el atributo declarado desde
+        el Bloque F1 y sin consumidor hasta el 22-08 (ver componentes/
         capacidad_mental.py) para diferenciar el grado de agencia -- por
-        debajo del umbral, la criatura queda sujeta al sesgo de territorio;
-        por encima (hoy, solo gnomo: rango racial 0.6-0.9), se asume que su
-        deambular puede reflejar decisiones no reducibles a "quedarse cerca
-        de lo conocido" y se deja el paso aleatorio intacto. Es un mecanismo
-        de gating GENERAL, no un caso especial de especie: el día que otra
-        especie tenga consciencia alta, quedará exenta automáticamente sin
-        tocar este código (leyes neutras, nunca teleológicas).
+        debajo del umbral, la criatura queda sujeta al sesgo de
+        territorio; por encima (hoy, solo gnomo: rango racial 0.6-0.9), se
+        asume que su deambular puede reflejar decisiones no reducibles a
+        "quedarse cerca de lo conocido". Mecanismo de gating GENERAL, no
+        un caso especial de especie: el día que otra especie tenga
+        consciencia alta, quedará exenta automáticamente sin tocar este
+        código (leyes neutras, nunca teleológicas). Reutiliza
+        nucleo.memoria.objetivo_recordado.
 
-        Reutiliza nucleo.memoria.objetivo_recordado tal cual existe hoy
-        (memoria, tipo, pos_x, pos_y, cap_mental, rng, config) -- misma
-        función que usan ahora _calcular_forrajeo/_calcular_hidratacion más
-        arriba en este archivo (corregidas el 2026-08-23, mismo cambio:
-        llamaban a `mem.obtener_recuerdos(tipo)`, método que MemoriaEspacial
-        nunca tuvo, seguido de una llamada a objetivo_recordado con una
-        firma posicional que no coincidía con la real -- código muerto que
-        habría crasheado en cuanto se alcanzara. Se detectó al escribir
-        este método y se corrigió también allí, no solo aquí).
+        NOTA DE RECONSTRUCCIÓN (2026-08-23): el sesgo gregario existió y
+        se confirmó con Diego en algún momento anterior a hoy -- consta,
+        con esas palabras, en el docstring de componentes/temperamento.py
+        ("el sesgo gregario en deambular, surgido de una pregunta directa
+        de Diego") y en el de sistema_reproduccion.py ("SistemaMovimiento
+        ya se encarga de acercar a los coespecíficos"). No sobrevivió al
+        refactor de necromasa/pipeline trifásico del 22-08 -- mismo patrón
+        de pérdida por colisión de ediciones diagnosticado ese mismo día
+        para nacer_criatura, solo que este caso no lanzaba ninguna
+        excepción (la clave de config quedaba leída y sin usar), así que
+        no se detectó hasta auditar el código funcionalidad por
+        funcionalidad. La CASCADA relativa entre gregario y territorio (aquí:
+        gregario primero, territorio como líneas de respaldo) es una
+        reconstrucción razonada mía, no una confirmación literal de Diego
+        -- se apoya en que el gregario nunca se documentó con gating de
+        consciencia (aplicaría a las cuatro especies) mientras que el de
+        territorio sí lo tiene, así que probar primero el mecanismo menos
+        restrictivo y caer al más restrictivo es el orden que preserva el
+        comportamiento de ambos sin que uno anule sistemáticamente al
+        otro. Queda abierta a que Diego la corrija si recuerda un orden
+        distinto ya decidido.
         """
+        if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
+            objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
+                gestor, entidad_id, especie, pos_x, pos_y, radio
+            )
+            if objetivo_conspecifico is not None:
+                dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
+                if dist > self.dist_deseada_conspecifico:
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
+
         if (
             mem is not None
             and cap_mental is not None

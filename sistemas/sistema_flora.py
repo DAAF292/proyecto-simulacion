@@ -15,6 +15,7 @@ from typing import Any
 from componentes.planta import Planta
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
+from nucleo.clima import estacion_actual as _estacion_actual_desde_indice
 from nucleo.entidad import GestorEntidades, crear_planta
 from nucleo.eventos import BusEventos
 from nucleo.flora import factor_produccion, factor_ribera
@@ -57,7 +58,12 @@ class SistemaFlora:
         Ejecuta el ciclo biológico de la flora al inicio de cada día.
         """
         zona = mundo.territorio.zonas[0]
-        estacion_actual = reloj.estacion
+        # (2026-08-23) Reloj.estacion es un int creciente, no el Enum
+        # Estacion que factor_produccion() necesita (llama a .value sobre
+        # él) -- este código pasaba el int en crudo, mismo bug que se
+        # encontró en sistema_necesidades.py. Renombrada la variable local
+        # para no sombrear la función importada de nucleo.clima.
+        estacion_hoy = _estacion_actual_desde_indice(reloj.estacion)
         clima_actual = getattr(zona, "clima_actual", None)
 
         plantas_entidades = sorted(gestor.entidades_con(Planta, Posicion))
@@ -86,7 +92,7 @@ class SistemaFlora:
                 especie_cfg=cfg_esp,
                 lluvia_celda=celda.lluvia,
                 temp_celda=celda.temperatura,
-                estacion=estacion_actual,
+                estacion=estacion_hoy,
                 clima=clima_actual,
                 config=self.config,
             )
