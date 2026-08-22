@@ -1,9 +1,40 @@
-"""Mundo: el conjunto completo, representado como grafo de territorios
-(informe tecnico, seccion 2.1). En fase 0 contiene un unico Territorio.
 """
+nucleo/mundo.py
+
+Contenedor de nivel superior en la jerarquía espacial (Mundo -> Territorio -> ZonaBioma -> Celda).
+Inicializa el grafo de territorios y propaga la configuración y el generador RNG del mapa.
+"""
+
+from __future__ import annotations
+
+import random
+from typing import Any
+
+from nucleo.territorio import Territorio
 
 
 class Mundo:
-    def __init__(self, semilla: int, territorios: list):
-        self.semilla = semilla
-        self.territorios = territorios
+    """
+    Representa el mundo completo de simulación.
+    En la fase actual contiene un único territorio activo.
+    """
+
+    def __init__(
+        self,
+        ancho: int,
+        alto: int,
+        config: dict[str, Any],
+        rng: random.Random,
+    ) -> None:
+        self.ancho = ancho
+        self.alto = alto
+        self.config = config
+        self.rng = rng
+
+        # Instanciar el territorio inicial con la configuración y RNG del mapa
+        self.territorio = Territorio(
+            ancho=self.ancho,
+            alto=self.alto,
+            config=self.config,
+            rng=self.rng,
+        )
