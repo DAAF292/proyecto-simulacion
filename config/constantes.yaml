@@ -273,6 +273,15 @@ depredacion:
   factor_dano_base: 0.4
   eficiencia_biomasa_saciedad: 1.5
   eficiencia_biomasa_hidratacion: 0.5
+  # Coste de forrajeo vs. beneficio (2026-08-23, ver sistema_movimiento.py:
+  # _calcular_caza para el diagnóstico completo). Ambos valores elegidos
+  # a propósito por debajo de la especie más pequeña actual (ardilla,
+  # 0.3-0.6kg) para no afectar a las cuatro especies de hoy -- son
+  # salvaguarda para fauna futura mucho más pequeña, no una recalibración
+  # de la caza actual. PROVISIONAL, verificado solo con un barrido de
+  # calibración ligera comprobando que NO cambian la dinámica de hoy.
+  fraccion_minima_peso_presa: 0.001
+  peso_referencia_deteccion_plena: 0.1
 
 # ------------------------------------------------------------------------------
 # 8. Metabolismo, Necesidades y Estados Críticos (Fase 3)

@@ -58,6 +58,47 @@ def radio_individual(agudeza_sensorial: float, radio_min: int, radio_max: int) -
     return max(radio_min, min(radio_max, round(bruto)))
 
 
+def radio_efectivo_por_peso(radio_base: int, peso_objetivo: float, peso_referencia_deteccion_plena: float) -> int:
+    """
+    Reduce el radio de percepción base cuando el OBJETIVO es pequeño en
+    términos absolutos, no relativos a quien percibe (2026-08-23,
+    pregunta de Diego: "no debería ser igual de fácil detectar a una
+    mosca que a un gnomo"). Complementa radio_individual (que solo
+    depende de la agudeza sensorial de quien mira) con un segundo factor
+    que depende del propio peso del objetivo -- un hecho físico del
+    objeto, no de quien lo busca: la misma mosca es igual de difícil de
+    ver para un halcón que para un lobo, cambia el radio BASE de cada
+    observador (agudeza_sensorial), no cuánto penaliza el tamaño del
+    objetivo.
+
+    Deliberadamente NO reutiliza nucleo.disposicion.magnitud_disposicion_
+    por_peso, aunque ambas dependan de peso: esa función mide diferencia
+    RELATIVA entre dos individuos (para decidir si cazar o huir), y su
+    curva, calculada a mano contra un lobo (60-90kg) cazando un conejo
+    (1.5-3kg) real, da un factor de penalización de hasta el 78% --
+    aplicarla aquí habría hecho casi indetectable a la presa legítima que
+    hoy sostiene al lobo, agravando el problema de inanición que ya se
+    diagnosticó el 23-08. Esta función usa en cambio el peso ABSOLUTO del
+    objetivo contra una única referencia de "plena visibilidad", con una
+    curva propia (exponente 2/3, aproximando cómo escala el área
+    transversal visible con la masa en cuerpos isométricos -- más
+    conspicuo cuanto más "superficie" presenta, no solo más pesado).
+
+    peso_referencia_deteccion_plena (PROVISIONAL=0.1kg, config/
+    constantes.yaml sección depredacion): elegido a propósito por DEBAJO
+    del peso mínimo de la especie más pequeña hoy (ardilla, 0.3-0.6kg),
+    así que con las cuatro especies actuales esta función siempre
+    devuelve radio_base sin ningún efecto -- es una salvaguarda para
+    fauna futura mucho más pequeña (insectos), no un ajuste que deba
+    notarse en la calibración de hoy. Verificado con el mismo barrido de
+    calibración ligera que el resto de piezas de esta sesión.
+    """
+    if peso_objetivo >= peso_referencia_deteccion_plena:
+        return radio_base
+    factor = (peso_objetivo / peso_referencia_deteccion_plena) ** (2.0 / 3.0)
+    return max(0, min(radio_base, round(radio_base * factor)))
+
+
 def celda_percibida(zona, x: int, y: int, radio: int, cumple):
     """Celda mas cercana que cumple el predicado `cumple(celda)`, solo
     entre las que caen dentro del radio de percepcion (distancia

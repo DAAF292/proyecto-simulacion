@@ -33,7 +33,7 @@ from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.entidad import GestorEntidades
 from nucleo.memoria import objetivo_recordado
 from nucleo.mundo import Mundo
-from nucleo.percepcion import radio_individual
+from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
 from nucleo.relieve import pendiente_maxima_transitable
 
 
@@ -79,6 +79,17 @@ class SistemaMovimiento:
         )
         self.umbral_consciencia_agencia: float = float(
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
+
+        # Coste de forrajeo vs. beneficio (2026-08-23, pregunta de Diego:
+        # "un lobo intenta depredar una mosca si se introduce" -- ver
+        # docstring de _calcular_caza para el diagnóstico completo).
+        cfg_dep = self.config.get("depredacion", {})
+        self.fraccion_minima_peso_presa: float = float(
+            cfg_dep.get("fraccion_minima_peso_presa", 0.001)
+        )
+        self.peso_referencia_deteccion_plena: float = float(
+            cfg_dep.get("peso_referencia_deteccion_plena", 0.1)
         )
 
     def ejecutar(self, gestor: GestorEntidades, mundo: Mundo) -> None:
@@ -211,17 +222,65 @@ class SistemaMovimiento:
         peso_cazador: float,
         radio: int,
     ) -> tuple[int, int]:
-        """Avanza hacia la presa válida más cercana dentro del radio sensorial."""
+        """
+        Avanza hacia la presa válida más cercana dentro del radio sensorial.
+
+        DOS FILTROS AÑADIDOS (2026-08-23, pregunta de Diego: "un lobo
+        intenta depredar una mosca si se introduce" -- confirmado real:
+        antes de este cambio, la única condición para ser "presa válida"
+        aquí era peso_p < peso_cazador, sin ningún suelo. sistema_
+        depredacion.py:_es_presa_valida sí tenía un umbral de disposición,
+        pero esa magnitud CRECE sin techo cuanto más pequeña es la presa
+        -- una mosca frente a un lobo lo habría superado con más margen
+        que un conejo, exactamente al revés de lo que hace falta).
+
+        1. Viabilidad energética (fraccion_minima_peso_presa, PROVISIONAL
+           =0.001): una presa por debajo de ese porcentaje del peso del
+           cazador no compensa el coste de perseguirla -- se descarta
+           ANTES de caminar hacia ella, no solo al resolver el ataque.
+           Elegido para no tocar ninguna de las cuatro especies actuales
+           (el lobo más ligero, 60kg, exige solo 0.06kg -- muy por debajo
+           de la ardilla más ligera, 0.3kg): esto es una salvaguarda para
+           fauna futura mucho más pequeña, no un ajuste que deba notarse
+           hoy. Se aplica también en sistema_depredacion.py:
+           _es_presa_valida, para el caso en que coincidan en la misma
+           celda por casualidad sin haber caminado el cazador hacia ella.
+
+        2. Detectabilidad por tamaño absoluto (nucleo.percepcion.
+           radio_efectivo_por_peso, peso_referencia_deteccion_plena
+           PROVISIONAL=0.1kg): el radio de percepción hasta hoy solo
+           dependía de la agudeza sensorial de quien mira, nunca del
+           tamaño de lo mirado -- una mosca y un gnomo eran igual de
+           fáciles de detectar a la misma distancia. Un objetivo por
+           debajo del peso de referencia reduce el radio efectivo SOLO
+           para esa búsqueda de presa, calculado por candidato (cada uno
+           tiene su propio radio efectivo según su propio peso). Mismo
+           criterio de no tocar a las especies actuales: 0.1kg está por
+           debajo de la ardilla (0.3-0.6kg), así que hoy este filtro no
+           cambia nada observable, solo prepara el terreno para fauna
+           mucho más pequeña.
+
+        Ninguno de los dos umbrales se ha calibrado con el harness
+        completo -- ver commit para el barrido de verificación de que,
+        en efecto, no perturban la dinámica poblacional de hoy.
+        """
+        peso_minimo_viable = peso_cazador * self.fraccion_minima_peso_presa
         presas = []
         for eid in gestor.entidades_con(Posicion, DimensionesFisicas):
             if eid == cazador_id:
                 continue
             pos_p = gestor.obtener_componente(eid, Posicion)
             dims_p = gestor.obtener_componente(eid, DimensionesFisicas)
-            if pos_p and dims_p and dims_p.peso < peso_cazador:
-                dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
-                if dist <= radio:
-                    presas.append((dist, pos_p.x, pos_p.y))
+            if not (pos_p and dims_p):
+                continue
+            if dims_p.peso >= peso_cazador or dims_p.peso < peso_minimo_viable:
+                continue
+            dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
+            radio_efectivo = radio_efectivo_por_peso(
+                radio, dims_p.peso, self.peso_referencia_deteccion_plena
+            )
+            if dist <= radio_efectivo:
+                presas.append((dist, pos_p.x, pos_p.y))
 
         if not presas:
             return self._paso_aleatorio()
