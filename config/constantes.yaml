@@ -137,10 +137,42 @@ descomposicion:
 flora:
   bono_produccion_ribera: 0.2
   tasa_retorno_mantillo: 0.05
+  # fraccion_siembra_inicial (PROVISIONAL, calibración numérica -- ver
+  # diagnóstico de inanición 2026-08-23, nucleo/entidad.py:sembrar_flora_inicial
+  # y main.py): fracción de las celdas tiene_recurso=True de cada especie
+  # que reciben una entidad Planta fundadora (etapa=1.0) al generar el
+  # mundo. Sin esto, sistema_flora.py nunca tiene ninguna Planta que
+  # procesar -- crear_planta solo se invoca desde la propagación, que
+  # necesita una Planta YA existente para disparerse, así que sin siembra
+  # inicial el conteo de Plantas es cero para siempre y toda la comida del
+  # mundo es un fondo fijo no renovable (celda.recursos se rellena a
+  # capacidad_maxima en la generación y sistema_recursos.py lo consume
+  # directamente, sin depender de ninguna entidad). Valor por defecto sin
+  # calibrar contra el motor en marcha todavía -- hipótesis de partida,
+  # pendiente de contrastar con el harness de calibración ligera.
+  fraccion_siembra_inicial: 0.08
   especies:
     hierba_silvestre:
       biomas: [pradera, bosque]
-      num_manchas: 4
+      # celdas_por_mancha_objetivo (2026-08-23, sustituye a num_manchas
+      # fijo): tamaño de mancha objetivo en celdas, del que se DERIVA el
+      # número de manchas (num_manchas_calculado = max(1, round(objetivo /
+      # celdas_por_mancha_objetivo)), ver nucleo/zona_bioma.py) en vez de
+      # al revés. Con num_manchas fijo, un mapa más grande no producía más
+      # manchas -- producía manchas más grandes (objetivo crece con el
+      # área, num_manchas no), degenerando en un único "supercontinente"
+      # dominante por especie (confirmado empíricamente: 500-975 de 1600
+      # celdas en una sola mancha de hierba en el mapa 40x40 actual). Con
+      # el tamaño de mancha como parámetro fijo en su lugar, es el NÚMERO
+      # de manchas el que crece con el área -- más parches de tamaño
+      # similar en un mapa más grande, no menos parches gigantescos.
+      # Valores calibrados para reproducir aproximadamente el num_manchas
+      # de hoy en el mapa 40x40 actual (script de 5 semillas, ver
+      # diagnóstico de inanición 2026-08-23) -- ancla de continuidad, no
+      # una cifra recalibrada desde cero.
+      celdas_por_mancha_objetivo:
+        pradera: 180
+        bosque: 12
       proporcion:
         pradera: 0.75
         bosque: 0.2
@@ -163,7 +195,7 @@ flora:
           valor_hidratacion: 0.12
     manzano:
       biomas: [bosque]
-      num_manchas: 4
+      celdas_por_mancha_objetivo: 10
       proporcion: 0.15
       tasa_crecimiento_por_dia: 0.08
       prob_propagacion_por_dia: 0.02
@@ -180,7 +212,7 @@ flora:
           categoria: material
     cactus:
       biomas: [desierto]
-      num_manchas: 3
+      celdas_por_mancha_objetivo: 3
       proporcion: 0.15
       tasa_crecimiento_por_dia: 0.05
       prob_propagacion_por_dia: 0.015
@@ -197,7 +229,7 @@ flora:
           categoria: material
     liquen:
       biomas: [montana]
-      num_manchas: 2
+      celdas_por_mancha_objetivo: 12
       proporcion: 0.1
       tasa_crecimiento_por_dia: 0.03
       prob_propagacion_por_dia: 0.01
@@ -212,7 +244,7 @@ flora:
           valor_hidratacion: 0.03
     musgo:
       biomas: [tundra]
-      num_manchas: 2
+      celdas_por_mancha_objetivo: 4
       proporcion: 0.1
       tasa_crecimiento_por_dia: 0.03
       prob_propagacion_por_dia: 0.01

@@ -26,7 +26,7 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
-from nucleo.entidad import GestorEntidades, crear_criatura
+from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo.persistencia import Persistencia
@@ -166,6 +166,71 @@ def sembrar_poblacion_inicial(
             )
 
 
+def sembrar_flora_inicial(
+    gestor: GestorEntidades,
+    mundo: Mundo,
+    config: dict[str, Any],
+    rng_juego: random.Random,
+) -> None:
+    """
+    Siembra las entidades Planta fundadoras del mundo (2026-08-23,
+    diagnóstico de inanición del mismo día): sin esto, sistema_flora.py
+    nunca tiene ninguna Planta que procesar en toda la partida --
+    crear_planta solo se invocaba antes desde sistema_flora.py:
+    _intentar_propagacion, que a su vez necesita una Planta YA existente
+    para dispararse (2%-6%/día). Con cero Plantas al arrancar, esa
+    condición nunca se cumple: es un bootstrap circular imposible,
+    confirmado empíricamente corriendo el motor 3000 ticks y comprobando
+    que gestor.entidades_con(Planta) se mantiene en cero todo el tiempo.
+
+    Mientras tanto, celda.recursos SÍ se rellena a capacidad_maxima para
+    toda celda tiene_recurso=True en la generación del mundo (nucleo/
+    zona_bioma.py) y SÍ se consume directamente en
+    sistemas/sistema_recursos.py:_resolver_comer -- ninguna de las dos
+    cosas depende de que exista una entidad Planta. El resultado, antes de
+    este cambio: toda la comida del mundo era un fondo fijo sembrado una
+    única vez y consumido de forma monótona, sin ningún mecanismo de
+    reposición activo jamás.
+
+    Reutiliza crear_planta, la misma fábrica que ya usa la propagación --
+    no se inventa un mecanismo nuevo para esto. etapa=1.0 (madura, a
+    diferencia del etapa=0.1 que usa la propagación): estas plantas
+    representan vegetación YA establecida en la generación del mundo
+    (coherente con que su celda ya arranca con recurso a capacidad_maxima),
+    no colonización nueva de territorio virgen -- ese caso conceptualmente
+    distinto sigue siendo trabajo exclusivo de la propagación existente.
+
+    Muestreo aleatorio uniforme sobre TODAS las celdas tiene_recurso=True
+    de cada especie, sin agrupar por mancha individual (la identidad de
+    cada mancha no se conserva más allá de la generación, solo
+    tiene_recurso/tipo_recurso por celda) -- estadísticamente equivalente
+    a repartir semillas dentro de cada mancha en proporción a su tamaño,
+    sin necesitar guardar esa estructura aparte. Da a la propagación
+    varios frentes simultáneos por mancha en vez de uno solo que tendría
+    que cubrir cientos de celdas por su cuenta.
+
+    fraccion_siembra_inicial (PROVISIONAL, ver config/constantes.yaml
+    sección flora): calibración numérica sin contrastar aún contra el
+    harness -- hipótesis de partida, no cifra cerrada.
+    """
+    zona = mundo.territorio.zonas[0]
+    especies_cfg = config.get("flora", {}).get("especies", {})
+    fraccion_por_defecto = float(config.get("flora", {}).get("fraccion_siembra_inicial", 0.08))
+
+    celdas_por_especie: dict[str, list[tuple[int, int]]] = {}
+    for x, y, celda in zona.celdas():
+        if celda.tiene_recurso:
+            celdas_por_especie.setdefault(celda.tipo_recurso, []).append((x, y))
+
+    for especie_key, celdas in celdas_por_especie.items():
+        especie_cfg = especies_cfg.get(especie_key, {})
+        fraccion = float(especie_cfg.get("fraccion_siembra_inicial", fraccion_por_defecto))
+        n_semillas = max(1, round(len(celdas) * fraccion))
+        elegidas = rng_juego.sample(celdas, min(n_semillas, len(celdas)))
+        for pos_x, pos_y in elegidas:
+            crear_planta(gestor, especie_key, pos_x, pos_y, etapa=1.0)
+
+
 def ejecutar_tick(
     gestor: GestorEntidades,
     mundo: Mundo,
@@ -252,6 +317,7 @@ def main() -> None:
 
     if not partida_restaurada:
         sembrar_poblacion_inicial(gestor, mundo, config, rng_juego, persistencia)
+        sembrar_flora_inicial(gestor, mundo, config, rng_juego)
 
     sistemas = instanciar_sistemas(config, rng_juego)
 
