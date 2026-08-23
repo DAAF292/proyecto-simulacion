@@ -24,7 +24,7 @@ from nucleo.agua import hay_agua_potable
 from nucleo.celda import Celda
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos
-from nucleo.memoria import capacidad_memoria, registrar_recuerdo
+from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 
@@ -222,6 +222,27 @@ class SistemaRecursos:
             nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
 
             self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
+        else:
+            # (2026-08-23, diagnóstico de extinción local semilla 1) Sin
+            # esto, un individuo que llega aquí guiado por un recuerdo de
+            # "comida" (nucleo/memoria.py:objetivo_recordado, consultado
+            # en sistema_movimiento.py:_calcular_forrajeo SOLO cuando la
+            # percepción directa no encuentra nada en el radio -- es
+            # decir, exactamente cuando el entorno inmediato ya está
+            # agotado) y encuentra la celda igual de vacía, no tenía
+            # ninguna consecuencia: el recuerdo stale se queda en la cola
+            # FIFO tal cual, objetivo_recordado() sigue devolviendo la
+            # MISMA coordenada por ser la más cercana en la lista, y el
+            # individuo puede quedar atrapado volviendo sobre el mismo
+            # sitio muerto en vez de que la memoria se corrija y el
+            # próximo intento explore otra cosa. purgar_recuerdo_invalido
+            # ya existía en nucleo/memoria.py con esta finalidad exacta
+            # ("invalida de inmediato una coordenada si el recurso ya no
+            # existe al visitarlo") pero no se llamaba desde ningún sitio
+            # -- pieza diseñada, nunca conectada, misma clase de deuda que
+            # agudeza_sensorial antes de esta sesión.
+            if mem is not None:
+                purgar_recuerdo_invalido(mem, "comida", pos_x, pos_y)
 
     def _resolver_beber(
         self,
@@ -234,6 +255,12 @@ class SistemaRecursos:
     ) -> None:
         """Satisface la hidratación sobre aguas permanentes o charcos efímeros."""
         if not hay_agua_potable(celda):
+            # Mismo razonamiento que en _resolver_comer: si llegó aquí
+            # guiado por un recuerdo de "agua" que ya no es válido (charco
+            # efímero evaporado, por ejemplo), purgarlo evita que
+            # objetivo_recordado() lo siga devolviendo como el más cercano.
+            if mem is not None:
+                purgar_recuerdo_invalido(mem, "agua", pos_x, pos_y)
             return
 
         nec.hidratacion = min(1.0, nec.hidratacion + self.tasa_consumo_beber)
