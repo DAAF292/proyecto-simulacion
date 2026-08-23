@@ -365,7 +365,7 @@ def main() -> None:
                     print(linea)
 
             if modo_visual and servidor_web is not None:
-                instantanea = construir_instantanea(mundo, gestor, reloj, list(cola_cronica))
+                instantanea = construir_instantanea(mundo, gestor, reloj, list(cola_cronica), config)
                 servidor_web.actualizar_instantanea(instantanea)
                 time.sleep(float(config.get("visual", {}).get("segundos_por_tick", 0.4)))
 
