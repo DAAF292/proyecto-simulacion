@@ -30,7 +30,10 @@ class SistemaCicloVital:
         self.config = config
         self.rng = rng
         self.techo_prob_muerte: float = float(
-            config.get("ciclo_vital", {}).get("techo_probabilidad_muerte_vejez", 0.3)
+            config.get("ciclo_vital", {}).get("techo_probabilidad_muerte_vejez", 0.05)
+        )
+        self.exponente_curva_vejez: float = float(
+            config.get("ciclo_vital", {}).get("exponente_curva_vejez", 8.0)
         )
 
     def ejecutar(
@@ -58,6 +61,7 @@ class SistemaCicloVital:
                 dims=dims,
                 tick_actual=reloj.tick_actual,
                 techo_probabilidad=self.techo_prob_muerte,
+                exponente=self.exponente_curva_vejez,
             )
 
             if prob_muerte > 0.0 and self.rng.random() < prob_muerte:

@@ -426,22 +426,28 @@ class SistemaMovimiento:
     ) -> tuple[int, int]:
         """
         Cascada de sesgos sobre el paso de dispersión, evaluados en este
-        orden: SESGO GREGARIO -> SESGO DE TERRITORIO -> paso aleatorio.
+        orden: SESGO DE TERRITORIO -> SESGO GREGARIO -> paso aleatorio.
 
-        SESGO GREGARIO (reconstruido 2026-08-23 desde su propia
-        documentación -- ver nota de reconstrucción más abajo): con
-        probabilidad = Temperamento.sociabilidad DIRECTA, sin escalar (así
-        lo describe sistema_reproduccion.py al contrastarse con
-        factor_base_concepcion: "el sesgo gregario de sociabilidad... SI
-        usa sociabilidad directa, sin escalar"), la criatura busca al
-        conspecífico más cercano en su radio de percepción y avanza hacia
-        él si está a más de social.distancia_deseada_conspecifico. Sin
-        gating por consciencia -- a diferencia del sesgo de territorio,
-        el agrupamiento social no se documentó nunca como exclusivo de
-        fauna sin agencia; es plausible tanto para gnomo como para el
-        resto. Si la tirada de sociabilidad no dispara el sesgo, o no hay
-        ningún conspecífico perceptible, se cae al siguiente nivel de la
-        cascada.
+        ORDEN INVERTIDO (2026-08-23, decisión de Diego): la primera
+        versión de esta cascada (misma tarde de hoy) probaba el gregario
+        primero, por una reconstrucción razonada mía sin respaldo directo
+        de Diego -- ver commit anterior. Consultado explícitamente sobre
+        cuál debía ir primero, Diego no tenía un criterio cerrado pero
+        señaló el norte del proyecto: "nuestra atención es crear la
+        simulación lo más apegada a la realidad". Bajo ese criterio, la
+        fidelidad al área de campeo (sitio conocido con comida/agua/
+        seguridad) es el instinto más fuerte y mejor documentado en fauna
+        real -- un animal no abandona su territorio conocido por
+        aproximarse a un congénere de paso; el agrupamiento social real
+        ocurre DENTRO del área de campeo compartida, no en lugar de ella.
+        Además, invertir el orden hace esta cascada consistente con la
+        jerarquía tipo Maslow que ya gobierna el resto de la Utility AI
+        (sistema_decision.py: seguridad/necesidades físicas por delante de
+        lo social) en vez de contradecirla en el único punto donde no se
+        aplicaba. Territorio ahora es el filtro PRIMARIO; gregario actúa
+        como sesgo secundario, solo cuando el territorio no aplica (fauna
+        consciente exenta, sin memoria todavía, o ya lo bastante cerca de
+        lo conocido).
 
         SESGO DE TERRITORIO (2026-08-22, propuesta de Diego, confirmada:
         "a nivel biológico lo común es mantenerse cerca de las fuentes de
@@ -465,6 +471,20 @@ class SistemaMovimiento:
         código (leyes neutras, nunca teleológicas). Reutiliza
         nucleo.memoria.objetivo_recordado.
 
+        SESGO GREGARIO (reconstruido 2026-08-23 desde su propia
+        documentación -- ver nota de reconstrucción más abajo): con
+        probabilidad = Temperamento.sociabilidad DIRECTA, sin escalar (así
+        lo describe sistema_reproduccion.py al contrastarse con
+        factor_base_concepcion: "el sesgo gregario de sociabilidad... SI
+        usa sociabilidad directa, sin escalar"), la criatura busca al
+        conspecífico más cercano en su radio de percepción y avanza hacia
+        él si está a más de social.distancia_deseada_conspecifico. Sin
+        gating por consciencia -- a diferencia del sesgo de territorio,
+        el agrupamiento social no se documentó nunca como exclusivo de
+        fauna sin agencia; es plausible tanto para gnomo como para el
+        resto. Si la tirada de sociabilidad no dispara el sesgo, o no hay
+        ningún conspecífico perceptible, se cae al paso aleatorio.
+
         NOTA DE RECONSTRUCCIÓN (2026-08-23): el sesgo gregario existió y
         se confirmó con Diego en algún momento anterior a hoy -- consta,
         con esas palabras, en el docstring de componentes/temperamento.py
@@ -476,26 +496,10 @@ class SistemaMovimiento:
         para nacer_criatura, solo que este caso no lanzaba ninguna
         excepción (la clave de config quedaba leída y sin usar), así que
         no se detectó hasta auditar el código funcionalidad por
-        funcionalidad. La CASCADA relativa entre gregario y territorio (aquí:
-        gregario primero, territorio como líneas de respaldo) es una
-        reconstrucción razonada mía, no una confirmación literal de Diego
-        -- se apoya en que el gregario nunca se documentó con gating de
-        consciencia (aplicaría a las cuatro especies) mientras que el de
-        territorio sí lo tiene, así que probar primero el mecanismo menos
-        restrictivo y caer al más restrictivo es el orden que preserva el
-        comportamiento de ambos sin que uno anule sistemáticamente al
-        otro. Queda abierta a que Diego la corrija si recuerda un orden
-        distinto ya decidido.
+        funcionalidad. La existencia del sesgo gregario en sí SÍ está
+        confirmada por Diego (esas citas); el ORDEN de la cascada frente a
+        territorio es ahora también decisión suya, tomada arriba.
         """
-        if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
-            objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
-                gestor, entidad_id, especie, pos_x, pos_y, radio
-            )
-            if objetivo_conspecifico is not None:
-                dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
-                if dist > self.dist_deseada_conspecifico:
-                    return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
-
         if (
             mem is not None
             and cap_mental is not None
@@ -516,6 +520,15 @@ class SistemaMovimiento:
 
             if objetivo is not None and mejor_dist is not None and mejor_dist > self.dist_deseada_territorio:
                 return self._acercarse_a(pos_x, pos_y, *objetivo)
+
+        if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
+            objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
+                gestor, entidad_id, especie, pos_x, pos_y, radio
+            )
+            if objetivo_conspecifico is not None:
+                dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
+                if dist > self.dist_deseada_conspecifico:
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
 
         return self._paso_aleatorio()
 

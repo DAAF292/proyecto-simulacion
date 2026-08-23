@@ -18,7 +18,9 @@ def edad_ticks(tick_nacimiento: int, tick_actual: int) -> int:
     return tick_actual - tick_nacimiento
 
 
-def probabilidad_muerte_vejez(identidad, dims, tick_actual: int, techo_probabilidad: float) -> float:
+def probabilidad_muerte_vejez(
+    identidad, dims, tick_actual: int, techo_probabilidad: float, exponente: float = 8.0,
+) -> float:
     """
     Probabilidad de morir por vejez EN ESTE CORTE DE DÍA (sistemas/
     sistema_ciclo_vital.py la muestrea una vez contra rng.random()).
@@ -30,9 +32,30 @@ def probabilidad_muerte_vejez(identidad, dims, tick_actual: int, techo_probabili
     en NINGÚN commit de todo el historial del proyecto -- confirmado
     buscando en `git log --all -p`. No es una pérdida por colisión de
     ediciones concurrentes como nacer_criatura: sencillamente nunca se
-    escribió. PROVISIONAL, criterio propio, sin calibrar contra el motor
-    en marcha -- señalado explícitamente en vez de presentarse como una
-    decisión ya cerrada.
+    escribió.
+
+    RECALIBRADA EL MISMO DÍA (2026-08-23, más tarde): la primera versión
+    (techo=0.3, exponente=2 fijo) se probó contra el motor en marcha por
+    primera vez al validar el cambio de tamaño de grid (ver commit de esa
+    pieza) y resultó catastrófica -- 55-76% de TODAS las muertes en un
+    barrido de 5 semillas x 6000 ticks, extinguiendo la población entera
+    en 1000-2000 ticks, muy por delante de cualquier dinámica de densidad
+    o depredación. La causa: con ratio al cuadrado, un individuo a mitad
+    de su longevidad individual (ratio=0.5) ya cargaba una probabilidad
+    diaria de 0.3*0.25=7.5% -- una esperanza de vida restante de apenas
+    ~13 días útiles, para un individuo que en teoría llevaba solo la
+    mitad de su vida. Corregido en dos frentes: el techo baja a un valor
+    muy inferior (config/constantes.yaml, sigue PROVISIONAL) y el
+    exponente sube de 2 a un valor configurable (por defecto 8) para que
+    la curva se aplane mucho más tiempo y solo se dispare cerca del
+    verdadero final de vida -- más parecido a la curva de mortalidad
+    actuarial real (riesgo bajo y estable durante la mayor parte de la
+    vida, "muro" de mortalidad concentrado al final), que es justamente
+    el criterio de realismo que Diego señaló para este tipo de decisión.
+    Sigue sin ser una calibración cerrada: ajustada contra un barrido
+    ligero de 5 semillas, no el harness completo de 15 semillas x 12000
+    ticks que usó el proyecto para calibrar el sistema de agua (7.39-
+    7.45) -- ver nota en el commit correspondiente.
 
     Diseño: curva de saturación sobre la razón entre edad actual y la
     longevidad INDIVIDUAL ya sorteada (dims.longevidad, en años -- no el
@@ -44,20 +67,20 @@ def probabilidad_muerte_vejez(identidad, dims, tick_actual: int, techo_probabili
       - ratio>1 (sobrevive más allá de su longevidad individual, posible
         porque longevidad es un sorteo, no un tope duro) -> se satura en
         techo_probabilidad, no sigue creciendo sin límite.
-    Se eleva al cuadrado (ratio**2, no lineal) para que la mortalidad sea
-    baja durante la mayor parte de la vida y se concentre hacia el final
-    -- mismo tipo de curva no lineal que ya pide nucleo/disposicion.py
-    para su propia magnitud (ahí logarítmica, aquí cuadrática porque el
-    dominio y el comportamiento deseado en los extremos son distintos:
-    aquí SÍ hace falta que llegue a exactamente 1.0 de techo en ratio=1,
-    cosa que una curva log-ratio no garantiza).
+    Se eleva a `exponente` (no lineal) para que la mortalidad sea baja
+    durante la mayor parte de la vida y se concentre hacia el final --
+    mismo tipo de curva no lineal que ya pide nucleo/disposicion.py para
+    su propia magnitud (ahí logarítmica, aquí potencial porque el dominio
+    y el comportamiento deseado en los extremos son distintos: aquí SÍ
+    hace falta que llegue a exactamente 1.0 de techo en ratio=1, cosa que
+    una curva log-ratio no garantiza).
     """
     longevidad_ticks = dims.longevidad * TICKS_POR_ANIO
     if longevidad_ticks <= 0:
         return techo_probabilidad
     edad_en_ticks = edad_ticks(identidad.tick_nacimiento, tick_actual)
     ratio = edad_en_ticks / longevidad_ticks
-    return techo_probabilidad * min(1.0, ratio ** 2)
+    return techo_probabilidad * min(1.0, ratio ** exponente)
 
 
 def es_adulto(edad_en_ticks: int, especie: str, rangos_raciales: dict, fraccion_madurez: float) -> bool:

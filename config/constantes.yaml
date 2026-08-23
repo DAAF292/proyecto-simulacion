@@ -7,8 +7,22 @@
 # 1. Configuración Espacial y Topología del Mundo
 # ------------------------------------------------------------------------------
 mundo:
-  grid_ancho: 28
-  grid_alto: 28
+  # AMPLIADO 2026-08-23 (28->40, decisión delegada por Diego): la
+  # población fundadora se triplicó (28->84 individuos) desde la
+  # calibración de referencia (informe de implementación 7.39-7.45,
+  # mapa 20x20) mientras el mapa solo se dobló (20x20->28x28), subiendo
+  # la densidad real un 53% (0.07->0.107 individuos/celda) en la
+  # dirección CONTRARIA a la que el propio informe técnico (sección 20)
+  # dejó pendiente ("población inicial menor" o "mapa más grande" como
+  # palancas alternativas). 40x40 baja la densidad a 0.0525
+  # individuos/celda, un 25% por debajo del baseline calibrado de 7.45,
+  # sin tocar la población fundadora que Diego ya había decidido.
+  # PROVISIONAL en el sentido de que no se ha repetido el harness
+  # completo de 7.39/7.45 (15 semillas x 12000 ticks) sobre este valor
+  # -- ver smoke test de calibración ligera en el commit que acompaña
+  # este cambio para una primera señal, no una validación definitiva.
+  grid_ancho: 40
+  grid_alto: 40
   metros_por_celda: 10
 
 semilla_por_defecto: 42
@@ -317,7 +331,16 @@ crisis_mental:
 # 9. Ciclo Vital y Dinámica Poblacional
 # ------------------------------------------------------------------------------
 ciclo_vital:
-  techo_probabilidad_muerte_vejez: 0.3
+  # RECALIBRADO 2026-08-23: el valor original (0.3, exponente fijo 2)
+  # convertía la vejez en la causa dominante de muerte (55-76% del
+  # total en un barrido de calibración ligera), extinguiendo la
+  # población en 1000-2000 ticks -- ver nucleo/ciclo_vital.py,
+  # docstring de probabilidad_muerte_vejez, para el diagnóstico
+  # completo. PROVISIONAL, ajustado contra un barrido ligero (5
+  # semillas x 6000 ticks), no el harness completo de 15x12000 que
+  # usó el proyecto para el sistema de agua.
+  techo_probabilidad_muerte_vejez: 0.05
+  exponente_curva_vejez: 8.0
 
 reproduccion:
   mutacion_fraccion: 0.1

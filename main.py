@@ -100,7 +100,14 @@ def sembrar_poblacion_inicial(
             elif celda.tipo_terreno == TipoTerreno.PRADERA:
                 celdas_pradera.append((x, y))
 
-    # Respaldo de seguridad ante semillas con escasa generación de bosque
+    # Respaldo de seguridad ante semillas con escasa generación de bosque.
+    # CONFIRMADO CON DIEGO (2026-08-23, ya no "provisional, no confirmado"
+    # como decía el informe técnico sección 20 hasta hoy): consultado
+    # explícitamente sobre la tensión con el Principio 5 (leyes neutras,
+    # nunca teleológicas) -- ¿debería una colonización fallar en vez de
+    # reasignarse a Pradera en silencio? -- Diego confirmó que este
+    # fallback le parece correcto tal cual. Pendiente trasladar esta
+    # confirmación al informe técnico cuando se actualice esa sección.
     candidatas_bosque = celdas_bosque if celdas_bosque else celdas_pradera
 
     especies_spawn = [
@@ -224,8 +231,8 @@ def main() -> None:
     gestor = GestorEntidades()
     persistencia = Persistencia(ruta_base / "datos" / "bosque.db")
 
-    ancho = int(config.get("mundo", {}).get("grid_ancho", 28))
-    alto = int(config.get("mundo", {}).get("grid_alto", 28))
+    ancho = int(config.get("mundo", {}).get("grid_ancho", 40))
+    alto = int(config.get("mundo", {}).get("grid_alto", 40))
     mundo = Mundo(ancho, alto, config, rng_mapa)
 
     # Carga opcional de partida guardada (2026-08-23): detrás de una
