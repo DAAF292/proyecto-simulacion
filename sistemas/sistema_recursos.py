@@ -68,6 +68,16 @@ class SistemaRecursos:
             cfg_dep.get("eficiencia_biomasa_hidratacion", 0.5)
         )
 
+        # (2026-08-23) Ver config/constantes.yaml sección memoria para el
+        # razonamiento completo: probabilidad de purga por visita fallida,
+        # no purga inmediata al primer fallo -- refinamiento pedido por
+        # Diego tras observar que la purga inmediata mejoraba 4 de 5
+        # semillas de referencia pero extinguía la quinta.
+        cfg_mem = self.config.get("memoria", {})
+        self.prob_purgar_recuerdo_agotado: float = float(
+            cfg_mem.get("prob_purgar_recuerdo_agotado", 0.05)
+        )
+
         # Mapa de valores nutricionales e hídricos por recurso vegetal
         self.nutricion_flora: dict[str, float] = {}
         self.hidratacion_flora: dict[str, float] = {}
@@ -241,7 +251,17 @@ class SistemaRecursos:
             # existe al visitarlo") pero no se llamaba desde ningún sitio
             # -- pieza diseñada, nunca conectada, misma clase de deuda que
             # agudeza_sensorial antes de esta sesión.
-            if mem is not None:
+            #
+            # CORRECCION 2026-08-23: la primera versión de este cambio
+            # purgaba al primer fallo, sin excepción. Mejoraba 4 de 5
+            # semillas de referencia de forma sustancial, pero extinguía
+            # una quinta -- descartaba de golpe un recuerdo que, con
+            # margen, habría vuelto a dar fruto tras la regeneración
+            # diaria de sistema_flora.py. prob_purgar_recuerdo_agotado
+            # (PROVISIONAL, ver config/constantes.yaml sección memoria)
+            # da varios reintentos esperados antes de rendirse, en vez de
+            # uno solo.
+            if mem is not None and self.rng.random() < self.prob_purgar_recuerdo_agotado:
                 purgar_recuerdo_invalido(mem, "comida", pos_x, pos_y)
 
     def _resolver_beber(
@@ -259,7 +279,11 @@ class SistemaRecursos:
             # guiado por un recuerdo de "agua" que ya no es válido (charco
             # efímero evaporado, por ejemplo), purgarlo evita que
             # objetivo_recordado() lo siga devolviendo como el más cercano.
-            if mem is not None:
+            # Probabilística, no inmediata (ver prob_purgar_recuerdo_agotado
+            # en config/constantes.yaml y el comentario equivalente en
+            # _resolver_comer): da margen a que el agua vuelva (lluvia,
+            # charco que se rellena) antes de descartar el recuerdo.
+            if mem is not None and self.rng.random() < self.prob_purgar_recuerdo_agotado:
                 purgar_recuerdo_invalido(mem, "agua", pos_x, pos_y)
             return
 

@@ -290,9 +290,40 @@ social:
   distancia_deseada_territorio: 1
 
 memoria:
-  capacidad_minima: 1
-  capacidad_maxima: 5
-  factor_error_por_distancia: 0.3
+  # CORRECCION 2026-08-23 (encontrado de paso, no lo que se pedia):
+  # estas tres claves se llamaban capacidad_minima/capacidad_maxima/
+  # factor_error_por_distancia -- ninguna coincidia con lo que lee
+  # nucleo/memoria.py (min_recuerdos_por_categoria/
+  # max_recuerdos_por_categoria/factor_imprecision_distancia), asi que el
+  # codigo caia siempre en sus valores por defecto (1, 5, 0.2). Coincidia
+  # por casualidad en capacidad (1 y 5); factor_imprecision_distancia
+  # llevaba desde siempre usando 0.2 en vez del 0.3 aqui configurado, sin
+  # que nada lo advirtiera. Renombradas para que el yaml controle de
+  # verdad lo que dice controlar.
+  min_recuerdos_por_categoria: 1
+  max_recuerdos_por_categoria: 5
+  factor_imprecision_distancia: 0.3
+  # prob_purgar_recuerdo_agotado (2026-08-23, PROVISIONAL -- ver
+  # sistema_recursos.py:_resolver_comer/_resolver_beber y el diagnostico
+  # de extincion local semilla 1): probabilidad, en CADA visita fallida a
+  # una coordenada recordada de comida/agua ya agotada, de descartar ese
+  # recuerdo -- en vez de purgarlo al primer fallo (lo que se probo
+  # primero y funcionaba muy bien en 4 de 5 semillas de referencia, pero
+  # extinguia una quinta: descartaba de golpe un recuerdo que, dado
+  # margen, habria vuelto a dar fruto tras la regeneracion diaria de
+  # sistema_flora.py). Con esta probabilidad baja, un individuo detenido
+  # en un punto muerto reintenta varias veces antes de rendirse -- da
+  # margen real a la regeneracion (que corre una vez por dia,
+  # Reloj.TICKS_POR_DIA=24 ticks) sin conservar el recuerdo para siempre.
+  # Valor de partida razonado, no derivado con precision -- contrastado
+  # contra el harness de calibracion (5 semillas x 6000 ticks): 0.05
+  # (espera esperada de ~20 ticks) NO bastaba para salvar la semilla 3 de
+  # referencia (seguia extinguiendose); 0.15 y 0.30 si, en ambos casos con
+  # crecimiento poblacional fuerte. Se deja en 0.15 (espera esperada de
+  # ~6-7 intentos) como punto medio -- mismo estatus provisional que el
+  # resto de esta seccion, pendiente de mas semillas si hiciera falta mas
+  # confianza.
+  prob_purgar_recuerdo_agotado: 0.15
 
 # ------------------------------------------------------------------------------
 # 7. Combate y Dinámica Trófica (Fase 2)
