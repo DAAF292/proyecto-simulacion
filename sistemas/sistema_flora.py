@@ -68,6 +68,33 @@ class SistemaFlora:
 
         plantas_entidades = sorted(gestor.entidades_con(Planta, Posicion))
 
+        # Índice de posiciones ocupadas (2026-08-23, perfilado tras el
+        # arreglo de siembra inicial del mismo día): _intentar_propagacion
+        # comprobaba "¿hay ya una Planta en (nx, ny)?" con un
+        # any(...) que recorría TODAS las entidades Planta del mundo en
+        # cada intento de colonización -- barato con las 0-2 Plantas de
+        # antes de la siembra inicial, pero con cientos-miles de Plantas
+        # ya sembradas (ver sembrar_flora_inicial en main.py) es un
+        # escaneo O(N) por intento, y empeora con el tiempo según la
+        # población de Plantas crece. Perfilado con cProfile sobre 600
+        # ticks a ~1100 Plantas / ~200 fauna: sistema_flora.ejecutar +
+        # _intentar_propagacion sumaban el 23% del tiempo de esa ventana,
+        # con el propio any(...) como mayor responsable individual
+        # (2.86M llamadas al generador en esa ventana). Se sustituye por
+        # un set de posiciones, calculado una vez por día a partir de la
+        # misma lista de entidades que ya se recorre aquí abajo, y
+        # actualizado en el propio _intentar_propagacion cuando coloniza
+        # una celda nueva -- para que dos colonizaciones del MISMO día no
+        # se pisen entre sí, exactamente el mismo comportamiento que tenía
+        # el any() en vivo sobre entidades_con(). No cambia ningún
+        # resultado (no consume el rng, es una comprobación determinista),
+        # solo el coste de calcularla -- verificado con el mismo harness
+        # de calibración, misma trayectoria de población por semilla.
+        posiciones_planta = {
+            (gestor.obtener_componente(pid, Posicion).x, gestor.obtener_componente(pid, Posicion).y)
+            for pid in plantas_entidades
+        }
+
         for planta_id in plantas_entidades:
             planta = gestor.obtener_componente(planta_id, Planta)
             pos = gestor.obtener_componente(planta_id, Posicion)
@@ -124,7 +151,7 @@ class SistemaFlora:
             prob_prop = float(cfg_esp.get("prob_propagacion_por_dia", 0.02))
             if self.rng.random() < prob_prop:
                 self._intentar_propagacion(
-                    gestor, zona, pos.x, pos.y, planta.especie, cfg_esp
+                    gestor, zona, pos.x, pos.y, planta.especie, cfg_esp, posiciones_planta
                 )
 
     def _intentar_propagacion(
@@ -135,8 +162,16 @@ class SistemaFlora:
         origen_y: int,
         especie_nombre: str,
         especie_cfg: dict[str, Any],
+        posiciones_planta: set[tuple[int, int]],
     ) -> None:
-        """Coloniza una celda adyacente compatible inicializando sus recursos en 0.0."""
+        """Coloniza una celda adyacente compatible inicializando sus recursos en 0.0.
+
+        posiciones_planta (2026-08-23, ver comentario en ejecutar()): set
+        de posiciones ocupadas por Planta, mantenido por el llamador y
+        actualizado aquí mismo tras cada colonización -- sustituye a un
+        any(...) que escaneaba todas las entidades Planta del mundo en
+        cada intento, mismo resultado, sin el coste O(N) por intento.
+        """
         vecinos = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         self.rng.shuffle(vecinos)
 
@@ -151,13 +186,9 @@ class SistemaFlora:
             if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
                 celda_dest = zona.obtener_celda(nx, ny)
                 if celda_dest.tipo_terreno in biomas_compatibles:
-                    hay_planta = any(
-                        gestor.obtener_componente(pid, Posicion).x == nx  # type: ignore
-                        and gestor.obtener_componente(pid, Posicion).y == ny  # type: ignore
-                        for pid in gestor.entidades_con(Planta, Posicion)
-                    )
-                    if not hay_planta:
+                    if (nx, ny) not in posiciones_planta:
                         crear_planta(gestor, especie_nombre, nx, ny, etapa=0.1)
+                        posiciones_planta.add((nx, ny))
                         # Inicialización explícita del diccionario de recursos de la celda
                         for r_cfg in especie_cfg.get("recursos", []):
                             nom = r_cfg.get("nombre")
