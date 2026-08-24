@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import http.server
 import json
+import mimetypes
 import threading
+from pathlib import Path
 from typing import Any
 
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -41,6 +43,19 @@ from nucleo.clima import estacion_actual
 from nucleo.entidad import GestorEntidades
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
+
+# (2026-08-24) Reintroduccion parcial y deliberada de arte real, tras el
+# revert completo de la sesion anterior (ver CLAUDE.md, seccion "Limites
+# conocidos y pendientes"). A diferencia de aquel intento -- que sustituia
+# TODO de golpe (14 variantes de gnomo + fauna + flora) y hubo que revertir
+# entero -- esta vez es una sola pieza: solo la textura de terreno (biomas +
+# agua), decidida con Diego pieza a pieza (criaturas e iconos de accion
+# quedan para despues, cada uno validado por separado antes de sumar el
+# siguiente). Fuente: paquete "Tilesets" de PyxelSpace (nuevosAssets/Tilesets),
+# licencia comercial con atribucion obligatoria (nombre+email del comprador
+# en los creditos del proyecto) -- pendiente de anotar en el informe cuando
+# se cierre esta pieza.
+RUTA_ASSETS = Path(__file__).resolve().parent / "assets"
 
 HTML_VISOR = """<!DOCTYPE html>
 <html lang="es">
@@ -110,6 +125,32 @@ HTML_VISOR = """<!DOCTYPE html>
       'buscar_pareja': '❤️', 'dormir': '💤'
     };
 
+    // (2026-08-24) Texturas reales de terreno (PyxelSpace, "Tilesets") --
+    // UN solo asset por material (grass/sand/stone/water), no uno por bioma:
+    // el tinte de cada bioma sigue viniendo de COLORES_TERRENO de arriba,
+    // aplicado en canvas via 'multiply'. Reutiliza la paleta que ya existia
+    // en vez de inventar 5 texturas distintas -- bosque y pradera comparten
+    // la misma textura de hierba y solo cambian de tono via el mismo color
+    // que antes pintaba el fillRect plano.
+    const RUTA_TEXTURAS = {
+      'grass': 'assets/terreno/grass.png',
+      'sand': 'assets/terreno/sand.png',
+      'stone': 'assets/terreno/stone.png',
+      'water': 'assets/terreno/water.png',
+    };
+    const TEXTURA_POR_BIOMA = {
+      'bosque': 'grass', 'pradera': 'grass', 'montana': 'stone',
+      'desierto': 'sand', 'tundra': 'stone'
+    };
+    const TEXTURAS = {};
+    const texturaLista = {};
+    for (const [clave, ruta] of Object.entries(RUTA_TEXTURAS)) {
+      const img = new Image();
+      img.onload = () => { texturaLista[clave] = true; };
+      img.src = ruta;
+      TEXTURAS[clave] = img;
+    }
+
     let referencias = {};
     let estadoAnterior = null;   // { porId, t } del poll previo, para interpolar
     let estadoActual = null;     // { data, porId, t } del ultimo poll recibido
@@ -133,9 +174,21 @@ HTML_VISOR = """<!DOCTYPE html>
           const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
           const colorBase = COLORES_TERRENO[c.terreno] || [20, 20, 20];
 
-          // 1. Relleno base del bioma
-          bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
-          bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+          // 1. Relleno base del bioma: textura real tenida con el color de
+          // bioma (ver bloque TEXTURAS arriba). Si la textura aun no cargo
+          // (primer poll, o fallo de red), cae al relleno de color plano de
+          // antes -- nunca deja una celda en blanco.
+          const claveTex = TEXTURA_POR_BIOMA[c.terreno];
+          if (claveTex && texturaLista[claveTex]) {
+            bufferCtx.drawImage(TEXTURAS[claveTex], px, py, TILE_NATIVO, TILE_NATIVO);
+            bufferCtx.globalCompositeOperation = 'multiply';
+            bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
+            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+            bufferCtx.globalCompositeOperation = 'source-over';
+          } else {
+            bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
+            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+          }
 
           // 2. Autotiling procedimental (equivalente al bitmask de 4 bits del
           // informe, sin tileset: en vez de mapear a una subtextura, se
@@ -181,8 +234,12 @@ HTML_VISOR = """<!DOCTYPE html>
             bufferCtx.fill();
           }
 
-          // 5. Agua permanente: bandas de profundidad + espuma procedimental en el borde
+          // 5. Agua permanente: textura real de base + bandas de profundidad
+          // (semi-transparentes, tal cual antes) + espuma procedimental en el borde
           if (c.tiene_agua) {
+            if (texturaLista['water']) {
+              bufferCtx.drawImage(TEXTURAS['water'], px, py, TILE_NATIVO, TILE_NATIVO);
+            }
             let colorAgua, alfa;
             if (c.profundidad_agua <= 0.3) { colorAgua = '135,206,235'; alfa = 0.55; }
             else if (c.profundidad_agua <= 1.0) { colorAgua = '52,120,190'; alfa = 0.75; }
@@ -424,9 +481,34 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             payload = self.servidor_ref.instantanea_json if self.servidor_ref else "{}"
             self.wfile.write(payload.encode("utf-8"))
+        elif self.path.startswith("/assets/"):
+            self._servir_asset()
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _servir_asset(self) -> None:
+        """Sirve estaticos solo desde presentacion/assets/ (2026-08-24, pieza
+        de terreno con arte real -- ver RUTA_ASSETS arriba). Resuelve la ruta
+        y verifica que siga dentro de RUTA_ASSETS antes de leerla, para que
+        un "../" en la URL no pueda escapar del directorio de assets."""
+        rel = self.path[len("/assets/"):].split("?")[0]
+        try:
+            ruta = (RUTA_ASSETS / rel).resolve()
+            ruta.relative_to(RUTA_ASSETS)
+        except (ValueError, RuntimeError):
+            self.send_response(404)
+            self.end_headers()
+            return
+        if not ruta.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return
+        tipo, _ = mimetypes.guess_type(str(ruta))
+        self.send_response(200)
+        self.send_header("Content-Type", tipo or "application/octet-stream")
+        self.end_headers()
+        self.wfile.write(ruta.read_bytes())
 
     def log_message(self, format: str, *args: Any) -> None:
         pass

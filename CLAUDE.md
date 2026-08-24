@@ -140,14 +140,81 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   comunicación entre razas sin idioma común, mejora de atributos en vida,
   manada/asentamiento como concepto genérico, y más): informe técnico,
   sección 20.
-- **Capa visual con arte real**: explorada por completo el 24-08-2026
-  (sprites propios de Diego para gnomo/lobo/conejo/ardilla/manzano/hierba,
-  integrados y verificados) y revertida el mismo día por decisión de Diego
-  al migrar de Cowork a Claude Code — no por ningún problema técnico. Los
-  ficheros (`.ase` originales y `.png` exportados) siguen en disco sin usar.
-  Si se retoma, ver informe de implementación 7.53 para el estado exacto en
-  que quedó y las preguntas de diseño que quedaron sin cerrar (tamaño de
-  lienzo 16×16 vs. la convención 16×24 para bípedos, ausencia de
-  diferenciación de forma por sexo en los sprites infantiles, y si las
-  variantes 1/2/3 por categoría deben ser un catálogo cerrado o un sorteo de
-  tono continuo siguiendo el patrón de atributo racial + sorteo individual).
+- **Capa visual con arte real — historial e ITERACIÓN EN CURSO (24-08-2026)**:
+  primer intento explorado por completo el 23-08 (sprites propios de Diego
+  para gnomo/lobo/conejo/ardilla/manzano/hierba, integrados y verificados) y
+  revertido el mismo día por decisión de Diego al migrar de Cowork a Claude
+  Code — no por ningún problema técnico. Esos ficheros (`.ase` originales y
+  `.png` exportados en `presentacion/assets/sprites_criaturas/` y
+  `presentacion/assets/terreno/{manzano,hierba_silvestre}.png`) siguen en
+  disco sin usar. Preguntas de diseño que quedaron sin cerrar de aquel
+  intento (relevantes si se retoma el sprite de gnomo): tamaño de lienzo
+  16×16 vs. la convención 16×24 para bípedos, ausencia de diferenciación de
+  forma por sexo en los sprites infantiles, y si las variantes 1/2/3 por
+  categoría deben ser un catálogo cerrado o un sorteo de tono continuo
+  siguiendo el patrón de atributo racial + sorteo individual.
+
+  El 24-08 Diego aportó un segundo lote de assets de terceros
+  (`nuevosAssets/`, todos PyxelSpace salvo "Miniature world" cuya licencia
+  Diego verificó directamente en la web del autor) y pidió sustituir
+  progresivamente biomas/terreno, criaturas e iconos de acción — esta vez
+  **por partes, cada una validada antes de sumar la siguiente** (principio 2),
+  a diferencia del intento anterior que sustituyó todo de golpe. Orden
+  acordado con Diego: terreno primero, luego criaturas, luego iconos.
+
+  **Pieza 1 (terreno) — IMPLEMENTADA este mismo día.** Textura real de
+  biomas + agua en `dibujarTerreno` (`presentacion/vista_web.py`), fuente
+  paquete "Tilesets" de PyxelSpace. Diseño: UN solo asset de textura por
+  material (`grass.png`, `sand.png`, `stone.png`, `water.png` en
+  `presentacion/assets/terreno/`), no uno por bioma — el tinte de cada
+  bioma sigue viniendo de `COLORES_TERRENO` (ya existía), aplicado en
+  canvas vía `globalCompositeOperation='multiply'`. Asignación:
+  bosque→grass, pradera→grass (mismo asset que bosque, se diferencian solo
+  por el tinte, igual que antes con el color plano), montana→stone,
+  desierto→sand, tundra→stone (no hay textura de hielo/nieve en el paquete;
+  reutilizar stone con tinte pálido fue la mejor aproximación disponible,
+  validada visualmente, no una calidad cerrada). El agua permanente dibuja
+  la textura real como base y conserva intactas las bandas de profundidad y
+  la espuma procedimental ya existentes; el fix de charco (0.2 alpha) no se
+  tocó. Todo el resto del pipeline (autotiling por gradiente, sombreado de
+  relieve) se mantuvo sin cambios — el único cambio real es el paso 1
+  (relleno base) de `fillRect` de color plano a `drawImage` + tinte.
+  Reintroducido el servido estático `/assets/` (antes retirado en el
+  revert), esta vez limitado a `presentacion/assets/`. Verificado con
+  mock-DOM (conteo exacto de `drawImage`/`fillRect`/`multiply` en ambos
+  caminos: textura aún no cargada y textura cargada — el primero reproduce
+  exactamente los conteos de la versión sin arte, sin regresión) y con un
+  render de referencia hecho en Python/PIL replicando el algoritmo exacto
+  sobre un mapa sintético de 5 bandas + río, para inspección visual previa
+  a abrir el visor real. **Pendiente de confirmación visual de Diego en su
+  propio navegador** (el sandbox no tiene un navegador real disponible para
+  screenshot — sin acceso de red para descargar Chromium/Playwright).
+
+  **Pendiente — Pieza 2 (criaturas)**: gnomo desde el arte ya construido
+  (pieza revertida arriba), lobo/conejo/ardilla desde `nuevosAssets/animals`
+  (variante `web-games`: PNG + JSON con `frame{x,y,w,h}` y `duration` por
+  frame, formato atlas directamente parseable, preferible a la variante
+  `rpg-maker` sin metadatos).
+
+  **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
+  (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
+  buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo
+  visual ya hecho (24-08): comer→`Foods/apple.png` y cazar→`Animals/
+  claw.png` son sustituciones limpias; beber→`Spells/water-05.png`,
+  buscar_pareja→`Jewelry/ring.png` y dormir→`Spells/status-02.png` son
+  aceptables pero con interpretación forzada (no hay icono de gota para
+  beber, corazón para pareja, ni "zzz" para dormir en el paquete); huir no
+  tiene ningún candidato que se lea con claridad — Diego eligió
+  `Spells/ground-01.png` (huella) sabiendo que es forzado, antes que dejarlo
+  sin resolver.
+
+  **Licencia y atribución**: los paquetes de PyxelSpace ("Icons Pack 01",
+  "Tilesets", "Animals", "Monster Pack 01") tienen licencia comercial clara
+  (uso y modificación permitidos, redistribución del material —modificado o
+  no— prohibida) **con una condición explícita**: el nombre y el email
+  registrados en la compra deben figurar en los créditos del proyecto si se
+  usa en más de un proyecto. Pendiente añadir esos créditos en algún lugar
+  visible del proyecto (informe de visión o README) antes de considerar
+  cerrada esta pieza. "Miniature world" no incluye fichero de licencia en
+  disco — Diego confirmó los términos directamente en la página del autor,
+  no verificado por Claude a partir de ficheros locales.
