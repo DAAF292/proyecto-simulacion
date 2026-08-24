@@ -295,10 +295,14 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
      paquete, no por descuido, y así queda documentado para no repetir la
      búsqueda si se retoma esto más adelante.
 
-  **Licencia sin verificar**: no hay fichero de licencia junto a los PNG de
-  Urizen en disco (mismo caso que "Miniature world" en `nuevosAssets/`) —
-  pendiente de que Diego confirme los términos en la fuente original antes
-  de dar esta pieza por cerrada. **Pendiente también**: confirmación visual
+  **Licencia — confirmada por Diego (25-08)**: sin fichero de licencia junto
+  a los PNG en disco, pero Diego confirmó directamente que es gratuita y de
+  uso libre para cualquier fin ("se puede usar para lo que quieras") — sin
+  verificar por Claude contra una fuente escrita (misma situación que
+  "Miniature world" en `nuevosAssets/`, donde Diego también confirmó de
+  palabra tras consultar la página del autor). No se exige atribución, a
+  diferencia de los paquetes de PyxelSpace (nombre+email en créditos).
+  **Pendiente todavía**: confirmación visual
   de Diego en su propio navegador (tercera vez que se pide en esta pieza;
   el sandbox sigue sin navegador real disponible).
 
