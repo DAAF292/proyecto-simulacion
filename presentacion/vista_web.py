@@ -95,9 +95,13 @@ HTML_VISOR = """<!DOCTYPE html>
     const bufferCtx = bufferTerreno.getContext('2d');
     bufferCtx.imageSmoothingEnabled = false;
 
+    // (2026-08-23) Paleta reajustada -- la version anterior salia demasiado
+    // palida/grisacea en pantalla (bosque y pradera casi indistinguibles,
+    // tonos frios). Mas saturacion y mas contraste entre biomas, sin tocar
+    // el algoritmo de autotiling/sombreado que consume estos colores.
     const COLORES_TERRENO = {
-      'bosque': [30, 77, 43], 'pradera': [74, 124, 41], 'montana': [127, 140, 141],
-      'desierto': [212, 172, 13], 'tundra': [174, 182, 191]
+      'bosque': [21, 74, 42], 'pradera': [107, 158, 60], 'montana': [112, 104, 96],
+      'desierto': [224, 178, 96], 'tundra': [205, 214, 219]
     };
     const COLORES_SEXO = { 'macho': '#5dade2', 'hembra': '#e874c9' };
     const GLIFOS_ESPECIE = { 'gnomo': '🧙', 'lobo': '🐺', 'conejo': '🐇', 'ardilla': '🐿️' };
@@ -198,7 +202,22 @@ HTML_VISOR = """<!DOCTYPE html>
               }
             }
           } else if (c.profundidad_charco > 0) {
-            bufferCtx.fillStyle = 'rgba(100,170,220,0.5)';
+            // (2026-08-24) Antes era una opacidad fija de 0.5 -- con lluvia
+            // extendida eso tine el mapa ENTERO de azul (confirmado en vivo:
+            // a maxima profundidad de charco, 0.5 produce un lavado ciano
+            // que hace ilegible la paleta de biomas). Ahora escala con la
+            // profundidad real / techo configurado (mismo patron que las
+            // bandas de agua permanente de arriba), con un techo de opacidad
+            // mucho mas bajo. ALPHA_MAX_CHARCO=0.2 es una eleccion estetica
+            // mia, comparada en vivo contra el motor real a varios valores
+            // (0.5 original, 0.2, 0.12) -- 0.12 ya resultaba casi invisible
+            // (perdia el valor informativo de "aqui hay agua efimera"), 0.5
+            // lavaba el mapa; 0.2 fue el punto donde el tinte se nota sin
+            // tapar el color de bioma. Sigue siendo gusto, no una medicion
+            // objetiva -- si no convence, es un solo numero que cambiar.
+            const ratioCharco = Math.min(1, c.profundidad_charco / (data.techo_profundidad_charco || 0.03));
+            const ALPHA_MAX_CHARCO = 0.2;
+            bufferCtx.fillStyle = `rgba(100,170,220,${ratioCharco * ALPHA_MAX_CHARCO})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
           }
 
@@ -554,8 +573,14 @@ def construir_instantanea(
 
     clima_actual = getattr(zona, "clima_actual", None)
 
+    # (2026-08-24) Necesario para que el cliente escale la opacidad del
+    # charco por profundidad real en vez de un techo adivinado -- unica
+    # fuente de verdad config/constantes.yaml, el cliente solo proyecta.
+    techo_profundidad_charco = config.get("charcos", {}).get("techo_profundidad_charco", 0.03)
+
     return {
         "tick": reloj.tick_actual,
+        "techo_profundidad_charco": techo_profundidad_charco,
         "dia": reloj.dia,
         # (2026-08-23) mismo bug que en sistema_necesidades.py/sistema_flora.py:
         # Reloj.estacion es un int creciente, no el Enum Estacion.
