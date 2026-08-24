@@ -125,22 +125,31 @@ HTML_VISOR = """<!DOCTYPE html>
       'buscar_pareja': '❤️', 'dormir': '💤'
     };
 
-    // (2026-08-24) Texturas reales de terreno (PyxelSpace, "Tilesets") --
-    // UN solo asset por material (grass/sand/stone/water), no uno por bioma:
-    // el tinte de cada bioma sigue viniendo de COLORES_TERRENO de arriba,
-    // aplicado en canvas via 'multiply'. Reutiliza la paleta que ya existia
-    // en vez de inventar 5 texturas distintas -- bosque y pradera comparten
-    // la misma textura de hierba y solo cambian de tono via el mismo color
-    // que antes pintaba el fillRect plano.
+    // (2026-08-24) Texturas reales de terreno. Primera version: paquete
+    // PyxelSpace "Tilesets", UN solo asset por material (grass/sand/stone)
+    // compartido entre biomas afines. Cambio de fuente el mismo dia (pieza
+    // 1, iteracion 2): Diego pidio pivotar a la estetica de Urizen (Vurmux)
+    // -- mas oscura, saturada y "de rogue" -- aportando el sheet completo
+    // (urizen_onebit_tileset__v2d0.png, grid nativo de 13x13px, NO 16x16
+    // como se penso al principio; confirmado por medicion de pixeles, no a
+    // ojo). A diferencia de PyxelSpace, aqui cada bioma tiene su propio
+    // recorte dedicado (no comparten asset) porque el sheet de Urizen ofrece
+    // variedad suficiente de tonos oscuros sin tener que forzar el mismo
+    // patron en dos biomas distintos. El tinte sigue viniendo de
+    // COLORES_TERRENO via 'multiply' -- mismo mecanismo, solo cambia el
+    // origen del asset. Agua se queda con la textura de PyxelSpace (ya
+    // validada, sin necesidad de tocarla en esta iteracion).
     const RUTA_TEXTURAS = {
-      'grass': 'assets/terreno/grass.png',
-      'sand': 'assets/terreno/sand.png',
-      'stone': 'assets/terreno/stone.png',
+      'bosque': 'assets/terreno/urizen_bosque.png',
+      'pradera': 'assets/terreno/urizen_pradera.png',
+      'montana': 'assets/terreno/urizen_montana.png',
+      'desierto': 'assets/terreno/urizen_desierto.png',
+      'tundra': 'assets/terreno/urizen_tundra.png',
       'water': 'assets/terreno/water.png',
     };
     const TEXTURA_POR_BIOMA = {
-      'bosque': 'grass', 'pradera': 'grass', 'montana': 'stone',
-      'desierto': 'sand', 'tundra': 'stone'
+      'bosque': 'bosque', 'pradera': 'pradera', 'montana': 'montana',
+      'desierto': 'desierto', 'tundra': 'tundra'
     };
     const TEXTURAS = {};
     const texturaLista = {};
@@ -165,6 +174,18 @@ HTML_VISOR = """<!DOCTYPE html>
     // variante no cree su propia periodicidad visible. Sigue sin añadir
     // ningun asset nuevo ni ningun rng en el cliente (misma celda siempre
     // produce la misma variante, estable entre polls).
+    //
+    // Leccion adicional al elegir los tiles de Urizen (misma pieza, segunda
+    // iteracion): las 8 variantes NO ayudan si el propio tile es casi
+    // simetrico bajo rotacion/espejado -- un motivo de "marco cuadrado
+    // centrado" se ve igual (a ojo, aunque no sea identico pixel a pixel)
+    // en las 8 orientaciones, así que el patron de repeticion vuelve a
+    // notarse por mas que el hash este bien distribuido. No es un bug del
+    // hash (verificado sin periodicidad ni diagonales constantes) sino una
+    // eleccion de asset: se prefirio el tile de roca agrietada de Urizen
+    // (asimetrico) frente al de bloque de piedra con marco (simetrico) para
+    // montana precisamente por esto -- confirmado en el render de
+    // referencia en Python antes de fijar la eleccion final.
     function dibujarTexturaVariada(img, x, y, px, py, size) {
       // (2026-08-24) Primera version de este hash (x*A + y*B mod 8, con A y B
       // primos grandes cualquiera) resulto tener A y B congruentes con 1 y -1

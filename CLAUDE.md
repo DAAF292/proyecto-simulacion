@@ -215,6 +215,78 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   visual de Diego en su propio navegador tras este segundo cambio** (mismo
   motivo que arriba: sin navegador real disponible en el sandbox).
 
+  **Pivote de fuente de arte — de PyxelSpace a Urizen (24-08, mismo día).**
+  Diego vio el visor real y, en vez de seguir ajustando la textura de
+  PyxelSpace, pidió un "cambio absoluto de enfoque" hacia la estética de
+  **Urizen** (Vurmux) — más oscura, saturada y "de rogue" — a partir de tres
+  capturas de referencia y dos PNG que aportó (`urizen_onebit_tileset__v2d0.png`,
+  2679×651, y `urizen__2bit__free.png`, 261×92, ambos en la raíz de
+  "simulación mundo", fuera del repo). Las tres capturas de referencia NO
+  eran consistentes entre sí (una pintaba suelo continuo, dos tenían fondo
+  negro con sprites sueltos); se le señaló esa contradicción explícitamente
+  y se le preguntó qué quería antes de tocar nada. Su respuesta fue pedir
+  una recomendación en vez de zanjarlo él mismo — la recomendación dada y
+  aceptada fue: **mantener el suelo continuo** (la información de bioma,
+  relieve y agua que ya transmite el terreno pintado se perdería con fondo
+  negro; eso no es estilizar, es borrar la capa que hace legible el mapa
+  como mundo abierto, a diferencia de un dungeon confinado donde la
+  convención rogue de "negro = no explorado" sí tiene sentido) pero
+  **eligiendo del propio sheet de Urizen los tonos más oscuros y apagados**
+  en vez de los más vivos, dejando los sprites de criaturas/vegetación
+  (mucho más "de rogue" que el fondo en sí) para la pieza 2 ya planificada.
+
+  Hallazgos técnicos al examinar el sheet grande: la grilla nativa real es
+  de **13×13 px**, no 16×16 como se asumió al principio a ojo — confirmado
+  midiendo la periodicidad de las líneas de guía con numpy, no a simple
+  vista (el error de asumir 16×16 sin medir habría sido silencioso, ya que
+  drawImage escala igual cualquier tamaño de origen). El sheet bundlea 5
+  secciones separadas por franjas magenta: solo la sección 1 (mazmorra/
+  naturaleza) y la sección 5 (criaturas/fuentes) son relevantes para este
+  proyecto — las secciones 2-4 son packs de items/RPG e iconografía
+  sci-fi/moderna sin ninguna relación con "un mundo vivo", descartadas por
+  completo. Dentro de la sección 1, las filas de "suelo de mazmorra" (roca,
+  tablón, piedra agrietada, texturas oscuras moteadas) resultaron mejor
+  candidato para bioma que las plantas/agua/criaturas de esa misma sección,
+  que están dibujadas como sprites sueltos de forma irregular (con
+  transparencia), pensados para colocarse como decoración puntual sobre un
+  fondo -- no como textura de relleno continuo -- coherente con que el
+  propio Urizen está diseñado nativamente para el estilo "sprites sobre
+  vacío" de las capturas 1 y 2, aunque aquí se use de otra manera.
+
+  Cada bioma recibió su propio recorte dedicado (ya no comparten asset como
+  con PyxelSpace): `urizen_bosque.png` (cobble musgoso oscuro),
+  `urizen_pradera.png` (punteado oscuro), `urizen_montana.png` (roca
+  agrietada), `urizen_desierto.png` (tablón, tono cálido), `urizen_tundra.png`
+  (piedra sólida clara) — agua se queda con `water.png` de PyxelSpace, sin
+  tocar. Dos problemas de calibración encontrados y corregidos ANTES de
+  fijar la elección final, ambos verificados con renders de referencia en
+  Python antes de tocar `vista_web.py`:
+  1. **Tinte multiply demasiado agresivo sobre texturas ya oscuras**: la
+     primera textura elegida para bosque, combinada con el verde más oscuro
+     de `COLORES_TERRENO`, se volvía prácticamente negro puro (multiply
+     nunca aclara, solo oscurece — dos oscuros combinados se acercan a
+     cero). Se probó 'overlay' como alternativa y tampoco resuelve el caso
+     general (mismo problema cuando la textura de base también es oscura).
+     Solución adoptada: elegir, para bosque específicamente, un recorte con
+     más brillo de base (un cobble con musgo) en vez de cambiar el modo de
+     mezcla — más simple y no introduce una regla especial por bioma.
+  2. **Un tile casi simétrico bajo rotación/espejado anula el efecto de las
+     8 variantes anti-repetición**: el primer candidato para montaña (un
+     bloque de piedra con marco centrado) se ve prácticamente igual en las
+     8 orientaciones a ojo humano, aunque no sea idéntico píxel a píxel —
+     así que el patrón de repetición volvía a notarse en el render de
+     referencia pese a que el hash en sí funciona correctamente (no es un
+     bug de código, es una elección de asset). Sustituido por un tile de
+     roca agrietada, visualmente asimétrico, donde las 8 orientaciones sí
+     se distinguen.
+
+  **Licencia sin verificar**: no hay fichero de licencia junto a los PNG de
+  Urizen en disco (mismo caso que "Miniature world" en `nuevosAssets/`) —
+  pendiente de que Diego confirme los términos en la fuente original antes
+  de dar esta pieza por cerrada. **Pendiente también**: confirmación visual
+  de Diego en su propio navegador (tercera vez que se pide en esta pieza;
+  el sandbox sigue sin navegador real disponible).
+
   **Pendiente — Pieza 2 (criaturas)**: gnomo desde el arte ya construido
   (pieza revertida arriba), lobo/conejo/ardilla desde `nuevosAssets/animals`
   (variante `web-games`: PNG + JSON con `frame{x,y,w,h}` y `duration` por
