@@ -143,7 +143,18 @@ HTML_VISOR = """<!DOCTYPE html>
       'bosque': 'assets/terreno/urizen_bosque.png',
       'pradera': 'assets/terreno/urizen_pradera.png',
       'montana': 'assets/terreno/urizen_montana.png',
-      'desierto': 'assets/terreno/urizen_desierto.png',
+      // (2026-08-25) Urizen no tiene ningun tile de suelo que lea como arena
+      // en las secciones relevantes del sheet (mazmorra/naturaleza) -- se
+      // probaron tablon, piedra agrietada, cobble y los "suelos oscuros"
+      // usados en bosque/pradera, tintados con el color de desierto, y
+      // ninguno se lee como arena (el tablon en concreto se ve claramente
+      // como suelo de madera, tinte aparte). Diego lo confirmo al verlo
+      // ("no hay arena?"). En vez de forzar un sustituto que no representa
+      // lo que dice representar, se vuelve a la arena de PyxelSpace ya
+      // extraida en la iteracion anterior (sand.png, sigue en disco) --
+      // unico bioma que no queda con arte de Urizen, por ausencia real del
+      // material en el paquete, no por descuido.
+      'desierto': 'assets/terreno/sand.png',
       'tundra': 'assets/terreno/urizen_tundra.png',
       'water': 'assets/terreno/water.png',
     };

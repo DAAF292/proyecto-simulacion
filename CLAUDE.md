@@ -256,9 +256,9 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   Cada bioma recibió su propio recorte dedicado (ya no comparten asset como
   con PyxelSpace): `urizen_bosque.png` (cobble musgoso oscuro),
   `urizen_pradera.png` (punteado oscuro), `urizen_montana.png` (roca
-  agrietada), `urizen_desierto.png` (tablón, tono cálido), `urizen_tundra.png`
-  (piedra sólida clara) — agua se queda con `water.png` de PyxelSpace, sin
-  tocar. Dos problemas de calibración encontrados y corregidos ANTES de
+  agrietada), `urizen_tundra.png` (piedra sólida clara). Agua se queda con
+  `water.png` de PyxelSpace, sin tocar. Tres problemas de calibración
+  encontrados y corregidos ANTES de
   fijar la elección final, ambos verificados con renders de referencia en
   Python antes de tocar `vista_web.py`:
   1. **Tinte multiply demasiado agresivo sobre texturas ya oscuras**: la
@@ -279,6 +279,21 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
      bug de código, es una elección de asset). Sustituido por un tile de
      roca agrietada, visualmente asimétrico, donde las 8 orientaciones sí
      se distinguen.
+  3. **Desierto — Urizen no tiene ningún tile de suelo que lea como arena**
+     (25-08, feedback directo de Diego: "no hay arena?"). Se probaron tablón,
+     piedra agrietada, cobble, y los mismos "suelos oscuros" usados en
+     bosque/pradera, todos tintados con el color de desierto — ninguno se
+     lee como arena; el tablón en concreto se ve claramente como suelo de
+     madera, tinte aparte. Búsqueda exhaustiva en toda la sección 1 del
+     sheet (no solo las filas ya muestreadas) antes de concluir que
+     simplemente no está: el contenido "de naturaleza" de Urizen fuera de
+     los suelos de mazmorra son sprites sueltos con forma irregular (charcos,
+     montones de tierra), no texturas de relleno. Revertido: `desierto`
+     vuelve a `sand.png` de PyxelSpace (ya extraído en la iteración
+     anterior, sigue en disco). Es el único de los cinco biomas que no
+     queda con arte de Urizen — por ausencia real del material en el
+     paquete, no por descuido, y así queda documentado para no repetir la
+     búsqueda si se retoma esto más adelante.
 
   **Licencia sin verificar**: no hay fichero de licencia junto a los PNG de
   Urizen en disco (mismo caso que "Miniature world" en `nuevosAssets/`) —
