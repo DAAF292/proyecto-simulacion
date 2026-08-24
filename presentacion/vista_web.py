@@ -125,32 +125,47 @@ HTML_VISOR = """<!DOCTYPE html>
       'buscar_pareja': '❤️', 'dormir': '💤'
     };
 
-    // (2026-08-24/25) Texturas reales de terreno -- historial resumido (ver
-    // CLAUDE.md y informe_implementacion_bosque.docx 7.53-7.57 para el
-    // detalle completo): version original con PyxelSpace "Tilesets";
-    // pivote a Urizen (Vurmux) el 24-08 a peticion de Diego buscando una
-    // estetica mas oscura/rogue, con recorte dedicado por bioma (grid
-    // nativo real de Urizen: 13x13px, confirmado midiendo pixeles, no a
-    // ojo); desierto revertido a PyxelSpace el 25-08 porque Urizen no tiene
-    // ningun tile que lea como arena; y el resto de biomas revertidos
-    // tambien a PyxelSpace el mismo dia porque los suelos de Urizen son
-    // literalmente suelos DE MAZMORRA (piedra con juntas, tablon con
-    // remaches) y leen "demasiado geometricos" para terreno natural
-    // continuo -- Urizen se reserva para decoracion/criaturas (pieza 2), no
-    // para el relleno de suelo. El tinte sigue viniendo de COLORES_TERRENO
-    // via 'multiply' en todos los casos -- mismo mecanismo, solo cambia el
-    // origen del asset. El mecanismo de las 8 variantes anti-repetición es
-    // independiente de qué PNG se cargue, así que no cambia con estos swaps.
+    // (2026-08-25) Texturas reales de terreno -- tercer pivote de fuente,
+    // historial completo en CLAUDE.md e informe_implementacion_bosque.docx
+    // (7.53-7.61): PyxelSpace "Tilesets" -> Urizen (Vurmux) -> vuelta a
+    // PyxelSpace -> ahora "Mini Medieval" (VEXED/v3x3d, itch.io, CC BY 4.0),
+    // a peticion de Diego tras no quedar conforme con el resultado de Urizen
+    // en pantalla. Mini Medieval resuelve el problema de fondo que arrastraban
+    // las dos fuentes anteriores: tiene suelo continuo real (no losas de
+    // mazmorra como Urizen) Y variedad genuina por bioma (a diferencia de
+    // PyxelSpace, que solo cubria 3 texturas para 5 biomas). Recortes: un
+    // tile solido de 16x16 por bioma, extraido de la seccion "GROUND EDGES"
+    // de cada Overworld.png (el tile de relleno limpio, sin las decoraciones
+    // sueltas de flores/setas que trae la seccion "GROUND" de al lado -- esas
+    // se dejan fuera de esta pieza a proposito, ver nota de alcance en
+    // CLAUDE.md). montana no tiene expansion de Mini Medieval dedicada (no
+    // existe un "Mini Medieval - Mountain" en el pack comprado): se usa el
+    // patron de piedra/adoquín gris de la seccion PATH del pack base como
+    // aproximacion, aceptado y documentado como tal.
+    //
+    // A diferencia de Urizen y PyxelSpace, estos tiles YA vienen con el
+    // color de bioma correcto (no son grises neutros pensados para tintar) --
+    // aplicar el mismo 'multiply' de antes a toda opacidad los oscureceria
+    // sin necesidad. Por eso el tinte se reserva solo para bosque/pradera
+    // (que comparten el mismo tile de hierba y si necesitan diferenciarse
+    // entre si) y se aplica en 'source-over' a alfa baja en vez de 'multiply'
+    // a alfa completa -- un nudge de color, no un tinte que pueda aplastar
+    // el brillo (la leccion de la pieza de Urizen de ayer). montana/desierto/
+    // tundra/agua se dibujan tal cual, sin ningun tinte encima.
     const RUTA_TEXTURAS = {
-      'grass': 'assets/terreno/grass.png',
-      'sand': 'assets/terreno/sand.png',
-      'stone': 'assets/terreno/stone.png',
-      'water': 'assets/terreno/water.png',
+      'grass': 'assets/terreno/mm_grass.png',
+      'sand': 'assets/terreno/mm_sand.png',
+      'rock': 'assets/terreno/mm_rock.png',
+      'tundra': 'assets/terreno/mm_tundra.png',
+      'water': 'assets/terreno/mm_water.png',
     };
     const TEXTURA_POR_BIOMA = {
-      'bosque': 'grass', 'pradera': 'grass', 'montana': 'stone',
-      'desierto': 'sand', 'tundra': 'stone'
+      'bosque': 'grass', 'pradera': 'grass', 'montana': 'rock',
+      'desierto': 'sand', 'tundra': 'tundra'
     };
+    // Subconjunto de COLORES_TERRENO que recibe el nudge de color descrito
+    // arriba -- deliberadamente NO incluye montana/desierto/tundra.
+    const TINTE_SUAVE_TERRENO = { 'bosque': COLORES_TERRENO['bosque'], 'pradera': COLORES_TERRENO['pradera'] };
     const TEXTURAS = {};
     const texturaLista = {};
     for (const [clave, ruta] of Object.entries(RUTA_TEXTURAS)) {
@@ -160,66 +175,42 @@ HTML_VISOR = """<!DOCTYPE html>
       TEXTURAS[clave] = img;
     }
 
-    // (2026-08-25) Pieza 2: sprites de criaturas, mismo patron de carga que
-    // la textura de terreno (flag de listo, fallback si aun no cargo). Los
-    // 4 recortes salen de Urizen (Vurmux), nativos de 13x13 -- ver CLAUDE.md
-    // e informe_implementacion_bosque.docx para de donde sale cada uno
-    // dentro del sheet. Nota importante sobre conejo/ardilla: Urizen NO
-    // tiene ningun sprite con silueta de ardilla (orejas cortas + cola
-    // tupida son los rasgos que la distinguen de un conejo, y ninguna pieza
-    // revisada del sheet -- ni la fila de fauna de seccion 1 ni el bloque
-    // humanoide/cuadrupedo de seccion 5 -- los tiene). Decision explicita de
-    // Diego (25-08) tras planteársela: en vez de mantener dos tamanos de
-    // conejo (cria/adulto), usar un unico conejo (el "grande") como especie
-    // conejo, y reutilizar el sprite del conejo "pequeño" retinido hacia un
-    // tono mas propio de ardilla como especie ardilla. Es una aproximacion
-    // deliberada y transparente, no una forma de ardilla real -- la silueta
-    // sigue siendo de conejo. Si aparece un sprite con silueta de ardilla de
-    // verdad en el futuro, esto se sustituye sin tocar el resto del mecanismo.
+    // (2026-08-25) Sprites de criaturas -- pivote de Urizen a Mini Medieval
+    // el mismo dia que el terreno (ver nota de arriba). Cambio de fondo, no
+    // solo de fuente: Mini Medieval SI tiene las cuatro especies como
+    // animales reales y reconocibles (Animals.png, con cria/adulto y
+    // animaciones IDLE/SIT/WALK/ACTION/HIT/DEAD por especie) -- en concreto
+    // trae una ardilla de verdad (SQUIRREL KIT/SQUIRREL), asi que ya NO hace
+    // falta la aproximacion de Urizen (conejo pequeño retenido) documentada
+    // ayer en la pieza 2. Por ahora se usa solo el frame IDLE (una pose fija
+    // por especie, igual que con Urizen) para las cuatro; el resto de
+    // animaciones del pack (ciclo de paso al caminar, HIT al recibir daño,
+    // DEAD para necromasa por especie de origen, poses de ACTION para
+    // comer/cazar donde el pack las tenga) quedan catalogadas en el informe
+    // de analisis pero deliberadamente fuera de esta pieza -- son una fuente
+    // de complejidad aparte (seleccion de frame por estado + temporizado de
+    // animacion), no algo que sumar en el mismo incremento que el cambio de
+    // fuente de arte.
+    //
+    // gnomo no tiene una fila de "raza pequeña" dedicada en Units.png (es un
+    // sheet de soldados humanos recoloreados, sin gnomos/enanos segun la
+    // propia descripcion del autor en itch.io) -- se eligio la unidad mas
+    // sencilla y pequeña disponible en la primera fila como aproximacion,
+    // sabiendo que no tiene barba blanca ni gorro rojo como pedia Diego.
+    // Aproximacion documentada, no un hallazgo forzado a pasar por bueno.
     const RUTA_SPRITES_CRIATURA = {
-      'gnomo': 'assets/sprites_criaturas/urizen_gnomo.png',
-      'lobo': 'assets/sprites_criaturas/urizen_lobo.png',
-      'conejo': 'assets/sprites_criaturas/urizen_conejo.png',
-      'ardilla': 'assets/sprites_criaturas/urizen_ardilla.png',
+      'gnomo': 'assets/sprites_criaturas/mm_gnomo.png',
+      'lobo': 'assets/sprites_criaturas/mm_lobo.png',
+      'conejo': 'assets/sprites_criaturas/mm_conejo.png',
+      'ardilla': 'assets/sprites_criaturas/mm_ardilla.png',
     };
-    // Tinte multiply aplicado solo donde el sprite base necesita cambiar de
-    // tono para acercarse a lo que representa (mismo mecanismo del tinte de
-    // bioma en el terreno, precalculado una vez al cargar en vez de por
-    // frame). Provisional: tono elegido a ojo, sin calibrar contra el motor
-    // en marcha -- si no convence es un solo valor que cambiar.
-    const TINTE_CRIATURA = {
-      'ardilla': [176, 100, 56],
-    };
-
-    function crearSpriteTenido(imgBase, tinte) {
-      // Tintar preservando la silueta transparente: multiply sobre todo el
-      // lienzo tambien pintaria fuera del sprite (un rect opaco, porque
-      // multiply con alfa de fondo 0 no se queda transparente) -- por eso
-      // el paso final en 'destination-in' recorta el resultado de vuelta a
-      // la alfa original del sprite. Se hace una sola vez al cargar, no en
-      // cada frame.
-      const c = document.createElement('canvas');
-      c.width = imgBase.width;
-      c.height = imgBase.height;
-      const cctx = c.getContext('2d');
-      cctx.drawImage(imgBase, 0, 0);
-      cctx.globalCompositeOperation = 'multiply';
-      cctx.fillStyle = `rgb(${tinte[0]},${tinte[1]},${tinte[2]})`;
-      cctx.fillRect(0, 0, c.width, c.height);
-      cctx.globalCompositeOperation = 'destination-in';
-      cctx.drawImage(imgBase, 0, 0);
-      return c;
-    }
-
     const SPRITES_CRIATURA = {};
     const spriteCriaturaListo = {};
     for (const [clave, ruta] of Object.entries(RUTA_SPRITES_CRIATURA)) {
       const img = new Image();
-      img.onload = () => {
-        SPRITES_CRIATURA[clave] = TINTE_CRIATURA[clave] ? crearSpriteTenido(img, TINTE_CRIATURA[clave]) : img;
-        spriteCriaturaListo[clave] = true;
-      };
+      img.onload = () => { spriteCriaturaListo[clave] = true; };
       img.src = ruta;
+      SPRITES_CRIATURA[clave] = img;
     }
 
     // (2026-08-24) Feedback directo de Diego sobre la primera version de esta
@@ -295,17 +286,23 @@ HTML_VISOR = """<!DOCTYPE html>
           const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
           const colorBase = COLORES_TERRENO[c.terreno] || [20, 20, 20];
 
-          // 1. Relleno base del bioma: textura real tenida con el color de
-          // bioma (ver bloque TEXTURAS arriba). Si la textura aun no cargo
-          // (primer poll, o fallo de red), cae al relleno de color plano de
-          // antes -- nunca deja una celda en blanco.
+          // 1. Relleno base del bioma: textura real de Mini Medieval, ya con
+          // el color de bioma correcto de fabrica (a diferencia de Urizen/
+          // PyxelSpace no hace falta tintarla para que lea bien). Solo
+          // bosque/pradera reciben un nudge de color suave en 'source-over'
+          // a alfa baja (no 'multiply' a alfa completa -- eso aplastaria el
+          // brillo, la leccion de ayer) porque comparten el mismo tile base
+          // y si necesitan diferenciarse entre si. Si la textura aun no
+          // cargo (primer poll, o fallo de red), cae al relleno de color
+          // plano de siempre -- nunca deja una celda en blanco.
           const claveTex = TEXTURA_POR_BIOMA[c.terreno];
           if (claveTex && texturaLista[claveTex]) {
             dibujarTexturaVariada(TEXTURAS[claveTex], x, y, px, py, TILE_NATIVO);
-            bufferCtx.globalCompositeOperation = 'multiply';
-            bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
-            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-            bufferCtx.globalCompositeOperation = 'source-over';
+            const tinteSuave = TINTE_SUAVE_TERRENO[c.terreno];
+            if (tinteSuave) {
+              bufferCtx.fillStyle = `rgba(${tinteSuave[0]},${tinteSuave[1]},${tinteSuave[2]},0.18)`;
+              bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+            }
           } else {
             bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);

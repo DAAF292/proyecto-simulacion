@@ -400,6 +400,77 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   borde se ve mal, es un ajuste pequeño y aislado para una iteración
   siguiente, no algo que deba resolverse a ciegas ahora.
 
+  **SUPERSEDIDO el mismo día — tercer pivote de fuente: terreno y criaturas
+  pasan de Urizen a "Mini Medieval" (25-08).** Todo lo anterior de esta
+  sección de Pieza 2 (Urizen) y la sección de terreno con PyxelSpace queda
+  como historial de decisiones, pero el estado actual del código ya no usa
+  ninguna de las dos fuentes. Motivo: Diego vio el resultado en el visor y
+  "no le gustó en absoluto" — pidió analizar una carpeta nueva que aportó él
+  mismo, `mini.medieval/`, un pack comprado (VEXED / v3x3d, itch.io, licencia
+  **CC BY 4.0** confirmada por escrito contra la página del producto, no de
+  palabra como las fuentes anteriores). El análisis completo está en
+  `informes/analisis_mini_medieval.docx` — resumen de lo que cambió:
+
+  - **Terreno (los 5 biomas + agua)**: pasa de PyxelSpace/Urizen a Mini
+    Medieval. Se extrajo un tile sólido de 16×16 por bioma desde la sección
+    "GROUND EDGES" de cada `Overworld.png` (el tile de relleno limpio, no la
+    sección "GROUND" de al lado que trae flores/setas ya compuestas — esa
+    decoración puntual queda fuera de esta pieza a propósito, ver "Pendiente"
+    más abajo). Coordenadas nativas (para reextraer si se pierde el PNG),
+    todas en `Mini-Medieval-*-8x8/Overworld.png` sin sufijo "Documented":
+    bosque/pradera desde el pack base en `(148,36)-(164,52)`; desierto desde
+    la expansión Desert en `(156,52)-(172,68)`; tundra desde la expansión
+    Arctic en `(164,44)-(180,60)`; agua desde el pack base en
+    `(3,261)-(19,277)`. **montana** no tiene expansión de Mini Medieval
+    dedicada (no existe un "Mini Medieval - Mountain" en lo comprado) — se
+    usa como aproximación el patrón de adoquín gris de la sección "PATH" del
+    pack base, en `(144,305)-(160,321)`, documentado como aproximación, no
+    como hallazgo perfecto.
+  - **Tinte**: cambio de criterio respecto a Urizen/PyxelSpace. Estos tiles
+    YA vienen coloreados correctamente por bioma (no son grises neutros
+    pensados para tintar), así que aplicarles el mismo `multiply` a alfa
+    completa de antes los oscurecería sin necesidad — la lección de "el
+    multiply no puede aclarar, solo oscurecer" de la pieza de ayer aplicada
+    en sentido inverso. Se dropea el tinte por completo para montana/
+    desierto/tundra/agua, y se mantiene solo para bosque/pradera (que
+    comparten el mismo tile base y sí necesitan diferenciarse entre sí), con
+    una técnica distinta: `source-over` a alfa baja (0.18) en vez de
+    `multiply` a alfa completa — un empujón de color, no un tinte que pueda
+    aplastar el brillo. Nueva constante `TINTE_SUAVE_TERRENO` (subconjunto de
+    `COLORES_TERRENO`, que se mantiene intacto para sus otros dos usos:
+    relleno de respaldo mientras carga la textura, y la mezcla de degradado
+    en los bordes entre biomas).
+  - **Criaturas**: gnomo/lobo/conejo/ardilla pasan de Urizen a Mini Medieval.
+    Cambio de fondo, no solo de fuente: Mini Medieval tiene las cuatro
+    especies como animales reales en `Animals.png` (fila por especie con
+    cría/adulto y columnas IDLE/SIT/WALK/ACTION 1/ACTION 2/HIT/DEAD) — en
+    concreto trae **una ardilla de verdad** (fila "SQUIRREL KIT / SQUIRREL"),
+    así que ya no hace falta la aproximación de ayer (conejo pequeño
+    reteñido). Diego, consultado explícitamente, prefirió un único sprite de
+    conejo (sin variante cría/adulto) antes que complicar el modelo de
+    variantes. Coordenadas nativas usadas (un solo frame IDLE por especie,
+    en `Mini-Medieval-8x8/Animals.png` sin sufijo "Documented"): lobo
+    `(1,512)-(8,520)` (fila "WOLF PUP/WOLF", adulto), conejo `(0,80)-(8,88)`
+    (fila "RABBIT KIT/RABBIT", adulto), ardilla `(0,608)-(8,616)` (fila
+    "SQUIRREL KIT/SQUIRREL", adulto). gnomo sigue siendo una aproximación:
+    `Units.png` es un sheet de soldados humanos recoloreados sin ninguna
+    fila de raza pequeña/gnomo/enano (confirmado contra la propia
+    descripción del autor en itch.io, que lista "heroes/units" genéricos y
+    "king/queen" como únicas unidades específicas) — se usó la unidad más
+    sencilla y pequeña de la primera fila, en `(0,15)-(7,24)`, sabiendo que
+    no tiene barba blanca ni gorro rojo como pedía Diego. Aproximación
+    documentada, no forzada a pasar por un hallazgo real.
+  - **Pendiente, explícito, para una iteración posterior** (no implementado
+    hoy, a propósito — una sola fuente de complejidad por incremento):
+    animación real por estado (ciclo de paso al caminar, HIT al recibir
+    daño, DEAD para necromasa según la especie de origen, poses de ACTION
+    para comer/cazar donde el pack las tenga) — hoy solo se usa el frame
+    IDLE fijo, igual que con Urizen ayer. Decoración puntual del terreno
+    (flores/setas/árboles frutales/arbustos que trae el pack, catalogados en
+    el informe de análisis pero no dibujados todavía). liquen (montaña) y
+    musgo (tundra) siguen sin sprite dedicado identificado en ningún pack
+    revisado hasta ahora.
+
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
   buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo
