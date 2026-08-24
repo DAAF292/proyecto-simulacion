@@ -125,42 +125,31 @@ HTML_VISOR = """<!DOCTYPE html>
       'buscar_pareja': '❤️', 'dormir': '💤'
     };
 
-    // (2026-08-24) Texturas reales de terreno. Primera version: paquete
-    // PyxelSpace "Tilesets", UN solo asset por material (grass/sand/stone)
-    // compartido entre biomas afines. Cambio de fuente el mismo dia (pieza
-    // 1, iteracion 2): Diego pidio pivotar a la estetica de Urizen (Vurmux)
-    // -- mas oscura, saturada y "de rogue" -- aportando el sheet completo
-    // (urizen_onebit_tileset__v2d0.png, grid nativo de 13x13px, NO 16x16
-    // como se penso al principio; confirmado por medicion de pixeles, no a
-    // ojo). A diferencia de PyxelSpace, aqui cada bioma tiene su propio
-    // recorte dedicado (no comparten asset) porque el sheet de Urizen ofrece
-    // variedad suficiente de tonos oscuros sin tener que forzar el mismo
-    // patron en dos biomas distintos. El tinte sigue viniendo de
-    // COLORES_TERRENO via 'multiply' -- mismo mecanismo, solo cambia el
-    // origen del asset. Agua se queda con la textura de PyxelSpace (ya
-    // validada, sin necesidad de tocarla en esta iteracion).
+    // (2026-08-24/25) Texturas reales de terreno -- historial resumido (ver
+    // CLAUDE.md y informe_implementacion_bosque.docx 7.53-7.57 para el
+    // detalle completo): version original con PyxelSpace "Tilesets";
+    // pivote a Urizen (Vurmux) el 24-08 a peticion de Diego buscando una
+    // estetica mas oscura/rogue, con recorte dedicado por bioma (grid
+    // nativo real de Urizen: 13x13px, confirmado midiendo pixeles, no a
+    // ojo); desierto revertido a PyxelSpace el 25-08 porque Urizen no tiene
+    // ningun tile que lea como arena; y el resto de biomas revertidos
+    // tambien a PyxelSpace el mismo dia porque los suelos de Urizen son
+    // literalmente suelos DE MAZMORRA (piedra con juntas, tablon con
+    // remaches) y leen "demasiado geometricos" para terreno natural
+    // continuo -- Urizen se reserva para decoracion/criaturas (pieza 2), no
+    // para el relleno de suelo. El tinte sigue viniendo de COLORES_TERRENO
+    // via 'multiply' en todos los casos -- mismo mecanismo, solo cambia el
+    // origen del asset. El mecanismo de las 8 variantes anti-repetición es
+    // independiente de qué PNG se cargue, así que no cambia con estos swaps.
     const RUTA_TEXTURAS = {
-      'bosque': 'assets/terreno/urizen_bosque.png',
-      'pradera': 'assets/terreno/urizen_pradera.png',
-      'montana': 'assets/terreno/urizen_montana.png',
-      // (2026-08-25) Urizen no tiene ningun tile de suelo que lea como arena
-      // en las secciones relevantes del sheet (mazmorra/naturaleza) -- se
-      // probaron tablon, piedra agrietada, cobble y los "suelos oscuros"
-      // usados en bosque/pradera, tintados con el color de desierto, y
-      // ninguno se lee como arena (el tablon en concreto se ve claramente
-      // como suelo de madera, tinte aparte). Diego lo confirmo al verlo
-      // ("no hay arena?"). En vez de forzar un sustituto que no representa
-      // lo que dice representar, se vuelve a la arena de PyxelSpace ya
-      // extraida en la iteracion anterior (sand.png, sigue en disco) --
-      // unico bioma que no queda con arte de Urizen, por ausencia real del
-      // material en el paquete, no por descuido.
-      'desierto': 'assets/terreno/sand.png',
-      'tundra': 'assets/terreno/urizen_tundra.png',
+      'grass': 'assets/terreno/grass.png',
+      'sand': 'assets/terreno/sand.png',
+      'stone': 'assets/terreno/stone.png',
       'water': 'assets/terreno/water.png',
     };
     const TEXTURA_POR_BIOMA = {
-      'bosque': 'bosque', 'pradera': 'pradera', 'montana': 'montana',
-      'desierto': 'desierto', 'tundra': 'tundra'
+      'bosque': 'grass', 'pradera': 'grass', 'montana': 'stone',
+      'desierto': 'sand', 'tundra': 'stone'
     };
     const TEXTURAS = {};
     const texturaLista = {};

@@ -302,6 +302,25 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   de Diego en su propio navegador (tercera vez que se pide en esta pieza;
   el sandbox sigue sin navegador real disponible).
 
+  **Reparto final — el suelo entero vuelve a PyxelSpace, Urizen se reserva
+  para decoración/criaturas (25-08, mismo día que el punto 3 de arriba).**
+  Con desierto ya de vuelta en PyxelSpace, Diego vio los otros cuatro
+  biomas en Urizen y señaló que montaña/tundra se ven "demasiado
+  geométricos" en contraste con bosque. Coincide con lo ya catalogado más
+  arriba: los tiles de "suelo" de Urizen son literalmente suelos DE
+  MAZMORRA (piedra con juntas, tablón con remaches) — leen bien como piso
+  de interior, no como terreno natural continuo. Se adoptó un reparto por
+  función en vez de seguir ajustando textura por textura: el **suelo
+  entero** (los 5 biomas + agua) vuelve a **PyxelSpace "Tilesets"**
+  (`grass.png`/`sand.png`/`stone.png`/`water.png`, orgánicos, sin aspecto
+  de rejilla, ya validados), y **Urizen se reserva por completo para lo que
+  no es relleno continuo** — criaturas y decoración puntual (árboles, rocas
+  sueltas) en la pieza 2, que es literalmente para lo que ese pack está
+  diseñado según lo encontrado al catalogarlo. Los cinco recortes
+  `urizen_*.png` de terreno quedan en disco sin usar (mismo criterio de
+  "no borrar" del resto de la sesión); el mecanismo de las 8 variantes
+  anti-repetición no cambia, es independiente de qué PNG se cargue.
+
   **Pendiente — Pieza 2 (criaturas)**: gnomo desde el arte ya construido
   (pieza revertida arriba), lobo/conejo/ardilla desde `nuevosAssets/animals`
   (variante `web-games`: PNG + JSON con `frame{x,y,w,h}` y `duration` por
