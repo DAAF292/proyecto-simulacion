@@ -151,6 +151,44 @@ HTML_VISOR = """<!DOCTYPE html>
       TEXTURAS[clave] = img;
     }
 
+    // (2026-08-24) Feedback directo de Diego sobre la primera version de esta
+    // pieza: con un unico crop de 32x32 estampado igual en cada celda, a
+    // zoom normal se ve claramente el patron que se repite (efecto "papel
+    // pintado" -- ojo humano detectando periodicidad regular). Primer intento
+    // (flip por paridad de x/y, 4 variantes, periodo 2x2) mejoraba pero
+    // seguia siendo visible, sobre todo en piedra/arena por su estructura
+    // interna muy geometrica -- confirmado con un render de referencia en
+    // Python antes de conformarme con esa version. Version actual: las 8
+    // simetrias del cuadrado (4 rotaciones de 90 grados x espejado opcional,
+    // grupo diedrico D4) elegidas por un hash simple y determinista de (x,y)
+    // -- no la paridad directa, para que el propio patron de seleccion de
+    // variante no cree su propia periodicidad visible. Sigue sin añadir
+    // ningun asset nuevo ni ningun rng en el cliente (misma celda siempre
+    // produce la misma variante, estable entre polls).
+    function dibujarTexturaVariada(img, x, y, px, py, size) {
+      // (2026-08-24) Primera version de este hash (x*A + y*B mod 8, con A y B
+      // primos grandes cualquiera) resulto tener A y B congruentes con 1 y -1
+      // modulo 8 -- el hash colapsaba a (x-y) mod 8, es decir: la MISMA
+      // variante se repetia en toda una diagonal completa del mapa (franjas
+      // a 45 grados en vez de ruido). Detectado con el arnes de mock-DOM
+      // comprobando explicitamente celdas con x-y constante, no solo pares
+      // (dx,0)/(0,dy) -- esa prueba mas simple no lo habria visto. Con mezcla
+      // de bits estilo MurmurHash3 (xor + multiplicaciones + shifts) no hay
+      // formula lineal que colapse asi.
+      let h = (Math.imul(x, 0x27d4eb2f) ^ Math.imul(y, 0x165667b1)) | 0;
+      h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+      h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+      h = ((h ^ (h >>> 16)) >>> 0) % 8;
+      const rot = (h % 4) * (Math.PI / 2);
+      const flip = h >= 4;
+      bufferCtx.save();
+      bufferCtx.translate(px + size / 2, py + size / 2);
+      bufferCtx.rotate(rot);
+      bufferCtx.scale(flip ? -1 : 1, 1);
+      bufferCtx.drawImage(img, -size / 2, -size / 2, size, size);
+      bufferCtx.restore();
+    }
+
     let referencias = {};
     let estadoAnterior = null;   // { porId, t } del poll previo, para interpolar
     let estadoActual = null;     // { data, porId, t } del ultimo poll recibido
@@ -180,7 +218,7 @@ HTML_VISOR = """<!DOCTYPE html>
           // antes -- nunca deja una celda en blanco.
           const claveTex = TEXTURA_POR_BIOMA[c.terreno];
           if (claveTex && texturaLista[claveTex]) {
-            bufferCtx.drawImage(TEXTURAS[claveTex], px, py, TILE_NATIVO, TILE_NATIVO);
+            dibujarTexturaVariada(TEXTURAS[claveTex], x, y, px, py, TILE_NATIVO);
             bufferCtx.globalCompositeOperation = 'multiply';
             bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
@@ -238,7 +276,7 @@ HTML_VISOR = """<!DOCTYPE html>
           // (semi-transparentes, tal cual antes) + espuma procedimental en el borde
           if (c.tiene_agua) {
             if (texturaLista['water']) {
-              bufferCtx.drawImage(TEXTURAS['water'], px, py, TILE_NATIVO, TILE_NATIVO);
+              dibujarTexturaVariada(TEXTURAS['water'], x, y, px, py, TILE_NATIVO);
             }
             let colorAgua, alfa;
             if (c.profundidad_agua <= 0.3) { colorAgua = '135,206,235'; alfa = 0.55; }

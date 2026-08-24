@@ -186,9 +186,34 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   exactamente los conteos de la versión sin arte, sin regresión) y con un
   render de referencia hecho en Python/PIL replicando el algoritmo exacto
   sobre un mapa sintético de 5 bandas + río, para inspección visual previa
-  a abrir el visor real. **Pendiente de confirmación visual de Diego en su
-  propio navegador** (el sandbox no tiene un navegador real disponible para
-  screenshot — sin acceso de red para descargar Chromium/Playwright).
+  a abrir el visor real.
+
+  **Corrección posterior el mismo día — repetición visible de textura.**
+  Diego abrió el visor real y confirmó con una captura lo que el render de
+  referencia no dejaba ver a esa escala: con un único crop de 32×32
+  estampado igual en cada celda, a zoom normal se nota claramente el patrón
+  que se repite (efecto "papel pintado"). Corregido con `dibujarTexturaVariada`:
+  cada celda dibuja la misma textura pero con una de las 8 simetrías del
+  cuadrado (4 rotaciones × espejado opcional, grupo diédrico D4), elegida
+  por un hash determinista de `(x,y)` — sin añadir ningún asset nuevo ni rng
+  en cliente. **Primer intento del hash fue erróneo y el propio arnés de
+  verificación lo detectó**: usar `(x*A + y*B) mod 8` con A y B "primos
+  grandes cualesquiera" resultó tener A≡1 y B≡−1 (mód 8) sin que se buscara
+  a propósito, así que el hash colapsaba a `(x−y) mod 8` — la MISMA variante
+  se repetía a lo largo de toda una diagonal del mapa (franjas a 45°, un
+  artefacto distinto pero igual de visible que el original). La prueba
+  ingenua de periodicidad (comparar celda contra celda+(dx,0) y celda+(0,dy))
+  no lo habría visto; hubo que añadir explícitamente una comprobación de
+  constancia a lo largo de diagonales `x−y=k` al arnés mock-DOM para
+  encontrarlo antes de pasar a verificación visual. Solución: mezcla de bits
+  estilo MurmurHash3 (xor + multiplicaciones + shifts) en vez de una
+  combinación lineal — verificado sin periodicidad hasta desplazamiento 8 en
+  ningún eje, sin diagonales constantes, y con las 8 variantes razonablemente
+  repartidas. Confirmado también con un segundo render de referencia en
+  Python/PIL replicando el hash exacto: la mejora visual es clara, ya no se
+  percibe ningún patrón geométrico regular. **Sigue pendiente la confirmación
+  visual de Diego en su propio navegador tras este segundo cambio** (mismo
+  motivo que arriba: sin navegador real disponible en el sandbox).
 
   **Pendiente — Pieza 2 (criaturas)**: gnomo desde el arte ya construido
   (pieza revertida arriba), lobo/conejo/ardilla desde `nuevosAssets/animals`
