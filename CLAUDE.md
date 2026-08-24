@@ -325,11 +325,80 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   "no borrar" del resto de la sesión); el mecanismo de las 8 variantes
   anti-repetición no cambia, es independiente de qué PNG se cargue.
 
-  **Pendiente — Pieza 2 (criaturas)**: gnomo desde el arte ya construido
-  (pieza revertida arriba), lobo/conejo/ardilla desde `nuevosAssets/animals`
-  (variante `web-games`: PNG + JSON con `frame{x,y,w,h}` y `duration` por
-  frame, formato atlas directamente parseable, preferible a la variante
-  `rpg-maker` sin metadatos).
+  **Resuelto — Pieza 2 (criaturas), primera iteración (25-08)**: cambio de
+  plan respecto a lo que decía este mismo párrafo hasta ahora. La idea de
+  traer lobo/conejo/ardilla desde `nuevosAssets/animals` se descartó sin
+  llegar a implementarse: a petición de Diego ("mete todas las
+  funcionalidades de urizen y comprobamos si hay que ajustar los fondos") se
+  investigó primero si Urizen por sí solo cubría las cuatro especies, y
+  resultó que sí para tres de ellas — **las cuatro especies acaban usando
+  Urizen**, no una mezcla de paquetes.
+
+  Recortes nativos de 13×13 usados (coordenadas en el sheet completo
+  `urizen_onebit_tileset__v2d0.png`, 2679×651px, útiles para reextraer si se
+  pierde el PNG ya recortado):
+  - `gnomo`: humanoide de la sección 5 (banda de color "gris", fila nativa
+    y=26–39), columna 5 dentro de esa fila de poses, x=2483–2496. Pose
+    sencilla en pie con un objeto pequeño en la mano; no se buscó una pose
+    "neutra sin nada" porque a esta resolución no se distingue y no vale la
+    pena la búsqueda adicional.
+  - `lobo`: cuadrúpedo de la misma sección 5, columna dedicada a "animal de
+    compañía" que se repite recoloreada junto a cada fila de humanoide
+    (banda gris), x=2613–2626, y=26–39. Lee como silueta de animal de cuatro
+    patas — razonable para "lobo" a este nivel de abstracción, no hay
+    intención de que se lea inequívocamente como *canis lupus* frente a
+    "perro" u otro cánido genérico.
+  - `conejo`: fila de fauna pequeña de la sección 1 (no la 5), fila nativa
+    y=208–221 (justo debajo de las filas de ciervo/pato), columna 3
+    (x=39–52) — un conejo gris de pie con orejas largas erguidas.
+
+  **Hallazgo honesto sobre `ardilla`**: tras revisar tanto esta fila de
+  fauna pequeña de sección 1 como todo el bloque humanoide/cuadrúpedo de
+  sección 5, **Urizen no tiene ningún sprite con silueta de ardilla** (orejas
+  cortas + cola tupida son los rasgos que distinguen a una ardilla de un
+  conejo, y no aparecen en ninguna pieza revisada del pack). Se lo planteé
+  a Diego explícitamente en vez de forzar una sustitución silenciosa — mismo
+  criterio que con la arena del desierto. Diego decidió (25-08), con la
+  limitación conocida por delante: usar el conejo "pequeño" de la misma
+  fila (columna 4, x=52–65, y=208–221 — mismo tamaño que el "grande" pese al
+  nombre) retinido hacia un tono marrón-rojizo como especie `ardilla`, y
+  descartar la variante cría/adulto para `conejo` (una sola especie, un solo
+  sprite: el "grande"). **Esto es una aproximación deliberada y documentada,
+  no una ardilla real** — la silueta sigue leyendo como conejo, solo cambia
+  el tono. Si en el futuro aparece en algún pack un sprite con silueta de
+  ardilla de verdad, se sustituye sin tocar nada del mecanismo.
+
+  **Mecanismo de tinte**: mismo patrón que el tinte de bioma en el terreno
+  (`globalCompositeOperation='multiply'` con el color destino), con un paso
+  extra necesario aquí que en terreno no hace falta: los sprites de criatura
+  tienen fondo transparente, y un `multiply` con `fillRect` sobre un área
+  con alfa=0 no se queda transparente (pinta un rectángulo opaco del color
+  de tinte). Se resuelve con un paso final en `globalCompositeOperation=
+  'destination-in'` redibujando el sprite original, que recorta el
+  resultado de vuelta a la alfa original. Se hace **una sola vez al cargar
+  la imagen** (en el `onload`), no en cada frame — el resultado tinado se
+  cachea como un `<canvas>` y se reutiliza igual que una `Image` normal en
+  el resto del pipeline de dibujo.
+
+  **Verificación hecha**: arnés mock-DOM confirmando la secuencia exacta de
+  composite-ops del tintado (`drawImage`→`multiply`+`fillRect`→
+  `destination-in`+`drawImage`) y que `dibujarEntidad` dibuja el sprite (no
+  el glifo emoji) para las 4 especies una vez cargadas, cayendo a emoji si
+  la especie no tiene sprite — mismo patrón de robustez que la textura de
+  terreno; servido HTTP real de los 4 PNG vía `ServidorWeb` (200 + 404
+  correcto para rutas inexistentes); render de referencia en PIL confirmando
+  visualmente el resultado del tinte y que la silueta de cada sprite se lee
+  razonablemente bien a este tamaño. **Pendiente, como con la pieza de
+  terreno**: confirmación visual de Diego en su propio navegador — el
+  sandbox sigue sin uno real disponible.
+
+  **No tocado en esta iteración**: la capa 1 de `dibujarEntidad` (elipse de
+  color por sexo, mecanismo previo y ya validado) se deja exactamente igual
+  — con el sprite real encima queda casi tapada salvo un borde superior
+  visible, que es aceptable por ahora y no se ha tocado siguiendo el
+  principio de tocar una sola pieza por incremento. Si en el visor real ese
+  borde se ve mal, es un ajuste pequeño y aislado para una iteración
+  siguiente, no algo que deba resolverse a ciegas ahora.
 
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/

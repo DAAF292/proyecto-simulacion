@@ -160,6 +160,68 @@ HTML_VISOR = """<!DOCTYPE html>
       TEXTURAS[clave] = img;
     }
 
+    // (2026-08-25) Pieza 2: sprites de criaturas, mismo patron de carga que
+    // la textura de terreno (flag de listo, fallback si aun no cargo). Los
+    // 4 recortes salen de Urizen (Vurmux), nativos de 13x13 -- ver CLAUDE.md
+    // e informe_implementacion_bosque.docx para de donde sale cada uno
+    // dentro del sheet. Nota importante sobre conejo/ardilla: Urizen NO
+    // tiene ningun sprite con silueta de ardilla (orejas cortas + cola
+    // tupida son los rasgos que la distinguen de un conejo, y ninguna pieza
+    // revisada del sheet -- ni la fila de fauna de seccion 1 ni el bloque
+    // humanoide/cuadrupedo de seccion 5 -- los tiene). Decision explicita de
+    // Diego (25-08) tras planteársela: en vez de mantener dos tamanos de
+    // conejo (cria/adulto), usar un unico conejo (el "grande") como especie
+    // conejo, y reutilizar el sprite del conejo "pequeño" retinido hacia un
+    // tono mas propio de ardilla como especie ardilla. Es una aproximacion
+    // deliberada y transparente, no una forma de ardilla real -- la silueta
+    // sigue siendo de conejo. Si aparece un sprite con silueta de ardilla de
+    // verdad en el futuro, esto se sustituye sin tocar el resto del mecanismo.
+    const RUTA_SPRITES_CRIATURA = {
+      'gnomo': 'assets/sprites_criaturas/urizen_gnomo.png',
+      'lobo': 'assets/sprites_criaturas/urizen_lobo.png',
+      'conejo': 'assets/sprites_criaturas/urizen_conejo.png',
+      'ardilla': 'assets/sprites_criaturas/urizen_ardilla.png',
+    };
+    // Tinte multiply aplicado solo donde el sprite base necesita cambiar de
+    // tono para acercarse a lo que representa (mismo mecanismo del tinte de
+    // bioma en el terreno, precalculado una vez al cargar en vez de por
+    // frame). Provisional: tono elegido a ojo, sin calibrar contra el motor
+    // en marcha -- si no convence es un solo valor que cambiar.
+    const TINTE_CRIATURA = {
+      'ardilla': [176, 100, 56],
+    };
+
+    function crearSpriteTenido(imgBase, tinte) {
+      // Tintar preservando la silueta transparente: multiply sobre todo el
+      // lienzo tambien pintaria fuera del sprite (un rect opaco, porque
+      // multiply con alfa de fondo 0 no se queda transparente) -- por eso
+      // el paso final en 'destination-in' recorta el resultado de vuelta a
+      // la alfa original del sprite. Se hace una sola vez al cargar, no en
+      // cada frame.
+      const c = document.createElement('canvas');
+      c.width = imgBase.width;
+      c.height = imgBase.height;
+      const cctx = c.getContext('2d');
+      cctx.drawImage(imgBase, 0, 0);
+      cctx.globalCompositeOperation = 'multiply';
+      cctx.fillStyle = `rgb(${tinte[0]},${tinte[1]},${tinte[2]})`;
+      cctx.fillRect(0, 0, c.width, c.height);
+      cctx.globalCompositeOperation = 'destination-in';
+      cctx.drawImage(imgBase, 0, 0);
+      return c;
+    }
+
+    const SPRITES_CRIATURA = {};
+    const spriteCriaturaListo = {};
+    for (const [clave, ruta] of Object.entries(RUTA_SPRITES_CRIATURA)) {
+      const img = new Image();
+      img.onload = () => {
+        SPRITES_CRIATURA[clave] = TINTE_CRIATURA[clave] ? crearSpriteTenido(img, TINTE_CRIATURA[clave]) : img;
+        spriteCriaturaListo[clave] = true;
+      };
+      img.src = ruta;
+    }
+
     // (2026-08-24) Feedback directo de Diego sobre la primera version de esta
     // pieza: con un unico crop de 32x32 estampado igual en cada celda, a
     // zoom normal se ve claramente el patron que se repite (efecto "papel
@@ -408,10 +470,18 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.fill();
       ctx.globalAlpha = 1;
 
-      // Capas 2-3 (rasgos/atuendo): sin arte, el glifo de especie hace ese papel hoy
-      ctx.font = `${TILE_NATIVO * 0.9 * escala}px sans-serif`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(GLIFOS_ESPECIE[e.tipo] || '❓', 0, 0);
+      // Capas 2-3 (rasgos/atuendo): sprite real de Urizen si ya cargo: si no
+      // (primer poll, especie sin sprite, o fallo de red) cae al glifo emoji
+      // -- mismo patron de robustez que la textura de terreno, nunca deja la
+      // entidad en blanco mientras carga.
+      if (spriteCriaturaListo[e.tipo]) {
+        const tam = TILE_NATIVO * 1.1 * escala;
+        ctx.drawImage(SPRITES_CRIATURA[e.tipo], -tam / 2, -tam / 2, tam, tam);
+      } else {
+        ctx.font = `${TILE_NATIVO * 0.9 * escala}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(GLIFOS_ESPECIE[e.tipo] || '❓', 0, 0);
+      }
 
       // Capa 4: overlays de estado -- herida y gestacion
       if (e.vitalidad !== undefined && e.vitalidad < 0.5) {
