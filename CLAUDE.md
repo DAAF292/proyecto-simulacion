@@ -894,7 +894,33 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   "verde" (bosque/pradera, pack base) y "arena" (todo lo demás, pack
   Ocean), así que montaña y tundra caen en el anillo de arena por defecto en
   vez de uno propio. Catalogar si Arctic/Desert traen su propio anillo queda
-  como pieza aparte, no iniciada.
+  como pieza aparte, no iniciada. **Superseded por la entrada siguiente: el
+  sistema entero de orillas se retiró horas después.**
+
+  **Resuelto — se retira el sistema de orillas por completo (26-08)**: tras
+  el render de referencia de la unificación a "arena" (entrada anterior),
+  Diego lo comparó con una construcción propia hecha a mano en Tiled (anillo
+  de tierra/barro oscuro con remate de espuma blanca, visualmente distinto
+  de la arena beige usada) y señaló que la orilla debía adaptarse al bioma,
+  cosa que la unificación acababa de abandonar. Al repasar el hilo completo
+  (festoneado v1 → esquina+borde en agua v2/v3 → esquina+borde en tierra v4
+  → reorientación v4.1 → verde mal extraído → unificación a arena) sin
+  haber llegado a un resultado que Diego aceptara en ninguna iteración,
+  decidió cortar el ciclo: "esto se está haciendo bola, no consigues el
+  resultado que yo quiero". Se retiró el sistema entero en vez de seguir
+  iterando sobre la variante de pieza: `dibujarAnilloOrilla`,
+  `dibujarCapaOrillas`, `orillaCargada` y `juegoOrillaPara` se eliminaron de
+  `vista_web.py`; las 12 entradas `orilla_*` de `RUTA_TEXTURAS` y las 12
+  piezas `mm_orilla_*.png` correspondientes se eliminaron del repositorio.
+  Estado actual, verificado con un render de referencia fiel al algoritmo
+  real (agua rectangular, laguna en L, laguna pequeña sobre desierto): la
+  celda de agua pinta su textura de olas + banda de profundidad, la celda
+  de tierra vecina pinta solo la textura de su bioma, sin ninguna pieza de
+  transición entre ambas — un corte limpio, sin festoneado ni anillo.
+  Pendiente real, no resuelto por esta decisión: si en el futuro se retoma
+  la orilla, la lección de esta ronda es no reanudar sobre piezas de 8x8
+  sueltas sin que Diego tenga primero una referencia visual concreta y
+  aprobada (como hizo en Tiled) de qué construcción concreta seguir.
 
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/

@@ -199,57 +199,6 @@ HTML_VISOR = """<!DOCTYPE html>
         'assets/terreno/mm_tundra_c.png', 'assets/terreno/mm_tundra_d.png'
       ],
       'water': 'assets/terreno/mm_water.png',
-      // (2026-08-25) SUPERSEDIDO el mismo dia -- ver nota larga junto a
-      // dibujarAnilloOrilla() mas abajo (renombrada en v4 -- antes se llamaba
-      // dibujarBordesAgua). Estas 12 piezas sustituyen al primer
-      // 'orilla' de una sola textura rotada (que producia un festoneado
-      // artificial, ver CLAUDE.md): 4 esquinas convexas + 4 tramos rectos,
-      // con 3 variantes de textura cada uno en O/E para evitar repeticion
-      // visible en tramos largos, extraidas pieza a pieza (no como bloque ya
-      // montado) de Mini-Medieval-Ocean-v2.1.
-      'orilla_esquina_no': 'assets/terreno/mm_orilla_esquina_no.png',
-      'orilla_esquina_ne': 'assets/terreno/mm_orilla_esquina_ne.png',
-      'orilla_esquina_so': 'assets/terreno/mm_orilla_esquina_so.png',
-      'orilla_esquina_se': 'assets/terreno/mm_orilla_esquina_se.png',
-      'orilla_borde_n': 'assets/terreno/mm_orilla_borde_n.png',
-      'orilla_borde_s': 'assets/terreno/mm_orilla_borde_s.png',
-      'orilla_borde_o_a': 'assets/terreno/mm_orilla_borde_o_a.png',
-      'orilla_borde_o_b': 'assets/terreno/mm_orilla_borde_o_b.png',
-      'orilla_borde_o_c': 'assets/terreno/mm_orilla_borde_o_c.png',
-      'orilla_borde_e_a': 'assets/terreno/mm_orilla_borde_e_a.png',
-      'orilla_borde_e_b': 'assets/terreno/mm_orilla_borde_e_b.png',
-      'orilla_borde_e_c': 'assets/terreno/mm_orilla_borde_e_c.png',
-      // (2026-08-25) SUPERSEDIDO el mismo dia, segunda vuelta: Diego probo el
-      // render de referencia y señalo dos fallos reales sobre las 12 piezas
-      // de arriba -- (1) estaban invertidas (el acento de agua tocaba la
-      // hierba en vez del agua) y (2) "estas usando las orillas de desierto
-      // o oceano, cada bioma tendra que tener orillas respectivas". (1) se
-      // corrigio in-place (ver dibujarAnilloOrilla). Para (2) se extrajo un
-      // juego "verde" equivalente de la seccion "BASIC WATER" del pack
-      // base -- que resulto ser la construccion equivocada (un marco
-      // decorativo con el CENTRO TRANSPARENTE, pensado para otra cosa, no
-      // una pieza de orilla) y se retiro por completo mas tarde el mismo
-      // dia. Los 4 estanques reales de ese pack (seccion ACTIVE/BASIC
-      // WATER, fila superior) son objetos ya montados de tamaño fijo
-      // (~2x3 celdas) sin tramo recto N/S disociable -- no se pueden
-      // trocear en un kit de esquina+borde sin repetir el error de las
-      // orillas v1 (tratar una composicion ya montada como pieza atomica).
-      //
-      // Decision (25-08, delegada por Diego -- "toma la decision mas
-      // optima... lo mas estetico posible"): en vez de construir un
-      // pipeline nuevo de "estampar un objeto de tamaño fijo" (una fuente
-      // de complejidad real: deteccion de blobs de agua, encaje por
-      // tamaño, que hacer cuando no encaja) solo para un subconjunto de
-      // biomas, TODOS los biomas usan el juego "arena" de Ocean -- ya
-      // verificado, ya corregido de orientacion, y probado escalando a
-      // formas irregulares (ver 7.66/7.67, aprobado por Diego sobre una
-      // laguna en L). Un reborde de arena alrededor de un estanque en
-      // hierba es una convencion visual habitual y aceptable en pixel art
-      // (playa/orilla arenosa incluso en bioma verde) -- preferible a piezas
-      // rotas o a una arquitectura nueva sin validar. Revisable si en algun
-      // momento aparece un juego verde genuinamente componible, o si Diego
-      // decide que vale la pena construir el pipeline de estampado para
-      // lagunas pequeñas y compactas.
     };
     const TEXTURA_POR_BIOMA = {
       'bosque': 'grass', 'pradera': 'grass', 'montana': 'rock',
@@ -350,11 +299,13 @@ HTML_VISOR = """<!DOCTYPE html>
     // (asimetrico) frente al de bloque de piedra con marco (simetrico) para
     // montana precisamente por esto -- confirmado en el render de
     // referencia en Python antes de fijar la eleccion final.
-    // (2026-08-25) Extraido de dibujarTexturaVariada para reutilizarlo tambien
-    // en la seleccion de variante de los tramos rectos de orilla (ver
-    // dibujarBordesAgua mas abajo) -- mismo mezclado de bits, mismo criterio
-    // de "reutiliza antes de inventar" que el resto del proyecto. Comportamiento
-    // identico al de antes del refactor (mismo input -> mismo entero de salida).
+    // (2026-08-25) Extraido de dibujarTexturaVariada para reutilizarlo en
+    // cualquier otra seleccion pseudoaleatoria estable por celda -- mismo
+    // criterio de "reutiliza antes de inventar" que el resto del proyecto.
+    // Comportamiento identico al de antes del refactor (mismo input -> mismo
+    // entero de salida). (2026-08-26) Tambien se uso para elegir variante en
+    // los tramos rectos del sistema de orillas, retirado por completo hoy --
+    // ver CLAUDE.md.
     function hash32Celda(x, y) {
       let h = (Math.imul(x, 0x27d4eb2f) ^ Math.imul(y, 0x165667b1)) | 0;
       h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
@@ -372,7 +323,7 @@ HTML_VISOR = """<!DOCTYPE html>
       // (dx,0)/(0,dy) -- esa prueba mas simple no lo habria visto. Con mezcla
       // de bits estilo MurmurHash3 (xor + multiplicaciones + shifts) no hay
       // formula lineal que colapse asi.
-      // (2026-08-25) Acepta tanto una imagen unica (water, orillas) como un
+      // (2026-08-25) Acepta tanto una imagen unica (water) como un
       // banco de variantes reales (grass/sand/rock/tundra desde el cambio a
       // 8x8 nativo). La orientacion D4 se deriva de los 3 bits bajos del
       // hash (h % 8, igual que antes); el indice de variante se deriva de
@@ -393,149 +344,6 @@ HTML_VISOR = """<!DOCTYPE html>
       bufferCtx.scale(flip ? -1 : 1, 1);
       bufferCtx.drawImage(arr[idxVariante], -size / 2, -size / 2, size, size);
       bufferCtx.restore();
-    }
-
-    // (2026-08-25) SUPERSEDIDO el mismo dia: primera version de "orillas"
-    // (dibujarOrillaDireccional) tomaba un recorte de 24x10 que en realidad
-    // era una composicion YA MONTADA (esquina+centro+esquina de un estanque
-    // circular del pack), y la rotaba/repetia en cada celda de borde como si
-    // fuera una unica pieza reutilizable. Diego vio el resultado en un render
-    // de referencia y con razon no lo acepto: cada celda ponia su propia
-    // "esquina" redundante, produciendo una costa festoneada (cadena de
-    // medias lunas pinzadas en las uniones) en vez de una linea continua --
-    // visualmente peor que el estado anterior (espuma blanca lisa).
-    //
-    // Diego pidio explicitamente NO abandonar el asset del pack y resolverlo
-    // "de la forma mas profesional" usando el tileset. Investigacion mas a
-    // fondo (diseccion tile a tile de 8x8, no por bloques ya montados, ver
-    // CLAUDE.md para las coordenadas nativas completas) encontro que el pack
-    // SI separa pieza de esquina y pieza de tramo recto -- mi primer intento
-    // fallo por la unidad de recorte elegida, no porque el pack careciera de
-    // piezas componibles. Esta es la version corregida: un autotile minimo de
-    // 4 esquinas convexas + 4 tramos rectos (sin pieza cóncava dedicada -- el
-    // pack tampoco la trae; en una entrante de costa los dos tramos rectos
-    // simplemente se encuentran sin adorno extra, una simplificacion estandar
-    // en sistemas de autotile minimos y aceptable aqui). Los tramos rectos
-    // O/E tienen 3 variantes de textura (extraidas del propio pack, no
-    // inventadas) elegidas con el mismo hash32Celda que ya usa
-    // dibujarTexturaVariada, para que un tramo de costa largo no muestre la
-    // misma piedra repetida en cada celda.
-    // (2026-08-25) v4, misma tarde: rediseño de fondo tras discutirlo con
-    // Diego usando capas separadas en Tiled (agua en una capa, suelo en
-    // otra, anillo de orilla en una tercera por encima). Su ejemplo con
-    // capas dejo claro algo que las versiones v2/v3 hacian mal: el anillo de
-    // orilla debe superponerse sobre las celdas de TIERRA que rodean el
-    // agua, nunca sobre la celda de agua misma -- "si tienes dos celdas de
-    // agua eso solo tiene textura agua, las celdas circundantes seran del
-    // bioma que corresponda, en una segunda capa pintamos la orilla
-    // alrededor... y se superpone al bioma que haya debajo". v2/v3 hacian
-    // justo lo contrario: pintaban el anillo (opaco, sin transparencia,
-    // verificado con getcolors) DENTRO de la celda de agua. Medido con PIL:
-    // cada pieza es ~88% color de tierra y solo ~12% agua, asi que toda
-    // celda de agua en el borde se pintaba casi entera como tierra --
-    // cualquier cuerpo de agua se veia mas pequeño de lo que decia el
-    // modelo, y un canal de 1 celda de ancho (100% celdas de borde) se veia
-    // casi sin nada de agua real, pareciendo una estructura en vez de un
-    // canal (el hallazgo de "torre" de ayer). Girar el sistema a celdas de
-    // tierra resuelve esto de raiz sin tocar ningun PNG: el agua queda
-    // siempre intacta (paso de agua de dibujarCapaTerrenoAgua ya no dibuja
-    // ningun anillo), y la celda de tierra vecina -- que YA es
-    // mayoritariamente ese color -- recibe el anillo con naturalidad.
-    //
-    // Segundo cambio de fondo, geometrico: con el anillo en la celda de
-    // agua, una esquina convexa (p.ej. "esquina_no") se disparaba cuando esa
-    // celda de AGUA tenia tierra en dos lados cardinales adyacentes -- el
-    // caso comun en cualquier laguna rectangular (las 4 esquinas de la
-    // propia agua). Trasladado tal cual a la celda de tierra (usar la misma
-    // condicion pero con agua/tierra invertidos) NO es el equivalente
-    // correcto: para una laguna rectangular solida, la celda de tierra en la
-    // esquina diagonal de la laguna nunca tiene agua en dos lados
-    // cardinales a la vez (el agua le toca en diagonal, no en cruz) -- con
-    // la condicion ingenua invertida las esquinas dejarian de dispararse
-    // nunca para formas convexas normales, solo en muescas concavas, justo
-    // al reves de lo que hace falta. La regla correcta (la misma que usan
-    // los sistemas de autotile de 8 direcciones estandar en RPG Maker/Tiled
-    // Wang tiles para la esquina convexa exterior): una celda de tierra
-    // recibe la pieza de esquina cuando su vecino DIAGONAL en esa direccion
-    // es agua Y sus dos vecinos CARDINALES en esa misma esquina son ambos
-    // tierra (si alguno de los dos cardinales ya fuera agua, esa direccion
-    // se resuelve como tramo recto, no como esquina). Sin pieza concava
-    // dedicada (el pack no la trae, misma limitacion aceptada que en v2):
-    // una muesca de tierra rodeada de agua en dos lados cardinales
-    // adyacentes se resuelve con los dos tramos rectos independientes
-    // encontrandose sin adorno extra.
-    //
-    // Bug de opacidad (documentado, no resuelto en esta version): las 12
-    // piezas son 100% opacas (alfa 255 verificado con PIL) -- si una celda
-    // de tierra necesita mas de una pieza en lados NO adyacentes (p.ej. un
-    // istmo de tierra de 1 celda entre dos cuerpos de agua, con agua al
-    // norte Y al sur), el segundo drawImage borra el primero sin dejar
-    // rastro. Es el mismo bug que en v2/v3, ahora del lado de tierra en vez
-    // de agua -- afecta a istmos/penínsulas estrechas, un caso mas raro que
-    // los canales estrechos de antes pero real. No resuelto aqui: exigiria
-    // recortar el alfa de las piezas o componer con mascaras, un cambio
-    // mayor que Diego no ha pedido todavia.
-    //
-    // (2026-08-25) juegoOrillaPara() antes distinguia "verde" (bosque/
-    // pradera) de "arena" (resto). El juego verde se retiro por completo --
-    // ver la nota larga junto a RUTA_TEXTURAS -- asi que hoy todos los
-    // biomas usan el mismo juego de arena (Ocean), ya corregido de
-    // orientacion y probado sobre formas irregulares. La funcion se deja
-    // como punto unico de extension por si en el futuro aparece un juego
-    // verde genuinamente componible.
-    function juegoOrillaPara(bioma) {
-      return 'orilla_';
-    }
-
-    // Dibuja el anillo de orilla sobre una celda de TIERRA (x,y) que tenga
-    // algun vecino de agua, cardinal o diagonal. No hace nada si la celda es
-    // agua o si no toca agua por ningun lado.
-    function dibujarAnilloOrilla(grid, ancho, alto, x, y, px, py, size) {
-      const c = grid[y][x];
-      if (c.tiene_agua) return;
-      const esAgua = (nx, ny) => nx >= 0 && ny >= 0 && nx < ancho && ny < alto && grid[ny][nx].tiene_agua;
-      const n = esAgua(x, y - 1), s = esAgua(x, y + 1), o = esAgua(x - 1, y), e = esAgua(x + 1, y);
-      // Esquina convexa: diagonal es agua Y ambos cardinales de esa esquina
-      // son tierra (si alguno fuera agua, ese lado ya se resuelve como
-      // tramo recto -- ver nota larga arriba).
-      const no = !n && !o && esAgua(x - 1, y - 1);
-      const ne = !n && !e && esAgua(x + 1, y - 1);
-      const so = !s && !o && esAgua(x - 1, y + 1);
-      const se = !s && !e && esAgua(x + 1, y + 1);
-      if (!n && !s && !o && !e && !no && !ne && !so && !se) return;
-      const j = juegoOrillaPara(c.terreno);
-      let dibujadoN = false, dibujadoS = false, dibujadoO = false, dibujadoE = false;
-      if (no) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_no'], px, py, size, size); dibujadoN = dibujadoO = true; }
-      if (ne) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_ne'], px, py, size, size); dibujadoN = dibujadoE = true; }
-      if (so) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_so'], px, py, size, size); dibujadoS = dibujadoO = true; }
-      if (se) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_se'], px, py, size, size); dibujadoS = dibujadoE = true; }
-      if (n && !dibujadoN) {
-        bufferCtx.drawImage(TEXTURAS[j + 'borde_n'], px, py, size, size);
-      }
-      if (s && !dibujadoS) {
-        bufferCtx.drawImage(TEXTURAS[j + 'borde_s'], px, py, size, size);
-      }
-      if (o && !dibujadoO) {
-        if (j === 'orilla_') {
-          const variantes = ['orilla_borde_o_a', 'orilla_borde_o_b', 'orilla_borde_o_c'];
-          bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
-        } else {
-          bufferCtx.drawImage(TEXTURAS[j + 'borde_o'], px, py, size, size);
-        }
-      }
-      if (e && !dibujadoE) {
-        if (j === 'orilla_') {
-          const variantes = ['orilla_borde_e_a', 'orilla_borde_e_b', 'orilla_borde_e_c'];
-          bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
-        } else {
-          bufferCtx.drawImage(TEXTURAS[j + 'borde_e'], px, py, size, size);
-        }
-      }
-    }
-
-    function orillaCargada() {
-      return texturaLista['orilla_esquina_no'] && texturaLista['orilla_borde_n'] &&
-        texturaLista['orilla_borde_o_a'] && texturaLista['orilla_borde_e_a'];
     }
 
     let referencias = {};
@@ -575,7 +383,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // verificarlo, en vez de tener que leerlo entre otros ocho efectos en el
     // mismo bucle.
 
-    // --- Capa 1: terreno + agua (incluye orillas y charco, que son agua) ---
+    // --- Capa 1: terreno + agua (incluye charco, que es agua) ---
     function dibujarCapaTerrenoAgua(data) {
       const { ancho, alto, grid } = data;
       for (let y = 0; y < alto; y++) {
@@ -631,7 +439,8 @@ HTML_VISOR = """<!DOCTYPE html>
           }
 
           // Agua permanente: textura real de base + bandas de profundidad
-          // (semi-transparentes) + orilla procedimental en el borde.
+          // (semi-transparentes). Sin transicion hacia la tierra vecina --
+          // ver nota de 2026-08-26 mas abajo.
           //
           // (2026-08-25) mm_water.png dejo de ser un color plano: ahora es un
           // tile de olas real de 8x8 de la seccion WAVES del pack Ocean,
@@ -649,13 +458,18 @@ HTML_VISOR = """<!DOCTYPE html>
           // en las tres bandas. Es una eleccion de gusto, no una medicion
           // objetiva (mismo tipo de ajuste que el de ALPHA_MAX_CHARCO) --
           // si no convence, son tres numeros que cambiar.
-          // (2026-08-25) v4: el agua YA NO dibuja ningun anillo de orilla
-          // sobre si misma -- ver la nota larga junto a dibujarAnilloOrilla()
-          // mas abajo sobre por que eso hacia que el agua se viera mas
-          // pequeña de lo real. La celda de agua se pinta siempre pura:
-          // textura de olas + banda de profundidad, nada mas. El anillo se
-          // dibuja aparte, en dibujarCapaOrillas(), sobre las celdas de
-          // TIERRA vecinas.
+          // (2026-08-26) El sistema de anillo de orilla (v1 a v4.1: primero
+          // festoneado, luego esquina+borde sobre la celda de agua, luego
+          // sobre la celda de tierra, con hasta 3 juegos de piezas
+          // distintos probados -- arena, verde, unificacion) se retiro por
+          // completo: demasiadas iteraciones sin converger a un resultado
+          // que Diego aceptara, mas una pregunta de fondo sin resolver
+          // (si la orilla debe adaptarse por bioma) que no valia la pena
+          // seguir puliendo a ciegas sobre piezas de 8x8 sueltas. Ver
+          // CLAUDE.md para el historial completo. Hoy la celda de agua se
+          // pinta siempre pura -- textura de olas + banda de profundidad,
+          // nada mas -- y la celda de tierra vecina pinta solo la textura
+          // de su bioma, sin ninguna transicion entre ambas.
           if (c.tiene_agua) {
             if (texturaLista['water']) {
               dibujarTexturaVariada(TEXTURAS['water'], x, y, px, py, TILE_NATIVO);
@@ -685,22 +499,6 @@ HTML_VISOR = """<!DOCTYPE html>
             bufferCtx.fillStyle = `rgba(100,170,220,${ratioCharco * ALPHA_MAX_CHARCO})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
           }
-        }
-      }
-    }
-
-    // --- Capa 2: anillo de orilla sobre las celdas de tierra que tocan agua ---
-    // Se dibuja DESPUES de la capa de terreno/agua (para superponerse al
-    // bioma que ya esta pintado debajo, tal como lo describio Diego) y ANTES
-    // del relieve (para que el sombreado de elevacion siga aplicandose por
-    // encima del anillo igual que sobre cualquier otra celda de tierra).
-    function dibujarCapaOrillas(data) {
-      const { ancho, alto, grid } = data;
-      if (!orillaCargada()) return;
-      for (let y = 0; y < alto; y++) {
-        for (let x = 0; x < ancho; x++) {
-          const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
-          dibujarAnilloOrilla(grid, ancho, alto, x, y, px, py, TILE_NATIVO);
         }
       }
     }
@@ -760,7 +558,6 @@ HTML_VISOR = """<!DOCTYPE html>
       bufferTerreno.height = alto * TILE_NATIVO;
       bufferCtx.imageSmoothingEnabled = false;
       dibujarCapaTerrenoAgua(data);
-      dibujarCapaOrillas(data);
       dibujarCapaRelieve(data);
       dibujarCapaDecoracion(data);
     }
