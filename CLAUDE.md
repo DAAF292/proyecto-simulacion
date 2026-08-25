@@ -702,6 +702,113 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   esto. Se marca explícitamente como no resuelto en vez de dar por buena
   una hipótesis no verificada.
 
+  **Resuelto — Migración a grid nativo 8x8 y orillas v4: el anillo pasa a la
+  celda de tierra (25-08, tarde/noche)**: Diego abrió el `Overworld.png` del
+  pack base en Tiled (en vez de mis scripts de PIL con grid rojo dibujado
+  encima) y confirmó visualmente que el grid nativo real de TODO el pack
+  (suelo, agua, orillas) es 8x8, no 16x16 — las cuatro texturas de suelo que
+  se habían corregido unas horas antes (grass/sand/rock/tundra) resultaron
+  ser, cada una, un bloque de 2x2 celdas reales de 8x8 fusionadas en un
+  único recorte de 16x16, no una pieza atómica — el mismo tipo de error de
+  fondo que las orillas v1 (confundir una composición de varias celdas del
+  grid con una única pieza), esta vez sin síntoma visible porque la zona
+  elegida resultó ser homogénea.
+
+  *Cambio 1 — `TILE_NATIVO` 16→8*: cascada limpia por estar todo expresado
+  como fracción de la constante. Cada una de las cuatro texturas de suelo se
+  reextrajo como un banco de 4 variantes reales de 8x8 (`mm_grass_a..d.png`,
+  etc.), evitando las celdas que `getcolors()` reveló como planas de un solo
+  color dentro de esa misma franja (grass col0, sand col0/5/6, tundra
+  col0fila1 en sus packs respectivos) — descartadas a favor de otras celdas
+  con textura real de la misma sección GROUND. `dibujarTexturaVariada`
+  acepta ahora tanto una imagen única (water, orillas) como un banco de
+  variantes: el índice de variante y la orientación D4 se derivan de rangos
+  de bits independientes del mismo `hash32Celda` (`h % 8` para orientación,
+  `Math.floor(h/8) % N` para variante), sin solapar bits entre ambas
+  elecciones. `camara.zoom` inicial sube de 1 a 2 y los límites de la rueda
+  se duplican (0.3-4 → 0.6-8) para compensar exactamente que el mundo no se
+  vea de golpe a mitad de tamaño con el buffer nativo más pequeño.
+
+  *Cambio 2 — reordenar `dibujarTerreno` en capas de dibujo explícitas*: a
+  petición de Diego de pensar el mapa "por capas" (terreno/agua, accidentes
+  geográficos, flora, objetos, criaturas). Aclaración importante: esto
+  reordena la CAPA DE DIBUJO en el visor, no el modelo de datos del motor —
+  el DTO de celda ya separaba terreno/agua/elevación/recurso como campos
+  independientes antes de este cambio. `dibujarTerreno` ahora llama en
+  secuencia a `dibujarCapaTerrenoAgua`, `dibujarCapaOrillas`,
+  `dibujarCapaRelieve` y `dibujarCapaDecoracion`, cada una con su propio
+  bucle sobre el grid. Beneficio concreto: aislar el sombreado de relieve en
+  su propia función permite confirmar o descartar de forma directa (comentar
+  la llamada y comparar) el hallazgo pendiente de la mancha diagonal que
+  Diego señaló como "filtro de clima" — no hecho todavía, sigue sin
+  confirmar.
+
+  *Cambio 3 — orillas v4: el anillo se pinta sobre la celda de TIERRA, no
+  sobre la de agua*: el hallazgo de fondo de esta pieza. Diego construyó a
+  mano en Tiled, con capas separadas (suelo en una, agua en otra, orilla en
+  una tercera), varios estanques de prueba y explicó el diseño correcto sin
+  ambigüedad: "si tienes dos celdas de agua eso solo tiene textura agua, las
+  celdas circundantes serán del bioma que corresponda, en una segunda capa
+  pintamos la orilla alrededor del cuerpo de agua... y se superpone al
+  bioma que haya debajo". v2/v3 hacían justo lo contrario: pintaban el
+  anillo (opaco al 100%, verificado con `getcolors()`, sin transparencia)
+  DENTRO de la celda de agua. Medido con PIL: cada pieza de orilla es ~88%
+  color de tierra y solo ~12% agua — toda celda de agua en el borde se
+  pintaba casi entera como tierra, por lo que cualquier cuerpo de agua se
+  veía más pequeño de lo que decía el modelo, y un canal de 1 celda de ancho
+  (100% celdas de borde) se veía casi sin agua real, pareciendo una
+  estructura en vez de un canal (el hallazgo de "torre" documentado hace
+  unas horas). Girar el sistema a celdas de tierra resuelve esto de raíz sin
+  tocar ningún PNG.
+
+  *Detalle geométrico no trivial*: con el anillo en la celda de agua, una
+  esquina convexa se disparaba cuando esa celda de AGUA tenía tierra en dos
+  lados cardinales adyacentes (el caso común en cualquier laguna
+  rectangular). Trasladar la misma condición tal cual a la celda de tierra
+  (invertir agua/tierra sin más) NO es el equivalente correcto: para una
+  laguna rectangular sólida, la celda de tierra en la esquina diagonal de la
+  laguna nunca tiene agua en dos lados cardinales a la vez (el agua le toca
+  en diagonal, no en cruz) — con la condición ingenua invertida las esquinas
+  dejarían de dispararse nunca para formas convexas normales. La regla
+  correcta, la misma que usan los sistemas de autotile de 8 direcciones
+  estándar (RPG Maker, Wang tiles de Tiled) para la esquina convexa exterior:
+  una celda de tierra recibe la pieza de esquina cuando su vecino DIAGONAL
+  en esa dirección es agua Y sus dos vecinos cardinales en esa misma esquina
+  son ambos tierra. Implementado en `dibujarAnilloOrilla` (renombrada, antes
+  `dibujarBordesAgua`).
+
+  *Verificación*: render de referencia en PIL (réplica línea a línea del
+  algoritmo real) sobre tres formas — laguna rectangular en bosque, canal de
+  1 celda en desierto, laguna en forma de L en desierto — confirma agua
+  íntegra y visible en todas las celdas interiores, anillo correcto en las
+  cuatro esquinas de la laguna rectangular, canal de 1 celda ahora
+  legiblemente agua (ya no "torre"), y el ángulo cóncavo de la L resuelto
+  sin huecos ni piezas dedicadas, tal como se documentó en v2. No se ejecutó
+  arnés mock-DOM para este cambio porque la réplica en PIL es una
+  traducción literal del algoritmo JS real, no una aproximación — se
+  considera la verificación equivalente, dicho explícitamente en vez de
+  fingir una comprobación que no se hizo.
+
+  *Bug de opacidad, documentado y NO resuelto*: las 20 piezas de orilla son
+  100% opacas (alfa 255 verificado con PIL). Si una celda de tierra necesita
+  más de una pieza en lados NO adyacentes (un istmo de tierra de 1 celda
+  entre dos cuerpos de agua, agua al norte Y al sur a la vez), el segundo
+  `drawImage` borra el primero sin dejar rastro — mismo bug que en v2/v3,
+  ahora del lado de tierra en vez de agua. Afecta a istmos/penínsulas
+  estrechas de tierra, un caso más raro que los canales estrechos de agua de
+  antes pero real. Arreglarlo exigiría recortar el alfa de las piezas o
+  componer con máscaras — un cambio mayor que Diego no ha pedido todavía.
+
+  *Hallazgo pendiente, sin resolver*: si un cuerpo de agua debe poder
+  colindar con varios biomas a la vez con la orilla correcta de cada uno,
+  Diego señaló que "en todos los overworlds de los distintos packs" puede
+  haber otros anillos de orilla propios de cada pack (Arctic, Desert) que no
+  se han buscado todavía — hoy `juegoOrillaPara` solo distingue entre
+  "verde" (bosque/pradera, pack base) y "arena" (todo lo demás, pack
+  Ocean), así que montaña y tundra caen en el anillo de arena por defecto en
+  vez de uno propio. Catalogar si Arctic/Desert traen su propio anillo queda
+  como pieza aparte, no iniciada.
+
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
   buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo

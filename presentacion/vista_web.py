@@ -99,7 +99,24 @@ HTML_VISOR = """<!DOCTYPE html>
     // formas geometricas + glifos en vez de sprites dibujados a mano.
     // ------------------------------------------------------------------
 
-    const TILE_NATIVO = 16;      // px por celda en el buffer de terreno (resolucion nativa)
+    // (2026-08-25) TILE_NATIVO baja de 16 a 8 -- Diego abrio el Overworld.png
+    // de Mini Medieval en Tiled (con grid configurable, en vez de mis scripts
+    // de PIL con cuadricula roja dibujada encima) y confirmo visualmente que
+    // el grid nativo real de TODO el pack (suelo, agua, orillas) es 8x8, no
+    // 16x16. Las piezas de agua/orilla ya se extrajeron a 8x8 desde el
+    // principio y verificaron correctamente contra ese grid; las cuatro
+    // texturas de suelo (grass/sand/rock/tundra) se habian extraido como
+    // bloques de 16x16 -- un acierto casual de tileo, no una pieza atomica
+    // real, exactamente el mismo tipo de error de fondo que las orillas v1
+    // (confundir una composicion de varias celdas del grid con una unica
+    // pieza), solo que sin sintoma visible esta vez. Bajar TILE_NATIVO a 8
+    // hace que TODO el tileset se dibuje a resolucion nativa 1:1 (antes el
+    // agua/orillas de 8x8 se reescalaban x2 sin distorsion pero con grano
+    // visualmente mas grueso que el suelo de 16x16 sin escalar -- ver
+    // CLAUDE.md). Las cuatro texturas de suelo se reextrajeron como bancos
+    // de 4 variantes reales de 8x8 cada una (ver RUTA_TEXTURAS) en vez de
+    // depender solo de la rotacion D4 sobre una unica imagen.
+    const TILE_NATIVO = 8;       // px por celda en el buffer de terreno (resolucion nativa)
     const INTERVALO_POLL_MS = 250;
 
     const canvas = document.getElementById('canvas-mapa');
@@ -153,13 +170,38 @@ HTML_VISOR = """<!DOCTYPE html>
     // el brillo (la leccion de la pieza de Urizen de ayer). montana/desierto/
     // tundra/agua se dibujan tal cual, sin ningun tinte encima.
     const RUTA_TEXTURAS = {
-      'grass': 'assets/terreno/mm_grass.png',
-      'sand': 'assets/terreno/mm_sand.png',
-      'rock': 'assets/terreno/mm_rock.png',
-      'tundra': 'assets/terreno/mm_tundra.png',
+      // (2026-08-25) grass/sand/rock/tundra pasan de una sola imagen de
+      // 16x16 a un banco de 4 variantes reales de 8x8 -- el grid nativo real
+      // confirmado en Tiled (ver nota junto a TILE_NATIVO). No son un
+      // recorte generico: cada variante es una celda distinta y genuina de
+      // la seccion GROUND del pack correspondiente (sin decoraciones sueltas
+      // de flores/cactus/setas), elegidas evitando las celdas que resultaron
+      // ser lisas de un solo color al comprobar con getcolors() -- grass
+      // col0/sand col0,5,6 (base/desert) y tundra col0fila1 (arctic) eran
+      // planas y se descartaron a favor de otras celdas con textura real de
+      // la misma franja. rock mantiene las mismas 4 celdas que ya se usaban
+      // (bloque de grava de PATH), ahora citadas como banco explicito en vez
+      // de una unica imagen de 16x16.
+      'grass': [
+        'assets/terreno/mm_grass_a.png', 'assets/terreno/mm_grass_b.png',
+        'assets/terreno/mm_grass_c.png', 'assets/terreno/mm_grass_d.png'
+      ],
+      'sand': [
+        'assets/terreno/mm_sand_a.png', 'assets/terreno/mm_sand_b.png',
+        'assets/terreno/mm_sand_c.png', 'assets/terreno/mm_sand_d.png'
+      ],
+      'rock': [
+        'assets/terreno/mm_rock_a.png', 'assets/terreno/mm_rock_b.png',
+        'assets/terreno/mm_rock_c.png', 'assets/terreno/mm_rock_d.png'
+      ],
+      'tundra': [
+        'assets/terreno/mm_tundra_a.png', 'assets/terreno/mm_tundra_b.png',
+        'assets/terreno/mm_tundra_c.png', 'assets/terreno/mm_tundra_d.png'
+      ],
       'water': 'assets/terreno/mm_water.png',
       // (2026-08-25) SUPERSEDIDO el mismo dia -- ver nota larga junto a
-      // dibujarBordesAgua() mas abajo. Estas 12 piezas sustituyen al primer
+      // dibujarAnilloOrilla() mas abajo (renombrada en v4 -- antes se llamaba
+      // dibujarBordesAgua). Estas 12 piezas sustituyen al primer
       // 'orilla' de una sola textura rotada (que producia un festoneado
       // artificial, ver CLAUDE.md): 4 esquinas convexas + 4 tramos rectos,
       // con 3 variantes de textura cada uno en O/E para evitar repeticion
@@ -217,13 +259,32 @@ HTML_VISOR = """<!DOCTYPE html>
     // Subconjunto de COLORES_TERRENO que recibe el nudge de color descrito
     // arriba -- deliberadamente NO incluye montana/desierto/tundra.
     const TINTE_SUAVE_TERRENO = { 'bosque': COLORES_TERRENO['bosque'], 'pradera': COLORES_TERRENO['pradera'] };
+    // (2026-08-25) Soporta tanto una ruta unica (string) como un banco de
+    // variantes (array de rutas) -- lo segundo se usa para grass/sand/rock/
+    // tundra desde el cambio a 8x8 nativo. texturaLista[clave] solo pasa a
+    // true cuando TODAS las variantes del banco han cargado, para que
+    // dibujarTexturaVariada nunca intente dibujar con un array a medio
+    // rellenar.
     const TEXTURAS = {};
     const texturaLista = {};
     for (const [clave, ruta] of Object.entries(RUTA_TEXTURAS)) {
-      const img = new Image();
-      img.onload = () => { texturaLista[clave] = true; };
-      img.src = ruta;
-      TEXTURAS[clave] = img;
+      if (Array.isArray(ruta)) {
+        const imgs = ruta.map(r => {
+          const img = new Image();
+          img.src = r;
+          return img;
+        });
+        let cargadas = 0;
+        imgs.forEach(img => {
+          img.onload = () => { cargadas++; if (cargadas === imgs.length) texturaLista[clave] = true; };
+        });
+        TEXTURAS[clave] = imgs;
+      } else {
+        const img = new Image();
+        img.onload = () => { texturaLista[clave] = true; };
+        img.src = ruta;
+        TEXTURAS[clave] = img;
+      }
     }
 
     // (2026-08-25) Sprites de criaturas -- pivote de Urizen a Mini Medieval
@@ -312,14 +373,26 @@ HTML_VISOR = """<!DOCTYPE html>
       // (dx,0)/(0,dy) -- esa prueba mas simple no lo habria visto. Con mezcla
       // de bits estilo MurmurHash3 (xor + multiplicaciones + shifts) no hay
       // formula lineal que colapse asi.
-      const h = hash32Celda(x, y) % 8;
-      const rot = (h % 4) * (Math.PI / 2);
-      const flip = h >= 4;
+      // (2026-08-25) Acepta tanto una imagen unica (water, orillas) como un
+      // banco de variantes reales (grass/sand/rock/tundra desde el cambio a
+      // 8x8 nativo). La orientacion D4 se deriva de los 3 bits bajos del
+      // hash (h % 8, igual que antes); el indice de variante se deriva de
+      // los bits restantes (h / 8, sin solapar ningun bit con la
+      // orientacion) para que ambas elecciones sean independientes entre si
+      // -- evita a proposito el tipo de correlacion lineal que ya causo el
+      // bug de las franjas diagonales documentado mas abajo, aunque aqui el
+      // riesgo es menor por no ser una formula lineal en (x,y).
+      const arr = Array.isArray(img) ? img : [img];
+      const h = hash32Celda(x, y);
+      const orientCode = h % 8;
+      const rot = (orientCode % 4) * (Math.PI / 2);
+      const flip = orientCode >= 4;
+      const idxVariante = arr.length > 1 ? Math.floor(h / 8) % arr.length : 0;
       bufferCtx.save();
       bufferCtx.translate(px + size / 2, py + size / 2);
       bufferCtx.rotate(rot);
       bufferCtx.scale(flip ? -1 : 1, 1);
-      bufferCtx.drawImage(img, -size / 2, -size / 2, size, size);
+      bufferCtx.drawImage(arr[idxVariante], -size / 2, -size / 2, size, size);
       bufferCtx.restore();
     }
 
@@ -348,51 +421,94 @@ HTML_VISOR = """<!DOCTYPE html>
     // inventadas) elegidas con el mismo hash32Celda que ya usa
     // dibujarTexturaVariada, para que un tramo de costa largo no muestre la
     // misma piedra repetida en cada celda.
-    // (2026-08-25) juegoOrillaPara(): que celda de tierra decide el "estilo"
-    // de la orilla. Vale con mirar UN vecino de tierra (no los cuatro) porque
-    // en la practica el borde de un cuerpo de agua casi siempre pertenece a
-    // un unico bioma en el punto de contacto; si dos biomas distintos tocan
-    // el mismo lado de una celda de agua a la vez (un vertice de bioma justo
-    // en la orilla) se usa el primero que se encuentre en la comprobacion de
-    // vecinos de dibujarBordesAgua -- un empate infrecuente y sin
-    // consecuencia grave (una pieza en vez de otra en una sola celda), no
-    // una condicion que valga la pena resolver con mas codigo hoy.
+    // (2026-08-25) v4, misma tarde: rediseño de fondo tras discutirlo con
+    // Diego usando capas separadas en Tiled (agua en una capa, suelo en
+    // otra, anillo de orilla en una tercera por encima). Su ejemplo con
+    // capas dejo claro algo que las versiones v2/v3 hacian mal: el anillo de
+    // orilla debe superponerse sobre las celdas de TIERRA que rodean el
+    // agua, nunca sobre la celda de agua misma -- "si tienes dos celdas de
+    // agua eso solo tiene textura agua, las celdas circundantes seran del
+    // bioma que corresponda, en una segunda capa pintamos la orilla
+    // alrededor... y se superpone al bioma que haya debajo". v2/v3 hacian
+    // justo lo contrario: pintaban el anillo (opaco, sin transparencia,
+    // verificado con getcolors) DENTRO de la celda de agua. Medido con PIL:
+    // cada pieza es ~88% color de tierra y solo ~12% agua, asi que toda
+    // celda de agua en el borde se pintaba casi entera como tierra --
+    // cualquier cuerpo de agua se veia mas pequeño de lo que decia el
+    // modelo, y un canal de 1 celda de ancho (100% celdas de borde) se veia
+    // casi sin nada de agua real, pareciendo una estructura en vez de un
+    // canal (el hallazgo de "torre" de ayer). Girar el sistema a celdas de
+    // tierra resuelve esto de raiz sin tocar ningun PNG: el agua queda
+    // siempre intacta (paso de agua de dibujarCapaTerrenoAgua ya no dibuja
+    // ningun anillo), y la celda de tierra vecina -- que YA es
+    // mayoritariamente ese color -- recibe el anillo con naturalidad.
+    //
+    // Segundo cambio de fondo, geometrico: con el anillo en la celda de
+    // agua, una esquina convexa (p.ej. "esquina_no") se disparaba cuando esa
+    // celda de AGUA tenia tierra en dos lados cardinales adyacentes -- el
+    // caso comun en cualquier laguna rectangular (las 4 esquinas de la
+    // propia agua). Trasladado tal cual a la celda de tierra (usar la misma
+    // condicion pero con agua/tierra invertidos) NO es el equivalente
+    // correcto: para una laguna rectangular solida, la celda de tierra en la
+    // esquina diagonal de la laguna nunca tiene agua en dos lados
+    // cardinales a la vez (el agua le toca en diagonal, no en cruz) -- con
+    // la condicion ingenua invertida las esquinas dejarian de dispararse
+    // nunca para formas convexas normales, solo en muescas concavas, justo
+    // al reves de lo que hace falta. La regla correcta (la misma que usan
+    // los sistemas de autotile de 8 direcciones estandar en RPG Maker/Tiled
+    // Wang tiles para la esquina convexa exterior): una celda de tierra
+    // recibe la pieza de esquina cuando su vecino DIAGONAL en esa direccion
+    // es agua Y sus dos vecinos CARDINALES en esa misma esquina son ambos
+    // tierra (si alguno de los dos cardinales ya fuera agua, esa direccion
+    // se resuelve como tramo recto, no como esquina). Sin pieza concava
+    // dedicada (el pack no la trae, misma limitacion aceptada que en v2):
+    // una muesca de tierra rodeada de agua en dos lados cardinales
+    // adyacentes se resuelve con los dos tramos rectos independientes
+    // encontrandose sin adorno extra.
+    //
+    // Bug de opacidad (documentado, no resuelto en esta version): las 20
+    // piezas son 100% opacas (alfa 255 verificado con PIL) -- si una celda
+    // de tierra necesita mas de una pieza en lados NO adyacentes (p.ej. un
+    // istmo de tierra de 1 celda entre dos cuerpos de agua, con agua al
+    // norte Y al sur), el segundo drawImage borra el primero sin dejar
+    // rastro. Es el mismo bug que en v2/v3, ahora del lado de tierra en vez
+    // de agua -- afecta a istmos/penínsulas estrechas, un caso mas raro que
+    // los canales estrechos de antes pero real. No resuelto aqui: exigiria
+    // recortar el alfa de las piezas o componer con mascaras, un cambio
+    // mayor que Diego no ha pedido todavia.
     function juegoOrillaPara(bioma) {
       return BIOMAS_ORILLA_VERDE.has(bioma) ? 'orilla_verde_' : 'orilla_';
     }
 
-    function dibujarBordesAgua(grid, ancho, alto, x, y, px, py, size) {
+    // Dibuja el anillo de orilla sobre una celda de TIERRA (x,y) que tenga
+    // algun vecino de agua, cardinal o diagonal. No hace nada si la celda es
+    // agua o si no toca agua por ningun lado.
+    function dibujarAnilloOrilla(grid, ancho, alto, x, y, px, py, size) {
+      const c = grid[y][x];
+      if (c.tiene_agua) return;
       const esAgua = (nx, ny) => nx >= 0 && ny >= 0 && nx < ancho && ny < alto && grid[ny][nx].tiene_agua;
-      const biomaVecino = (nx, ny) => (nx >= 0 && ny >= 0 && nx < ancho && ny < alto) ? grid[ny][nx].terreno : null;
-      const n = !esAgua(x, y - 1), s = !esAgua(x, y + 1), o = !esAgua(x - 1, y), e = !esAgua(x + 1, y);
-      if (!n && !s && !o && !e) return;
+      const n = esAgua(x, y - 1), s = esAgua(x, y + 1), o = esAgua(x - 1, y), e = esAgua(x + 1, y);
+      // Esquina convexa: diagonal es agua Y ambos cardinales de esa esquina
+      // son tierra (si alguno fuera agua, ese lado ya se resuelve como
+      // tramo recto -- ver nota larga arriba).
+      const no = !n && !o && esAgua(x - 1, y - 1);
+      const ne = !n && !e && esAgua(x + 1, y - 1);
+      const so = !s && !o && esAgua(x - 1, y + 1);
+      const se = !s && !e && esAgua(x + 1, y + 1);
+      if (!n && !s && !o && !e && !no && !ne && !so && !se) return;
+      const j = juegoOrillaPara(c.terreno);
       let dibujadoN = false, dibujadoS = false, dibujadoO = false, dibujadoE = false;
-      if (n && o) {
-        const j = juegoOrillaPara(biomaVecino(x, y - 1));
-        bufferCtx.drawImage(TEXTURAS[j + 'esquina_no'], px, py, size, size); dibujadoN = dibujadoO = true;
-      }
-      if (n && e) {
-        const j = juegoOrillaPara(biomaVecino(x, y - 1));
-        bufferCtx.drawImage(TEXTURAS[j + 'esquina_ne'], px, py, size, size); dibujadoN = dibujadoE = true;
-      }
-      if (s && o) {
-        const j = juegoOrillaPara(biomaVecino(x, y + 1));
-        bufferCtx.drawImage(TEXTURAS[j + 'esquina_so'], px, py, size, size); dibujadoS = dibujadoO = true;
-      }
-      if (s && e) {
-        const j = juegoOrillaPara(biomaVecino(x, y + 1));
-        bufferCtx.drawImage(TEXTURAS[j + 'esquina_se'], px, py, size, size); dibujadoS = dibujadoE = true;
-      }
+      if (no) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_no'], px, py, size, size); dibujadoN = dibujadoO = true; }
+      if (ne) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_ne'], px, py, size, size); dibujadoN = dibujadoE = true; }
+      if (so) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_so'], px, py, size, size); dibujadoS = dibujadoO = true; }
+      if (se) { bufferCtx.drawImage(TEXTURAS[j + 'esquina_se'], px, py, size, size); dibujadoS = dibujadoE = true; }
       if (n && !dibujadoN) {
-        const j = juegoOrillaPara(biomaVecino(x, y - 1));
         bufferCtx.drawImage(TEXTURAS[j + 'borde_n'], px, py, size, size);
       }
       if (s && !dibujadoS) {
-        const j = juegoOrillaPara(biomaVecino(x, y + 1));
         bufferCtx.drawImage(TEXTURAS[j + 'borde_s'], px, py, size, size);
       }
       if (o && !dibujadoO) {
-        const j = juegoOrillaPara(biomaVecino(x - 1, y));
         if (j === 'orilla_') {
           const variantes = ['orilla_borde_o_a', 'orilla_borde_o_b', 'orilla_borde_o_c'];
           bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
@@ -401,7 +517,6 @@ HTML_VISOR = """<!DOCTYPE html>
         }
       }
       if (e && !dibujadoE) {
-        const j = juegoOrillaPara(biomaVecino(x + 1, y));
         if (j === 'orilla_') {
           const variantes = ['orilla_borde_e_a', 'orilla_borde_e_b', 'orilla_borde_e_c'];
           bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
@@ -423,26 +538,49 @@ HTML_VISOR = """<!DOCTYPE html>
     let estadoActual = null;     // { data, porId, t } del ultimo poll recibido
     let tPollActual = performance.now();
 
-    const camara = { x: null, y: null, zoom: 1 };
+    // (2026-08-25) zoom inicial sube de 1 a 2 al bajar TILE_NATIVO de 16 a 8:
+    // sin este ajuste el mundo se veria de golpe a la mitad de tamaño en
+    // pantalla (mismo numero de celdas, la mitad de px nativos cada una) --
+    // zoom=2 compensa exactamente el cambio y deja el tamaño en pantalla
+    // igual que antes por defecto. Limites de la rueda tambien x2 (0.3-4 ->
+    // 0.6-8) por el mismo motivo, para no perder rango de detalle disponible.
+    const camara = { x: null, y: null, zoom: 2 };
     let arrastrando = false;
     let ultimoRaton = { x: 0, y: 0 };
 
-    // --- Terreno: dibujado una vez por poll en el buffer offscreen, no cada frame ---
-    function dibujarTerreno(data) {
-      const ancho = data.ancho, alto = data.alto;
-      bufferTerreno.width = ancho * TILE_NATIVO;
-      bufferTerreno.height = alto * TILE_NATIVO;
-      bufferCtx.imageSmoothingEnabled = false;
-      const grid = data.grid;
+    // (2026-08-25) Reordenado en tres pasadas explicitas sobre el grid, cada
+    // una en su propia funcion, a peticion de Diego tras proponer pensar el
+    // mapa "por capas" (terreno/agua, accidentes geograficos, flora, objetos,
+    // criaturas). Aclaracion importante que quedo documentada en la
+    // conversacion y se repite aqui porque es facil perderla de vista
+    // leyendo solo el codigo: esto reordena la CAPA DE DIBUJO en el visor,
+    // no el modelo de datos del motor -- el DTO de celda ya separaba
+    // terreno/agua/elevacion/recurso como campos independientes antes de
+    // este cambio; lo que faltaba era que el dibujo los tratara como pasos
+    // independientes en vez de mezclarlos en un unico bucle. Flora y objetos
+    // como capas de datos reales (no solo el marcador de recurso actual, que
+    // es un flag binario) siguen sin existir y son piezas aparte, no
+    // resueltas por este cambio.
+    //
+    // Beneficio concreto, no solo estetico: separar el sombreado de relieve
+    // (antes paso 3, mezclado con el resto) en dibujarCapaRelieve() propia
+    // permite confirmar o descartar de forma directa el hallazgo pendiente
+    // de la mancha diagonal que Diego senalo como "filtro de clima" --
+    // comentar la llamada a esta funcion y comparar el render basta para
+    // verificarlo, en vez de tener que leerlo entre otros ocho efectos en el
+    // mismo bucle.
 
+    // --- Capa 1: terreno + agua (incluye orillas y charco, que son agua) ---
+    function dibujarCapaTerrenoAgua(data) {
+      const { ancho, alto, grid } = data;
       for (let y = 0; y < alto; y++) {
         for (let x = 0; x < ancho; x++) {
           const c = grid[y][x];
           const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
           const colorBase = COLORES_TERRENO[c.terreno] || [20, 20, 20];
 
-          // 1. Relleno base del bioma: textura real de Mini Medieval, ya con
-          // el color de bioma correcto de fabrica (a diferencia de Urizen/
+          // Relleno base del bioma: textura real de Mini Medieval, ya con el
+          // color de bioma correcto de fabrica (a diferencia de Urizen/
           // PyxelSpace no hace falta tintarla para que lea bien). Solo
           // bosque/pradera reciben un nudge de color suave en 'source-over'
           // a alfa baja (no 'multiply' a alfa completa -- eso aplastaria el
@@ -463,7 +601,7 @@ HTML_VISOR = """<!DOCTYPE html>
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
           }
 
-          // 2. Autotiling procedimental (equivalente al bitmask de 4 bits del
+          // Autotiling procedimental (equivalente al bitmask de 4 bits del
           // informe, sin tileset: en vez de mapear a una subtextura, se
           // mezcla el color hacia el vecino distinto con un degradado en el
           // borde correspondiente -- mismo calculo de vecinos, distinto
@@ -487,27 +625,7 @@ HTML_VISOR = """<!DOCTYPE html>
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
           }
 
-          // 3. Sombreado de relieve: diferencia de elevacion con el vecino diagonal
-          if (x > 0 && y > 0) {
-            const dz = c.elevacion - grid[y - 1][x - 1].elevacion;
-            if (dz > 0.001) {
-              bufferCtx.fillStyle = `rgba(255,255,255,${Math.min(0.35, dz * 1.5)})`;
-              bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-            } else if (dz < -0.001) {
-              bufferCtx.fillStyle = `rgba(0,0,0,${Math.min(0.3, -dz * 1.5)})`;
-              bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-            }
-          }
-
-          // 4. Marcador sutil de recurso (util para observar el motor, no estetico)
-          if (c.tiene_recurso) {
-            bufferCtx.fillStyle = 'rgba(120,220,120,0.55)';
-            bufferCtx.beginPath();
-            bufferCtx.arc(px + TILE_NATIVO / 2, py + TILE_NATIVO / 2, TILE_NATIVO * 0.12, 0, Math.PI * 2);
-            bufferCtx.fill();
-          }
-
-          // 5. Agua permanente: textura real de base + bandas de profundidad
+          // Agua permanente: textura real de base + bandas de profundidad
           // (semi-transparentes) + orilla procedimental en el borde.
           //
           // (2026-08-25) mm_water.png dejo de ser un color plano: ahora es un
@@ -526,6 +644,13 @@ HTML_VISOR = """<!DOCTYPE html>
           // en las tres bandas. Es una eleccion de gusto, no una medicion
           // objetiva (mismo tipo de ajuste que el de ALPHA_MAX_CHARCO) --
           // si no convence, son tres numeros que cambiar.
+          // (2026-08-25) v4: el agua YA NO dibuja ningun anillo de orilla
+          // sobre si misma -- ver la nota larga junto a dibujarAnilloOrilla()
+          // mas abajo sobre por que eso hacia que el agua se viera mas
+          // pequeña de lo real. La celda de agua se pinta siempre pura:
+          // textura de olas + banda de profundidad, nada mas. El anillo se
+          // dibuja aparte, en dibujarCapaOrillas(), sobre las celdas de
+          // TIERRA vecinas.
           if (c.tiene_agua) {
             if (texturaLista['water']) {
               dibujarTexturaVariada(TEXTURAS['water'], x, y, px, py, TILE_NATIVO);
@@ -536,30 +661,6 @@ HTML_VISOR = """<!DOCTYPE html>
             else { colorAgua = '15,50,100'; alfa = 0.60; }
             bufferCtx.fillStyle = `rgba(${colorAgua},${alfa})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-
-            // (2026-08-25) Orilla v2 -- ver la nota larga junto a
-            // dibujarBordesAgua() sobre por que la primera version (una sola
-            // pieza rotada) se descarto. Esquina real donde hay esquina,
-            // tramo recto donde hay tramo recto; sin fallback de espuma si
-            // las 12 piezas no cargaron todavia (primer poll) para no
-            // mezclar dos estilos a la vez -- se ve la celda de agua lisa un
-            // instante y luego aparece la orilla completa, en vez de una
-            // franja blanca que desentona con el resto.
-            if (orillaCargada()) {
-              dibujarBordesAgua(grid, ancho, alto, x, y, px, py, TILE_NATIVO);
-            } else {
-              const grosor = TILE_NATIVO * 0.35;
-              for (const [dx, dy, dir] of [[0, -1, 'N'], [1, 0, 'E'], [0, 1, 'S'], [-1, 0, 'O']]) {
-                const nx = x + dx, ny = y + dy;
-                if (nx < 0 || ny < 0 || nx >= ancho || ny >= alto || !grid[ny][nx].tiene_agua) {
-                  bufferCtx.fillStyle = 'rgba(255,255,255,0.4)';
-                  if (dir === 'N') bufferCtx.fillRect(px, py, TILE_NATIVO, grosor);
-                  if (dir === 'S') bufferCtx.fillRect(px, py + TILE_NATIVO - grosor, TILE_NATIVO, grosor);
-                  if (dir === 'O') bufferCtx.fillRect(px, py, grosor, TILE_NATIVO);
-                  if (dir === 'E') bufferCtx.fillRect(px + TILE_NATIVO - grosor, py, grosor, TILE_NATIVO);
-                }
-              }
-            }
           } else if (c.profundidad_charco > 0) {
             // (2026-08-24) Antes era una opacidad fija de 0.5 -- con lluvia
             // extendida eso tine el mapa ENTERO de azul (confirmado en vivo:
@@ -579,14 +680,84 @@ HTML_VISOR = """<!DOCTYPE html>
             bufferCtx.fillStyle = `rgba(100,170,220,${ratioCharco * ALPHA_MAX_CHARCO})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
           }
+        }
+      }
+    }
 
-          // 6. Fuego
+    // --- Capa 2: anillo de orilla sobre las celdas de tierra que tocan agua ---
+    // Se dibuja DESPUES de la capa de terreno/agua (para superponerse al
+    // bioma que ya esta pintado debajo, tal como lo describio Diego) y ANTES
+    // del relieve (para que el sombreado de elevacion siga aplicandose por
+    // encima del anillo igual que sobre cualquier otra celda de tierra).
+    function dibujarCapaOrillas(data) {
+      const { ancho, alto, grid } = data;
+      if (!orillaCargada()) return;
+      for (let y = 0; y < alto; y++) {
+        for (let x = 0; x < ancho; x++) {
+          const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
+          dibujarAnilloOrilla(grid, ancho, alto, x, y, px, py, TILE_NATIVO);
+        }
+      }
+    }
+
+    // --- Capa 3: accidentes geograficos (relieve) ---
+    // Sombreado de relieve: diferencia de elevacion con el vecino diagonal.
+    // Separado en su propia pasada (antes vivia dentro del mismo bucle que
+    // el resto) precisamente para poder aislarlo al diagnosticar la mancha
+    // diagonal que Diego senalo -- ver nota larga arriba de dibujarTerreno().
+    function dibujarCapaRelieve(data) {
+      const { ancho, alto, grid } = data;
+      for (let y = 1; y < alto; y++) {
+        for (let x = 1; x < ancho; x++) {
+          const c = grid[y][x];
+          const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
+          const dz = c.elevacion - grid[y - 1][x - 1].elevacion;
+          if (dz > 0.001) {
+            bufferCtx.fillStyle = `rgba(255,255,255,${Math.min(0.35, dz * 1.5)})`;
+            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+          } else if (dz < -0.001) {
+            bufferCtx.fillStyle = `rgba(0,0,0,${Math.min(0.3, -dz * 1.5)})`;
+            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+          }
+        }
+      }
+    }
+
+    // --- Capa 4: decoracion/eventos (marcador de recurso, fuego) ---
+    // Marcador de recurso es hoy un proxy tosco de "flora" (un punto verde,
+    // no una textura ni una densidad real) -- se deja en esta capa a
+    // proposito para que el dia que flora exista como concepto real del
+    // motor, sustituirlo aqui no obligue a reordenar nada mas.
+    function dibujarCapaDecoracion(data) {
+      const { ancho, alto, grid } = data;
+      for (let y = 0; y < alto; y++) {
+        for (let x = 0; x < ancho; x++) {
+          const c = grid[y][x];
+          const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
+          if (c.tiene_recurso) {
+            bufferCtx.fillStyle = 'rgba(120,220,120,0.55)';
+            bufferCtx.beginPath();
+            bufferCtx.arc(px + TILE_NATIVO / 2, py + TILE_NATIVO / 2, TILE_NATIVO * 0.12, 0, Math.PI * 2);
+            bufferCtx.fill();
+          }
           if (c.en_llamas) {
             bufferCtx.fillStyle = 'rgba(192,57,43,0.75)';
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
           }
         }
       }
+    }
+
+    // --- Terreno: dibujado una vez por poll en el buffer offscreen, no cada frame ---
+    function dibujarTerreno(data) {
+      const ancho = data.ancho, alto = data.alto;
+      bufferTerreno.width = ancho * TILE_NATIVO;
+      bufferTerreno.height = alto * TILE_NATIVO;
+      bufferCtx.imageSmoothingEnabled = false;
+      dibujarCapaTerrenoAgua(data);
+      dibujarCapaOrillas(data);
+      dibujarCapaRelieve(data);
+      dibujarCapaDecoracion(data);
     }
 
     // --- Camara: transformacion afin (traslacion + zoom), aplicada antes de dibujar ---
@@ -762,7 +933,7 @@ HTML_VISOR = """<!DOCTYPE html>
     canvas.addEventListener('wheel', e => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 0.9;
-      camara.zoom = Math.max(0.3, Math.min(4, camara.zoom * factor));
+      camara.zoom = Math.max(0.6, Math.min(8, camara.zoom * factor));
     }, { passive: false });
 
     setInterval(poll, INTERVALO_POLL_MS);
