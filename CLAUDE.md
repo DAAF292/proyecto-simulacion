@@ -613,6 +613,95 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   mismo tipo de calibración que `ALPHA_MAX_CHARCO` — no una medición
   objetiva, son tres números que cambiar si no convence en el visor real.
 
+  **Resuelto — Cuatro texturas de terreno mal extraídas: planas o del
+  tileset equivocado (25-08, misma tarde)**: Diego revisó una captura real
+  del visor y fue tajante: "el suelo de la mayoría de sitios sigue siendo
+  un color completo... la textura de montaña no creo que sea del tileset
+  que debes usar o si lo es no es la que se debería poner porque eso es un
+  suelo adoquinado, la arena también parece un solo color". Verificado con
+  `PIL.Image.getcolors(maxcolors=100000)` antes de tocar nada, para no
+  repetir el error de diagnosticar a ojo: `mm_grass.png` y `mm_sand.png`
+  eran, literalmente, recortes de 16×16 de un único color (1 color cada
+  uno) — casi con toda seguridad tomados de una franja de referencia o
+  plantilla de bordes, no de tierra real con textura. `mm_rock.png` y
+  `mm_tundra.png` resultaron ser el mismo recorte por error: la variante de
+  ladrillo/adoquín rectangular de la sección PATH del pack base — visible a
+  ojo como suelo pavimentado con líneas de mortero y brotes de maleza, tal
+  cual describió Diego.
+
+  *Corrección*: se reextrajo cada textura de la sección GROUND real de su
+  pack correspondiente, evitando las zonas decorativas (flores, cactus,
+  brotes verdes) que rompen el tileo. Hierba: `Mini-Medieval-v2.4/
+  Mini-Medieval-8x8/Overworld.png`, recorte `(0,0,16,16)`. Arena:
+  `Mini-Medieval-Desert-v2.2/Mini-Medieval-Desert-8x8/Overworld.png`, franja
+  limpia `(0,0,16,8)` duplicada verticalmente para llenar 16×16 (la sección
+  GROUND del pack Desert solo trae 8px de alto de suelo liso antes de la
+  vegetación). Tundra: `Mini-Medieval-Arctic-v2.1/Mini-Medieval-Arctic-8x8/
+  Overworld.png`, recorte `(0,0,16,16)` — un tono crema/amarillo pálido con
+  motas grises redondeadas, el tono de "tundra helada" propio del pack, no
+  nieve blanca literal. Montaña: sin bioma de montaña dedicado en ningún
+  pack comprado (limitación ya conocida, reconfirmada una vez más), se
+  cambió de la variante "ladrillo" de PATH a la variante "grava/piedra
+  suelta" de la misma sección, en `(96,304)-(112,320)` de
+  `Mini-Medieval-v2.4/Mini-Medieval-8x8/Overworld.png` — un moteado
+  irregular tostado/gris/violeta con brotes verdes pequeños, que lee como
+  roca suelta y no como pavimento, la aproximación menos mala disponible.
+  Las cuatro se confirmaron tileables sin costura visible mediante un
+  render PIL de 6×6 antes de copiarlas al repositorio. Cero cambios de
+  código: es un swap de fichero puro, los mismos cuatro nombres de fichero
+  que ya referenciaba `RUTA_TEXTURAS`.
+
+  *Verificación*: recuento de colores tras el swap — hierba 2, arena 2,
+  montaña 4, tundra 2 (todas dejaron de ser 1-color-plano); confirmación
+  visual de que ninguna es ya la textura de ladrillo. Se generó además un
+  render de referencia combinando las cinco texturas de bioma, el agua con
+  olas y ambos juegos de orilla sobre un mapa mixto, para comprobar que el
+  tinte suave de bosque/pradera (`TINTE_SUAVE_TERRENO`, alfa 0.18) sigue
+  leyéndose bien ahora que la hierba de base es una textura real y no un
+  color plano — se confirma que sí: la textura de fondo permanece visible
+  bajo el tinte, y bosque/pradera se distinguen con claridad entre sí. No
+  se ejecutó arnés mock-DOM para este cambio en concreto porque no hay
+  lógica nueva que verificar — es un swap de asset puro sobre código ya
+  probado; el recuento de colores y el render conjunto son la verificación
+  real aquí. Pendiente, como siempre: confirmación de Diego en el visor
+  real con estas texturas.
+
+  **Hallazgo pendiente de resolver — franjas de agua estrechas leen como
+  "torre" (25-08, detectado al revisar la captura de Diego, no comunicado
+  hasta ahora)**: en el render de referencia de este mismo incremento, un
+  cuerpo de agua de una sola celda de ancho (dos celdas de largo) queda
+  compuesto por dos esquinas apiladas verticalmente — el resultado visual
+  es una forma vertical estrecha con bordes ornamentados en los cuatro
+  lados que, a la escala del mapa, se lee más como una estructura o
+  monumento que como agua. El sistema de esquina+borde funciona
+  correctamente para masas de agua con superficie 2D real (lagunas,
+  costas); el problema aparece específicamente en canales/arroyos de 1
+  celda de ancho, donde no hay tramo recto posible y solo se ven esquinas
+  contiguas. No es el "filtro de clima" que señaló Diego (ver abajo), es un
+  hallazgo aparte que no se le había comunicado todavía. No está resuelto:
+  posibles vías son una pieza dedicada de "canal estrecho" (más trabajo de
+  extracción) o, más simple, no tratar el agua de 1 celda de ancho con el
+  sistema de orillas y dejarla como agua lisa sin ornamento — a decidir con
+  Diego, no una decisión que corresponda tomar unilateralmente.
+
+  **Hallazgo pendiente de confirmar — "filtro de clima" señalado por Diego,
+  atribución tentativa (25-08)**: Diego describió una mancha diagonal más
+  oscura sobre el terreno como si "los filtros de clima estropearan por
+  completo el estilo". Se buscó explícitamente código de clima/lluvia/
+  niebla/tormenta en `vista_web.py` (grep por clima, lluvia, nube, niebla,
+  tormenta) y no existe ningún overlay visual de ese tipo — solo una
+  etiqueta de texto con el clima actual y el tinte de charco ya documentado
+  (que se descartó también: los píxeles muestreados en la zona señalada no
+  muestran sesgo azul). La atribución tentativa, no confirmada, es el
+  sombreado de relieve por elevación (paso 3 de `dibujarTerreno`: overlay
+  blanco/negro semitransparente según la diferencia de elevación con una
+  celda vecina en diagonal) — produce exactamente el tipo de mancha
+  diagonal oscura descrita, y es el único overlay existente con esa forma.
+  No se ha verificado pixel a pixel contra la captura real de Diego para
+  confirmarlo con certeza, ni se ha hecho ningún cambio de código sobre
+  esto. Se marca explícitamente como no resuelto en vez de dar por buena
+  una hipótesis no verificada.
+
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
   buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo
