@@ -471,6 +471,66 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
     musgo (tundra) siguen sin sprite dedicado identificado en ningún pack
     revisado hasta ahora.
 
+  **Resuelto — Orillas de agua v2, dos intentos el mismo día (25-08)**: a
+  partir de las capturas de referencia de Mini Medieval, Diego señaló el mapa
+  como "demasiado plano", sin relieve real en la orilla entre tierra y agua.
+  Se decidió con Diego abordar primero orillas (frente a pendientes/relieve
+  de altura, aplazado explícitamente).
+
+  *Primer intento (descartado el mismo día)*: se recortó `(24,600)-(48,610)`
+  del `Overworld.png` en crudo de `Mini-Medieval-Ocean-v2.1` como una única
+  franja de 24×10, y se rotó por dirección (N/E/S/O) con el mismo mecanismo
+  de `dibujarTexturaVariada`. El render de referencia mostró una costa
+  festoneada (cadena de medias lunas pinzadas en cada unión) — visualmente
+  peor que la espuma blanca lisa anterior. Diego lo rechazó y, al preguntarle
+  si prefería abandonar el asset del pack (blend de gradiente genérico ya
+  usado en fronteras bioma-bioma) o intentar un autotile real con piezas del
+  propio pack, respondió que se resolviera "de la forma más profesional"
+  usando el tileset comprado.
+
+  *Diagnóstico del fallo*: el recorte de 24×10 no era una pieza atómica —
+  era una composición ya montada (esquina+centro+esquina de un anillo
+  circular completo), y tratarla como una única unidad repetible duplicaba
+  la curvatura de la esquina en cada celda de borde. Se dedujo diseccionando
+  la hoja `Overworld.png` en crudo (no la documentada — para este archivo
+  documentado y crudo difieren también en alto, 944px vs 896px, no solo en
+  ancho por la columna de etiquetas) tile a tile en cuadrícula de 8×8,
+  comparando pieza por pieza en vez de asumir por los bloques de demostración
+  ya ensamblados que aparecen en la hoja.
+
+  *Piezas atómicas encontradas y usadas*, coordenadas nativas en tiles de
+  8px sobre `Mini-Medieval-Ocean-v2.1/Mini-Medieval-Ocean-8x8/Overworld.png`
+  con origen de recorte en `(x=0, y=496)`: esquina NO=`(1,1)`, borde
+  N=`(2,1)`, esquina NE=`(3,1)`; borde O, 3 variantes de textura=`(0,2)`,
+  `(0,3)`, `(0,4)`; borde E, 3 variantes=`(4,2)`, `(4,3)`, `(4,4)`; esquina
+  SO=`(1,5)`, borde S=`(2,5)`, esquina SE=`(3,5)`. Guardadas como
+  `mm_orilla_esquina_{no,ne,so,se}.png` y `mm_orilla_borde_{n,s}.png` /
+  `mm_orilla_borde_{o,e}_{a,b,c}.png` en `presentacion/assets/terreno/`.
+
+  *Implementación*: `dibujarBordesAgua()` sustituye a
+  `dibujarOrillaDireccional()` (eliminada). Por cada celda de agua se
+  comprueban los 4 vecinos cardinales; si dos vecinos adyacentes son tierra
+  (p.ej. N y O), se dibuja la esquina convexa correspondiente; si solo uno,
+  el tramo recto de ese lado. Los tramos O/E rotan entre sus 3 variantes con
+  `hash32Celda(x,y) % 3` — el mismo hash de `dibujarTexturaVariada`, extraído
+  a función compartida en vez de duplicarlo (reutiliza antes de inventar).
+  **Sin pieza cóncava dedicada**: el pack tampoco la trae — en una entrante
+  de costa (esquina cóncava) los dos tramos rectos simplemente se encuentran
+  sin adorno adicional. Es la simplificación estándar de un autotile mínimo
+  de esquina+borde (sin las piezas interiores de un blob-tileset completo de
+  47 piezas) y se probó explícitamente contra una forma en L sin fallos ni
+  huecos visuales graves.
+
+  *Verificación*: arnés mock-DOM confirma sobre una laguna rectangular 4×4
+  que se dibujan exactamente las 4 esquinas (una vez cada una), 2 celdas de
+  borde N, 2 de borde S, y los tramos O/E repartidos entre variantes; sobre
+  una forma en L (esquina cóncava) no hay excepción ni pieza faltante.
+  Render de referencia en PIL (mismos ficheros, mismo algoritmo) sobre una
+  laguna rectangular y sobre una forma orgánica con una isla interior:
+  costa limpia y continua, sin festoneado, con variación de textura visible
+  y natural en los tramos largos. Pendiente, como siempre: confirmación de
+  Diego en el visor real.
+
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
   buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo

@@ -158,6 +158,25 @@ HTML_VISOR = """<!DOCTYPE html>
       'rock': 'assets/terreno/mm_rock.png',
       'tundra': 'assets/terreno/mm_tundra.png',
       'water': 'assets/terreno/mm_water.png',
+      // (2026-08-25) SUPERSEDIDO el mismo dia -- ver nota larga junto a
+      // dibujarBordesAgua() mas abajo. Estas 12 piezas sustituyen al primer
+      // 'orilla' de una sola textura rotada (que producia un festoneado
+      // artificial, ver CLAUDE.md): 4 esquinas convexas + 4 tramos rectos,
+      // con 3 variantes de textura cada uno en O/E para evitar repeticion
+      // visible en tramos largos, extraidas pieza a pieza (no como bloque ya
+      // montado) de Mini-Medieval-Ocean-v2.1.
+      'orilla_esquina_no': 'assets/terreno/mm_orilla_esquina_no.png',
+      'orilla_esquina_ne': 'assets/terreno/mm_orilla_esquina_ne.png',
+      'orilla_esquina_so': 'assets/terreno/mm_orilla_esquina_so.png',
+      'orilla_esquina_se': 'assets/terreno/mm_orilla_esquina_se.png',
+      'orilla_borde_n': 'assets/terreno/mm_orilla_borde_n.png',
+      'orilla_borde_s': 'assets/terreno/mm_orilla_borde_s.png',
+      'orilla_borde_o_a': 'assets/terreno/mm_orilla_borde_o_a.png',
+      'orilla_borde_o_b': 'assets/terreno/mm_orilla_borde_o_b.png',
+      'orilla_borde_o_c': 'assets/terreno/mm_orilla_borde_o_c.png',
+      'orilla_borde_e_a': 'assets/terreno/mm_orilla_borde_e_a.png',
+      'orilla_borde_e_b': 'assets/terreno/mm_orilla_borde_e_b.png',
+      'orilla_borde_e_c': 'assets/terreno/mm_orilla_borde_e_c.png',
     };
     const TEXTURA_POR_BIOMA = {
       'bosque': 'grass', 'pradera': 'grass', 'montana': 'rock',
@@ -239,6 +258,18 @@ HTML_VISOR = """<!DOCTYPE html>
     // (asimetrico) frente al de bloque de piedra con marco (simetrico) para
     // montana precisamente por esto -- confirmado en el render de
     // referencia en Python antes de fijar la eleccion final.
+    // (2026-08-25) Extraido de dibujarTexturaVariada para reutilizarlo tambien
+    // en la seleccion de variante de los tramos rectos de orilla (ver
+    // dibujarBordesAgua mas abajo) -- mismo mezclado de bits, mismo criterio
+    // de "reutiliza antes de inventar" que el resto del proyecto. Comportamiento
+    // identico al de antes del refactor (mismo input -> mismo entero de salida).
+    function hash32Celda(x, y) {
+      let h = (Math.imul(x, 0x27d4eb2f) ^ Math.imul(y, 0x165667b1)) | 0;
+      h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+      h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+      return (h ^ (h >>> 16)) >>> 0;
+    }
+
     function dibujarTexturaVariada(img, x, y, px, py, size) {
       // (2026-08-24) Primera version de este hash (x*A + y*B mod 8, con A y B
       // primos grandes cualquiera) resulto tener A y B congruentes con 1 y -1
@@ -249,10 +280,7 @@ HTML_VISOR = """<!DOCTYPE html>
       // (dx,0)/(0,dy) -- esa prueba mas simple no lo habria visto. Con mezcla
       // de bits estilo MurmurHash3 (xor + multiplicaciones + shifts) no hay
       // formula lineal que colapse asi.
-      let h = (Math.imul(x, 0x27d4eb2f) ^ Math.imul(y, 0x165667b1)) | 0;
-      h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
-      h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
-      h = ((h ^ (h >>> 16)) >>> 0) % 8;
+      const h = hash32Celda(x, y) % 8;
       const rot = (h % 4) * (Math.PI / 2);
       const flip = h >= 4;
       bufferCtx.save();
@@ -261,6 +289,57 @@ HTML_VISOR = """<!DOCTYPE html>
       bufferCtx.scale(flip ? -1 : 1, 1);
       bufferCtx.drawImage(img, -size / 2, -size / 2, size, size);
       bufferCtx.restore();
+    }
+
+    // (2026-08-25) SUPERSEDIDO el mismo dia: primera version de "orillas"
+    // (dibujarOrillaDireccional) tomaba un recorte de 24x10 que en realidad
+    // era una composicion YA MONTADA (esquina+centro+esquina de un estanque
+    // circular del pack), y la rotaba/repetia en cada celda de borde como si
+    // fuera una unica pieza reutilizable. Diego vio el resultado en un render
+    // de referencia y con razon no lo acepto: cada celda ponia su propia
+    // "esquina" redundante, produciendo una costa festoneada (cadena de
+    // medias lunas pinzadas en las uniones) en vez de una linea continua --
+    // visualmente peor que el estado anterior (espuma blanca lisa).
+    //
+    // Diego pidio explicitamente NO abandonar el asset del pack y resolverlo
+    // "de la forma mas profesional" usando el tileset. Investigacion mas a
+    // fondo (diseccion tile a tile de 8x8, no por bloques ya montados, ver
+    // CLAUDE.md para las coordenadas nativas completas) encontro que el pack
+    // SI separa pieza de esquina y pieza de tramo recto -- mi primer intento
+    // fallo por la unidad de recorte elegida, no porque el pack careciera de
+    // piezas componibles. Esta es la version corregida: un autotile minimo de
+    // 4 esquinas convexas + 4 tramos rectos (sin pieza cóncava dedicada -- el
+    // pack tampoco la trae; en una entrante de costa los dos tramos rectos
+    // simplemente se encuentran sin adorno extra, una simplificacion estandar
+    // en sistemas de autotile minimos y aceptable aqui). Los tramos rectos
+    // O/E tienen 3 variantes de textura (extraidas del propio pack, no
+    // inventadas) elegidas con el mismo hash32Celda que ya usa
+    // dibujarTexturaVariada, para que un tramo de costa largo no muestre la
+    // misma piedra repetida en cada celda.
+    function dibujarBordesAgua(grid, ancho, alto, x, y, px, py, size) {
+      const esAgua = (nx, ny) => nx >= 0 && ny >= 0 && nx < ancho && ny < alto && grid[ny][nx].tiene_agua;
+      const n = !esAgua(x, y - 1), s = !esAgua(x, y + 1), o = !esAgua(x - 1, y), e = !esAgua(x + 1, y);
+      if (!n && !s && !o && !e) return;
+      let dibujadoN = false, dibujadoS = false, dibujadoO = false, dibujadoE = false;
+      if (n && o) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_no'], px, py, size, size); dibujadoN = dibujadoO = true; }
+      if (n && e) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_ne'], px, py, size, size); dibujadoN = dibujadoE = true; }
+      if (s && o) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_so'], px, py, size, size); dibujadoS = dibujadoO = true; }
+      if (s && e) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_se'], px, py, size, size); dibujadoS = dibujadoE = true; }
+      if (n && !dibujadoN) bufferCtx.drawImage(TEXTURAS['orilla_borde_n'], px, py, size, size);
+      if (s && !dibujadoS) bufferCtx.drawImage(TEXTURAS['orilla_borde_s'], px, py, size, size);
+      if (o && !dibujadoO) {
+        const variantes = ['orilla_borde_o_a', 'orilla_borde_o_b', 'orilla_borde_o_c'];
+        bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
+      }
+      if (e && !dibujadoE) {
+        const variantes = ['orilla_borde_e_a', 'orilla_borde_e_b', 'orilla_borde_e_c'];
+        bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
+      }
+    }
+
+    function orillaCargada() {
+      return texturaLista['orilla_esquina_no'] && texturaLista['orilla_borde_n'] &&
+        texturaLista['orilla_borde_o_a'] && texturaLista['orilla_borde_e_a'];
     }
 
     let referencias = {};
@@ -365,15 +444,27 @@ HTML_VISOR = """<!DOCTYPE html>
             bufferCtx.fillStyle = `rgba(${colorAgua},${alfa})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
 
-            const grosor = TILE_NATIVO * 0.15;
-            for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
-              const nx = x + dx, ny = y + dy;
-              if (nx < 0 || ny < 0 || nx >= ancho || ny >= alto || !grid[ny][nx].tiene_agua) {
-                bufferCtx.fillStyle = 'rgba(255,255,255,0.4)';
-                if (dx === 0 && dy === -1) bufferCtx.fillRect(px, py, TILE_NATIVO, grosor);
-                if (dx === 0 && dy === 1) bufferCtx.fillRect(px, py + TILE_NATIVO - grosor, TILE_NATIVO, grosor);
-                if (dx === -1 && dy === 0) bufferCtx.fillRect(px, py, grosor, TILE_NATIVO);
-                if (dx === 1 && dy === 0) bufferCtx.fillRect(px + TILE_NATIVO - grosor, py, grosor, TILE_NATIVO);
+            // (2026-08-25) Orilla v2 -- ver la nota larga junto a
+            // dibujarBordesAgua() sobre por que la primera version (una sola
+            // pieza rotada) se descarto. Esquina real donde hay esquina,
+            // tramo recto donde hay tramo recto; sin fallback de espuma si
+            // las 12 piezas no cargaron todavia (primer poll) para no
+            // mezclar dos estilos a la vez -- se ve la celda de agua lisa un
+            // instante y luego aparece la orilla completa, en vez de una
+            // franja blanca que desentona con el resto.
+            if (orillaCargada()) {
+              dibujarBordesAgua(grid, ancho, alto, x, y, px, py, TILE_NATIVO);
+            } else {
+              const grosor = TILE_NATIVO * 0.35;
+              for (const [dx, dy, dir] of [[0, -1, 'N'], [1, 0, 'E'], [0, 1, 'S'], [-1, 0, 'O']]) {
+                const nx = x + dx, ny = y + dy;
+                if (nx < 0 || ny < 0 || nx >= ancho || ny >= alto || !grid[ny][nx].tiene_agua) {
+                  bufferCtx.fillStyle = 'rgba(255,255,255,0.4)';
+                  if (dir === 'N') bufferCtx.fillRect(px, py, TILE_NATIVO, grosor);
+                  if (dir === 'S') bufferCtx.fillRect(px, py + TILE_NATIVO - grosor, TILE_NATIVO, grosor);
+                  if (dir === 'O') bufferCtx.fillRect(px, py, grosor, TILE_NATIVO);
+                  if (dir === 'E') bufferCtx.fillRect(px + TILE_NATIVO - grosor, py, grosor, TILE_NATIVO);
+                }
               }
             }
           } else if (c.profundidad_charco > 0) {
