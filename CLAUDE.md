@@ -799,6 +799,67 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   antes pero real. Arreglarlo exigiría recortar el alfa de las piezas o
   componer con máscaras — un cambio mayor que Diego no ha pedido todavía.
 
+  **Resuelto — v4.1: reorientar las 12 piezas de arena tras el cambio de
+  celda (25-08, misma noche)**: consecuencia directa de mover el anillo de
+  la celda de agua a la de tierra (v4) que no había verificado. v3 había
+  volteado las piezas para que, dibujadas SOBRE LA CELDA DE AGUA, el acento
+  decorado con agua mirara hacia el interior (más agua) y la arena hacia
+  fuera (hacia la tierra). Al pasar a dibujar sobre la celda de TIERRA en
+  v4, esa misma orientación queda invertida: la arena terminaba tocando el
+  agua y el borde festoneado (acento de agua) terminaba pegado a la hierba
+  — Diego lo señaló directamente ("la dirección de las orillas es hacia
+  dentro... la parte de arena iría pegada a la hierba"). Arreglo: deshacer
+  el giro de v3 en las 12 piezas del juego "arena" (la misma transformación
+  aplicada una segunda vez devuelve la orientación original en crudo, que
+  es la correcta para el caso de tierra). Verificado con un render de
+  referencia antes/después sobre la misma forma en L: en el resultado
+  corregido la arena queda pegada a la hierba con un borde limpio, y el
+  festoneado con acento de agua queda contra el agua real. Confirmado por
+  Diego ("así mejor, sí"). El juego "verde" NO se ha reorientado todavía —
+  sigue bloqueado por la pregunta de construcción de más abajo, y no tiene
+  sentido corregir la orientación de unas piezas cuyo contenido de origen
+  sigue en duda.
+
+  **Hallazgo — las piezas de "orilla_verde" actuales son la construcción
+  equivocada; localizados los 4 estanques correctos, arquitectura sin
+  decidir (25-08, misma noche)**: Diego revisó un render con las piezas
+  `orilla_verde_*` (extraídas de lo que yo identifiqué como "BASIC WATER"
+  del pack base) y las rechazó: "ninguna de esas, son estas", señalando en
+  su lugar unos estanques ya completos (agua rellena, borde, reborde) que
+  había visto en Tiled. Investigado con la hoja documentada del pack base:
+  las secciones "BASIC WATER" y "ACTIVE WATER" contienen CADA UNA dos
+  construcciones distintas apiladas verticalmente — una fila superior de
+  estanques ya montados con agua rellena (los que Diego señaló), y una fila
+  inferior de marcos decorativos con el centro TRANSPARENTE (alfa 0,
+  confirmado con numpy) que yo había confundido con piezas de orilla. El
+  marco transparente no es una orilla en absoluto — es un hueco pensado
+  para que se vea lo que haya debajo en otra capa (probablemente un
+  parterre o similar), coherente con que su interior mostrara verde cuando
+  se probó sobre hierba sin agua real debajo.
+
+  Localizadas por comparación píxel a píxel contra la hoja en crudo
+  (`Mini-Medieval-v2.4/Mini-Medieval-8x8/Overworld.png`, no la documentada,
+  que difieren en tamaño): 4 variantes reales de estanque ya montado, en
+  crudo en `(3,65)`, `(27,65)`, `(27,97)`, `(99,97)`, cada una de ~18×26px
+  (unas 2×3 celdas), coincidencia exacta de píxeles confirmada.
+
+  **Sin decidir — arquitectura para bosque/pradera**: estos 4 estanques son
+  objetos ya completos y de tamaño fijo, no piezas de esquina/borde
+  descomponibles como el juego "arena" — no hay forma de trocearlos en un
+  kit componible sin repetir el error de las orillas v1 (tratar una
+  composición ya montada como si fuera atómica). Si son el asset correcto
+  para bosque/pradera, la implicación es que el enfoque no puede ser
+  `dibujarAnilloOrilla` por celda: sería "cuando el generador de agua
+  produzca un cuerpo pequeño y compacto de este tamaño en un bioma verde,
+  estampar uno de los 4 estanques enteros" en vez de componerlo celda a
+  celda — un cambio de paradigma real (objeto estampado vs kit escalable),
+  no solo un cambio de coordenadas. Pendiente de que Diego confirme si es
+  así, y si el generador de agua produce cuerpos de tamaño consistente en
+  esos biomas como para que encaje, o hace falta decidir qué pasa cuando el
+  agua real no mide 2×3. No se ha tocado código todavía para esto —
+  `orilla_verde_*` sigue apuntando a las piezas equivocadas en
+  `RUTA_TEXTURAS` a la espera de esta decisión.
+
   *Hallazgo pendiente, sin resolver*: si un cuerpo de agua debe poder
   colindar con varios biomas a la vez con la orilla correcta de cada uno,
   Diego señaló que "en todos los overworlds de los distintos packs" puede
