@@ -222,36 +222,35 @@ HTML_VISOR = """<!DOCTYPE html>
       // (2026-08-25) SUPERSEDIDO el mismo dia, segunda vuelta: Diego probo el
       // render de referencia y señalo dos fallos reales sobre las 12 piezas
       // de arriba -- (1) estaban invertidas (el acento de agua tocaba la
-      // hierba en vez del agua: las piezas se extrajeron bien pero se
-      // colocaron sin voltearlas -- en la hoja original el lado con acento
-      // de agua mira hacia FUERA del anillo, no hacia el agujero interior,
-      // porque el asset esta pensado como un atolon en mar abierto, no como
-      // una playa contra tierra firme) y (2) "estas usando las orillas de
-      // desierto o oceano, cada bioma tendra que tener orillas respectivas".
-      // Las 12 piezas de arriba se corrigieron in-place (ver dibujarBordesAgua)
-      // y se reservan para desierto/tundra/montana; estas 8 son el juego
-      // equivalente para bosque/pradera, extraidas de la seccion "BASIC
-      // WATER" del pack BASE (no Ocean) -- mismo problema de orientacion
-      // encontrado y corregido de la misma manera. Sin variantes de textura
-      // en O/E (el pack solo trae una, a diferencia de Ocean con 3).
-      // Limitacion aceptada por Diego: cada pieza trae un poste/estaca de
-      // madera decorativo que sobresale un poco hacia fuera en cada celda de
-      // borde (no hay variante "sin poste" para alternar) -- se ve mas
-      // recargado que las capturas de referencia, pero Diego acepto usarlo
-      // "de momento", con la expectativa de que mejore cuando el suelo tenga
-      // su propia textura/decoracion (pieza aparte, no resuelta hoy).
-      'orilla_verde_esquina_no': 'assets/terreno/mm_orilla_verde_esquina_no.png',
-      'orilla_verde_esquina_ne': 'assets/terreno/mm_orilla_verde_esquina_ne.png',
-      'orilla_verde_esquina_so': 'assets/terreno/mm_orilla_verde_esquina_so.png',
-      'orilla_verde_esquina_se': 'assets/terreno/mm_orilla_verde_esquina_se.png',
-      'orilla_verde_borde_n': 'assets/terreno/mm_orilla_verde_borde_n.png',
-      'orilla_verde_borde_s': 'assets/terreno/mm_orilla_verde_borde_s.png',
-      'orilla_verde_borde_o': 'assets/terreno/mm_orilla_verde_borde_o.png',
-      'orilla_verde_borde_e': 'assets/terreno/mm_orilla_verde_borde_e.png',
+      // hierba en vez del agua) y (2) "estas usando las orillas de desierto
+      // o oceano, cada bioma tendra que tener orillas respectivas". (1) se
+      // corrigio in-place (ver dibujarAnilloOrilla). Para (2) se extrajo un
+      // juego "verde" equivalente de la seccion "BASIC WATER" del pack
+      // base -- que resulto ser la construccion equivocada (un marco
+      // decorativo con el CENTRO TRANSPARENTE, pensado para otra cosa, no
+      // una pieza de orilla) y se retiro por completo mas tarde el mismo
+      // dia. Los 4 estanques reales de ese pack (seccion ACTIVE/BASIC
+      // WATER, fila superior) son objetos ya montados de tamaño fijo
+      // (~2x3 celdas) sin tramo recto N/S disociable -- no se pueden
+      // trocear en un kit de esquina+borde sin repetir el error de las
+      // orillas v1 (tratar una composicion ya montada como pieza atomica).
+      //
+      // Decision (25-08, delegada por Diego -- "toma la decision mas
+      // optima... lo mas estetico posible"): en vez de construir un
+      // pipeline nuevo de "estampar un objeto de tamaño fijo" (una fuente
+      // de complejidad real: deteccion de blobs de agua, encaje por
+      // tamaño, que hacer cuando no encaja) solo para un subconjunto de
+      // biomas, TODOS los biomas usan el juego "arena" de Ocean -- ya
+      // verificado, ya corregido de orientacion, y probado escalando a
+      // formas irregulares (ver 7.66/7.67, aprobado por Diego sobre una
+      // laguna en L). Un reborde de arena alrededor de un estanque en
+      // hierba es una convencion visual habitual y aceptable en pixel art
+      // (playa/orilla arenosa incluso en bioma verde) -- preferible a piezas
+      // rotas o a una arquitectura nueva sin validar. Revisable si en algun
+      // momento aparece un juego verde genuinamente componible, o si Diego
+      // decide que vale la pena construir el pipeline de estampado para
+      // lagunas pequeñas y compactas.
     };
-    // Biomas que usan el juego de orilla "verde" (musgo/tierra del pack base)
-    // en vez del juego "arena" (Ocean) por defecto -- ver nota arriba.
-    const BIOMAS_ORILLA_VERDE = new Set(['bosque', 'pradera']);
     const TEXTURA_POR_BIOMA = {
       'bosque': 'grass', 'pradera': 'grass', 'montana': 'rock',
       'desierto': 'sand', 'tundra': 'tundra'
@@ -466,7 +465,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // adyacentes se resuelve con los dos tramos rectos independientes
     // encontrandose sin adorno extra.
     //
-    // Bug de opacidad (documentado, no resuelto en esta version): las 20
+    // Bug de opacidad (documentado, no resuelto en esta version): las 12
     // piezas son 100% opacas (alfa 255 verificado con PIL) -- si una celda
     // de tierra necesita mas de una pieza en lados NO adyacentes (p.ej. un
     // istmo de tierra de 1 celda entre dos cuerpos de agua, con agua al
@@ -476,8 +475,16 @@ HTML_VISOR = """<!DOCTYPE html>
     // los canales estrechos de antes pero real. No resuelto aqui: exigiria
     // recortar el alfa de las piezas o componer con mascaras, un cambio
     // mayor que Diego no ha pedido todavia.
+    //
+    // (2026-08-25) juegoOrillaPara() antes distinguia "verde" (bosque/
+    // pradera) de "arena" (resto). El juego verde se retiro por completo --
+    // ver la nota larga junto a RUTA_TEXTURAS -- asi que hoy todos los
+    // biomas usan el mismo juego de arena (Ocean), ya corregido de
+    // orientacion y probado sobre formas irregulares. La funcion se deja
+    // como punto unico de extension por si en el futuro aparece un juego
+    // verde genuinamente componible.
     function juegoOrillaPara(bioma) {
-      return BIOMAS_ORILLA_VERDE.has(bioma) ? 'orilla_verde_' : 'orilla_';
+      return 'orilla_';
     }
 
     // Dibuja el anillo de orilla sobre una celda de TIERRA (x,y) que tenga
@@ -528,9 +535,7 @@ HTML_VISOR = """<!DOCTYPE html>
 
     function orillaCargada() {
       return texturaLista['orilla_esquina_no'] && texturaLista['orilla_borde_n'] &&
-        texturaLista['orilla_borde_o_a'] && texturaLista['orilla_borde_e_a'] &&
-        texturaLista['orilla_verde_esquina_no'] && texturaLista['orilla_verde_borde_n'] &&
-        texturaLista['orilla_verde_borde_o'] && texturaLista['orilla_verde_borde_e'];
+        texturaLista['orilla_borde_o_a'] && texturaLista['orilla_borde_e_a'];
     }
 
     let referencias = {};

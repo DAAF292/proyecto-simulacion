@@ -860,6 +860,32 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   `orilla_verde_*` sigue apuntando a las piezas equivocadas en
   `RUTA_TEXTURAS` a la espera de esta decisión.
 
+  **Resuelto — decisión: retirar el juego "verde", unificar todos los
+  biomas al juego "arena" (25-08, misma noche)**: Diego delegó la decisión
+  ("toma la decisión más óptima en base a tu criterio, quiero que en este
+  punto lo dejemos lo más estético posible") sobre qué hacer con bosque/
+  pradera tras el hallazgo de que las piezas `orilla_verde_*` eran la
+  construcción equivocada y los 4 estanques reales no son componibles por
+  celda. Evaluadas dos vías: (a) construir un pipeline nuevo de "estampar
+  un objeto de tamaño fijo" para lagunas pequeñas y compactas en biomas
+  verdes — exige detección de blobs de agua, lógica de encaje por tamaño, y
+  una decisión de qué hacer cuando el agua real no mide ~2×3, una fuente de
+  complejidad real y sin validar; (b) unificar todos los biomas al juego
+  "arena" de Ocean, ya corregido de orientación (v4.1) y ya probado sobre
+  formas irregulares grandes (la laguna en L aprobada por Diego). Elegida
+  (b): un reborde de arena alrededor de una laguna en hierba es una
+  convención visual habitual y aceptable en pixel art, y es preferible a
+  una arquitectura nueva sin validar solo para un subconjunto de biomas.
+  `juegoOrillaPara()` ahora siempre devuelve `'orilla_'`; las 8 piezas
+  `mm_orilla_verde_*.png` (la construcción equivocada) se eliminaron del
+  repositorio al no tener ya ninguna referencia en el código.
+  `BIOMAS_ORILLA_VERDE` se retiró. Verificado con un render de referencia
+  sobre los 4 biomas con agua (bosque, tundra, montaña, desierto): mismo
+  anillo, misma orientación correcta, coherente entre todos. Decisión
+  revisable: si en el futuro aparece un juego verde genuinamente componible,
+  o si Diego decide que vale la pena construir el pipeline de estampado
+  para lagunas pequeñas, `juegoOrillaPara()` es el punto único de extensión.
+
   *Hallazgo pendiente, sin resolver*: si un cuerpo de agua debe poder
   colindar con varios biomas a la vez con la orilla correcta de cada uno,
   Diego señaló que "en todos los overworlds de los distintos packs" puede
