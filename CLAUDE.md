@@ -592,6 +592,27 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   esta pieza— decidir si el poste decorativo del juego verde necesita
   revisión propia una vez el terreno tenga decoración.
 
+  **Resuelto — Textura real de agua abierta + recalibrar alfa de profundidad
+  (25-08, misma tarde)**: Diego pidió explícitamente "meter la textura del
+  agua también... para que el mapa quede como los mockups". `mm_water.png`
+  era hasta ahora un color plano (16×16, un único tono). Se localizó en la
+  sección WAVES de `Mini-Medieval-Ocean-v2.1/Overworld.png` un tile de 8×8
+  (origen `(0,56)` en la hoja en crudo) con un patrón de olas sutil,
+  confirmado sin costura visible al teselarlo 6×6 en un render aparte antes
+  de usarlo. Se sustituyó el fichero directamente — cero cambios de código
+  para esto, `dibujarTexturaVariada` ya lo dibuja con su rotación
+  anti-repetición como cualquier otra textura de bioma.
+
+  *Hallazgo al verificar*: las bandas de profundidad semi-transparentes
+  existentes (alfa 0.55/0.75/0.92 para playa/media/profunda) se diseñaron
+  para ir sobre un color plano — con la textura real debajo, 0.92 en la
+  banda profunda la aplastaba casi por completo (confirmado comparando dos
+  renders de referencia lado a lado). Bajadas a 0.30/0.45/0.60: la ola se
+  distingue en las tres bandas sin perder el degradado de profundidad hacia
+  el centro. Es una elección de gusto comparada en vivo contra el motor,
+  mismo tipo de calibración que `ALPHA_MAX_CHARCO` — no una medición
+  objetiva, son tres números que cambiar si no convence en el visor real.
+
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
   buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo

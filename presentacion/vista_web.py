@@ -508,15 +508,32 @@ HTML_VISOR = """<!DOCTYPE html>
           }
 
           // 5. Agua permanente: textura real de base + bandas de profundidad
-          // (semi-transparentes, tal cual antes) + espuma procedimental en el borde
+          // (semi-transparentes) + orilla procedimental en el borde.
+          //
+          // (2026-08-25) mm_water.png dejo de ser un color plano: ahora es un
+          // tile de olas real de 8x8 de la seccion WAVES del pack Ocean,
+          // confirmado sin costura visible al teselarlo 6x6 antes de usarlo
+          // (dibujarTexturaVariada de sobra reutilizado, cero codigo nuevo
+          // para esto). A peticion expresa de Diego ("quiero meter la
+          // textura del agua tambien... para que el mapa quede como los
+          // mockups"). Las alfas de las bandas de profundidad de abajo
+          // (0.55/0.75/0.92) son ANTERIORES a este cambio, pensadas para un
+          // color plano debajo -- con la textura real, 0.92 en la banda
+          // profunda la aplastaba casi del todo (confirmado en un render de
+          // referencia comparando ambos). Bajadas a 0.30/0.45/0.60,
+          // comparadas en el mismo render de referencia -- sigue habiendo
+          // gradiente de profundidad claramente visible, pero la ola se nota
+          // en las tres bandas. Es una eleccion de gusto, no una medicion
+          // objetiva (mismo tipo de ajuste que el de ALPHA_MAX_CHARCO) --
+          // si no convence, son tres numeros que cambiar.
           if (c.tiene_agua) {
             if (texturaLista['water']) {
               dibujarTexturaVariada(TEXTURAS['water'], x, y, px, py, TILE_NATIVO);
             }
             let colorAgua, alfa;
-            if (c.profundidad_agua <= 0.3) { colorAgua = '135,206,235'; alfa = 0.55; }
-            else if (c.profundidad_agua <= 1.0) { colorAgua = '52,120,190'; alfa = 0.75; }
-            else { colorAgua = '15,50,100'; alfa = 0.92; }
+            if (c.profundidad_agua <= 0.3) { colorAgua = '135,206,235'; alfa = 0.30; }
+            else if (c.profundidad_agua <= 1.0) { colorAgua = '52,120,190'; alfa = 0.45; }
+            else { colorAgua = '15,50,100'; alfa = 0.60; }
             bufferCtx.fillStyle = `rgba(${colorAgua},${alfa})`;
             bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
 
