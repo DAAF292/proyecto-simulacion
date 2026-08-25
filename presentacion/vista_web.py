@@ -177,7 +177,39 @@ HTML_VISOR = """<!DOCTYPE html>
       'orilla_borde_e_a': 'assets/terreno/mm_orilla_borde_e_a.png',
       'orilla_borde_e_b': 'assets/terreno/mm_orilla_borde_e_b.png',
       'orilla_borde_e_c': 'assets/terreno/mm_orilla_borde_e_c.png',
+      // (2026-08-25) SUPERSEDIDO el mismo dia, segunda vuelta: Diego probo el
+      // render de referencia y señalo dos fallos reales sobre las 12 piezas
+      // de arriba -- (1) estaban invertidas (el acento de agua tocaba la
+      // hierba en vez del agua: las piezas se extrajeron bien pero se
+      // colocaron sin voltearlas -- en la hoja original el lado con acento
+      // de agua mira hacia FUERA del anillo, no hacia el agujero interior,
+      // porque el asset esta pensado como un atolon en mar abierto, no como
+      // una playa contra tierra firme) y (2) "estas usando las orillas de
+      // desierto o oceano, cada bioma tendra que tener orillas respectivas".
+      // Las 12 piezas de arriba se corrigieron in-place (ver dibujarBordesAgua)
+      // y se reservan para desierto/tundra/montana; estas 8 son el juego
+      // equivalente para bosque/pradera, extraidas de la seccion "BASIC
+      // WATER" del pack BASE (no Ocean) -- mismo problema de orientacion
+      // encontrado y corregido de la misma manera. Sin variantes de textura
+      // en O/E (el pack solo trae una, a diferencia de Ocean con 3).
+      // Limitacion aceptada por Diego: cada pieza trae un poste/estaca de
+      // madera decorativo que sobresale un poco hacia fuera en cada celda de
+      // borde (no hay variante "sin poste" para alternar) -- se ve mas
+      // recargado que las capturas de referencia, pero Diego acepto usarlo
+      // "de momento", con la expectativa de que mejore cuando el suelo tenga
+      // su propia textura/decoracion (pieza aparte, no resuelta hoy).
+      'orilla_verde_esquina_no': 'assets/terreno/mm_orilla_verde_esquina_no.png',
+      'orilla_verde_esquina_ne': 'assets/terreno/mm_orilla_verde_esquina_ne.png',
+      'orilla_verde_esquina_so': 'assets/terreno/mm_orilla_verde_esquina_so.png',
+      'orilla_verde_esquina_se': 'assets/terreno/mm_orilla_verde_esquina_se.png',
+      'orilla_verde_borde_n': 'assets/terreno/mm_orilla_verde_borde_n.png',
+      'orilla_verde_borde_s': 'assets/terreno/mm_orilla_verde_borde_s.png',
+      'orilla_verde_borde_o': 'assets/terreno/mm_orilla_verde_borde_o.png',
+      'orilla_verde_borde_e': 'assets/terreno/mm_orilla_verde_borde_e.png',
     };
+    // Biomas que usan el juego de orilla "verde" (musgo/tierra del pack base)
+    // en vez del juego "arena" (Ocean) por defecto -- ver nota arriba.
+    const BIOMAS_ORILLA_VERDE = new Set(['bosque', 'pradera']);
     const TEXTURA_POR_BIOMA = {
       'bosque': 'grass', 'pradera': 'grass', 'montana': 'rock',
       'desierto': 'sand', 'tundra': 'tundra'
@@ -316,30 +348,74 @@ HTML_VISOR = """<!DOCTYPE html>
     // inventadas) elegidas con el mismo hash32Celda que ya usa
     // dibujarTexturaVariada, para que un tramo de costa largo no muestre la
     // misma piedra repetida en cada celda.
+    // (2026-08-25) juegoOrillaPara(): que celda de tierra decide el "estilo"
+    // de la orilla. Vale con mirar UN vecino de tierra (no los cuatro) porque
+    // en la practica el borde de un cuerpo de agua casi siempre pertenece a
+    // un unico bioma en el punto de contacto; si dos biomas distintos tocan
+    // el mismo lado de una celda de agua a la vez (un vertice de bioma justo
+    // en la orilla) se usa el primero que se encuentre en la comprobacion de
+    // vecinos de dibujarBordesAgua -- un empate infrecuente y sin
+    // consecuencia grave (una pieza en vez de otra en una sola celda), no
+    // una condicion que valga la pena resolver con mas codigo hoy.
+    function juegoOrillaPara(bioma) {
+      return BIOMAS_ORILLA_VERDE.has(bioma) ? 'orilla_verde_' : 'orilla_';
+    }
+
     function dibujarBordesAgua(grid, ancho, alto, x, y, px, py, size) {
       const esAgua = (nx, ny) => nx >= 0 && ny >= 0 && nx < ancho && ny < alto && grid[ny][nx].tiene_agua;
+      const biomaVecino = (nx, ny) => (nx >= 0 && ny >= 0 && nx < ancho && ny < alto) ? grid[ny][nx].terreno : null;
       const n = !esAgua(x, y - 1), s = !esAgua(x, y + 1), o = !esAgua(x - 1, y), e = !esAgua(x + 1, y);
       if (!n && !s && !o && !e) return;
       let dibujadoN = false, dibujadoS = false, dibujadoO = false, dibujadoE = false;
-      if (n && o) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_no'], px, py, size, size); dibujadoN = dibujadoO = true; }
-      if (n && e) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_ne'], px, py, size, size); dibujadoN = dibujadoE = true; }
-      if (s && o) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_so'], px, py, size, size); dibujadoS = dibujadoO = true; }
-      if (s && e) { bufferCtx.drawImage(TEXTURAS['orilla_esquina_se'], px, py, size, size); dibujadoS = dibujadoE = true; }
-      if (n && !dibujadoN) bufferCtx.drawImage(TEXTURAS['orilla_borde_n'], px, py, size, size);
-      if (s && !dibujadoS) bufferCtx.drawImage(TEXTURAS['orilla_borde_s'], px, py, size, size);
+      if (n && o) {
+        const j = juegoOrillaPara(biomaVecino(x, y - 1));
+        bufferCtx.drawImage(TEXTURAS[j + 'esquina_no'], px, py, size, size); dibujadoN = dibujadoO = true;
+      }
+      if (n && e) {
+        const j = juegoOrillaPara(biomaVecino(x, y - 1));
+        bufferCtx.drawImage(TEXTURAS[j + 'esquina_ne'], px, py, size, size); dibujadoN = dibujadoE = true;
+      }
+      if (s && o) {
+        const j = juegoOrillaPara(biomaVecino(x, y + 1));
+        bufferCtx.drawImage(TEXTURAS[j + 'esquina_so'], px, py, size, size); dibujadoS = dibujadoO = true;
+      }
+      if (s && e) {
+        const j = juegoOrillaPara(biomaVecino(x, y + 1));
+        bufferCtx.drawImage(TEXTURAS[j + 'esquina_se'], px, py, size, size); dibujadoS = dibujadoE = true;
+      }
+      if (n && !dibujadoN) {
+        const j = juegoOrillaPara(biomaVecino(x, y - 1));
+        bufferCtx.drawImage(TEXTURAS[j + 'borde_n'], px, py, size, size);
+      }
+      if (s && !dibujadoS) {
+        const j = juegoOrillaPara(biomaVecino(x, y + 1));
+        bufferCtx.drawImage(TEXTURAS[j + 'borde_s'], px, py, size, size);
+      }
       if (o && !dibujadoO) {
-        const variantes = ['orilla_borde_o_a', 'orilla_borde_o_b', 'orilla_borde_o_c'];
-        bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
+        const j = juegoOrillaPara(biomaVecino(x - 1, y));
+        if (j === 'orilla_') {
+          const variantes = ['orilla_borde_o_a', 'orilla_borde_o_b', 'orilla_borde_o_c'];
+          bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
+        } else {
+          bufferCtx.drawImage(TEXTURAS[j + 'borde_o'], px, py, size, size);
+        }
       }
       if (e && !dibujadoE) {
-        const variantes = ['orilla_borde_e_a', 'orilla_borde_e_b', 'orilla_borde_e_c'];
-        bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
+        const j = juegoOrillaPara(biomaVecino(x + 1, y));
+        if (j === 'orilla_') {
+          const variantes = ['orilla_borde_e_a', 'orilla_borde_e_b', 'orilla_borde_e_c'];
+          bufferCtx.drawImage(TEXTURAS[variantes[hash32Celda(x, y) % 3]], px, py, size, size);
+        } else {
+          bufferCtx.drawImage(TEXTURAS[j + 'borde_e'], px, py, size, size);
+        }
       }
     }
 
     function orillaCargada() {
       return texturaLista['orilla_esquina_no'] && texturaLista['orilla_borde_n'] &&
-        texturaLista['orilla_borde_o_a'] && texturaLista['orilla_borde_e_a'];
+        texturaLista['orilla_borde_o_a'] && texturaLista['orilla_borde_e_a'] &&
+        texturaLista['orilla_verde_esquina_no'] && texturaLista['orilla_verde_borde_n'] &&
+        texturaLista['orilla_verde_borde_o'] && texturaLista['orilla_verde_borde_e'];
     }
 
     let referencias = {};

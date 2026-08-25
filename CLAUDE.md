@@ -531,6 +531,67 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   y natural en los tramos largos. Pendiente, como siempre: confirmación de
   Diego en el visor real.
 
+  **Resuelto — Orillas de agua v3: orientación invertida y orilla por bioma
+  (25-08, misma tarde)**: Diego vio el render de referencia de v2 y señaló
+  dos fallos reales, no de gusto: "estás poniendo las piezas al revés... la
+  textura de agua está contra la textura de hierba en vez de contra el
+  agua", y además "estás usando las orillas de desierto o océano, cada
+  bioma tendrá que tener orillas respectivas — en biomas verdes usa active
+  water y basic water del Overworld del paquete base".
+
+  *Diagnóstico de la inversión*: correcto — verificado pieza por pieza antes
+  de tocar código. Las 8 piezas de v2 (esquinas y bordes de Ocean) se
+  extrajeron bien pero se usaron sin voltear: en la hoja original, el lado
+  con acento de agua/teal de cada pieza mira hacia **fuera** del anillo
+  (porque el asset está pensado como un atolón en mar abierto, con agua
+  rodeándolo por ambos lados — igual dentro que fuera), no hacia el agujero
+  interior. Al usar la pieza tal cual, el lado decorado con teal quedaba
+  pegado a la celda de tierra en vez de a la celda de agua real. Corrección:
+  flip vertical en borde N/S, flip horizontal en borde O/E, rotación de 180°
+  en las 4 esquinas — invierte qué lado de cada pieza mira hacia dónde, sin
+  tocar la lógica de composición de `dibujarBordesAgua()`.
+
+  *Orilla por bioma*: se buscó en el pack **base** (no Ocean) la sección
+  "BASIC WATER" del `Overworld.png` en crudo de `Mini-Medieval-v2.4`, con la
+  misma disección tile a tile que en v2. Estructura más simple que la de
+  Ocean: anillo de exactamente 3×3 tiles (no 5×5), sin variantes de textura
+  en los bordes O/E. Coordenadas nativas, origen de recorte `(x=0, y=152)`:
+  esquina NO=`(0,1)`, borde N=`(1,1)`, esquina NE=`(2,1)`; borde O=`(0,2)`,
+  borde E=`(2,2)`; esquina SO=`(0,3)`, borde S=`(1,3)`, esquina SE=`(2,3)`.
+  Mismo problema de orientación que Ocean (verde hacia el agujero, teal
+  hacia fuera) y misma corrección aplicada. Guardadas como
+  `mm_orilla_verde_{esquina_no,esquina_ne,esquina_so,esquina_se,borde_n,
+  borde_s,borde_o,borde_e}.png`.
+
+  `dibujarBordesAgua()` ahora mira el bioma de la celda de tierra
+  correspondiente a cada lado (`juegoOrillaPara()`) para elegir entre el
+  juego `orilla_` (arena, Ocean) y `orilla_verde_` (musgo, pack base):
+  bosque y pradera usan el verde, el resto (desierto/tundra/montaña) sigue
+  con arena. Si el vecino de tierra cae fuera de los límites del grid (agua
+  tocando el borde exacto del mapa) se usa arena por defecto, sin más
+  información disponible — comportamiento documentado, no un bug, y de
+  impacto visual mínimo dado que es un caso de borde extremo.
+
+  **Limitación aceptada, no resuelta**: el juego verde trae un poste/estaca
+  de madera decorativo incorporado en cada pieza (esquina y borde por
+  igual), sin variante "sin poste" para alternar — a diferencia del juego de
+  arena, el pack base no ofrece más de una textura por posición. El
+  resultado se ve más recargado que las capturas de referencia de Diego,
+  sobre todo en una costa orgánica larga donde el poste se repite en cada
+  celda sin romper el patrón. Diego lo vio en un render de referencia y
+  aceptó usarlo "de momento", con la expectativa explícita de que mejore
+  cuando el suelo tenga su propia textura/decoración (pieza todavía no
+  planificada, no solo no implementada).
+
+  *Verificación*: arnés mock-DOM confirma que una laguna en bioma bosque usa
+  exclusivamente piezas `mm_orilla_verde_*` (cuando el agua no toca el borde
+  del grid) y que una laguna en desierto usa exclusivamente piezas de arena
+  con sus 3 variantes; renders de referencia en PIL para ambos juegos
+  confirman visualmente la orientación correcta (agua contra agua) antes de
+  comitear. Pendiente: confirmación de Diego en el visor real, y —fuera de
+  esta pieza— decidir si el poste decorativo del juego verde necesita
+  revisión propia una vez el terreno tenga decoración.
+
   **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
   (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
   buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo
