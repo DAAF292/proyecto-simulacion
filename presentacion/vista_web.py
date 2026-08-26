@@ -199,11 +199,70 @@ HTML_VISOR = """<!DOCTYPE html>
         'assets/terreno/mm_tundra_c.png', 'assets/terreno/mm_tundra_d.png'
       ],
       'water': 'assets/terreno/mm_water.png',
+      // (2026-08-26) Objetos de decoracion Urizen para el pivote a estetica
+      // rogue-lite -- ver nota larga junto a BIOMAS_FONDO_OSCURO mas abajo.
+      // Recortados a mano del sheet urizen_onebit_tileset__v2d0.png (grid
+      // nativo 13x13, confirmado con numpy la vez anterior que se uso este
+      // mismo sheet) usando coincidencia visual directa contra la seccion de
+      // plantas/naturaleza y la seccion de casas/montañas -- no una
+      // composicion ya montada tomada por pieza atomica. Los 7 se cargan ya
+      // todos (barato, son 13x13px) aunque de momento solo bosque esta
+      // conectado en BIOMAS_FONDO_OSCURO/OBJETOS_BIOMA -- el resto es
+      // preparacion para cuando se valide bosque y se extienda al resto.
+      'obj_bosque_lleno': 'assets/decoracion/urizen_obj_bosque_lleno.png',
+      'obj_bosque_vacio': 'assets/decoracion/urizen_obj_bosque_vacio.png',
+      'obj_pradera_lleno': 'assets/decoracion/urizen_obj_pradera_lleno.png',
+      'obj_pradera_vacio': 'assets/decoracion/urizen_obj_pradera_vacio.png',
+      'obj_desierto': 'assets/decoracion/urizen_obj_desierto.png',
+      'obj_montana': 'assets/decoracion/urizen_obj_montana.png',
+      'obj_tundra': 'assets/decoracion/urizen_obj_tundra.png',
     };
     const TEXTURA_POR_BIOMA = {
       'bosque': 'grass', 'pradera': 'grass', 'montana': 'rock',
       'desierto': 'sand', 'tundra': 'tundra'
     };
+    // (2026-08-26) Pivote a estetica rogue-lite (Diego, tras varias rondas
+    // sin converger en el suelo continuo Mini Medieval + orillas -- "vamos a
+    // desistir de todo esto, quiero volver a una interfaz estilo rogue lite
+    // como de le Vurmux"): en vez de suelo continuo por bioma, un fondo
+    // oscuro casi uniforme con un tinte muy sutil por bioma, y la identidad
+    // del bioma la dan objetos sueltos (arbol/hierba/roca/etc) dispersos por
+    // encima -- no la textura de fondo. Aprobado explicitamente por Diego
+    // (tinte sutil por bioma, densidad dispersa 25-40%) frente a fondo
+    // neutro puro o densidad alta. BIOMAS_FONDO_OSCURO es la lista de
+    // biomas ya migrados a este esquema -- crece de uno en uno (bosque
+    // primero, a peticion expresa de Diego, para validar antes de extender)
+    // en vez de cambiar los 5 biomas a la vez.
+    const BIOMAS_FONDO_OSCURO = new Set(['bosque']);
+    const FONDO_OSCURO_BASE = [22, 22, 26];
+    const PESO_TINTE_FONDO_OSCURO = 0.12;
+    function fondoOscuroBioma(bioma) {
+      const hue = COLORES_TERRENO[bioma];
+      if (!hue) return FONDO_OSCURO_BASE;
+      const p = PESO_TINTE_FONDO_OSCURO;
+      return [
+        Math.round(FONDO_OSCURO_BASE[0] * (1 - p) + hue[0] * p),
+        Math.round(FONDO_OSCURO_BASE[1] * (1 - p) + hue[1] * p),
+        Math.round(FONDO_OSCURO_BASE[2] * (1 - p) + hue[2] * p),
+      ];
+    }
+    // Objeto(s) decorativo(s) por bioma ya migrado. bosque/pradera llevan
+    // pareja lleno/vacio -- lleno si la celda tiene tiene_recurso=true ahora
+    // mismo, vacio si no. Esto es una lectura HONESTA de un dato mecanico
+    // real del motor (a diferencia del anillo de orillas o cualquier regla
+    // inventada): el arbol/hierba decorativo SIGUE APARECIENDO tanto si hay
+    // recurso como si no (la decision de "hay objeto en esta celda o no" es
+    // puramente de presentacion, por hash) -- solo cambia CUAL de las dos
+    // variantes de arte se dibuja. montana/desierto/tundra no tienen pareja
+    // (una roca o un cactus no se "consumen" como una planta) y usan una
+    // unica clave. Ver nota junto a dibujarCapaDecoracion.
+    const OBJETOS_BIOMA = {
+      'bosque': { lleno: 'obj_bosque_lleno', vacio: 'obj_bosque_vacio' },
+    };
+    // Fraccion de celdas del bioma que reciben objeto -- dispersa, aprobada
+    // por Diego frente a densidad alta (25-40%, se toma 30% como punto
+    // medio inicial, PROVISIONAL/de gusto igual que ALPHA_MAX_CHARCO).
+    const DENSIDAD_OBJETOS_BIOMA = 0.30;
     // Subconjunto de COLORES_TERRENO que recibe el nudge de color descrito
     // arriba -- deliberadamente NO incluye montana/desierto/tundra.
     const TINTE_SUAVE_TERRENO = { 'bosque': COLORES_TERRENO['bosque'], 'pradera': COLORES_TERRENO['pradera'] };
@@ -392,50 +451,73 @@ HTML_VISOR = """<!DOCTYPE html>
           const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
           const colorBase = COLORES_TERRENO[c.terreno] || [20, 20, 20];
 
-          // Relleno base del bioma: textura real de Mini Medieval, ya con el
-          // color de bioma correcto de fabrica (a diferencia de Urizen/
-          // PyxelSpace no hace falta tintarla para que lea bien). Solo
-          // bosque/pradera reciben un nudge de color suave en 'source-over'
-          // a alfa baja (no 'multiply' a alfa completa -- eso aplastaria el
-          // brillo, la leccion de ayer) porque comparten el mismo tile base
-          // y si necesitan diferenciarse entre si. Si la textura aun no
-          // cargo (primer poll, o fallo de red), cae al relleno de color
-          // plano de siempre -- nunca deja una celda en blanco.
-          const claveTex = TEXTURA_POR_BIOMA[c.terreno];
-          if (claveTex && texturaLista[claveTex]) {
-            dibujarTexturaVariada(TEXTURAS[claveTex], x, y, px, py, TILE_NATIVO);
-            const tinteSuave = TINTE_SUAVE_TERRENO[c.terreno];
-            if (tinteSuave) {
-              bufferCtx.fillStyle = `rgba(${tinteSuave[0]},${tinteSuave[1]},${tinteSuave[2]},0.18)`;
+          if (BIOMAS_FONDO_OSCURO.has(c.terreno)) {
+            // (2026-08-26) Bioma migrado al esquema rogue-lite: fondo plano
+            // oscuro con tinte sutil, sin textura de relleno ni autotiling de
+            // borde. La identidad del bioma la dan los objetos de
+            // dibujarCapaDecoracion, no este fondo -- ver nota larga junto a
+            // BIOMAS_FONDO_OSCURO mas arriba. El autotiling de degradado de
+            // abajo (vecinos4) es una tecnica pensada para transicionar entre
+            // DOS TEXTURAS DE RELLENO vecinas; con fondo plano no aporta nada
+            // y ademas mezclaria un color brillante de COLORES_TERRENO sobre
+            // el fondo oscuro, contradiciendo la estetica -- se omite a
+            // proposito para biomas de este set, no es un olvido.
+            const fc = fondoOscuroBioma(c.terreno);
+            bufferCtx.fillStyle = `rgb(${fc[0]},${fc[1]},${fc[2]})`;
+            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+          } else {
+            // Relleno base del bioma: textura real de Mini Medieval, ya con el
+            // color de bioma correcto de fabrica (a diferencia de Urizen/
+            // PyxelSpace no hace falta tintarla para que lea bien). Solo
+            // bosque/pradera reciben un nudge de color suave en 'source-over'
+            // a alfa baja (no 'multiply' a alfa completa -- eso aplastaria el
+            // brillo, la leccion de ayer) porque comparten el mismo tile base
+            // y si necesitan diferenciarse entre si. Si la textura aun no
+            // cargo (primer poll, o fallo de red), cae al relleno de color
+            // plano de siempre -- nunca deja una celda en blanco.
+            const claveTex = TEXTURA_POR_BIOMA[c.terreno];
+            if (claveTex && texturaLista[claveTex]) {
+              dibujarTexturaVariada(TEXTURAS[claveTex], x, y, px, py, TILE_NATIVO);
+              const tinteSuave = TINTE_SUAVE_TERRENO[c.terreno];
+              if (tinteSuave) {
+                bufferCtx.fillStyle = `rgba(${tinteSuave[0]},${tinteSuave[1]},${tinteSuave[2]},0.18)`;
+                bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+              }
+            } else {
+              bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
               bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
             }
-          } else {
-            bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
-            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-          }
 
-          // Autotiling procedimental (equivalente al bitmask de 4 bits del
-          // informe, sin tileset: en vez de mapear a una subtextura, se
-          // mezcla el color hacia el vecino distinto con un degradado en el
-          // borde correspondiente -- mismo calculo de vecinos, distinto
-          // consumo visual).
-          const vecinos4 = [[0, -1, 'N'], [1, 0, 'E'], [0, 1, 'S'], [-1, 0, 'O']];
-          for (const [dx, dy, dir] of vecinos4) {
-            const nx = x + dx, ny = y + dy;
-            if (nx < 0 || ny < 0 || nx >= ancho || ny >= alto) continue;
-            const vecino = grid[ny][nx];
-            if (vecino.terreno === c.terreno) continue;
-            const cv = COLORES_TERRENO[vecino.terreno] || colorBase;
-            let grad;
-            const franja = TILE_NATIVO * 0.4;
-            if (dir === 'N') grad = bufferCtx.createLinearGradient(px, py, px, py + franja);
-            else if (dir === 'S') grad = bufferCtx.createLinearGradient(px, py + TILE_NATIVO, px, py + TILE_NATIVO - franja);
-            else if (dir === 'O') grad = bufferCtx.createLinearGradient(px, py, px + franja, py);
-            else grad = bufferCtx.createLinearGradient(px + TILE_NATIVO, py, px + TILE_NATIVO - franja, py);
-            grad.addColorStop(0, `rgba(${cv[0]},${cv[1]},${cv[2]},0.35)`);
-            grad.addColorStop(1, `rgba(${cv[0]},${cv[1]},${cv[2]},0)`);
-            bufferCtx.fillStyle = grad;
-            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+            // Autotiling procedimental (equivalente al bitmask de 4 bits del
+            // informe, sin tileset: en vez de mapear a una subtextura, se
+            // mezcla el color hacia el vecino distinto con un degradado en el
+            // borde correspondiente -- mismo calculo de vecinos, distinto
+            // consumo visual). Solo aplica entre biomas que siguen en el
+            // esquema de textura continua -- si CUALQUIERA de los dos lados
+            // (celda o vecino) ya paso a fondo oscuro, se omite: no hay
+            // textura de relleno con la que continuar el degradado en ese
+            // lado, y pintar el color brillante de COLORES_TERRENO sobre un
+            // fondo oscuro reintroduciria justo el contraste que el pivote
+            // rogue-lite busca evitar.
+            const vecinos4 = [[0, -1, 'N'], [1, 0, 'E'], [0, 1, 'S'], [-1, 0, 'O']];
+            for (const [dx, dy, dir] of vecinos4) {
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= ancho || ny >= alto) continue;
+              const vecino = grid[ny][nx];
+              if (vecino.terreno === c.terreno) continue;
+              if (BIOMAS_FONDO_OSCURO.has(vecino.terreno)) continue;
+              const cv = COLORES_TERRENO[vecino.terreno] || colorBase;
+              let grad;
+              const franja = TILE_NATIVO * 0.4;
+              if (dir === 'N') grad = bufferCtx.createLinearGradient(px, py, px, py + franja);
+              else if (dir === 'S') grad = bufferCtx.createLinearGradient(px, py + TILE_NATIVO, px, py + TILE_NATIVO - franja);
+              else if (dir === 'O') grad = bufferCtx.createLinearGradient(px, py, px + franja, py);
+              else grad = bufferCtx.createLinearGradient(px + TILE_NATIVO, py, px + TILE_NATIVO - franja, py);
+              grad.addColorStop(0, `rgba(${cv[0]},${cv[1]},${cv[2]},0.35)`);
+              grad.addColorStop(1, `rgba(${cv[0]},${cv[1]},${cv[2]},0)`);
+              bufferCtx.fillStyle = grad;
+              bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
+            }
           }
 
           // Agua permanente: textura real de base + bandas de profundidad
@@ -526,18 +608,48 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
-    // --- Capa 4: decoracion/eventos (marcador de recurso, fuego) ---
-    // Marcador de recurso es hoy un proxy tosco de "flora" (un punto verde,
-    // no una textura ni una densidad real) -- se deja en esta capa a
-    // proposito para que el dia que flora exista como concepto real del
-    // motor, sustituirlo aqui no obligue a reordenar nada mas.
+    // --- Capa 4: decoracion/eventos (objetos de bioma, marcador de recurso, fuego) ---
+    // Marcador de recurso (punto verde) es un proxy tosco de "flora" para los
+    // biomas que TODAVIA no migraron al esquema rogue-lite -- se mantiene sin
+    // tocar como fallback mientras dure la migracion incremental (ver
+    // BIOMAS_FONDO_OSCURO). Para los biomas ya migrados, la flora/relieve se
+    // representa con un objeto Urizen real en vez del punto.
+    //
+    // (2026-08-26) Colocacion de objetos por bioma -- dos decisiones
+    // independientes, a proposito separadas (Diego senalo esto como
+    // refinamiento propio al ver el primer borrador del diseno):
+    //   1. ¿Hay objeto en esta celda? -- pura decision de PRESENTACION, por
+    //      hash32Celda(x,y) contra un umbral de densidad. No lee ningun
+    //      estado del motor. Se reutiliza hash32Celda (ya usado para
+    //      orientacion D4 y variante de textura) en vez de inventar un nuevo
+    //      generador -- "reutiliza antes de inventar". Se toman bits altos
+    //      del hash (>>6) para no correlacionar con los bits bajos que ya usa
+    //      dibujarTexturaVariada sobre la misma celda en otros contextos.
+    //   2. ¿Que variante se dibuja (lleno/vacio)? -- para bosque/pradera,
+    //      lectura HONESTA de c.tiene_recurso (un dato mecanico real del
+    //      motor: "hay una Planta produciendo comida aqui ahora mismo"), no
+    //      una regla inventada. La presencia del objeto en si NO depende de
+    //      esto -- un arbol (lleno o vacio) puede aparecer en cualquier
+    //      celda de bosque con probabilidad DENSIDAD_OBJETOS_BIOMA,
+    //      independientemente de si esa celda tiene recurso o no.
     function dibujarCapaDecoracion(data) {
       const { ancho, alto, grid } = data;
       for (let y = 0; y < alto; y++) {
         for (let x = 0; x < ancho; x++) {
           const c = grid[y][x];
           const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
-          if (c.tiene_recurso) {
+          const objBioma = OBJETOS_BIOMA[c.terreno];
+          if (objBioma) {
+            const h = hash32Celda(x, y);
+            const esDenso = (Math.floor(h / 64) % 100) < DENSIDAD_OBJETOS_BIOMA * 100;
+            if (esDenso) {
+              const clave = c.tiene_recurso ? objBioma.lleno : objBioma.vacio;
+              if (texturaLista[clave]) {
+                bufferCtx.drawImage(TEXTURAS[clave], px, py, TILE_NATIVO, TILE_NATIVO);
+              }
+            }
+          } else if (c.tiene_recurso) {
+            // Fallback para biomas aun no migrados al esquema rogue-lite.
             bufferCtx.fillStyle = 'rgba(120,220,120,0.55)';
             bufferCtx.beginPath();
             bufferCtx.arc(px + TILE_NATIVO / 2, py + TILE_NATIVO / 2, TILE_NATIVO * 0.12, 0, Math.PI * 2);
