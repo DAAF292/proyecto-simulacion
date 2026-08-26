@@ -516,11 +516,29 @@ HTML_VISOR = """<!DOCTYPE html>
     // Separado en su propia pasada (antes vivia dentro del mismo bucle que
     // el resto) precisamente para poder aislarlo al diagnosticar la mancha
     // diagonal que Diego senalo -- ver nota larga arriba de dibujarTerreno().
+    //
+    // (2026-08-26) Se salta por completo en celdas de BIOMAS_FONDO_OSCURO.
+    // Sobre las texturas Mini Medieval este sombreado (alfa hasta 0.35/0.30)
+    // era casi invisible, perdido en el detalle propio de la textura -- pero
+    // al migrar los 5 biomas a fondo negro plano se volvio visible como un
+    // moteado gris sobre todo el mapa (el terreno generado por ruido
+    // continuo varia de elevacion en casi cada celda). Diego lo detecto al
+    // preguntar por que el mapa real se veia mas "degradado" que el render
+    // de referencia en PIL -- que no reproducia esta capa -- y, puesto a
+    // elegir entre quitarlo, atenuarlo o dejarlo, opto por quitarlo en los
+    // biomas ya migrados: fondo limpio, se pierde la senal visual de
+    // elevacion en el visor (el motor la sigue calculando igual, esto es
+    // puramente de presentacion). Como los 5 biomas conocidos estan hoy en
+    // BIOMAS_FONDO_OSCURO, esta capa queda inerte para todo el mapa -- se
+    // conserva el codigo (no se borra la funcion) por si en el futuro algun
+    // bioma nuevo no entra en el esquema de fondo oscuro y vuelve a
+    // necesitar esta senal.
     function dibujarCapaRelieve(data) {
       const { ancho, alto, grid } = data;
       for (let y = 1; y < alto; y++) {
         for (let x = 1; x < ancho; x++) {
           const c = grid[y][x];
+          if (BIOMAS_FONDO_OSCURO.has(c.terreno)) continue;
           const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
           const dz = c.elevacion - grid[y - 1][x - 1].elevacion;
           if (dz > 0.001) {
