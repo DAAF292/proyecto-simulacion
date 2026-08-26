@@ -225,26 +225,26 @@ HTML_VISOR = """<!DOCTYPE html>
     // sin converger en el suelo continuo Mini Medieval + orillas -- "vamos a
     // desistir de todo esto, quiero volver a una interfaz estilo rogue lite
     // como de le Vurmux"): en vez de suelo continuo por bioma, un fondo
-    // oscuro casi uniforme con un tinte muy sutil por bioma, y la identidad
-    // del bioma la dan objetos sueltos (arbol/hierba/roca/etc) dispersos por
-    // encima -- no la textura de fondo. Aprobado explicitamente por Diego
-    // (tinte sutil por bioma, densidad dispersa 25-40%) frente a fondo
-    // neutro puro o densidad alta. BIOMAS_FONDO_OSCURO es la lista de
-    // biomas ya migrados a este esquema -- crece de uno en uno (bosque
-    // primero, a peticion expresa de Diego, para validar antes de extender)
-    // en vez de cambiar los 5 biomas a la vez.
+    // oscuro y la identidad del bioma la dan objetos sueltos (arbol/hierba/
+    // roca/etc) dispersos por encima -- no la textura de fondo.
+    // BIOMAS_FONDO_OSCURO es la lista de biomas ya migrados a este esquema --
+    // crece de uno en uno (bosque primero, a peticion expresa de Diego, para
+    // validar antes de extender) en vez de cambiar los 5 biomas a la vez.
+    //
+    // (2026-08-26, mismo dia) PRIMER INTENTO DESCARTADO: se probo un tinte
+    // sutil por bioma sobre el fondo oscuro (base gris carbon [22,22,26] +
+    // 12% del color de bioma de COLORES_TERRENO) -- aprobado inicialmente
+    // via pregunta de aclaracion antes de verlo renderizado. Al verlo en el
+    // visor real, Diego lo rechazo explicitamente: "queda horrible porque se
+    // ve el contraste con el fondo, hay que dejarlo todo negro completo".
+    // Se revierte a negro puro, igual para los 5 biomas, sin ninguna mezcla
+    // de color -- la funcion fondoOscuroBioma() se mantiene como punto unico
+    // de fondo oscuro (por si algun dia hay una razon real para diferenciar)
+    // pero ahora mismo devuelve siempre negro puro, no un tinte.
     const BIOMAS_FONDO_OSCURO = new Set(['bosque']);
-    const FONDO_OSCURO_BASE = [22, 22, 26];
-    const PESO_TINTE_FONDO_OSCURO = 0.12;
+    const FONDO_OSCURO_BASE = [0, 0, 0];
     function fondoOscuroBioma(bioma) {
-      const hue = COLORES_TERRENO[bioma];
-      if (!hue) return FONDO_OSCURO_BASE;
-      const p = PESO_TINTE_FONDO_OSCURO;
-      return [
-        Math.round(FONDO_OSCURO_BASE[0] * (1 - p) + hue[0] * p),
-        Math.round(FONDO_OSCURO_BASE[1] * (1 - p) + hue[1] * p),
-        Math.round(FONDO_OSCURO_BASE[2] * (1 - p) + hue[2] * p),
-      ];
+      return FONDO_OSCURO_BASE;
     }
     // Objeto(s) decorativo(s) por bioma ya migrado. bosque/pradera llevan
     // pareja lleno/vacio -- lleno si la celda tiene tiene_recurso=true ahora
