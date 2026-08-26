@@ -170,34 +170,6 @@ HTML_VISOR = """<!DOCTYPE html>
     // el brillo (la leccion de la pieza de Urizen de ayer). montana/desierto/
     // tundra/agua se dibujan tal cual, sin ningun tinte encima.
     const RUTA_TEXTURAS = {
-      // (2026-08-25) grass/sand/rock/tundra pasan de una sola imagen de
-      // 16x16 a un banco de 4 variantes reales de 8x8 -- el grid nativo real
-      // confirmado en Tiled (ver nota junto a TILE_NATIVO). No son un
-      // recorte generico: cada variante es una celda distinta y genuina de
-      // la seccion GROUND del pack correspondiente (sin decoraciones sueltas
-      // de flores/cactus/setas), elegidas evitando las celdas que resultaron
-      // ser lisas de un solo color al comprobar con getcolors() -- grass
-      // col0/sand col0,5,6 (base/desert) y tundra col0fila1 (arctic) eran
-      // planas y se descartaron a favor de otras celdas con textura real de
-      // la misma franja. rock mantiene las mismas 4 celdas que ya se usaban
-      // (bloque de grava de PATH), ahora citadas como banco explicito en vez
-      // de una unica imagen de 16x16.
-      'grass': [
-        'assets/terreno/mm_grass_a.png', 'assets/terreno/mm_grass_b.png',
-        'assets/terreno/mm_grass_c.png', 'assets/terreno/mm_grass_d.png'
-      ],
-      'sand': [
-        'assets/terreno/mm_sand_a.png', 'assets/terreno/mm_sand_b.png',
-        'assets/terreno/mm_sand_c.png', 'assets/terreno/mm_sand_d.png'
-      ],
-      'rock': [
-        'assets/terreno/mm_rock_a.png', 'assets/terreno/mm_rock_b.png',
-        'assets/terreno/mm_rock_c.png', 'assets/terreno/mm_rock_d.png'
-      ],
-      'tundra': [
-        'assets/terreno/mm_tundra_a.png', 'assets/terreno/mm_tundra_b.png',
-        'assets/terreno/mm_tundra_c.png', 'assets/terreno/mm_tundra_d.png'
-      ],
       'water': 'assets/terreno/mm_water.png',
       // (2026-08-26) Objetos de decoracion Urizen para el pivote a estetica
       // rogue-lite -- ver nota larga junto a BIOMAS_FONDO_OSCURO mas abajo.
@@ -205,10 +177,7 @@ HTML_VISOR = """<!DOCTYPE html>
       // nativo 13x13, confirmado con numpy la vez anterior que se uso este
       // mismo sheet) usando coincidencia visual directa contra la seccion de
       // plantas/naturaleza y la seccion de casas/montañas -- no una
-      // composicion ya montada tomada por pieza atomica. Los 7 se cargan ya
-      // todos (barato, son 13x13px) aunque de momento solo bosque esta
-      // conectado en BIOMAS_FONDO_OSCURO/OBJETOS_BIOMA -- el resto es
-      // preparacion para cuando se valide bosque y se extienda al resto.
+      // composicion ya montada tomada por pieza atomica.
       'obj_bosque_lleno': 'assets/decoracion/urizen_obj_bosque_lleno.png',
       'obj_bosque_vacio': 'assets/decoracion/urizen_obj_bosque_vacio.png',
       'obj_pradera_lleno': 'assets/decoracion/urizen_obj_pradera_lleno.png',
@@ -217,19 +186,12 @@ HTML_VISOR = """<!DOCTYPE html>
       'obj_montana': 'assets/decoracion/urizen_obj_montana.png',
       'obj_tundra': 'assets/decoracion/urizen_obj_tundra.png',
     };
-    const TEXTURA_POR_BIOMA = {
-      'bosque': 'grass', 'pradera': 'grass', 'montana': 'rock',
-      'desierto': 'sand', 'tundra': 'tundra'
-    };
     // (2026-08-26) Pivote a estetica rogue-lite (Diego, tras varias rondas
     // sin converger en el suelo continuo Mini Medieval + orillas -- "vamos a
     // desistir de todo esto, quiero volver a una interfaz estilo rogue lite
     // como de le Vurmux"): en vez de suelo continuo por bioma, un fondo
     // oscuro y la identidad del bioma la dan objetos sueltos (arbol/hierba/
     // roca/etc) dispersos por encima -- no la textura de fondo.
-    // BIOMAS_FONDO_OSCURO es la lista de biomas ya migrados a este esquema --
-    // crece de uno en uno (bosque primero, a peticion expresa de Diego, para
-    // validar antes de extender) en vez de cambiar los 5 biomas a la vez.
     //
     // (2026-08-26, mismo dia) PRIMER INTENTO DESCARTADO: se probo un tinte
     // sutil por bioma sobre el fondo oscuro (base gris carbon [22,22,26] +
@@ -241,31 +203,50 @@ HTML_VISOR = """<!DOCTYPE html>
     // de color -- la funcion fondoOscuroBioma() se mantiene como punto unico
     // de fondo oscuro (por si algun dia hay una razon real para diferenciar)
     // pero ahora mismo devuelve siempre negro puro, no un tinte.
-    const BIOMAS_FONDO_OSCURO = new Set(['bosque']);
+    //
+    // (2026-08-26, misma tarde) MIGRACION COMPLETA A LOS 5 BIOMAS: tras ver
+    // el resultado en el visor real con solo bosque migrado -- una mancha
+    // negra brusca contra la pradera/montana/desierto aun con textura Mini
+    // Medieval, que se leia como "hueco sin renderizar" mas que como bioma --
+    // Diego decidio migrar los 4 biomas restantes de inmediato en vez de
+    // seguir iterando sobre bosque en aislado, para poder juzgar el diseno
+    // con el mapa entero coherente. BIOMAS_FONDO_OSCURO ya no es una lista
+    // parcial en crecimiento: cubre los 5 biomas conocidos (los mismos que
+    // declara COLORES_TERRENO). Con esto, TODO el banco de texturas Mini
+    // Medieval de terreno continuo (grass/sand/rock/tundra, mas
+    // TEXTURA_POR_BIOMA y TINTE_SUAVE_TERRENO que lo consumian) queda sin
+    // ningun caso de uso real -- se retira del todo en vez de dejarlo como
+    // codigo muerto, junto con el bloque de autotiling por degradado que
+    // solo tenia sentido entre dos texturas de relleno vecinas. Los PNG en
+    // disco (mm_grass_*.png etc.) no se han borrado todavia -- eso y la
+    // actualizacion de CLAUDE.md/informe quedan para el cierre documental
+    // de esta pieza.
+    const BIOMAS_FONDO_OSCURO = new Set(['bosque', 'pradera', 'montana', 'desierto', 'tundra']);
     const FONDO_OSCURO_BASE = [0, 0, 0];
     function fondoOscuroBioma(bioma) {
       return FONDO_OSCURO_BASE;
     }
-    // Objeto(s) decorativo(s) por bioma ya migrado. bosque/pradera llevan
-    // pareja lleno/vacio -- lleno si la celda tiene tiene_recurso=true ahora
-    // mismo, vacio si no. Esto es una lectura HONESTA de un dato mecanico
-    // real del motor (a diferencia del anillo de orillas o cualquier regla
-    // inventada): el arbol/hierba decorativo SIGUE APARECIENDO tanto si hay
-    // recurso como si no (la decision de "hay objeto en esta celda o no" es
-    // puramente de presentacion, por hash) -- solo cambia CUAL de las dos
-    // variantes de arte se dibuja. montana/desierto/tundra no tienen pareja
-    // (una roca o un cactus no se "consumen" como una planta) y usan una
-    // unica clave. Ver nota junto a dibujarCapaDecoracion.
+    // Objeto(s) decorativo(s) por bioma. bosque/pradera llevan pareja
+    // lleno/vacio -- lleno si la celda tiene tiene_recurso=true ahora mismo,
+    // vacio si no. Esto es una lectura HONESTA de un dato mecanico real del
+    // motor (a diferencia del anillo de orillas o cualquier regla inventada):
+    // el arbol/hierba decorativo SIGUE APARECIENDO tanto si hay recurso como
+    // si no (la decision de "hay objeto en esta celda o no" es puramente de
+    // presentacion, por hash) -- solo cambia CUAL de las dos variantes de
+    // arte se dibuja. montana/desierto/tundra no tienen pareja (una roca o un
+    // cactus no se "consumen" como una planta) y usan 'unico'. Ver nota junto
+    // a dibujarCapaDecoracion.
     const OBJETOS_BIOMA = {
       'bosque': { lleno: 'obj_bosque_lleno', vacio: 'obj_bosque_vacio' },
+      'pradera': { lleno: 'obj_pradera_lleno', vacio: 'obj_pradera_vacio' },
+      'montana': { unico: 'obj_montana' },
+      'desierto': { unico: 'obj_desierto' },
+      'tundra': { unico: 'obj_tundra' },
     };
     // Fraccion de celdas del bioma que reciben objeto -- dispersa, aprobada
     // por Diego frente a densidad alta (25-40%, se toma 30% como punto
     // medio inicial, PROVISIONAL/de gusto igual que ALPHA_MAX_CHARCO).
     const DENSIDAD_OBJETOS_BIOMA = 0.30;
-    // Subconjunto de COLORES_TERRENO que recibe el nudge de color descrito
-    // arriba -- deliberadamente NO incluye montana/desierto/tundra.
-    const TINTE_SUAVE_TERRENO = { 'bosque': COLORES_TERRENO['bosque'], 'pradera': COLORES_TERRENO['pradera'] };
     // (2026-08-25) Soporta tanto una ruta unica (string) como un banco de
     // variantes (array de rutas) -- lo segundo se usa para grass/sand/rock/
     // tundra desde el cambio a 8x8 nativo. texturaLista[clave] solo pasa a
@@ -449,76 +430,21 @@ HTML_VISOR = """<!DOCTYPE html>
         for (let x = 0; x < ancho; x++) {
           const c = grid[y][x];
           const px = x * TILE_NATIVO, py = y * TILE_NATIVO;
-          const colorBase = COLORES_TERRENO[c.terreno] || [20, 20, 20];
 
-          if (BIOMAS_FONDO_OSCURO.has(c.terreno)) {
-            // (2026-08-26) Bioma migrado al esquema rogue-lite: fondo plano
-            // oscuro con tinte sutil, sin textura de relleno ni autotiling de
-            // borde. La identidad del bioma la dan los objetos de
-            // dibujarCapaDecoracion, no este fondo -- ver nota larga junto a
-            // BIOMAS_FONDO_OSCURO mas arriba. El autotiling de degradado de
-            // abajo (vecinos4) es una tecnica pensada para transicionar entre
-            // DOS TEXTURAS DE RELLENO vecinas; con fondo plano no aporta nada
-            // y ademas mezclaria un color brillante de COLORES_TERRENO sobre
-            // el fondo oscuro, contradiciendo la estetica -- se omite a
-            // proposito para biomas de este set, no es un olvido.
-            const fc = fondoOscuroBioma(c.terreno);
-            bufferCtx.fillStyle = `rgb(${fc[0]},${fc[1]},${fc[2]})`;
-            bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-          } else {
-            // Relleno base del bioma: textura real de Mini Medieval, ya con el
-            // color de bioma correcto de fabrica (a diferencia de Urizen/
-            // PyxelSpace no hace falta tintarla para que lea bien). Solo
-            // bosque/pradera reciben un nudge de color suave en 'source-over'
-            // a alfa baja (no 'multiply' a alfa completa -- eso aplastaria el
-            // brillo, la leccion de ayer) porque comparten el mismo tile base
-            // y si necesitan diferenciarse entre si. Si la textura aun no
-            // cargo (primer poll, o fallo de red), cae al relleno de color
-            // plano de siempre -- nunca deja una celda en blanco.
-            const claveTex = TEXTURA_POR_BIOMA[c.terreno];
-            if (claveTex && texturaLista[claveTex]) {
-              dibujarTexturaVariada(TEXTURAS[claveTex], x, y, px, py, TILE_NATIVO);
-              const tinteSuave = TINTE_SUAVE_TERRENO[c.terreno];
-              if (tinteSuave) {
-                bufferCtx.fillStyle = `rgba(${tinteSuave[0]},${tinteSuave[1]},${tinteSuave[2]},0.18)`;
-                bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-              }
-            } else {
-              bufferCtx.fillStyle = `rgb(${colorBase[0]},${colorBase[1]},${colorBase[2]})`;
-              bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-            }
-
-            // Autotiling procedimental (equivalente al bitmask de 4 bits del
-            // informe, sin tileset: en vez de mapear a una subtextura, se
-            // mezcla el color hacia el vecino distinto con un degradado en el
-            // borde correspondiente -- mismo calculo de vecinos, distinto
-            // consumo visual). Solo aplica entre biomas que siguen en el
-            // esquema de textura continua -- si CUALQUIERA de los dos lados
-            // (celda o vecino) ya paso a fondo oscuro, se omite: no hay
-            // textura de relleno con la que continuar el degradado en ese
-            // lado, y pintar el color brillante de COLORES_TERRENO sobre un
-            // fondo oscuro reintroduciria justo el contraste que el pivote
-            // rogue-lite busca evitar.
-            const vecinos4 = [[0, -1, 'N'], [1, 0, 'E'], [0, 1, 'S'], [-1, 0, 'O']];
-            for (const [dx, dy, dir] of vecinos4) {
-              const nx = x + dx, ny = y + dy;
-              if (nx < 0 || ny < 0 || nx >= ancho || ny >= alto) continue;
-              const vecino = grid[ny][nx];
-              if (vecino.terreno === c.terreno) continue;
-              if (BIOMAS_FONDO_OSCURO.has(vecino.terreno)) continue;
-              const cv = COLORES_TERRENO[vecino.terreno] || colorBase;
-              let grad;
-              const franja = TILE_NATIVO * 0.4;
-              if (dir === 'N') grad = bufferCtx.createLinearGradient(px, py, px, py + franja);
-              else if (dir === 'S') grad = bufferCtx.createLinearGradient(px, py + TILE_NATIVO, px, py + TILE_NATIVO - franja);
-              else if (dir === 'O') grad = bufferCtx.createLinearGradient(px, py, px + franja, py);
-              else grad = bufferCtx.createLinearGradient(px + TILE_NATIVO, py, px + TILE_NATIVO - franja, py);
-              grad.addColorStop(0, `rgba(${cv[0]},${cv[1]},${cv[2]},0.35)`);
-              grad.addColorStop(1, `rgba(${cv[0]},${cv[1]},${cv[2]},0)`);
-              bufferCtx.fillStyle = grad;
-              bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
-            }
-          }
+          // (2026-08-26) Los 5 biomas estan migrados al esquema rogue-lite:
+          // fondo negro puro, identico para todos (fondoOscuroBioma ya no
+          // diferencia por bioma -- ver su nota de cabecera). La textura de
+          // relleno continua de Mini Medieval (banco grass/sand/rock/tundra,
+          // el nudge de tinte suave y el autotiling de degradado en el borde
+          // entre biomas) queda retirada por completo en este punto: con los
+          // 5 biomas en fondo plano no queda ningun caso en el que dibujarla,
+          // y mantenerla como codigo muerto tras la migracion completa
+          // contradice la honestidad sobre el estado real del sistema. La
+          // identidad de cada bioma la dan ahora, en exclusiva, los objetos
+          // de dibujarCapaDecoracion.
+          const fc = fondoOscuroBioma(c.terreno);
+          bufferCtx.fillStyle = `rgb(${fc[0]},${fc[1]},${fc[2]})`;
+          bufferCtx.fillRect(px, py, TILE_NATIVO, TILE_NATIVO);
 
           // Agua permanente: textura real de base + bandas de profundidad
           // (semi-transparentes). Sin transicion hacia la tierra vecina --
@@ -643,7 +569,10 @@ HTML_VISOR = """<!DOCTYPE html>
             const h = hash32Celda(x, y);
             const esDenso = (Math.floor(h / 64) % 100) < DENSIDAD_OBJETOS_BIOMA * 100;
             if (esDenso) {
-              const clave = c.tiene_recurso ? objBioma.lleno : objBioma.vacio;
+              // 'unico' (montana/desierto/tundra): una sola clave, no hay
+              // pareja lleno/vacio que leer de tiene_recurso -- ver nota de
+              // OBJETOS_BIOMA mas arriba.
+              const clave = objBioma.unico || (c.tiene_recurso ? objBioma.lleno : objBioma.vacio);
               if (texturaLista[clave]) {
                 bufferCtx.drawImage(TEXTURAS[clave], px, py, TILE_NATIVO, TILE_NATIVO);
               }
