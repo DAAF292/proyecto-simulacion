@@ -707,9 +707,20 @@ HTML_VISOR = """<!DOCTYPE html>
         // de por si, al venir del mismo campo continuo).
         const lluviaMedia = cluster.reduce((s, c) => s + c.c.lluvia, 0) / cluster.length;
         const sombra = 1 - lluviaMedia * 0.22;
+        const color = `${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}`;
+
+        // Capa base solida por celda (SIN Chaikin) primero: Chaikin encoge
+        // cada region hacia dentro de forma independiente, asi que dos
+        // regiones vecinas suavizadas por separado dejan un hueco sin
+        // cubrir en su borde compartido -- ahi se veria el pergamino
+        // crudo si esta capa no existiera. La silueta organica de encima
+        // es la que de verdad se ve; esta capa solo evita el hueco.
+        ctx.fillStyle = `rgba(${color}, 0.40)`;
+        for (const cel of cluster) ctx.fillRect(cel.x * tam, cel.y * tam, tam, tam);
+
         const contorno = suavizarChaikin(contornoDeCluster(cluster, tam), 2);
         trazarPoligono(contorno);
-        ctx.fillStyle = `rgba(${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}, 0.40)`;
+        ctx.fillStyle = `rgba(${color}, 0.40)`;
         ctx.fill();
       }
     }
