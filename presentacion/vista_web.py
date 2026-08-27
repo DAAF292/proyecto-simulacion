@@ -1182,17 +1182,19 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
     def _servir_asset(self, ruta_relativa: str) -> None:
-        """Sirve un archivo de RUTA_ASSETS. Resuelve la ruta final y
-        verifica que siga colgando de RUTA_ASSETS antes de leerla --
-        sin esto, un path.startswith("/assets/") con "../../" en la URL
-        serviria cualquier archivo legible del sistema (vulnerabilidad
-        de path traversal), no solo la biblioteca de imagenes."""
+        """Sirve un archivo de RUTA_ASSETS/{flora,relieve}. Resuelve la ruta
+        final y verifica que siga colgando de una de esas dos subcarpetas
+        (no solo de RUTA_ASSETS en general) antes de leerla -- sin esto,
+        un path.startswith("/assets/") con "../../" en la URL serviria
+        cualquier archivo legible del sistema (path traversal), y sin la
+        restriccion a flora/relieve especificamente, cualquier otro
+        archivo suelto en RUTA_ASSETS (como el material fuente sin
+        recortar) quedaria publicado por HTTP sin querer."""
         from urllib.parse import unquote
 
         destino = (RUTA_ASSETS / unquote(ruta_relativa)).resolve()
-        try:
-            destino.relative_to(RUTA_ASSETS.resolve())
-        except ValueError:
+        carpetas_publicas = (RUTA_ASSETS / "flora", RUTA_ASSETS / "relieve")
+        if not any(destino.is_relative_to(c.resolve()) for c in carpetas_publicas):
             self.send_response(403)
             self.end_headers()
             return
