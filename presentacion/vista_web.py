@@ -4,14 +4,15 @@ presentacion/vista_web.py
 Servidor HTTP integrado para monitoreo visual en tiempo real del mundo en el navegador.
 Serializa el estado completo en un payload JSON puro consumido por polling desde el canvas.
 
-Codice Cartografico Procedural (Paso 1 de la propuesta de frontend, 2026-08-27):
+Codice Cartografico Procedural (propuesta de frontend, 2026-08-27):
 sustituye el visor de bloques planos y emojis por un lienzo HTML5 Canvas con
-textura de pergamino, lavado acuoso por bioma y reticula perimetral numerada.
-Los pasos siguientes (hidrografia/vegetacion vectorial, camara pan/zoom con
-runas, panel de inspeccion ECS) se construyen sobre este mismo archivo en
-commits posteriores, sin tocar el motor -- el contrato JSON de mas abajo solo
-expone campos que YA existen en el ECS (Principio 4: honestidad sobre lo
-pendiente, nunca se inventa un dato que el motor no calcula).
+textura de pergamino, lavado acuoso por bioma, hidrografia/relieve/vegetacion
+vectorial, camara pan/zoom con runas Futhark y LOD, y un panel de inspeccion
+ECS con ficha de criatura, seguimiento de camara y busqueda en la cronica
+(pasos 1-4 de la propuesta, todos sobre este mismo archivo). El contrato JSON
+de mas abajo solo expone campos que YA existen en el ECS (Principio 4:
+honestidad sobre lo pendiente, nunca se inventa un dato que el motor no
+calcula).
 """
 
 from __future__ import annotations
@@ -132,6 +133,65 @@ HTML_VISOR = """<!DOCTYPE html>
       box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     }
     .card strong { font-family: 'Cinzel', serif; font-weight: 500; }
+    #ficha-entidad h3 {
+      font-family: 'Cinzel', serif;
+      font-weight: 500;
+      font-size: 13px;
+      margin: 0 0 6px 0;
+      border-bottom: 1px solid #8a6a3e;
+      padding-bottom: 4px;
+    }
+    #ficha-entidad .fila-stat {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      margin-bottom: 1px;
+    }
+    #ficha-entidad .barra-contenedor {
+      background: rgba(58,43,26,0.22);
+      border-radius: 2px;
+      height: 6px;
+      overflow: hidden;
+      margin: 1px 0 5px 0;
+    }
+    #ficha-entidad .barra-relleno { height: 100%; }
+    #ficha-entidad .seccion-ficha { margin-top: 8px; }
+    #ficha-entidad .seccion-ficha:first-of-type { margin-top: 0; }
+    #ficha-entidad button.enlace-parentesco {
+      background: none;
+      border: none;
+      color: #2c5c8a;
+      text-decoration: underline;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: inherit;
+      padding: 0;
+    }
+    #ficha-entidad .fila-botones { display: flex; gap: 6px; margin-top: 8px; }
+    #ficha-entidad button.accion-ficha {
+      font-family: 'IM Fell English', Georgia, serif;
+      font-size: 11px;
+      background: linear-gradient(180deg, #efe2c0, #cbb789);
+      border: 1px solid #6b4a2c;
+      border-radius: 2px;
+      padding: 3px 8px;
+      cursor: pointer;
+      color: var(--tinta-fuerte);
+    }
+    #ficha-entidad button.accion-ficha.activo { background: #8a6a3e; color: #efe2c0; }
+    #ficha-entidad .nota-ficha { font-style: italic; color: #6b5a3e; font-size: 10.5px; }
+    #buscar-cronica {
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 6px;
+      font-family: inherit;
+      font-size: 11.5px;
+      padding: 3px 6px;
+      border: 1px solid #8a6a3e;
+      border-radius: 2px;
+      background: #efe2c0;
+      color: var(--tinta-fuerte);
+    }
     #cronica {
       height: 300px;
       overflow-y: auto;
@@ -166,7 +226,7 @@ HTML_VISOR = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Regio Septentrionalis: Vallis Runica</h1>
-  <div id="subtitulo">Un Mundo Vivo &mdash; Codice de Simulacion (Paso 3: camara interactiva, runas Futhark, LOD)</div>
+  <div id="subtitulo">Un Mundo Vivo &mdash; Codice de Simulacion (Paso 4: panel de inspeccion ECS y seguimiento)</div>
   <div id="contenedor">
     <div id="marco-mapa">
       <canvas id="canvas-mapa" width="700" height="700"></canvas>
@@ -178,13 +238,18 @@ HTML_VISOR = """<!DOCTYPE html>
     <div id="panel-lateral">
       <div class="card" id="info-mundo">Cargando...</div>
       <div class="card" id="info-poblacion">Poblacion: -</div>
+      <div class="card" id="ficha-entidad">
+        <h3>Registro de Criatura</h3>
+        <div class="nota-ficha">Toca una criatura o resto en el mapa para ver su ficha.</div>
+      </div>
       <div class="card">
         <strong>Cronica en Vivo</strong>
+        <input type="text" id="buscar-cronica" placeholder="Buscar en la cronica (tick, especie, causa...)">
         <div id="cronica"></div>
       </div>
     </div>
   </div>
-  <div id="footer-nota">Rueda del raton: zoom (centrado en el cursor). Arrastrar: desplazar el mapa. El panel de inspeccion ECS con ficha de criatura y seguimiento llega en el paso siguiente de esta misma propuesta.</div>
+  <div id="footer-nota">Rueda del raton: zoom (centrado en el cursor). Arrastrar: desplazar el mapa. Click sobre una criatura: ficha e inspeccion.</div>
 
   <script>
     const canvas = document.getElementById('canvas-mapa');
@@ -261,23 +326,55 @@ HTML_VISOR = """<!DOCTYPE html>
       return { xMin, xMax, yMin, yMax };
     }
 
-    // --- Interaccion: arrastrar para desplazar, rueda para zoom ---------
+    // Paso 4: seleccion de entidad e inspeccion ECS ----------------------
+    let entidadSeleccionadaId = null;
+    let modoSeguimiento = false;
+    let ultimoDataConocido = null;   // ultima instantanea recibida, para hit-test e informes por id
+
+    // Hit-test contra la posicion en pantalla de cada entidad (misma
+    // formula mundoAPantalla que usa el dibujado) -- selecciona la mas
+    // cercana al click dentro de un radio razonable de acierto.
+    function entidadEnPunto(data, px, py) {
+      let mejor = null, distMejor = 16 * 16;   // radio de acierto ~16px
+      for (const e of data.entidades) {
+        const centro = mundoAPantalla((e.x + 0.5) * tam0, (e.y + 0.5) * tam0);
+        const d = (centro.x - px) ** 2 + (centro.y - py) ** 2;
+        if (d < distMejor) { distMejor = d; mejor = e; }
+      }
+      return mejor;
+    }
+
+    // --- Interaccion: arrastrar para desplazar, rueda para zoom, click para seleccionar ---
     let arrastrando = false;
     let ultimoPunteroX = 0, ultimoPunteroY = 0;
+    let distanciaArrastre = 0;
 
     canvas.addEventListener('mousedown', (ev) => {
       arrastrando = true;
+      distanciaArrastre = 0;
       canvas.classList.add('arrastrando');
       ultimoPunteroX = ev.clientX;
       ultimoPunteroY = ev.clientY;
     });
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (ev) => {
+      if (arrastrando && distanciaArrastre < 5 && ultimoDataConocido) {
+        // Arrastre insignificante: se trata como un click de seleccion,
+        // no como un pan -- evita que un pan largo dispare una seleccion
+        // al soltar el boton lejos de donde se pulso.
+        const rect = canvas.getBoundingClientRect();
+        const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
+        const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
+        const encontrada = entidadEnPunto(ultimoDataConocido, px, py);
+        entidadSeleccionadaId = encontrada ? encontrada.id : null;
+        if (!encontrada) modoSeguimiento = false;
+      }
       arrastrando = false;
       canvas.classList.remove('arrastrando');
     });
     window.addEventListener('mousemove', (ev) => {
       if (!arrastrando) return;
       const dx = ev.clientX - ultimoPunteroX, dy = ev.clientY - ultimoPunteroY;
+      distanciaArrastre += Math.abs(dx) + Math.abs(dy);
       ultimoPunteroX = ev.clientX;
       ultimoPunteroY = ev.clientY;
       camara.offsetX += dx * (canvas.width / canvas.clientWidth);
@@ -623,12 +720,128 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
+    // Paso 4: ficha de criatura (panel de inspeccion ECS) ----------------
+
+    function formatoPct(v) { return Math.round(Math.max(0, Math.min(1, v)) * 100) + '%'; }
+
+    function colorBarra(valor) {
+      if (valor > 0.55) return 'rgba(58,110,58,0.85)';
+      if (valor > 0.25) return 'rgba(160,120,30,0.85)';
+      return 'rgba(150,40,32,0.85)';
+    }
+
+    function filaBarra(etiqueta, valor) {
+      const pct = Math.max(0, Math.min(1, valor)) * 100;
+      return `<div class="fila-stat"><span>${etiqueta}</span><span>${formatoPct(valor)}</span></div>` +
+             `<div class="barra-contenedor"><div class="barra-relleno" style="width:${pct}%;background:${colorBarra(valor)}"></div></div>`;
+    }
+
+    // Enlace a un progenitor SOLO si sigue presente en la instantanea
+    // actual (vivo y dentro del ECS ahora mismo) -- si no, texto plano
+    // honesto en vez de un enlace roto a algo que ya no se puede mostrar.
+    function enlaceProgenitor(data, id, etiqueta) {
+      if (id === null || id === undefined) {
+        return `<span class="nota-ficha">${etiqueta}: fundador, sin registro</span>`;
+      }
+      const existe = data.entidades.some(en => en.id === id);
+      if (!existe) return `<span class="nota-ficha">${etiqueta}: #${id} (no localizable ahora)</span>`;
+      return `${etiqueta}: <button class="enlace-parentesco" data-id="${id}">#${id}</button>`;
+    }
+
+    function actualizarFicha(data) {
+      const cont = document.getElementById('ficha-entidad');
+
+      if (entidadSeleccionadaId === null) {
+        cont.innerHTML = '<h3>Registro de Criatura</h3>' +
+          '<div class="nota-ficha">Toca una criatura o resto en el mapa para ver su ficha.</div>';
+        return;
+      }
+
+      const e = data.entidades.find(en => en.id === entidadSeleccionadaId);
+      if (!e) {
+        cont.innerHTML = '<h3>Registro de Criatura</h3>' +
+          '<div class="nota-ficha">La entidad seleccionada ya no esta activa (murio, fue devorada o removida).</div>';
+        entidadSeleccionadaId = null;
+        modoSeguimiento = false;
+        return;
+      }
+
+      if (e.tipo === 'necromasa') {
+        cont.innerHTML = `<h3>🦴 Restos &middot; ${e.origen}</h3>` +
+          `<div class="fila-stat"><span>Posicion</span><span>(${e.x}, ${e.y})</span></div>` +
+          `<div class="fila-stat"><span>Masa organica</span><span>${e.masa} kg</span></div>` +
+          `<div class="fila-botones"><button class="accion-ficha" id="btn-deseleccionar">Cerrar ficha</button></div>`;
+        document.getElementById('btn-deseleccionar').addEventListener('click', () => {
+          entidadSeleccionadaId = null; modoSeguimiento = false;
+        });
+        return;
+      }
+
+      const runa = RUNAS[e.tipo] || '?';
+      let html = `<h3>${runa} ${e.tipo.toUpperCase()} #${e.id}${e.nombre ? ' &middot; "' + e.nombre + '"' : ''}</h3>`;
+      html += `<div class="fila-stat"><span>Sexo</span><span>${e.sexo || '-'}</span></div>`;
+      html += `<div class="fila-stat"><span>Edad</span><span>${e.edad_anios} anios</span></div>`;
+      html += `<div class="fila-stat"><span>Accion actual</span><span>${e.accion || '-'}</span></div>`;
+      html += `<div class="fila-stat"><span>Posicion</span><span>(${e.x}, ${e.y})</span></div>`;
+
+      html += '<div class="seccion-ficha"><strong>Linaje</strong><br>' +
+        enlaceProgenitor(data, e.id_madre, 'Madre') + '<br>' +
+        enlaceProgenitor(data, e.id_padre, 'Padre') + '</div>';
+
+      if (e.necesidades) {
+        html += '<div class="seccion-ficha"><strong>Necesidades</strong>';
+        for (const [k, v] of Object.entries(e.necesidades)) html += filaBarra(k, v);
+        html += '</div>';
+      }
+      if (e.pool_fisico) {
+        html += '<div class="seccion-ficha"><strong>Pools fisicos</strong>' +
+          filaBarra('vitalidad', e.pool_fisico.vitalidad) +
+          filaBarra('resistencia', e.pool_fisico.resistencia) + '</div>';
+      }
+      if (e.pool_mental) {
+        html += '<div class="seccion-ficha"><strong>Pool mental</strong>' +
+          filaBarra('estabilidad', e.pool_mental.estabilidad) + '</div>';
+      }
+      if (e.temperamento) {
+        html += '<div class="seccion-ficha"><strong>Temperamento</strong>';
+        for (const [k, v] of Object.entries(e.temperamento)) html += filaBarra(k, v);
+        html += '</div>';
+      }
+      if (e.dimensiones) {
+        // "peso" NO se muestra en kg: DimensionesFisicas.peso sigue siendo
+        // una escala abstracta en el motor (ver componentes/dimensiones_
+        // fisicas.py), fingir una unidad real aqui violaria el Principio 4.
+        html += `<div class="seccion-ficha nota-ficha">Peso (escala relativa): ${e.dimensiones.peso} ` +
+          `&middot; Altura: ${e.dimensiones.altura_m} m &middot; Fuerza: ${e.dimensiones.fuerza}</div>`;
+      }
+
+      html += `<div class="fila-botones">` +
+        `<button class="accion-ficha${modoSeguimiento ? ' activo' : ''}" id="btn-seguir">` +
+        `${modoSeguimiento ? 'Siguiendo...' : 'Seguir esta entidad'}</button>` +
+        `<button class="accion-ficha" id="btn-deseleccionar">Cerrar ficha</button></div>`;
+
+      cont.innerHTML = html;
+      document.getElementById('btn-seguir').addEventListener('click', () => { modoSeguimiento = !modoSeguimiento; });
+      document.getElementById('btn-deseleccionar').addEventListener('click', () => {
+        entidadSeleccionadaId = null; modoSeguimiento = false;
+      });
+      cont.querySelectorAll('.enlace-parentesco').forEach((btn) => {
+        btn.addEventListener('click', () => { entidadSeleccionadaId = parseInt(btn.dataset.id, 10); });
+      });
+    }
+
+    let filtroCronica = '';
+    document.getElementById('buscar-cronica').addEventListener('input', (ev) => {
+      filtroCronica = ev.target.value.toLowerCase();
+    });
+
     async function actualizar() {
       try {
         const resp = await fetch('/estado.json');
         if (!resp.ok) return;
         const data = await resp.json();
         if (!data.celdas) return;
+        ultimoDataConocido = data;
 
         document.getElementById('info-mundo').innerHTML =
           `<strong>Semilla:</strong> ${data.semilla} &middot; <strong>Tick:</strong> ${data.tick} &middot; ` +
@@ -642,6 +855,21 @@ HTML_VISOR = """<!DOCTYPE html>
 
         tam0 = canvas.width / data.ancho;
         const tam = tam0;
+
+        // Modo seguimiento (informe seccion 6.1): la camara persigue a la
+        // entidad seleccionada, con suavizado exponencial en vez de un
+        // salto brusco cada tick -- solo mueve offsetX/offsetY, el zoom
+        // actual del usuario se respeta.
+        if (modoSeguimiento && entidadSeleccionadaId !== null) {
+          const objetivo = data.entidades.find((en) => en.id === entidadSeleccionadaId);
+          if (objetivo) {
+            const deseadoX = canvas.width / 2 - (objetivo.x + 0.5) * tam * camara.zoom;
+            const deseadoY = canvas.height / 2 - (objetivo.y + 0.5) * tam * camara.zoom;
+            camara.offsetX += (deseadoX - camara.offsetX) * 0.15;
+            camara.offsetY += (deseadoY - camara.offsetY) * 0.15;
+          }
+        }
+
         const claveActual = `${data.semilla}:${data.ancho}:${data.alto}`;
         if (pergaminoClave !== claveActual) {
           pergaminoCache = construirPergamino(data.semilla, data.ancho, data.alto);
@@ -709,12 +937,20 @@ HTML_VISOR = """<!DOCTYPE html>
 
           const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
           const runa = RUNAS[e.tipo] || '?';
+          const seleccionada = e.id === entidadSeleccionadaId;
 
           if (nivel === 'macro') {
             ctx.beginPath();
             ctx.arc(centro.x, centro.y, 3, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
             ctx.fill();
+            if (seleccionada) {
+              ctx.beginPath();
+              ctx.arc(centro.x, centro.y, 7, 0, Math.PI * 2);
+              ctx.strokeStyle = 'rgba(212,172,13,0.9)';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            }
             return;
           }
 
@@ -723,8 +959,8 @@ HTML_VISOR = """<!DOCTYPE html>
           ctx.arc(centro.x, centro.y, radioHalo, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(230,216,184,0.88)';
           ctx.fill();
-          ctx.strokeStyle = `rgba(${r},${g},${b},0.7)`;
-          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = seleccionada ? 'rgba(212,172,13,0.95)' : `rgba(${r},${g},${b},0.7)`;
+          ctx.lineWidth = seleccionada ? 2.2 : 1.2;
           ctx.stroke();
 
           ctx.font = `${nivel === 'micro' ? 20 : 14}px 'Cinzel', Georgia, serif`;
@@ -751,8 +987,13 @@ HTML_VISOR = """<!DOCTYPE html>
           }
         });
 
+        actualizarFicha(data);
+
         const divCronica = document.getElementById('cronica');
-        divCronica.innerHTML = data.cronica.map(l => `<div class="linea-cronica">${l}</div>`).join('');
+        const lineasFiltradas = filtroCronica
+          ? data.cronica.filter((l) => l.toLowerCase().includes(filtroCronica))
+          : data.cronica;
+        divCronica.innerHTML = lineasFiltradas.map(l => `<div class="linea-cronica">${l}</div>`).join('');
 
       } catch (err) {
         console.error("Error al actualizar instantanea:", err);
