@@ -202,16 +202,34 @@ def generar_zona_bioma(
     # de esa especie, comportamiento identico al de antes para cualquier
     # especie de un solo bioma) o un diccionario {bioma: proporcion} para
     # el caso -- hoy solo hierba_silvestre -- que necesita valores
-    # distintos por bioma. num_manchas se aplica tambien POR bioma ahora
-    # (antes era un reparto sobre el conjunto combinado) -- efecto
-    # colateral aceptado: una especie en N biomas puede generar hasta N x
-    # num_manchas grupos en vez de un reparto de num_manchas entre todos,
-    # sin calibrar, mismo estatus "hipotesis de partida" que el resto de
-    # esta seccion.
+    # distintos por bioma. celdas_por_mancha_objetivo se aplica tambien
+    # POR bioma ahora, con el mismo escalar-o-diccionario que proporcion.
+    #
+    # CORRECCION 2026-08-23 (pedida por Diego, ver diagnostico de
+    # inanicion del mismo dia): num_manchas era un CONTEO fijo por
+    # especie, independiente del area del grid -- el mismo antipatron que
+    # ya se sospecho (equivocadamente, esa vez) como causa de la
+    # inanicion. Con num_manchas fijo, `objetivo` (que si escala con el
+    # area, via candidatas) se repartia entre un numero constante de
+    # manchas -- un mapa mas grande no generaba mas manchas, generaba
+    # manchas mas grandes, degenerando en un unico "supercontinente"
+    # dominante por especie (confirmado empiricamente: 500-975 de 1600
+    # celdas en una sola mancha de hierba silvestre en el mapa 40x40
+    # actual). Ahora el parametro fijo es celdas_por_mancha_objetivo (un
+    # TAMANO de mancha, no un conteo), y num_manchas se DERIVA:
+    # objetivo // celdas_por_mancha_objetivo. Es el numero de manchas el
+    # que crece con el area del mapa, no su tamano individual -- un
+    # prado mas grande tiene mas parches de hierba de tamano parecido, no
+    # un parche unico cada vez mas grande. Valores de
+    # celdas_por_mancha_objetivo calibrados para reproducir
+    # aproximadamente el num_manchas de hoy en el mapa 40x40 actual (ver
+    # config/constantes.yaml, seccion flora) -- ancla de continuidad, no
+    # una recalibracion desde cero.
     especie_por_celda = {}
     celdas_ya_asignadas = set()
     for especie_key, especie_cfg in config_flora["especies"].items():
         proporcion_cfg = especie_cfg["proporcion"]
+        celdas_por_mancha_cfg = especie_cfg["celdas_por_mancha_objetivo"]
         for bioma_nombre in especie_cfg["biomas"]:
             bioma = TipoTerreno(bioma_nombre)
             candidatas = {
@@ -221,11 +239,17 @@ def generar_zona_bioma(
             proporcion = (
                 proporcion_cfg[bioma_nombre] if isinstance(proporcion_cfg, dict) else proporcion_cfg
             )
+            celdas_por_mancha = (
+                celdas_por_mancha_cfg[bioma_nombre]
+                if isinstance(celdas_por_mancha_cfg, dict)
+                else celdas_por_mancha_cfg
+            )
             objetivo = int(len(candidatas) * proporcion)
+            num_manchas = max(1, round(objetivo / max(celdas_por_mancha, 1)))
             mancha = _generar_manchas(
                 ancho, alto, rng,
                 celdas_candidatas=candidatas,
-                num_manchas=especie_cfg["num_manchas"],
+                num_manchas=num_manchas,
                 objetivo_absoluto=objetivo,
                 prob_expansion=config_generacion["recurso_prob_expansion"],
             )

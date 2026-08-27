@@ -24,7 +24,7 @@ from nucleo.agua import hay_agua_potable
 from nucleo.celda import Celda
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos
-from nucleo.memoria import capacidad_memoria, registrar_recuerdo
+from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 
@@ -66,6 +66,16 @@ class SistemaRecursos:
         )
         self.eficiencia_biomasa_hidratacion: float = float(
             cfg_dep.get("eficiencia_biomasa_hidratacion", 0.5)
+        )
+
+        # (2026-08-23) Ver config/constantes.yaml sección memoria para el
+        # razonamiento completo: probabilidad de purga por visita fallida,
+        # no purga inmediata al primer fallo -- refinamiento pedido por
+        # Diego tras observar que la purga inmediata mejoraba 4 de 5
+        # semillas de referencia pero extinguía la quinta.
+        cfg_mem = self.config.get("memoria", {})
+        self.prob_purgar_recuerdo_agotado: float = float(
+            cfg_mem.get("prob_purgar_recuerdo_agotado", 0.05)
         )
 
         # Mapa de valores nutricionales e hídricos por recurso vegetal
@@ -222,6 +232,37 @@ class SistemaRecursos:
             nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
 
             self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
+        else:
+            # (2026-08-23, diagnóstico de extinción local semilla 1) Sin
+            # esto, un individuo que llega aquí guiado por un recuerdo de
+            # "comida" (nucleo/memoria.py:objetivo_recordado, consultado
+            # en sistema_movimiento.py:_calcular_forrajeo SOLO cuando la
+            # percepción directa no encuentra nada en el radio -- es
+            # decir, exactamente cuando el entorno inmediato ya está
+            # agotado) y encuentra la celda igual de vacía, no tenía
+            # ninguna consecuencia: el recuerdo stale se queda en la cola
+            # FIFO tal cual, objetivo_recordado() sigue devolviendo la
+            # MISMA coordenada por ser la más cercana en la lista, y el
+            # individuo puede quedar atrapado volviendo sobre el mismo
+            # sitio muerto en vez de que la memoria se corrija y el
+            # próximo intento explore otra cosa. purgar_recuerdo_invalido
+            # ya existía en nucleo/memoria.py con esta finalidad exacta
+            # ("invalida de inmediato una coordenada si el recurso ya no
+            # existe al visitarlo") pero no se llamaba desde ningún sitio
+            # -- pieza diseñada, nunca conectada, misma clase de deuda que
+            # agudeza_sensorial antes de esta sesión.
+            #
+            # CORRECCION 2026-08-23: la primera versión de este cambio
+            # purgaba al primer fallo, sin excepción. Mejoraba 4 de 5
+            # semillas de referencia de forma sustancial, pero extinguía
+            # una quinta -- descartaba de golpe un recuerdo que, con
+            # margen, habría vuelto a dar fruto tras la regeneración
+            # diaria de sistema_flora.py. prob_purgar_recuerdo_agotado
+            # (PROVISIONAL, ver config/constantes.yaml sección memoria)
+            # da varios reintentos esperados antes de rendirse, en vez de
+            # uno solo.
+            if mem is not None and self.rng.random() < self.prob_purgar_recuerdo_agotado:
+                purgar_recuerdo_invalido(mem, "comida", pos_x, pos_y)
 
     def _resolver_beber(
         self,
@@ -234,6 +275,16 @@ class SistemaRecursos:
     ) -> None:
         """Satisface la hidratación sobre aguas permanentes o charcos efímeros."""
         if not hay_agua_potable(celda):
+            # Mismo razonamiento que en _resolver_comer: si llegó aquí
+            # guiado por un recuerdo de "agua" que ya no es válido (charco
+            # efímero evaporado, por ejemplo), purgarlo evita que
+            # objetivo_recordado() lo siga devolviendo como el más cercano.
+            # Probabilística, no inmediata (ver prob_purgar_recuerdo_agotado
+            # en config/constantes.yaml y el comentario equivalente en
+            # _resolver_comer): da margen a que el agua vuelva (lluvia,
+            # charco que se rellena) antes de descartar el recuerdo.
+            if mem is not None and self.rng.random() < self.prob_purgar_recuerdo_agotado:
+                purgar_recuerdo_invalido(mem, "agua", pos_x, pos_y)
             return
 
         nec.hidratacion = min(1.0, nec.hidratacion + self.tasa_consumo_beber)

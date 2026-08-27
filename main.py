@@ -100,7 +100,14 @@ def sembrar_poblacion_inicial(
             elif celda.tipo_terreno == TipoTerreno.PRADERA:
                 celdas_pradera.append((x, y))
 
-    # Respaldo de seguridad ante semillas con escasa generación de bosque
+    # Respaldo de seguridad ante semillas con escasa generación de bosque.
+    # CONFIRMADO CON DIEGO (2026-08-23, ya no "provisional, no confirmado"
+    # como decía el informe técnico sección 20 hasta hoy): consultado
+    # explícitamente sobre la tensión con el Principio 5 (leyes neutras,
+    # nunca teleológicas) -- ¿debería una colonización fallar en vez de
+    # reasignarse a Pradera en silencio? -- Diego confirmó que este
+    # fallback le parece correcto tal cual. Pendiente trasladar esta
+    # confirmación al informe técnico cuando se actualice esa sección.
     candidatas_bosque = celdas_bosque if celdas_bosque else celdas_pradera
 
     especies_spawn = [
@@ -159,30 +166,84 @@ def sembrar_poblacion_inicial(
             )
 
 
-def sembrar_flora_inicial(gestor: GestorEntidades, mundo: Mundo) -> None:
-    """Instancia la entidad Planta de cada celda que la generacion del mapa
-    ya marco con tiene_recurso=True (nucleo/zona_bioma.py).
+def sembrar_flora_inicial(
+    gestor: GestorEntidades,
+    mundo: Mundo,
+    config: dict[str, Any],
+    rng_juego: random.Random,
+) -> None:
+    # (2026-08-27) Al fusionar con origin/master aparecio una SEGUNDA
+    # implementacion de esta misma funcion (sembrar_flora_inicial(gestor,
+    # mundo), sin config ni rng, sembrando el 100% de las celdas
+    # tiene_recurso=True) escrita por otra sesion que detecto el mismo
+    # hueco de forma independiente -- su rama partia de un commit anterior
+    # a 2153b20, donde este arreglo con muestreo fraccional configurable
+    # todavia no existia, asi que desde su punto de partida el hueco
+    # seguia sin resolver. Se conserva esta version (la de aqui) porque es
+    # la mas completa: respeta fraccion_siembra_inicial (global y por
+    # especie) en vez de sembrar el 100%, que es precisamente la
+    # calibracion -- PROVISIONAL, ver docstring mas abajo -- que ya se
+    # habia decidido para dar a la propagacion varios frentes en vez de un
+    # mundo ya lleno desde el tick 0. La version descartada no se pierde:
+    # sigue en el historial de origin/master y en la rama de respaldo
+    # local si hiciera falta revisarla.
+    """
+    Siembra las entidades Planta fundadoras del mundo (2026-08-23,
+    diagnóstico de inanición del mismo día): sin esto, sistema_flora.py
+    nunca tiene ninguna Planta que procesar en toda la partida --
+    crear_planta solo se invocaba antes desde sistema_flora.py:
+    _intentar_propagacion, que a su vez necesita una Planta YA existente
+    para dispararse (2%-6%/día). Con cero Plantas al arrancar, esa
+    condición nunca se cumple: es un bootstrap circular imposible,
+    confirmado empíricamente corriendo el motor 3000 ticks y comprobando
+    que gestor.entidades_con(Planta) se mantiene en cero todo el tiempo.
 
-    Gap detectado el 2026-08-27, verificando el Paso 2 de la propuesta de
-    frontend (renderizado de vegetacion): sistemas/sistema_flora.py SOLO
-    hace crecer/propagar entidades Planta que YA existen
-    (gestor.entidades_con(Planta, Posicion)) -- nunca crea la primera
-    entidad para una celda recien generada con recurso. Sin este sembrado,
-    ninguna celda de las manchas iniciales (zona_bioma.py) tiene jamas una
-    entidad Planta real, aunque su Celda.recursos/tiene_recurso ya digan
-    que hay una: ni crece, ni se propaga, ni el visor puede mostrarla,
-    desde el primer tick hasta el ultimo. componentes/planta.py ya
-    documentaba el comportamiento esperado ("Las plantas sembradas al
-    generar el mundo nacen YA maduras (etapa=1.0)") -- esta funcion
-    completa esa pieza que faltaba, no inventa una nueva. Mismo motivo que
-    sembrar_poblacion_inicial: solo se llama sobre un mundo fresco, nunca
-    al restaurar una partida (persistencia.py ya carga plantas_estado)."""
+    Mientras tanto, celda.recursos SÍ se rellena a capacidad_maxima para
+    toda celda tiene_recurso=True en la generación del mundo (nucleo/
+    zona_bioma.py) y SÍ se consume directamente en
+    sistemas/sistema_recursos.py:_resolver_comer -- ninguna de las dos
+    cosas depende de que exista una entidad Planta. El resultado, antes de
+    este cambio: toda la comida del mundo era un fondo fijo sembrado una
+    única vez y consumido de forma monótona, sin ningún mecanismo de
+    reposición activo jamás.
+
+    Reutiliza crear_planta, la misma fábrica que ya usa la propagación --
+    no se inventa un mecanismo nuevo para esto. etapa=1.0 (madura, a
+    diferencia del etapa=0.1 que usa la propagación): estas plantas
+    representan vegetación YA establecida en la generación del mundo
+    (coherente con que su celda ya arranca con recurso a capacidad_maxima),
+    no colonización nueva de territorio virgen -- ese caso conceptualmente
+    distinto sigue siendo trabajo exclusivo de la propagación existente.
+
+    Muestreo aleatorio uniforme sobre TODAS las celdas tiene_recurso=True
+    de cada especie, sin agrupar por mancha individual (la identidad de
+    cada mancha no se conserva más allá de la generación, solo
+    tiene_recurso/tipo_recurso por celda) -- estadísticamente equivalente
+    a repartir semillas dentro de cada mancha en proporción a su tamaño,
+    sin necesitar guardar esa estructura aparte. Da a la propagación
+    varios frentes simultáneos por mancha en vez de uno solo que tendría
+    que cubrir cientos de celdas por su cuenta.
+
+    fraccion_siembra_inicial (PROVISIONAL, ver config/constantes.yaml
+    sección flora): calibración numérica sin contrastar aún contra el
+    harness -- hipótesis de partida, no cifra cerrada.
+    """
     zona = mundo.territorio.zonas[0]
-    for y in range(zona.alto):
-        for x in range(zona.ancho):
-            celda = zona.obtener_celda(x, y)
-            if celda.tiene_recurso and celda.tipo_recurso:
-                crear_planta(gestor, celda.tipo_recurso, x, y, etapa=1.0)
+    especies_cfg = config.get("flora", {}).get("especies", {})
+    fraccion_por_defecto = float(config.get("flora", {}).get("fraccion_siembra_inicial", 0.08))
+
+    celdas_por_especie: dict[str, list[tuple[int, int]]] = {}
+    for x, y, celda in zona.celdas():
+        if celda.tiene_recurso:
+            celdas_por_especie.setdefault(celda.tipo_recurso, []).append((x, y))
+
+    for especie_key, celdas in celdas_por_especie.items():
+        especie_cfg = especies_cfg.get(especie_key, {})
+        fraccion = float(especie_cfg.get("fraccion_siembra_inicial", fraccion_por_defecto))
+        n_semillas = max(1, round(len(celdas) * fraccion))
+        elegidas = rng_juego.sample(celdas, min(n_semillas, len(celdas)))
+        for pos_x, pos_y in elegidas:
+            crear_planta(gestor, especie_key, pos_x, pos_y, etapa=1.0)
 
 
 def ejecutar_tick(
@@ -250,8 +311,8 @@ def main() -> None:
     gestor = GestorEntidades()
     persistencia = Persistencia(ruta_base / "datos" / "bosque.db")
 
-    ancho = int(config.get("mundo", {}).get("grid_ancho", 28))
-    alto = int(config.get("mundo", {}).get("grid_alto", 28))
+    ancho = int(config.get("mundo", {}).get("grid_ancho", 40))
+    alto = int(config.get("mundo", {}).get("grid_alto", 40))
     mundo = Mundo(ancho, alto, config, rng_mapa)
 
     # Carga opcional de partida guardada (2026-08-23): detrás de una
@@ -261,16 +322,17 @@ def main() -> None:
     # charcos, fuego, recursos) -- el TERRENO (tipo de celda, relieve) lo
     # sigue generando Mundo() a partir de la semilla de config, así que
     # continuar una partida exige no haber cambiado semilla_por_defecto
-    # entre arranques. Esto no está validado con un smoke test dedicado
-    # todavía (pendiente honesto, no una garantía).
+    # entre arranques -- ahora detectado (no solo documentado): si la
+    # semilla guardada no coincide con la actual, cargar_snapshot avisa
+    # por stderr en vez de fallar en silencio (ver su propio docstring).
     continuar_partida = os.environ.get("BOSQUE_CONTINUAR") == "1"
     partida_restaurada = False
     if continuar_partida:
-        partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego)
+        partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
 
     if not partida_restaurada:
         sembrar_poblacion_inicial(gestor, mundo, config, rng_juego, persistencia)
-        sembrar_flora_inicial(gestor, mundo)
+        sembrar_flora_inicial(gestor, mundo, config, rng_juego)
 
     sistemas = instanciar_sistemas(config, rng_juego)
 
@@ -325,7 +387,7 @@ def main() -> None:
             bus_eventos.limpiar()
 
             if guardar_cada_ticks > 0 and reloj.tick_actual % guardar_cada_ticks == 0:
-                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego)
+                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
 
     except KeyboardInterrupt:
         pass
@@ -337,7 +399,7 @@ def main() -> None:
         # guardado, un autoguardado periódico que aún no llegó a su
         # cadencia dejaría la BD desactualizada respecto al último estado
         # real simulado.
-        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego)
+        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
 
 
 if __name__ == "__main__":

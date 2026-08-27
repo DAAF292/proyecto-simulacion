@@ -53,6 +53,16 @@ class SistemaDepredacion:
         self.umbral_disposicion_caza: float = float(
             cfg_dep.get("umbral_disposicion_caza", 0.5)
         )
+        # Viabilidad energética mínima (2026-08-23, ver docstring de
+        # sistema_movimiento.py:_calcular_caza para el diagnóstico
+        # completo): mismo umbral que el de movimiento, para que un
+        # cazador y una presa que coincidan en la misma celda por
+        # casualidad -- sin que el cazador haya caminado hacia ella --
+        # se rijan por el mismo criterio de "vale la pena" en vez de que
+        # el ataque resuelva algo que el movimiento ya habría descartado.
+        self.fraccion_minima_peso_presa: float = float(
+            cfg_dep.get("fraccion_minima_peso_presa", 0.001)
+        )
         self.eficiencia_biomasa_saciedad: float = float(
             cfg_dep.get("eficiencia_biomasa_saciedad", 1.5)
         )
@@ -125,6 +135,9 @@ class SistemaDepredacion:
             return False
 
         if dims_cazador.peso <= dims_presa.peso:
+            return False
+
+        if dims_presa.peso < dims_cazador.peso * self.fraccion_minima_peso_presa:
             return False
 
         disposicion = magnitud_disposicion_por_tamano(dims_cazador.peso, dims_presa.peso)

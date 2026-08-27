@@ -33,7 +33,7 @@ from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.entidad import GestorEntidades
 from nucleo.memoria import objetivo_recordado
 from nucleo.mundo import Mundo
-from nucleo.percepcion import radio_individual
+from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
 from nucleo.relieve import pendiente_maxima_transitable
 
 
@@ -79,6 +79,17 @@ class SistemaMovimiento:
         )
         self.umbral_consciencia_agencia: float = float(
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
+
+        # Coste de forrajeo vs. beneficio (2026-08-23, pregunta de Diego:
+        # "un lobo intenta depredar una mosca si se introduce" -- ver
+        # docstring de _calcular_caza para el diagnóstico completo).
+        cfg_dep = self.config.get("depredacion", {})
+        self.fraccion_minima_peso_presa: float = float(
+            cfg_dep.get("fraccion_minima_peso_presa", 0.001)
+        )
+        self.peso_referencia_deteccion_plena: float = float(
+            cfg_dep.get("peso_referencia_deteccion_plena", 0.1)
         )
 
     def ejecutar(self, gestor: GestorEntidades, mundo: Mundo) -> None:
@@ -211,17 +222,65 @@ class SistemaMovimiento:
         peso_cazador: float,
         radio: int,
     ) -> tuple[int, int]:
-        """Avanza hacia la presa válida más cercana dentro del radio sensorial."""
+        """
+        Avanza hacia la presa válida más cercana dentro del radio sensorial.
+
+        DOS FILTROS AÑADIDOS (2026-08-23, pregunta de Diego: "un lobo
+        intenta depredar una mosca si se introduce" -- confirmado real:
+        antes de este cambio, la única condición para ser "presa válida"
+        aquí era peso_p < peso_cazador, sin ningún suelo. sistema_
+        depredacion.py:_es_presa_valida sí tenía un umbral de disposición,
+        pero esa magnitud CRECE sin techo cuanto más pequeña es la presa
+        -- una mosca frente a un lobo lo habría superado con más margen
+        que un conejo, exactamente al revés de lo que hace falta).
+
+        1. Viabilidad energética (fraccion_minima_peso_presa, PROVISIONAL
+           =0.001): una presa por debajo de ese porcentaje del peso del
+           cazador no compensa el coste de perseguirla -- se descarta
+           ANTES de caminar hacia ella, no solo al resolver el ataque.
+           Elegido para no tocar ninguna de las cuatro especies actuales
+           (el lobo más ligero, 60kg, exige solo 0.06kg -- muy por debajo
+           de la ardilla más ligera, 0.3kg): esto es una salvaguarda para
+           fauna futura mucho más pequeña, no un ajuste que deba notarse
+           hoy. Se aplica también en sistema_depredacion.py:
+           _es_presa_valida, para el caso en que coincidan en la misma
+           celda por casualidad sin haber caminado el cazador hacia ella.
+
+        2. Detectabilidad por tamaño absoluto (nucleo.percepcion.
+           radio_efectivo_por_peso, peso_referencia_deteccion_plena
+           PROVISIONAL=0.1kg): el radio de percepción hasta hoy solo
+           dependía de la agudeza sensorial de quien mira, nunca del
+           tamaño de lo mirado -- una mosca y un gnomo eran igual de
+           fáciles de detectar a la misma distancia. Un objetivo por
+           debajo del peso de referencia reduce el radio efectivo SOLO
+           para esa búsqueda de presa, calculado por candidato (cada uno
+           tiene su propio radio efectivo según su propio peso). Mismo
+           criterio de no tocar a las especies actuales: 0.1kg está por
+           debajo de la ardilla (0.3-0.6kg), así que hoy este filtro no
+           cambia nada observable, solo prepara el terreno para fauna
+           mucho más pequeña.
+
+        Ninguno de los dos umbrales se ha calibrado con el harness
+        completo -- ver commit para el barrido de verificación de que,
+        en efecto, no perturban la dinámica poblacional de hoy.
+        """
+        peso_minimo_viable = peso_cazador * self.fraccion_minima_peso_presa
         presas = []
         for eid in gestor.entidades_con(Posicion, DimensionesFisicas):
             if eid == cazador_id:
                 continue
             pos_p = gestor.obtener_componente(eid, Posicion)
             dims_p = gestor.obtener_componente(eid, DimensionesFisicas)
-            if pos_p and dims_p and dims_p.peso < peso_cazador:
-                dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
-                if dist <= radio:
-                    presas.append((dist, pos_p.x, pos_p.y))
+            if not (pos_p and dims_p):
+                continue
+            if dims_p.peso >= peso_cazador or dims_p.peso < peso_minimo_viable:
+                continue
+            dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
+            radio_efectivo = radio_efectivo_por_peso(
+                radio, dims_p.peso, self.peso_referencia_deteccion_plena
+            )
+            if dist <= radio_efectivo:
+                presas.append((dist, pos_p.x, pos_p.y))
 
         if not presas:
             return self._paso_aleatorio()
@@ -426,22 +485,28 @@ class SistemaMovimiento:
     ) -> tuple[int, int]:
         """
         Cascada de sesgos sobre el paso de dispersión, evaluados en este
-        orden: SESGO GREGARIO -> SESGO DE TERRITORIO -> paso aleatorio.
+        orden: SESGO DE TERRITORIO -> SESGO GREGARIO -> paso aleatorio.
 
-        SESGO GREGARIO (reconstruido 2026-08-23 desde su propia
-        documentación -- ver nota de reconstrucción más abajo): con
-        probabilidad = Temperamento.sociabilidad DIRECTA, sin escalar (así
-        lo describe sistema_reproduccion.py al contrastarse con
-        factor_base_concepcion: "el sesgo gregario de sociabilidad... SI
-        usa sociabilidad directa, sin escalar"), la criatura busca al
-        conspecífico más cercano en su radio de percepción y avanza hacia
-        él si está a más de social.distancia_deseada_conspecifico. Sin
-        gating por consciencia -- a diferencia del sesgo de territorio,
-        el agrupamiento social no se documentó nunca como exclusivo de
-        fauna sin agencia; es plausible tanto para gnomo como para el
-        resto. Si la tirada de sociabilidad no dispara el sesgo, o no hay
-        ningún conspecífico perceptible, se cae al siguiente nivel de la
-        cascada.
+        ORDEN INVERTIDO (2026-08-23, decisión de Diego): la primera
+        versión de esta cascada (misma tarde de hoy) probaba el gregario
+        primero, por una reconstrucción razonada mía sin respaldo directo
+        de Diego -- ver commit anterior. Consultado explícitamente sobre
+        cuál debía ir primero, Diego no tenía un criterio cerrado pero
+        señaló el norte del proyecto: "nuestra atención es crear la
+        simulación lo más apegada a la realidad". Bajo ese criterio, la
+        fidelidad al área de campeo (sitio conocido con comida/agua/
+        seguridad) es el instinto más fuerte y mejor documentado en fauna
+        real -- un animal no abandona su territorio conocido por
+        aproximarse a un congénere de paso; el agrupamiento social real
+        ocurre DENTRO del área de campeo compartida, no en lugar de ella.
+        Además, invertir el orden hace esta cascada consistente con la
+        jerarquía tipo Maslow que ya gobierna el resto de la Utility AI
+        (sistema_decision.py: seguridad/necesidades físicas por delante de
+        lo social) en vez de contradecirla en el único punto donde no se
+        aplicaba. Territorio ahora es el filtro PRIMARIO; gregario actúa
+        como sesgo secundario, solo cuando el territorio no aplica (fauna
+        consciente exenta, sin memoria todavía, o ya lo bastante cerca de
+        lo conocido).
 
         SESGO DE TERRITORIO (2026-08-22, propuesta de Diego, confirmada:
         "a nivel biológico lo común es mantenerse cerca de las fuentes de
@@ -465,6 +530,20 @@ class SistemaMovimiento:
         código (leyes neutras, nunca teleológicas). Reutiliza
         nucleo.memoria.objetivo_recordado.
 
+        SESGO GREGARIO (reconstruido 2026-08-23 desde su propia
+        documentación -- ver nota de reconstrucción más abajo): con
+        probabilidad = Temperamento.sociabilidad DIRECTA, sin escalar (así
+        lo describe sistema_reproduccion.py al contrastarse con
+        factor_base_concepcion: "el sesgo gregario de sociabilidad... SI
+        usa sociabilidad directa, sin escalar"), la criatura busca al
+        conspecífico más cercano en su radio de percepción y avanza hacia
+        él si está a más de social.distancia_deseada_conspecifico. Sin
+        gating por consciencia -- a diferencia del sesgo de territorio,
+        el agrupamiento social no se documentó nunca como exclusivo de
+        fauna sin agencia; es plausible tanto para gnomo como para el
+        resto. Si la tirada de sociabilidad no dispara el sesgo, o no hay
+        ningún conspecífico perceptible, se cae al paso aleatorio.
+
         NOTA DE RECONSTRUCCIÓN (2026-08-23): el sesgo gregario existió y
         se confirmó con Diego en algún momento anterior a hoy -- consta,
         con esas palabras, en el docstring de componentes/temperamento.py
@@ -476,26 +555,10 @@ class SistemaMovimiento:
         para nacer_criatura, solo que este caso no lanzaba ninguna
         excepción (la clave de config quedaba leída y sin usar), así que
         no se detectó hasta auditar el código funcionalidad por
-        funcionalidad. La CASCADA relativa entre gregario y territorio (aquí:
-        gregario primero, territorio como líneas de respaldo) es una
-        reconstrucción razonada mía, no una confirmación literal de Diego
-        -- se apoya en que el gregario nunca se documentó con gating de
-        consciencia (aplicaría a las cuatro especies) mientras que el de
-        territorio sí lo tiene, así que probar primero el mecanismo menos
-        restrictivo y caer al más restrictivo es el orden que preserva el
-        comportamiento de ambos sin que uno anule sistemáticamente al
-        otro. Queda abierta a que Diego la corrija si recuerda un orden
-        distinto ya decidido.
+        funcionalidad. La existencia del sesgo gregario en sí SÍ está
+        confirmada por Diego (esas citas); el ORDEN de la cascada frente a
+        territorio es ahora también decisión suya, tomada arriba.
         """
-        if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
-            objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
-                gestor, entidad_id, especie, pos_x, pos_y, radio
-            )
-            if objetivo_conspecifico is not None:
-                dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
-                if dist > self.dist_deseada_conspecifico:
-                    return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
-
         if (
             mem is not None
             and cap_mental is not None
@@ -516,6 +579,15 @@ class SistemaMovimiento:
 
             if objetivo is not None and mejor_dist is not None and mejor_dist > self.dist_deseada_territorio:
                 return self._acercarse_a(pos_x, pos_y, *objetivo)
+
+        if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
+            objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
+                gestor, entidad_id, especie, pos_x, pos_y, radio
+            )
+            if objetivo_conspecifico is not None:
+                dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
+                if dist > self.dist_deseada_conspecifico:
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
 
         return self._paso_aleatorio()
 

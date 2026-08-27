@@ -16,6 +16,7 @@ import json
 import pickle
 import random
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +82,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.21-fase0"
+VERSION_ESQUEMA = "0.22-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -258,6 +259,8 @@ class Persistencia:
                     profundidad_charco REAL NOT NULL,
                     en_llamas BOOLEAN NOT NULL,
                     recursos TEXT NOT NULL,
+                    tiene_recurso BOOLEAN NOT NULL,
+                    tipo_recurso TEXT NOT NULL,
                     PRIMARY KEY (x, y)
                 )
                 """
@@ -349,8 +352,19 @@ class Persistencia:
         mundo: Mundo,
         reloj: Reloj,
         rng_juego: random.Random,
+        semilla: int,
     ) -> None:
-        """Serializa el estado completo en una transacción atómica."""
+        """Serializa el estado completo en una transacción atómica.
+
+        semilla (2026-08-23): la semilla de generación de mundo NUNCA se
+        persistía -- cargar_snapshot solo restaura el estado DINÁMICO de
+        celda (fertilidad, charcos, fuego, recursos); el TERRENO en sí
+        (tipo de bioma, elevación) lo regenera Mundo() a partir de la
+        semilla de config en cada arranque. Si esa semilla cambia entre
+        guardar y cargar, el terreno regenerado no coincide con el que
+        produjo el estado dinámico guardado, y hasta ahora eso pasaba en
+        silencio. Guardarla aquí permite que cargar_snapshot lo detecte y
+        avise -- ver su propio docstring."""
         zona = mundo.territorio.zonas[0]
 
         with self._conectar() as con:
@@ -477,13 +491,16 @@ class Persistencia:
                             celda.profundidad_charco,
                             celda.en_llamas,
                             json.dumps(celda.recursos),
+                            celda.tiene_recurso,
+                            celda.tipo_recurso,
                         )
                     )
-            cur.executemany("INSERT INTO celdas_estado VALUES (?, ?, ?, ?, ?, ?)", filas_celdas)
+            cur.executemany("INSERT INTO celdas_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?)", filas_celdas)
 
             # E. Metadatos de ejecución y RNG
             cur.execute("REPLACE INTO configuracion_ejecucion VALUES ('tick_actual', ?)", (reloj.tick_actual,))
             cur.execute("REPLACE INTO configuracion_ejecucion VALUES ('version_esquema', ?)", (VERSION_ESQUEMA,))
+            cur.execute("REPLACE INTO configuracion_ejecucion VALUES ('semilla', ?)", (semilla,))
             cur.execute(
                 "REPLACE INTO configuracion_ejecucion VALUES ('rng_juego_state', ?)",
                 (pickle.dumps(rng_juego.getstate()),),
@@ -497,8 +514,22 @@ class Persistencia:
         mundo: Mundo,
         reloj: Reloj,
         rng_juego: random.Random,
+        semilla: int,
     ) -> bool:
-        """Restaura el estado completo desde la base de datos."""
+        """Restaura el estado completo desde la base de datos.
+
+        semilla (2026-08-23, ver docstring de guardar_snapshot): se
+        compara contra la guardada en la propia partida. El terreno
+        (bioma, elevación, ríos) NO se persiste -- lo regenera Mundo() a
+        partir de la semilla de config en cada arranque, antes de que se
+        llame a esta función. Si la semilla actual no coincide con la que
+        generó el terreno sobre el que se guardó el estado dinámico de
+        celda, el mundo resultante mezcla un terreno nuevo con recursos/
+        fertilidad/charcos de otro terreno -- inconsistente, aunque no
+        impide cargar. Se avisa por stderr en vez de fallar en silencio o
+        bloquear la carga: no hay overhead de UI de por medio (nucleo/ no
+        importa nada de presentacion/) y un guardado antiguo sigue siendo
+        mejor que ninguno, incluso si el terreno ya no encaja."""
         zona = mundo.territorio.zonas[0]
 
         with self._conectar() as con:
@@ -508,6 +539,20 @@ class Persistencia:
             fila_tick = cur.fetchone()
             if not fila_tick:
                 return False
+
+            cur.execute("SELECT valor FROM configuracion_ejecucion WHERE clave = 'semilla'")
+            fila_semilla = cur.fetchone()
+            if fila_semilla is not None and int(fila_semilla[0]) != int(semilla):
+                print(
+                    f"[persistencia] AVISO: la partida guardada se generó con "
+                    f"semilla={fila_semilla[0]}, pero la configuración actual usa "
+                    f"semilla={semilla}. El terreno se ha regenerado con la semilla "
+                    f"actual y NO coincide con el que produjo el estado dinámico de "
+                    f"celda (fertilidad, charcos, fuego, recursos) que se va a "
+                    f"cargar. La carga continúa, pero el mundo resultante puede ser "
+                    f"inconsistente.",
+                    file=sys.stderr,
+                )
             # CORRECCIÓN (2026-08-23): Reloj.tick_actual es un atributo de
             # instancia plano fijado en __init__ (nucleo/reloj.py), NO una
             # property respaldada por _tick_actual -- escribir en
@@ -529,13 +574,27 @@ class Persistencia:
                 gestor.eliminar_entidad(eid)
 
             # 1. Cargar celdas
-            cur.execute("SELECT x, y, fertilidad, profundidad_charco, en_llamas, recursos FROM celdas_estado")
-            for x, y, fert, prof_ch, fuego, rec_json in cur.fetchall():
+            cur.execute(
+                "SELECT x, y, fertilidad, profundidad_charco, en_llamas, recursos, "
+                "tiene_recurso, tipo_recurso FROM celdas_estado"
+            )
+            for x, y, fert, prof_ch, fuego, rec_json, tiene_rec, tipo_rec in cur.fetchall():
                 celda = zona.obtener_celda(x, y)
                 celda.fertilidad = float(fert)
                 celda.profundidad_charco = float(prof_ch)
                 celda.en_llamas = bool(fuego)
                 celda.recursos = json.loads(rec_json)
+                # CORRECCIÓN (2026-08-23): tiene_recurso/tipo_recurso tienen
+                # su propio docstring en nucleo/celda.py afirmando "SI se
+                # persiste" -- hasta ahora no había columnas para ellos y se
+                # perdían en cada carga, quedando siempre en su valor por
+                # defecto (False/""), inconsistente con celda.recursos ya
+                # restaurado. Sin consumidor real todavía (ningún sistema
+                # los lee), así que esto no cambiaba el comportamiento
+                # observable hoy -- pero es la promesa documentada la que
+                # ahora se cumple.
+                celda.tiene_recurso = bool(tiene_rec)
+                celda.tipo_recurso = str(tipo_rec)
 
             # 2. Cargar entidades biológicas
             cur.execute(
