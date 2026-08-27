@@ -31,7 +31,13 @@ import random
 
 from nucleo.agua import generar_cuerpos_agua
 from nucleo.bioma import clasificar_bioma
-from nucleo.campo_continuo import generar_campo
+from nucleo.orografia import (
+    campo_elevacion_orografico,
+    campo_lluvia_orografica,
+    campo_temperatura_orografica,
+    generar_cordilleras,
+    sortear_viento_dominante,
+)
 from nucleo.celda import Celda, TipoTerreno
 from nucleo.clima import Clima
 from nucleo.flora import recursos_alimento
@@ -153,14 +159,23 @@ def generar_zona_bioma(
 ) -> ZonaBioma:
     todas_las_celdas = {(x, y) for x in range(ancho) for y in range(alto)}
 
-    # Fase terreno 2+3: tres campos continuos (elevacion, lluvia,
-    # temperatura), generados en este orden fijo -- comparten el mismo
-    # rng que el resto de la generacion, asi que el orden de estas tres
-    # llamadas es parte de lo que la semilla del mundo determina; cambiar
-    # el orden cambiaria el mapa resultante para la misma semilla.
-    campo_elevacion = generar_campo(rng, ancho, alto, config_generacion["elevacion_escala_celdas"])
-    campo_lluvia = generar_campo(rng, ancho, alto, config_generacion["lluvia_escala_celdas"])
-    campo_temperatura = generar_campo(rng, ancho, alto, config_generacion["temperatura_escala_celdas"])
+    # Círculo 1 (2026-08-27, acordado con Diego tras el diagnostico
+    # visual): la generacion pasa de tres campos de value noise
+    # independientes a UNA ESTRUCTURA GEOGRAFICA CAUSAL -- cordilleras
+    # sorteadas como generadores primarios de elevacion, clima derivado
+    # del relieve (gradiente termico por altitud, viento dominante con
+    # sombra orografica para la lluvia). Leyes y pruebas:
+    # tests/test_orografia.py. Mundillos guardados con la ley anterior
+    # quedan invalidados (decision de Diego). El orden de consumo del rng
+    # aqui es parte de lo que la semilla determina:
+    # cordilleras -> elevacion -> viento -> temperatura -> lluvia.
+    config_orografia = config_generacion["orografia"]
+    cordilleras = generar_cordilleras(rng, config_orografia, ancho, alto)
+    campo_elevacion = campo_elevacion_orografico(cordilleras, rng, config_orografia, ancho, alto)
+    viento_dx, viento_dy = sortear_viento_dominante(rng)
+    config_viento = dict(config_orografia, viento_dx=viento_dx, viento_dy=viento_dy)
+    campo_lluvia = campo_lluvia_orografica(campo_elevacion, rng, config_viento, ancho, alto)
+    campo_temperatura = campo_temperatura_orografica(campo_elevacion, rng, config_orografia, ancho, alto)
 
     # Fase terreno 3 (nucleo/bioma.py): el bioma de cada celda se deriva
     # de los tres campos de arriba -- SOLO el bioma, zona climatica, nada

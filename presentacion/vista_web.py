@@ -311,6 +311,7 @@ HTML_VISOR = """<!DOCTYPE html>
       'lobo':    0.85,
       'conejo':  0.5,
       'ardilla': 0.4,
+      'necromasa': 0.45,   // restos bajos: un craneo a la altura de un gnomo seria un monstruo
     };
 
     // Color por especie de planta (config/constantes.yaml, flora.especies --
@@ -461,7 +462,23 @@ HTML_VISOR = """<!DOCTYPE html>
           ordenY,
           alturaVisual: alturaImg / 2,
           dibujar: () => {
-            ctx.drawImage(imgCriatura, cx - anchoImg / 2, baseY - alturaImg, anchoImg, alturaImg);
+            // Adicion de Diego (2026-08-27): la direccion de marcha se
+            // refleja en el dibujo -- los recortes de los sheets nuevos
+            // nacen mirando a la DERECHA, asi que una criatura que se
+            // mueve hacia la izquierda se dibuja espejada. La posicion
+            // objetivo (tx) es la del ECS: la orientacion sigue a donde
+            // VA, no al temblor del suavizado. Necromasa (sin rumbo) y
+            // criaturas quietas conservan la ultima orientacion.
+            const haciaLaIzquierda = e.tx !== undefined && e.tx < e.x - 0.001;
+            if (haciaLaIzquierda) {
+              ctx.save();
+              ctx.translate(cx, 0);
+              ctx.scale(-1, 1);
+              ctx.drawImage(imgCriatura, -anchoImg / 2, baseY - alturaImg, anchoImg, alturaImg);
+              ctx.restore();
+            } else {
+              ctx.drawImage(imgCriatura, cx - anchoImg / 2, baseY - alturaImg, anchoImg, alturaImg);
+            }
           },
         };
       }
@@ -1857,8 +1874,13 @@ HTML_VISOR = """<!DOCTYPE html>
 
       // A zoom macro: puntos de tinta en espacio de pantalla, como siempre
       // (marcador de mapa, sin oclusiones -- decisión de diseño pieza 2).
+      // Adición de Diego (2026-08-27): de lejos solo se marcan las
+      // CRIATURAS CONSCIENTES con la runa de su especie -- el conejo que
+      // no mira, el lobo que acecha: eso es detalle de cerca. El filtro
+      // lee del DTO (estabilidad_mental_maxima existe solo para quienes
+      // tienen CapacidadMental), no hardcodea especies.
       if (nivel === 'macro') {
-        entidadesAnimadas.forEach(e => {
+        entidadesAnimadas.filter(e => e.consciente === true).forEach(e => {
           const centro = mundoAPantalla((e.x + 0.5) * tam, (e.y + 0.5) * tam);
           const margen = 24;
           if (centro.x < -margen || centro.x > canvas.width + margen ||
@@ -2165,6 +2187,17 @@ def construir_instantanea(
         capacidad_mental = gestor.obtener_componente(eid, CapacidadMental)
         if capacidad_mental:
             dato["estabilidad_mental_maxima"] = round(capacidad_mental.estabilidad_mental_maxima, 3)
+            # Circulo 1 (2026-08-27): quien es "consciente" lo decide el
+            # motor con el mismo umbral de agencia que usa el sistema de
+            # decision (config/constantes.yaml, decision
+            # .umbral_consciencia_agencia) -- una sola fuente de verdad; el
+            # visor solo renderiza el flag (a zoom macro solo se marcan
+            # las conscientes, decision de Diego).
+            umbral = (
+                mundo.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+            )
+            dato["consciencia"] = round(capacidad_mental.consciencia, 3)
+            dato["consciente"] = capacidad_mental.consciencia >= umbral
 
         temperamento = gestor.obtener_componente(eid, Temperamento)
         if temperamento:

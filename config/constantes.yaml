@@ -1,26 +1,26 @@
-# ==============================================================================
+﻿# ==============================================================================
 # config/constantes.yaml
-# Configuración paramétrica centralizada del motor "Un mundo vivo"
+# ConfiguraciÃ³n paramÃ©trica centralizada del motor "Un mundo vivo"
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. Configuración Espacial y Topología del Mundo
+# 1. ConfiguraciÃ³n Espacial y TopologÃ­a del Mundo
 # ------------------------------------------------------------------------------
 mundo:
-  # AMPLIADO 2026-08-23 (28->40, decisión delegada por Diego): la
-  # población fundadora se triplicó (28->84 individuos) desde la
-  # calibración de referencia (informe de implementación 7.39-7.45,
-  # mapa 20x20) mientras el mapa solo se dobló (20x20->28x28), subiendo
+  # AMPLIADO 2026-08-23 (28->40, decisiÃ³n delegada por Diego): la
+  # poblaciÃ³n fundadora se triplicÃ³ (28->84 individuos) desde la
+  # calibraciÃ³n de referencia (informe de implementaciÃ³n 7.39-7.45,
+  # mapa 20x20) mientras el mapa solo se doblÃ³ (20x20->28x28), subiendo
   # la densidad real un 53% (0.07->0.107 individuos/celda) en la
-  # dirección CONTRARIA a la que el propio informe técnico (sección 20)
-  # dejó pendiente ("población inicial menor" o "mapa más grande" como
+  # direcciÃ³n CONTRARIA a la que el propio informe tÃ©cnico (secciÃ³n 20)
+  # dejÃ³ pendiente ("poblaciÃ³n inicial menor" o "mapa mÃ¡s grande" como
   # palancas alternativas). 40x40 baja la densidad a 0.0525
   # individuos/celda, un 25% por debajo del baseline calibrado de 7.45,
-  # sin tocar la población fundadora que Diego ya había decidido.
+  # sin tocar la poblaciÃ³n fundadora que Diego ya habÃ­a decidido.
   # PROVISIONAL en el sentido de que no se ha repetido el harness
   # completo de 7.39/7.45 (15 semillas x 12000 ticks) sobre este valor
-  # -- ver smoke test de calibración ligera en el commit que acompaña
-  # este cambio para una primera señal, no una validación definitiva.
+  # -- ver smoke test de calibraciÃ³n ligera en el commit que acompaÃ±a
+  # este cambio para una primera seÃ±al, no una validaciÃ³n definitiva.
   grid_ancho: 40
   grid_alto: 40
   metros_por_celda: 10
@@ -32,24 +32,52 @@ semilla_por_defecto: 42
 # ------------------------------------------------------------------------------
 persistencia:
   # PROVISIONAL, sin calibrar contra el coste real de guardar_snapshot a
-  # escala (ver main.py) -- hipótesis de partida, no una cifra medida.
+  # escala (ver main.py) -- hipÃ³tesis de partida, no una cifra medida.
   guardar_cada_dias: 5
 
 generacion_mapa:
-  elevacion_escala_celdas: 7
-  lluvia_escala_celdas: 9
-  temperatura_escala_celdas: 12
+  # CÃ­rculo 1 (2026-08-27): la generaciÃ³n es CAUSAL -- la elevaciÃ³n nace de
+  # cordilleras sorteadas (nucleo/orografia.py) y el clima se deriva del
+  # relieve. Los tres valores de escala de ruido que vivÃ­an aquÃ­
+  # (elevacion/lluvia/temperatura_escala_celdas) desaparecieron con esa ley;
+  # mundos guardados con la ley anterior quedaron invalidados (decisiÃ³n de
+  # Diego). Leyes y pruebas: tests/test_orografia.py.
   rio_ancho: 1
   recurso_prob_expansion: 0.5
+  orografia:
+    num_cordilleras: [1, 3]        # sorteo: cuÃ¡ntas cordilleras tiene el mundo
+    longitud_min: 0.50             # fracciÃ³n del lado mayor del mapa
+    longitud_max: 0.90
+    anchura_celdas: [4, 9]         # semianchura de la cresta, sorteo por cordillera
+    altura_cresta: [0.78, 0.95]    # sorteo por cordillera
+    altura_fondo: [0.05, 0.35]     # colinas de fondo (fuera de cordilleras)
+    elevacion_escala_celdas: 9     # ruido de las colinas de fondo
+    temperatura_base: 0.55         # llanura: temperatura de partida
+    gradiente_termico: 0.45        # cuÃ¡nto enfrÃ­a la altitud (ley: T = base - g*elev)
+    temperatura_ruido_escala_celdas: 8
+    temperatura_ruido_amplitud: 0.12
+    lluvia_base: 0.58              # lluvia sin sombra orogrÃ¡fica
+    lluvia_sombra_celdas: 6        # alcance del viento al cargar contra relieve
+    lluvia_sombra_fuerza: 0.65
+    lluvia_ruido_escala_celdas: 8
+    lluvia_ruido_amplitud: 0.2
+    # El viento dominante NO se configura: se sortea por semilla entre los
+    # cuatro rumbos cardinales (nucleo/orografia.py:sortear_viento_dominante).
 
 bioma:
-  umbral_elevacion_montana: 0.80
-  umbral_temperatura_tundra: 0.12
-  umbral_lluvia_desierto: 0.15
-  umbral_lluvia_bosque: 0.72
+  # Umbrales recalibrados (2026-08-27) contra mundos reales con la ley
+  # orografica (arnes de calibracion: 6 semillas, 48x48): crestas de
+  # cordillera en 0.78-0.95, fondo 0.05-0.35. Objetivo de proporciones
+  # (aprox): pradera ~50%, bosque ~25%, montana ~10% (crestas+laderas),
+  # desierto ~5% (sotaventos), tundra ~3% (cumbres frias). Objetivo
+  # propuesto, a revalidar tras jugar con estos mundos.
+  umbral_elevacion_montana: 0.47
+  umbral_temperatura_tundra: 0.25
+  umbral_lluvia_desierto: 0.24
+  umbral_lluvia_bosque: 0.62
 
 # ------------------------------------------------------------------------------
-# 2. Hidrología y Dinámica de Superficie
+# 2. HidrologÃ­a y DinÃ¡mica de Superficie
 # ------------------------------------------------------------------------------
 agua:
   umbral_elevacion_nacimiento: 0.70
@@ -69,7 +97,7 @@ charcos:
   tasa_agotamiento_charco_al_beber: 0.01
 
 # ------------------------------------------------------------------------------
-# 3. Atmósfera, Climatología y Desastres
+# 3. AtmÃ³sfera, ClimatologÃ­a y Desastres
 # ------------------------------------------------------------------------------
 estaciones:
   primavera:
@@ -120,7 +148,7 @@ desastres:
   tasa_putrefaccion_calcinada: 0.15
 
 # ------------------------------------------------------------------------------
-# 4. Botánica, Descomposición y Fertilidad Edáfica
+# 4. BotÃ¡nica, DescomposiciÃ³n y Fertilidad EdÃ¡fica
 # ------------------------------------------------------------------------------
 abono:
   incremento_fertilidad_por_aliviarse: 0.2
@@ -137,38 +165,38 @@ descomposicion:
 flora:
   bono_produccion_ribera: 0.2
   tasa_retorno_mantillo: 0.05
-  # fraccion_siembra_inicial (PROVISIONAL, calibración numérica -- ver
-  # diagnóstico de inanición 2026-08-23, nucleo/entidad.py:sembrar_flora_inicial
-  # y main.py): fracción de las celdas tiene_recurso=True de cada especie
+  # fraccion_siembra_inicial (PROVISIONAL, calibraciÃ³n numÃ©rica -- ver
+  # diagnÃ³stico de inaniciÃ³n 2026-08-23, nucleo/entidad.py:sembrar_flora_inicial
+  # y main.py): fracciÃ³n de las celdas tiene_recurso=True de cada especie
   # que reciben una entidad Planta fundadora (etapa=1.0) al generar el
   # mundo. Sin esto, sistema_flora.py nunca tiene ninguna Planta que
-  # procesar -- crear_planta solo se invoca desde la propagación, que
-  # necesita una Planta YA existente para disparerse, así que sin siembra
+  # procesar -- crear_planta solo se invoca desde la propagaciÃ³n, que
+  # necesita una Planta YA existente para disparerse, asÃ­ que sin siembra
   # inicial el conteo de Plantas es cero para siempre y toda la comida del
   # mundo es un fondo fijo no renovable (celda.recursos se rellena a
-  # capacidad_maxima en la generación y sistema_recursos.py lo consume
+  # capacidad_maxima en la generaciÃ³n y sistema_recursos.py lo consume
   # directamente, sin depender de ninguna entidad). Valor por defecto sin
-  # calibrar contra el motor en marcha todavía -- hipótesis de partida,
-  # pendiente de contrastar con el harness de calibración ligera.
+  # calibrar contra el motor en marcha todavÃ­a -- hipÃ³tesis de partida,
+  # pendiente de contrastar con el harness de calibraciÃ³n ligera.
   fraccion_siembra_inicial: 0.08
   especies:
     hierba_silvestre:
       biomas: [pradera, bosque]
       # celdas_por_mancha_objetivo (2026-08-23, sustituye a num_manchas
-      # fijo): tamaño de mancha objetivo en celdas, del que se DERIVA el
-      # número de manchas (num_manchas_calculado = max(1, round(objetivo /
+      # fijo): tamaÃ±o de mancha objetivo en celdas, del que se DERIVA el
+      # nÃºmero de manchas (num_manchas_calculado = max(1, round(objetivo /
       # celdas_por_mancha_objetivo)), ver nucleo/zona_bioma.py) en vez de
-      # al revés. Con num_manchas fijo, un mapa más grande no producía más
-      # manchas -- producía manchas más grandes (objetivo crece con el
-      # área, num_manchas no), degenerando en un único "supercontinente"
-      # dominante por especie (confirmado empíricamente: 500-975 de 1600
+      # al revÃ©s. Con num_manchas fijo, un mapa mÃ¡s grande no producÃ­a mÃ¡s
+      # manchas -- producÃ­a manchas mÃ¡s grandes (objetivo crece con el
+      # Ã¡rea, num_manchas no), degenerando en un Ãºnico "supercontinente"
+      # dominante por especie (confirmado empÃ­ricamente: 500-975 de 1600
       # celdas en una sola mancha de hierba en el mapa 40x40 actual). Con
-      # el tamaño de mancha como parámetro fijo en su lugar, es el NÚMERO
-      # de manchas el que crece con el área -- más parches de tamaño
-      # similar en un mapa más grande, no menos parches gigantescos.
+      # el tamaÃ±o de mancha como parÃ¡metro fijo en su lugar, es el NÃšMERO
+      # de manchas el que crece con el Ã¡rea -- mÃ¡s parches de tamaÃ±o
+      # similar en un mapa mÃ¡s grande, no menos parches gigantescos.
       # Valores calibrados para reproducir aproximadamente el num_manchas
       # de hoy en el mapa 40x40 actual (script de 5 semillas, ver
-      # diagnóstico de inanición 2026-08-23) -- ancla de continuidad, no
+      # diagnÃ³stico de inaniciÃ³n 2026-08-23) -- ancla de continuidad, no
       # una cifra recalibrada desde cero.
       celdas_por_mancha_objetivo:
         pradera: 180
@@ -259,7 +287,7 @@ flora:
           valor_hidratacion: 0.04
 
 # ------------------------------------------------------------------------------
-# 5. Población Inicial y Demografía
+# 5. PoblaciÃ³n Inicial y DemografÃ­a
 # ------------------------------------------------------------------------------
 poblacion:
   gnomos_iniciales: 18
@@ -269,7 +297,7 @@ poblacion:
   techo_fraccion_edad_inicial_longevidad: 0.7
 
 # ------------------------------------------------------------------------------
-# 6. Biomecánica, Fricción y Cinemática (Fase 2)
+# 6. BiomecÃ¡nica, FricciÃ³n y CinemÃ¡tica (Fase 2)
 # ------------------------------------------------------------------------------
 percepcion:
   radio_minimo_celdas: 0
@@ -326,7 +354,7 @@ memoria:
   prob_purgar_recuerdo_agotado: 0.15
 
 # ------------------------------------------------------------------------------
-# 7. Combate y Dinámica Trófica (Fase 2)
+# 7. Combate y DinÃ¡mica TrÃ³fica (Fase 2)
 # ------------------------------------------------------------------------------
 depredacion:
   umbral_disposicion_caza: 0.5
@@ -337,17 +365,17 @@ depredacion:
   eficiencia_biomasa_saciedad: 1.5
   eficiencia_biomasa_hidratacion: 0.5
   # Coste de forrajeo vs. beneficio (2026-08-23, ver sistema_movimiento.py:
-  # _calcular_caza para el diagnóstico completo). Ambos valores elegidos
-  # a propósito por debajo de la especie más pequeña actual (ardilla,
+  # _calcular_caza para el diagnÃ³stico completo). Ambos valores elegidos
+  # a propÃ³sito por debajo de la especie mÃ¡s pequeÃ±a actual (ardilla,
   # 0.3-0.6kg) para no afectar a las cuatro especies de hoy -- son
-  # salvaguarda para fauna futura mucho más pequeña, no una recalibración
+  # salvaguarda para fauna futura mucho mÃ¡s pequeÃ±a, no una recalibraciÃ³n
   # de la caza actual. PROVISIONAL, verificado solo con un barrido de
-  # calibración ligera comprobando que NO cambian la dinámica de hoy.
+  # calibraciÃ³n ligera comprobando que NO cambian la dinÃ¡mica de hoy.
   fraccion_minima_peso_presa: 0.001
   peso_referencia_deteccion_plena: 0.1
 
 # ------------------------------------------------------------------------------
-# 8. Metabolismo, Necesidades y Estados Críticos (Fase 3)
+# 8. Metabolismo, Necesidades y Estados CrÃ­ticos (Fase 3)
 # ------------------------------------------------------------------------------
 necesidades:
   defecto:
@@ -378,12 +406,12 @@ decision:
   # Umbral de CapacidadMental.consciencia por debajo del cual una criatura
   # queda sujeta al sesgo de territorio (sistemas/sistema_movimiento.py):
   # tiende a permanecer cerca de comida/agua recordadas en vez de
-  # deambular erráticamente sin objetivo (2026-08-22, propuesta de Diego).
-  # PROVISIONAL: 0.3 es una hipótesis de partida razonada, no calibrada
+  # deambular errÃ¡ticamente sin objetivo (2026-08-22, propuesta de Diego).
+  # PROVISIONAL: 0.3 es una hipÃ³tesis de partida razonada, no calibrada
   # contra el motor en marcha -- separa con margen a lobo/conejo/ardilla
   # (rango racial de consciencia 0.0-0.2 o 0.0-0.1) de gnomo (0.6-0.9),
   # de modo que hoy solo gnomo queda EXENTO del sesgo de territorio. Si al
-  # observar el motor conviene que alguna otra especie también quede
+  # observar el motor conviene que alguna otra especie tambiÃ©n quede
   # exenta o incluida, este umbral es el primer sitio a ajustar.
   umbral_consciencia_agencia: 0.3
 
@@ -400,17 +428,17 @@ crisis_mental:
   umbral_agresividad_violenta: 0.6
 
 # ------------------------------------------------------------------------------
-# 9. Ciclo Vital y Dinámica Poblacional
+# 9. Ciclo Vital y DinÃ¡mica Poblacional
 # ------------------------------------------------------------------------------
 ciclo_vital:
   # RECALIBRADO 2026-08-23: el valor original (0.3, exponente fijo 2)
-  # convertía la vejez en la causa dominante de muerte (55-76% del
-  # total en un barrido de calibración ligera), extinguiendo la
-  # población en 1000-2000 ticks -- ver nucleo/ciclo_vital.py,
-  # docstring de probabilidad_muerte_vejez, para el diagnóstico
+  # convertÃ­a la vejez en la causa dominante de muerte (55-76% del
+  # total en un barrido de calibraciÃ³n ligera), extinguiendo la
+  # poblaciÃ³n en 1000-2000 ticks -- ver nucleo/ciclo_vital.py,
+  # docstring de probabilidad_muerte_vejez, para el diagnÃ³stico
   # completo. PROVISIONAL, ajustado contra un barrido ligero (5
   # semillas x 6000 ticks), no el harness completo de 15x12000 que
-  # usó el proyecto para el sistema de agua.
+  # usÃ³ el proyecto para el sistema de agua.
   techo_probabilidad_muerte_vejez: 0.05
   exponente_curva_vejez: 8.0
 
@@ -557,9 +585,11 @@ rangos_raciales:
     consciencia: [0.0, 0.1]
 
 # ------------------------------------------------------------------------------
-# 11. Presentación y Monitoreo Web
+# 11. PresentaciÃ³n y Monitoreo Web
 # ------------------------------------------------------------------------------
 visual:
   puerto: 8765
   segundos_por_tick: 0.4
   max_lineas_cronica: 200
+
+
