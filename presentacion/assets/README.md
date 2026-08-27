@@ -83,23 +83,38 @@ empieza a estampar esas dos variantes en vez del contorno vectorial en las
 celdas de bosque con manzano — no hace falta completar las 5 especies a la
 vez.
 
-## Pendientes (2026-08-27)
+## Pendientes (2026-08-27, actualizado el mismo día)
 
 ### Huecos en la biblioteca actual
 
-Estas tres categorías siguen cayendo al dibujo vectorial porque no tienen
-ningún asset todavía. Mismo estilo que el resto (tinta con tramado
-cruzado, no la acuarela suave de la primera hoja, ya retirada):
+- **`agua/rio_<n>.png`** — sigue sin resolver. Diego subió
+  `presentacion/nuevosAssets/Gemini_Generated_Image_gfaoymgfaoymgfao.jpeg`,
+  un tileset de agua (lagos, ríos con curvas/cruces, cascadas) muy
+  completo, pero en **acuarela suave** (washes de color, sin tramado de
+  tinta) — el mismo estilo que ya se retiró una vez de este proyecto por
+  no encajar con el resto del mapa (ver hilo de "hojas de estilo
+  antiguo" más arriba en la memoria del proyecto). No se ha integrado
+  por ese motivo: mezclar un río en acuarela sobre un mapa entero en
+  tinta se vería peor que la doble orilla vectorial actual. Sin esto, el
+  río sigue con doble orilla vectorial. Si Diego confirma que quiere
+  aceptar ese estilo igualmente para el agua, se puede reconsiderar.
 
-- **`agua/rio_<n>.png`** — la única categoría que se quedó sin ilustrar al
-  quitar la primera hoja (sus ríos no encajaban de estilo). Sin esto, el
-  río sigue con doble orilla vectorial.
-- **`flora/musgo_<n>.png`** (tundra) — Diego pidió específicamente pinos
-  nevados o rocas con nieve, algo que lea claramente "frío/nevado" y no
-  se confunda con vegetación templada.
-- **`flora/liquen_<n>.png`** (montaña) — sin propuesta de estilo concreta
-  todavía, algo bajo/rocoso (parche de liquen sobre roca) encajaría con
-  el bioma.
+### Resuelto (2026-08-27) — musgo y liquen
+
+`presentacion/nuevosAssets/Gemini_Generated_Image_939a4j939a4j939a.jpeg`
+(hoja de flora/rocas, con mitad "neutra" tinta sepia + mitad a color) sí
+encajaba con el estilo — confirmado comparando contra `manzano_4.png` y
+`cactus_1.png` (ambos sepia, no verdes). Se usó la mitad NEUTRA:
+
+- **`flora/musgo_1.png`, `flora/musgo_2.png`** — rocas con nieve de la
+  fila de "rocas" de esa hoja (lee "frío/nevado" tal como pidió Diego,
+  sin pinos nevados porque la única hoja con pino nevado
+  (`Gemini_Generated_Image_rvlcfprvlcfprvlc.jpeg`) lo dibuja a todo
+  color/verde, no en la paleta neutra del resto de la biblioteca).
+- **`flora/liquen_1.png`** — roca con musgo verde (acento de color igual
+  que las manzanas rojas sobre el manzano sepia, no rompe el patrón).
+- **`flora/liquen_2.png`** — roca con textura de liquen gris/crema, sin
+  color añadido.
 
 ### Propuesta de sistema de escala (LOD por zoom) — diseño, todavía SIN soporte en el código
 
@@ -128,3 +143,44 @@ ancha en vez de un objeto vertical como los sellos actuales):
 Esto es un diseño propuesto para dejar constancia, no una convención que
 el visor ya reconozca — cuando se implemente el lado del código, esta
 sección se actualizará para reflejarlo.
+
+### Criaturas — cambio deliberado de estilo (2026-08-27)
+
+Diego subió 8 hojas nuevas en `presentacion/nuevosAssets/` (gnomo macho
+adulto, gnomo hembra adulta, gnomos jóvenes, lobos, conejos, ardillas,
+más `zorro.jpeg` y `caballo.jpeg` — estas dos últimas sin uso posible,
+no hay especie `zorro` ni `caballo` en `componentes/identidad.py`, se
+quedan en `nuevosAssets/` sin tocar) con instrucción explícita de
+usarlas para "darle más vida al mapa". A diferencia del terreno/flora,
+**estas hojas NO están en el estilo de tinta con tramado cruzado** —
+son ilustración pictórica a todo color, con sombra propia bajo cada
+figura, y con múltiples variantes de color por especie (p.ej. lobo
+gris/pardo/blanco/negro) en vez de una sola paleta neutra.
+
+Se sustituyeron enteros los antiguos `gnomo_*`, `lobo_*`, `conejo_*`,
+`ardilla_*` (que sí estaban en tinta) por selecciones de estas hojas
+nuevas — nunca mezclados dentro de la misma especie (habría producido
+parpadeo de estilo entre individuos del mismo bicho en el mismo mapa,
+el mismo error que ya se corrigió una vez con el terreno). Resultado:
+**el mapa ahora tiene una separación de estilo deliberada** entre el
+entorno (tinta/pergamino, sin cambios) y las criaturas (color/pictórico,
+con sombra). Verificado visualmente en el visor real — se lee bien, no
+se ve roto, pero es un contraste real que antes no existía y que no se
+ha validado explícitamente con Diego más allá de la instrucción de usar
+estas hojas. Si no convence, la biblioteca previa de criaturas en tinta
+sigue en el historial de git (no en disco).
+
+Variantes elegidas (una pose limpia por variante, recorte con
+`scipy.ndimage` + fondo a transparencia por distancia al blanco):
+
+- **`gnomo_1..4`**: macho adulto, hembra adulta, joven varón, joven
+  hembra (una imagen por hoja, sin ampliar a más poses por ahora).
+- **`lobo_1..4`**: gris, pardo, blanco, negro.
+- **`conejo_1..4`**: gris/blanco, pardo, tierra, manchado.
+- **`ardilla_1..4`**: gris/marrón, común, tierra, manchada.
+
+Cada hoja trae docenas de poses más (caminar, dormir, sentarse, comer)
+sin usar todavía — el visor solo estampa una imagen estática por
+individuo (sin animación por estado), así que no había necesidad de
+extraerlas todas. Si en el futuro se añade animación por pose, esas
+hojas ya están en el repo listas para recortar más variantes.
