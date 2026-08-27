@@ -710,7 +710,19 @@ HTML_VISOR = """<!DOCTYPE html>
     // mundo) para que no cambie de un frame a otro. No sustituye a
     // Chaikin, se aplica DESPUES: Chaikin quita las esquinas de celda,
     // esto rompe la regularidad que Chaikin por si solo deja perfecta.
+    // (2026-08-27, correccion): la primera version ondulaba hacia dentro Y
+    // hacia fuera del borde real de celda por igual. Donde la onda tiraba
+    // hacia dentro, se veia por debajo la capa de respaldo plana (fillRect
+    // por celda, sin ondular, anadida antes para evitar huecos entre
+    // regiones vecinas) -- ahi el borde seguia leyendose recto, que es
+    // justo lo que Diego senalo en una region de tundra bastante
+    // rectangular. Ahora la ondulacion SIEMPRE empuja hacia fuera (nunca
+    // por debajo del borde real): "dilatacion" es un margen minimo
+    // garantizado, la suma de ondas se anade encima sin poder bajar de
+    // cero. Con esto la capa de respaldo deja de hacer falta -- ver
+    // dibujarBiomas() mas abajo, ya no la dibuja.
     function ondularContorno(puntos, amplitud, fase) {
+      const dilatacion = amplitud * 1.4;
       let longitudAcum = 0;
       const salida = [];
       for (let i = 0; i < puntos.length; i++) {
@@ -720,7 +732,7 @@ HTML_VISOR = """<!DOCTYPE html>
         const nx = -dy / seg, ny = dx / seg;
         const onda1 = Math.sin(longitudAcum / 42 + fase) * amplitud;
         const onda2 = Math.sin(longitudAcum / 15 + fase * 2.3) * amplitud * 0.35;
-        const bulto = onda1 + onda2;
+        const bulto = dilatacion + onda1 + onda2;
         salida.push({ x: p0.x + nx * bulto, y: p0.y + ny * bulto });
         longitudAcum += seg;
       }
@@ -741,15 +753,11 @@ HTML_VISOR = """<!DOCTYPE html>
         const sombra = 1 - lluviaMedia * 0.22;
         const color = `${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}`;
 
-        // Capa base solida por celda (SIN Chaikin) primero: Chaikin encoge
-        // cada region hacia dentro de forma independiente, asi que dos
-        // regiones vecinas suavizadas por separado dejan un hueco sin
-        // cubrir en su borde compartido -- ahi se veria el pergamino
-        // crudo si esta capa no existiera. La silueta organica de encima
-        // es la que de verdad se ve; esta capa solo evita el hueco.
-        ctx.fillStyle = `rgba(${color}, 0.40)`;
-        for (const cel of cluster) ctx.fillRect(cel.x * tam, cel.y * tam, tam, tam);
-
+        // Sin capa de respaldo plana: ondularContorno() ya garantiza que
+        // la silueta nunca queda por dentro del borde real de celda (ver
+        // su comentario), asi que no hace falta una capa recta debajo
+        // para tapar huecos -- esa capa era, precisamente, la causa del
+        // "borde recto" que se veia en regiones grandes.
         let contorno = suavizarChaikin(contornoDeCluster(cluster, tam), 2);
         const fase = hash2(cluster[0].x, cluster[0].y, 211) * Math.PI * 2;
         contorno = ondularContorno(contorno, tam * 0.3, fase);
