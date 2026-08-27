@@ -82,3 +82,49 @@ Con solo añadir `flora/manzano_1.png` y `flora/manzano_2.png`, el visor ya
 empieza a estampar esas dos variantes en vez del contorno vectorial en las
 celdas de bosque con manzano — no hace falta completar las 5 especies a la
 vez.
+
+## Pendientes (2026-08-27)
+
+### Huecos en la biblioteca actual
+
+Estas tres categorías siguen cayendo al dibujo vectorial porque no tienen
+ningún asset todavía. Mismo estilo que el resto (tinta con tramado
+cruzado, no la acuarela suave de la primera hoja, ya retirada):
+
+- **`agua/rio_<n>.png`** — la única categoría que se quedó sin ilustrar al
+  quitar la primera hoja (sus ríos no encajaban de estilo). Sin esto, el
+  río sigue con doble orilla vectorial.
+- **`flora/musgo_<n>.png`** (tundra) — Diego pidió específicamente pinos
+  nevados o rocas con nieve, algo que lea claramente "frío/nevado" y no
+  se confunda con vegetación templada.
+- **`flora/liquen_<n>.png`** (montaña) — sin propuesta de estilo concreta
+  todavía, algo bajo/rocoso (parche de liquen sobre roca) encajaría con
+  el bioma.
+
+### Propuesta de sistema de escala (LOD por zoom) — diseño, todavía SIN soporte en el código
+
+Idea de Diego: hoy el zoom solo escala el mismo sello (un pico se ve más
+grande o más pequeño, pero es la misma imagen). La propuesta es que, al
+alejar el zoom lo suficiente, un CLUSTER completo de celdas contiguas se
+dibuje como una única imagen de "formación agregada" en vez de un sello
+por celda — igual que un atlas real cambia de dibujo con la escala, no
+solo de tamaño (generalización cartográfica).
+
+Categorías propuestas para una hoja nueva (mismo estilo de tinta que el
+resto; fondo transparente; horizontal, pensadas para cubrir un área
+ancha en vez de un objeto vertical como los sellos actuales):
+
+- **`relieve/macizo_<n>.png`** — una cordillera completa vista de lejos
+  (varios picos fundidos en una sola silueta), no un pico suelto.
+  3-4 variantes, distintas siluetas/anchuras.
+- **`flora/masa_bosque_<n>.png`** — la copa de un bosque entero vista
+  como una masa continua de follaje (textura de copas fundidas, sin
+  troncos individuales visibles), no un árbol.
+  3-4 variantes.
+- **`flora/colinas_<n>.png`** — pradera vista de lejos como colinas
+  suaves onduladas, no briznas de hierba individuales.
+  3-4 variantes.
+
+Esto es un diseño propuesto para dejar constancia, no una convención que
+el visor ya reconozca — cuando se implemente el lado del código, esta
+sección se actualizará para reflejarlo.
