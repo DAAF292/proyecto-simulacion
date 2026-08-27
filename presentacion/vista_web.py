@@ -266,7 +266,7 @@ HTML_VISOR = """<!DOCTYPE html>
       'pradera':  [122, 138, 74],
       'montana':  [110, 104, 96],
       'desierto': [176, 150, 84],
-      'tundra':   [163, 176, 178],
+      'tundra':   [188, 184, 170],
     };
     const COLOR_AGUA = [58, 92, 122];
     const COLOR_CHARCO = [90, 130, 160];
