@@ -181,6 +181,16 @@ HTML_VISOR = """<!DOCTYPE html>
     const COLOR_FUEGO = [168, 58, 38];
     const GLIFOS = { 'gnomo': '🧙', 'lobo': '🐺', 'conejo': '🐇', 'ardilla': '🐿️', 'necromasa': '🦴' };
 
+    // Color por especie de planta (config/constantes.yaml, flora.especies --
+    // exactamente estas cinco existen hoy en el catalogo, ninguna inventada).
+    const COLOR_ESPECIE = {
+      'manzano':          [61, 92, 46],
+      'hierba_silvestre': [107, 138, 66],
+      'cactus':           [92, 122, 72],
+      'liquen':           [138, 148, 108],
+      'musgo':            [58, 84, 56],
+    };
+
     let pergaminoCache = null;   // canvas offscreen con grano, cacheado por semilla+tamano
     let pergaminoClave = null;
 
@@ -268,6 +278,231 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
+    // Paso 2: relieve, hidrografia vectorial y vegetacion --------------
+
+    function dibujarRelieve(tam, data) {
+      // Silueta triangular con sombreado este por celda de bioma Montana
+      // (LOD macro de la propuesta) -- sin isolineas de curva de nivel
+      // todavia, eso queda para cuando haya camara/zoom real (Paso 3) y
+      // tenga sentido un trazo mas fino que una celda entera.
+      for (let y = 0; y < data.alto; y++) {
+        for (let x = 0; x < data.ancho; x++) {
+          const c = data.celdas[y][x];
+          if (c.bioma !== 'montana') continue;
+          const cx = x * tam + tam / 2;
+          const base = y * tam + tam * 0.86;
+          const apice = y * tam + tam * (0.22 - Math.min(0.14, c.elevacion * 0.14));
+          const izq = x * tam + tam * 0.08;
+          const der = x * tam + tam * 0.92;
+
+          ctx.beginPath();
+          ctx.moveTo(cx, apice); ctx.lineTo(izq, base); ctx.lineTo(cx, base);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(150,140,124,0.5)';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(cx, apice); ctx.lineTo(der, base); ctx.lineTo(cx, base);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(94,84,70,0.5)';
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(58,43,26,0.4)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(izq, base); ctx.lineTo(cx, apice); ctx.lineTo(der, base);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Componentes conexas (4-vecinos) de celdas con el mismo tipo_agua --
+    // el motor (nucleo/agua.py) SI agrupa celdas en cuerpos de agua al
+    // generarlas, pero solo persiste tipo/profundidad por celda, no un id
+    // de cuerpo. Reconstruirlo aqui via flood-fill sobre datos reales
+    // (posicion + tipo_agua, ambos expuestos por construir_instantanea) no
+    // inventa estado nuevo, solo agrupa visualmente lo que ya es contiguo.
+    function componentesAgua(data, tipoObjetivo) {
+      const visitado = new Set();
+      const componentes = [];
+      for (let y = 0; y < data.alto; y++) {
+        for (let x = 0; x < data.ancho; x++) {
+          if (data.celdas[y][x].tipo_agua !== tipoObjetivo) continue;
+          const clave = x + ',' + y;
+          if (visitado.has(clave)) continue;
+          const pila = [[x, y]];
+          visitado.add(clave);
+          const comp = [];
+          while (pila.length) {
+            const [cx, cy] = pila.pop();
+            const celda = data.celdas[cy][cx];
+            comp.push({ x: cx, y: cy, elevacion: celda.elevacion, profundidad: celda.profundidad_agua });
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = cx + dx, ny = cy + dy;
+              if (nx < 0 || ny < 0 || nx >= data.ancho || ny >= data.alto) continue;
+              const k = nx + ',' + ny;
+              if (visitado.has(k)) continue;
+              if (data.celdas[ny][nx].tipo_agua === tipoObjetivo) { visitado.add(k); pila.push([nx, ny]); }
+            }
+          }
+          componentes.push(comp);
+        }
+      }
+      return componentes;
+    }
+
+    // Reconstruccion visual de un camino continuo por una componente de
+    // rio: nucleo/agua.py SI calcula un camino de descenso ordenado al
+    // generar el mundo (_trazar_rio), pero no lo persiste por celda --
+    // aqui se aproxima por vecino-mas-cercano partiendo de la celda de
+    // mayor elevacion, sobre datos 100% reales (posicion + elevacion).
+    // Para un cauce de un solo trazo (el caso normal) reproduce el camino
+    // real; en una confluencia puede aproximar, nunca inventa una celda
+    // que no exista.
+    function ordenarCaminoRio(componente) {
+      const restante = componente.slice().sort((a, b) => b.elevacion - a.elevacion);
+      const camino = [restante.shift()];
+      while (restante.length) {
+        const actual = camino[camino.length - 1];
+        let idxMejor = 0, distMejor = Infinity;
+        for (let i = 0; i < restante.length; i++) {
+          const dx = restante[i].x - actual.x, dy = restante[i].y - actual.y;
+          const d = dx * dx + dy * dy;
+          if (d < distMejor) { distMejor = d; idxMejor = i; }
+        }
+        camino.push(restante.splice(idxMejor, 1)[0]);
+      }
+      return camino;
+    }
+
+    // Spline Catmull-Rom simplificado (informe seccion 4.3): un
+    // quadraticCurveTo por punto medio entre celdas consecutivas.
+    function trazarSpline(puntos) {
+      ctx.moveTo(puntos[0].x, puntos[0].y);
+      for (let i = 1; i < puntos.length - 1; i++) {
+        const xc = (puntos[i].x + puntos[i + 1].x) / 2;
+        const yc = (puntos[i].y + puntos[i + 1].y) / 2;
+        ctx.quadraticCurveTo(puntos[i].x, puntos[i].y, xc, yc);
+      }
+      const ultimo = puntos[puntos.length - 1];
+      ctx.lineTo(ultimo.x, ultimo.y);
+    }
+
+    function dibujarCuenca(tam, comp) {
+      // Lago/poza/rio de una sola celda: cuenca organica por solapamiento
+      // de circulos, sin borde poligonal exacto (aproximacion deliberada,
+      // suficiente para el nivel de detalle macro de este paso).
+      for (const celda of comp) {
+        const cx = celda.x * tam + tam / 2, cy = celda.y * tam + tam / 2;
+        const profundidad = Math.min(1, celda.profundidad / 2.5);
+        ctx.beginPath();
+        ctx.arc(cx, cy, tam * 0.66, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(48, 82, 112, ${(0.5 + profundidad * 0.3).toFixed(3)})`;
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(28,40,51,0.5)';
+      ctx.lineWidth = 1.2;
+      for (const celda of comp) {
+        const cx = celda.x * tam + tam / 2, cy = celda.y * tam + tam / 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, tam * 0.66, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    function dibujarHidrografia(tam, data) {
+      componentesAgua(data, 'lago').forEach(comp => dibujarCuenca(tam, comp));
+      componentesAgua(data, 'poza').forEach(comp => dibujarCuenca(tam, comp));
+
+      for (const comp of componentesAgua(data, 'rio')) {
+        if (comp.length < 2) { dibujarCuenca(tam, comp); continue; }
+
+        const camino = ordenarCaminoRio(comp).map(p => ({
+          x: p.x * tam + tam / 2, y: p.y * tam + tam / 2, profundidad: p.profundidad,
+        }));
+        const profundidadMedia = camino.reduce((s, p) => s + p.profundidad, 0) / camino.length;
+        const anchoBase = tam * (0.28 + Math.min(1, profundidadMedia / 1.5) * 0.4);
+
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Halo translucido (el agua moja mas alla del cauce firme).
+        ctx.beginPath();
+        trazarSpline(camino);
+        ctx.strokeStyle = 'rgba(58,92,122,0.35)';
+        ctx.lineWidth = anchoBase * 1.8;
+        ctx.stroke();
+
+        // Cauce central, tinta de agua profunda.
+        ctx.beginPath();
+        trazarSpline(camino);
+        ctx.strokeStyle = 'rgba(28,45,64,0.75)';
+        ctx.lineWidth = anchoBase;
+        ctx.stroke();
+      }
+    }
+
+    function dibujarVegetacion(tam, data) {
+      // Sin lista de entidades aparte: se recorre celdas[][] en el mismo
+      // orden Y ascendente que el resto del lienzo -- el pintado de una
+      // fila mas al sur pisa a la de mas al norte, mismo Y-sorting norte-
+      // sur que pide la propuesta, gratis por el orden del bucle.
+      for (let y = 0; y < data.alto; y++) {
+        for (let x = 0; x < data.ancho; x++) {
+          const c = data.celdas[y][x];
+          if (!c.planta) continue;
+          const cx = x * tam + tam / 2, cy = y * tam + tam / 2;
+          const escala = 0.32 + 0.68 * c.planta.etapa;
+          const [r, g, b] = COLOR_ESPECIE[c.planta.especie] || [90, 110, 70];
+
+          if (c.planta.especie === 'manzano') {
+            ctx.strokeStyle = 'rgba(58,40,24,0.6)';
+            ctx.lineWidth = Math.max(1, tam * 0.05);
+            ctx.beginPath();
+            ctx.moveTo(cx, cy + tam * 0.32);
+            ctx.lineTo(cx, cy + tam * 0.08);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(cx, cy - tam * 0.05, tam * 0.34 * escala, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+            ctx.fill();
+
+            if (c.planta.etapa >= 1.0) {
+              ctx.fillStyle = 'rgba(150,40,32,0.8)';
+              for (const [ox, oy] of [[-0.12, -0.08], [0.1, 0.02], [-0.02, 0.14]]) {
+                ctx.beginPath();
+                ctx.arc(cx + ox * tam, cy - tam * 0.05 + oy * tam, tam * 0.045, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          } else if (c.planta.especie === 'hierba_silvestre') {
+            ctx.strokeStyle = `rgba(${r},${g},${b},0.85)`;
+            ctx.lineWidth = Math.max(1, tam * 0.06);
+            for (const dx of [-0.18, 0, 0.18]) {
+              ctx.beginPath();
+              ctx.moveTo(cx + dx * tam, cy + tam * 0.3);
+              ctx.quadraticCurveTo(cx + dx * tam * 1.4, cy, cx + dx * tam * 0.6, cy - tam * 0.28 * escala);
+              ctx.stroke();
+            }
+          } else if (c.planta.especie === 'cactus') {
+            const ancho = tam * 0.16 * escala, alto = tam * 0.42 * escala;
+            ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+            ctx.beginPath();
+            ctx.roundRect(cx - ancho / 2, cy + tam * 0.24 - alto, ancho, alto, ancho * 0.5);
+            ctx.fill();
+          } else {
+            // liquen / musgo: mismo tratamiento (mancha baja e irregular
+            // sin estructura vertical), solo cambia el color por especie.
+            ctx.fillStyle = `rgba(${r},${g},${b},0.55)`;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + tam * 0.18, tam * 0.3 * escala, tam * 0.14 * escala, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+
     async function actualizar() {
       try {
         const resp = await fetch('/estado.json');
@@ -306,11 +541,11 @@ HTML_VISOR = """<!DOCTYPE html>
             ctx.fillStyle = `rgba(${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}, 0.40)`;
             ctx.fillRect(px, py, tam, tam);
 
-            if (c.tiene_agua) {
-              const profundidad = Math.min(1, c.profundidad_agua / 2.0);
-              ctx.fillStyle = `rgba(${COLOR_AGUA[0]}, ${COLOR_AGUA[1]}, ${COLOR_AGUA[2]}, ${0.45 + profundidad * 0.35})`;
-              ctx.fillRect(px, py, tam, tam);
-            } else if (c.profundidad_charco > 0) {
+            // Agua permanente (rio/lago/poza) ya no se pinta plana aqui --
+            // dibujarHidrografia() la traza como forma vectorial despues de
+            // esta pasada. El charco efimero SI se queda plano: es una
+            // mancha de un tick, no un cuerpo geografico que merezca trazo.
+            if (c.profundidad_charco > 0) {
               const intensidad = Math.min(1, c.profundidad_charco / 0.3);
               ctx.fillStyle = `rgba(${COLOR_CHARCO[0]}, ${COLOR_CHARCO[1]}, ${COLOR_CHARCO[2]}, ${0.15 + intensidad * 0.3})`;
               ctx.fillRect(px, py, tam, tam);
@@ -323,6 +558,9 @@ HTML_VISOR = """<!DOCTYPE html>
           }
         }
 
+        dibujarRelieve(tam, data);
+        dibujarHidrografia(tam, data);
+        dibujarVegetacion(tam, data);
         dibujarReticula(tam, data.ancho, data.alto);
 
         ctx.font = `${tam * 0.72}px sans-serif`;

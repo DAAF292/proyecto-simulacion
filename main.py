@@ -26,7 +26,7 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
-from nucleo.entidad import GestorEntidades, crear_criatura
+from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo.persistencia import Persistencia
@@ -159,6 +159,32 @@ def sembrar_poblacion_inicial(
             )
 
 
+def sembrar_flora_inicial(gestor: GestorEntidades, mundo: Mundo) -> None:
+    """Instancia la entidad Planta de cada celda que la generacion del mapa
+    ya marco con tiene_recurso=True (nucleo/zona_bioma.py).
+
+    Gap detectado el 2026-08-27, verificando el Paso 2 de la propuesta de
+    frontend (renderizado de vegetacion): sistemas/sistema_flora.py SOLO
+    hace crecer/propagar entidades Planta que YA existen
+    (gestor.entidades_con(Planta, Posicion)) -- nunca crea la primera
+    entidad para una celda recien generada con recurso. Sin este sembrado,
+    ninguna celda de las manchas iniciales (zona_bioma.py) tiene jamas una
+    entidad Planta real, aunque su Celda.recursos/tiene_recurso ya digan
+    que hay una: ni crece, ni se propaga, ni el visor puede mostrarla,
+    desde el primer tick hasta el ultimo. componentes/planta.py ya
+    documentaba el comportamiento esperado ("Las plantas sembradas al
+    generar el mundo nacen YA maduras (etapa=1.0)") -- esta funcion
+    completa esa pieza que faltaba, no inventa una nueva. Mismo motivo que
+    sembrar_poblacion_inicial: solo se llama sobre un mundo fresco, nunca
+    al restaurar una partida (persistencia.py ya carga plantas_estado)."""
+    zona = mundo.territorio.zonas[0]
+    for y in range(zona.alto):
+        for x in range(zona.ancho):
+            celda = zona.obtener_celda(x, y)
+            if celda.tiene_recurso and celda.tipo_recurso:
+                crear_planta(gestor, celda.tipo_recurso, x, y, etapa=1.0)
+
+
 def ejecutar_tick(
     gestor: GestorEntidades,
     mundo: Mundo,
@@ -244,6 +270,7 @@ def main() -> None:
 
     if not partida_restaurada:
         sembrar_poblacion_inicial(gestor, mundo, config, rng_juego, persistencia)
+        sembrar_flora_inicial(gestor, mundo)
 
     sistemas = instanciar_sistemas(config, rng_juego)
 
