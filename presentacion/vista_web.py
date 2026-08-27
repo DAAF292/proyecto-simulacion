@@ -3,6 +3,15 @@ presentacion/vista_web.py
 
 Servidor HTTP integrado para monitoreo visual en tiempo real del mundo en el navegador.
 Serializa el estado completo en un payload JSON puro consumido por polling desde el canvas.
+
+Codice Cartografico Procedural (Paso 1 de la propuesta de frontend, 2026-08-27):
+sustituye el visor de bloques planos y emojis por un lienzo HTML5 Canvas con
+textura de pergamino, lavado acuoso por bioma y reticula perimetral numerada.
+Los pasos siguientes (hidrografia/vegetacion vectorial, camara pan/zoom con
+runas, panel de inspeccion ECS) se construyen sobre este mismo archivo en
+commits posteriores, sin tocar el motor -- el contrato JSON de mas abajo solo
+expone campos que YA existen en el ECS (Principio 4: honestidad sobre lo
+pendiente, nunca se inventa un dato que el motor no calcula).
 """
 
 from __future__ import annotations
@@ -12,14 +21,18 @@ import json
 import threading
 from typing import Any
 
+from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Intencion
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
+from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
+from componentes.reproduccion import Reproduccion
+from componentes.temperamento import Temperamento
 from nucleo.clima import estacion_actual
 from nucleo.entidad import GestorEntidades
 from nucleo.mundo import Mundo
@@ -29,83 +42,294 @@ HTML_VISOR = """<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Un Mundo Vivo - Vista Web</title>
+  <title>Un Mundo Vivo - Codice Cartografico</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
   <style>
-    body { background: #1a1a1a; color: #e0e0e0; font-family: monospace; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
-    #contenedor { display: flex; gap: 20px; max-width: 1200px; width: 100%; }
-    #canvas-mapa { border: 2px solid #333; background: #000; }
-    #panel-lateral { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-    .card { background: #242424; border: 1px solid #3a3a3a; padding: 10px; border-radius: 4px; font-size: 12px; }
-    #cronica { height: 280px; overflow-y: auto; display: flex; flex-direction: column-reverse; background: #181818; padding: 8px; border: 1px solid #333; font-size: 11px; }
-    .linea-cronica { margin-bottom: 4px; line-height: 1.3; border-bottom: 1px solid #222; padding-bottom: 2px; }
-    .tag { font-weight: bold; padding: 2px 4px; border-radius: 2px; }
-    .tag-gnomo { color: #5dade2; }
-    .tag-lobo { color: #e74c3c; }
-    .tag-conejo { color: #f39c12; }
-    .tag-ardilla { color: #2ecc71; }
-    .tag-necromasa { color: #95a5a6; }
+    :root {
+      --madera: #2b1d12;
+      --madera-oscura: #1a1109;
+      --pergamino: #e6d8b8;
+      --pergamino-oscuro: #cbb789;
+      --tinta: #3a2b1a;
+      --tinta-fuerte: #241a0f;
+      --acento: #7a5230;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--madera-oscura);
+      background-image: radial-gradient(circle at 50% 0%, var(--madera), var(--madera-oscura) 70%);
+      color: var(--pergamino);
+      font-family: 'IM Fell English', Georgia, serif;
+      margin: 0;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      letter-spacing: 2px;
+      font-size: 20px;
+      margin: 0 0 4px 0;
+      text-align: center;
+    }
+    #subtitulo {
+      font-style: italic;
+      color: var(--pergamino-oscuro);
+      margin-bottom: 14px;
+      font-size: 13px;
+    }
+    #contenedor {
+      display: flex;
+      gap: 18px;
+      max-width: 1280px;
+      width: 100%;
+    }
+    #marco-mapa {
+      padding: 10px;
+      background: linear-gradient(135deg, #4a3320, #2b1d12);
+      border: 1px solid #6b4a2c;
+      border-radius: 3px;
+      box-shadow: 0 0 22px rgba(0,0,0,0.55);
+    }
+    #canvas-mapa { display: block; background: var(--pergamino); }
+    #panel-lateral {
+      flex: 1;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .card {
+      background: linear-gradient(180deg, #efe2c0, #e0cd9c);
+      color: var(--tinta-fuerte);
+      border: 1px solid #8a6a3e;
+      padding: 10px 12px;
+      border-radius: 2px;
+      font-size: 12.5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .card strong { font-family: 'Cinzel', serif; font-weight: 500; }
+    #cronica {
+      height: 300px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column-reverse;
+      background: #ded0a8;
+      padding: 8px;
+      border: 1px solid #8a6a3e;
+      font-size: 11.5px;
+    }
+    .linea-cronica {
+      margin-bottom: 4px;
+      line-height: 1.35;
+      border-bottom: 1px solid #c9b789;
+      padding-bottom: 3px;
+    }
+    .tag { font-weight: bold; }
+    .tag-gnomo { color: #2c5c8a; }
+    .tag-lobo { color: #8a2c2c; }
+    .tag-conejo { color: #8a6a1c; }
+    .tag-ardilla { color: #2c7a3a; }
+    .tag-necromasa { color: #5a5148; }
+    #footer-nota {
+      font-size: 10.5px;
+      color: var(--pergamino-oscuro);
+      text-align: center;
+      max-width: 1280px;
+      margin-top: 10px;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
-  <h2>🌲 Un Mundo Vivo — Panel de Simulación</h2>
+  <h1>Regio Septentrionalis: Vallis Runica</h1>
+  <div id="subtitulo">Un Mundo Vivo &mdash; Codice de Simulacion (Paso 1: pergamino, acuarela de biomas, reticula)</div>
   <div id="contenedor">
-    <canvas id="canvas-mapa" width="560" height="560"></canvas>
+    <div id="marco-mapa">
+      <canvas id="canvas-mapa" width="700" height="700"></canvas>
+    </div>
     <div id="panel-lateral">
       <div class="card" id="info-mundo">Cargando...</div>
-      <div class="card" id="info-poblacion">Población: -</div>
+      <div class="card" id="info-poblacion">Poblacion: -</div>
       <div class="card">
-        <strong>📜 Crónica en Vivo:</strong>
+        <strong>Cronica en Vivo</strong>
         <div id="cronica"></div>
       </div>
     </div>
   </div>
+  <div id="footer-nota">Runas, camara interactiva, hidrografia vectorial y panel de inspeccion ECS llegan en pasos posteriores de esta misma propuesta.</div>
 
   <script>
     const canvas = document.getElementById('canvas-mapa');
     const ctx = canvas.getContext('2d');
-    const COLORES_TERRENO = {
-      'bosque': '#1e4d2b', 'pradera': '#4a7c29', 'montana': '#7f8c8d',
-      'desierto': '#d4ac0d', 'tundra': '#aeb6bf', 'agua': '#2980b9'
+
+    // Colores de lavado por bioma -- aplicados sobre la base de pergamino
+    // con alfa parcial (acuarela translucida), nunca opacos: el grano del
+    // pergamino debe seguir visible a traves de cualquier bioma.
+    const COLOR_BIOMA = {
+      'bosque':   [46, 74, 42],
+      'pradera':  [122, 138, 74],
+      'montana':  [110, 104, 96],
+      'desierto': [176, 150, 84],
+      'tundra':   [163, 176, 178],
     };
+    const COLOR_AGUA = [58, 92, 122];
+    const COLOR_CHARCO = [90, 130, 160];
+    const COLOR_FUEGO = [168, 58, 38];
     const GLIFOS = { 'gnomo': '🧙', 'lobo': '🐺', 'conejo': '🐇', 'ardilla': '🐿️', 'necromasa': '🦴' };
+
+    let pergaminoCache = null;   // canvas offscreen con grano, cacheado por semilla+tamano
+    let pergaminoClave = null;
+
+    // PRNG determinista (mulberry32) sembrado por instantanea.semilla --
+    // el grano del pergamino debe ser el MISMO en cada recarga del mismo
+    // mundo, no ruido distinto cada frame (eso rompería la ilusion de un
+    // mapa fisico real, no una textura decorativa aleatoria).
+    function mulberry32(a) {
+      return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function construirPergamino(semilla, ancho, alto) {
+      const off = document.createElement('canvas');
+      off.width = canvas.width;
+      off.height = canvas.height;
+      const octx = off.getContext('2d');
+
+      octx.fillStyle = '#e6d8b8';
+      octx.fillRect(0, 0, off.width, off.height);
+
+      const rng = mulberry32((semilla ?? 42) * 2654435761 % 4294967296);
+      const manchas = Math.floor((off.width * off.height) / 900);
+      for (let i = 0; i < manchas; i++) {
+        const x = rng() * off.width;
+        const y = rng() * off.height;
+        const r = 1.5 + rng() * 5.5;
+        const tono = rng() < 0.5 ? '60,45,25' : '210,190,140';
+        octx.fillStyle = `rgba(${tono}, ${(0.02 + rng() * 0.05).toFixed(3)})`;
+        octx.beginPath();
+        octx.ellipse(x, y, r, r * (0.6 + rng() * 0.8), rng() * Math.PI, 0, Math.PI * 2);
+        octx.fill();
+      }
+
+      const vinieta = octx.createRadialGradient(
+        off.width / 2, off.height / 2, off.width * 0.35,
+        off.width / 2, off.height / 2, off.width * 0.72
+      );
+      vinieta.addColorStop(0, 'rgba(0,0,0,0)');
+      vinieta.addColorStop(1, 'rgba(40,26,12,0.35)');
+      octx.fillStyle = vinieta;
+      octx.fillRect(0, 0, off.width, off.height);
+
+      return off;
+    }
+
+    function dibujarReticula(tam, ancho, alto) {
+      ctx.strokeStyle = 'rgba(58,43,26,0.28)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= ancho; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * tam + 0.5, 0);
+        ctx.lineTo(x * tam + 0.5, alto * tam);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= alto; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * tam + 0.5);
+        ctx.lineTo(ancho * tam, y * tam + 0.5);
+        ctx.stroke();
+      }
+
+      // Marco perimetral con numeracion (paso 1 del pipeline: "Reticula y
+      // Cenefas"), sin cartela heraldica todavia -- eso llega con el resto
+      // de la identidad grafica en un paso posterior.
+      ctx.strokeStyle = 'rgba(36,26,15,0.85)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(1.5, 1.5, ancho * tam - 3, alto * tam - 3);
+
+      ctx.fillStyle = 'rgba(36,26,15,0.75)';
+      ctx.font = `${Math.max(9, tam * 0.32)}px Georgia, serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const paso = Math.max(1, Math.round(ancho / 14));
+      for (let x = 0; x < ancho; x += paso) {
+        ctx.fillText(String(x + 1), x * tam + tam / 2, 3);
+      }
+      ctx.textAlign = 'left';
+      for (let y = 0; y < alto; y += paso) {
+        ctx.fillText(String(y + 1), 3, y * tam + tam / 2 - 5);
+      }
+    }
 
     async function actualizar() {
       try {
         const resp = await fetch('/estado.json');
         if (!resp.ok) return;
         const data = await resp.json();
+        if (!data.celdas) return;
 
-        document.getElementById('info-mundo').innerHTML = 
-          `<strong>Tick:</strong> ${data.tick} | <strong>Día:</strong> ${data.dia} | <strong>Estación:</strong> ${data.estacion}<br>` +
-          `<strong>Clima:</strong> ${data.clima}`;
+        document.getElementById('info-mundo').innerHTML =
+          `<strong>Semilla:</strong> ${data.semilla} &middot; <strong>Tick:</strong> ${data.tick} &middot; ` +
+          `<strong>Dia:</strong> ${data.dia} &middot; <strong>Anio:</strong> ${data.anio}<br>` +
+          `<strong>Estacion:</strong> ${data.estacion} &middot; <strong>Clima:</strong> ${data.clima}`;
 
-        document.getElementById('info-poblacion').innerHTML = 
-          `<strong>Vivos:</strong> Gnomos: ${data.censo.gnomo || 0} | Lobos: ${data.censo.lobo || 0} | ` +
-          `Conejos: ${data.censo.conejo || 0} | Ardillas: ${data.censo.ardilla || 0} | ` +
+        document.getElementById('info-poblacion').innerHTML =
+          `<strong>Gnomos:</strong> ${data.censo.gnomo || 0} &middot; <strong>Lobos:</strong> ${data.censo.lobo || 0} &middot; ` +
+          `<strong>Conejos:</strong> ${data.censo.conejo || 0} &middot; <strong>Ardillas:</strong> ${data.censo.ardilla || 0}<br>` +
           `<strong>Restos (Necromasa):</strong> ${data.censo.necromasa || 0}`;
 
-        const celdas = data.grid;
         const tam = canvas.width / data.ancho;
+        const claveActual = `${data.semilla}:${data.ancho}:${data.alto}`;
+        if (pergaminoClave !== claveActual) {
+          pergaminoCache = construirPergamino(data.semilla, data.ancho, data.alto);
+          pergaminoClave = claveActual;
+        }
+        ctx.drawImage(pergaminoCache, 0, 0);
 
         for (let y = 0; y < data.alto; y++) {
           for (let x = 0; x < data.ancho; x++) {
-            const c = celdas[y][x];
-            ctx.fillStyle = c.en_llamas ? '#c0392b' : (c.tiene_agua ? COLORES_TERRENO['agua'] : (COLORES_TERRENO[c.terreno] || '#111'));
-            ctx.fillRect(x * tam, y * tam, tam, tam);
+            const c = data.celdas[y][x];
+            const px = x * tam, py = y * tam;
 
-            if (c.profundidad_charco > 0 && !c.tiene_agua) {
-              ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
-              ctx.fillRect(x * tam, y * tam, tam, tam);
+            const base = COLOR_BIOMA[c.bioma] || [120, 110, 90];
+            // Modulacion "acuarela": la lluvia oscurece el lavado, la
+            // temperatura lo calienta levemente -- variacion determinista
+            // por celda (mismo dato cada frame), no ruido visual.
+            const sombra = 1 - c.lluvia * 0.22;
+            ctx.fillStyle = `rgba(${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}, 0.40)`;
+            ctx.fillRect(px, py, tam, tam);
+
+            if (c.tiene_agua) {
+              const profundidad = Math.min(1, c.profundidad_agua / 2.0);
+              ctx.fillStyle = `rgba(${COLOR_AGUA[0]}, ${COLOR_AGUA[1]}, ${COLOR_AGUA[2]}, ${0.45 + profundidad * 0.35})`;
+              ctx.fillRect(px, py, tam, tam);
+            } else if (c.profundidad_charco > 0) {
+              const intensidad = Math.min(1, c.profundidad_charco / 0.3);
+              ctx.fillStyle = `rgba(${COLOR_CHARCO[0]}, ${COLOR_CHARCO[1]}, ${COLOR_CHARCO[2]}, ${0.15 + intensidad * 0.3})`;
+              ctx.fillRect(px, py, tam, tam);
+            }
+
+            if (c.en_llamas) {
+              ctx.fillStyle = `rgba(${COLOR_FUEGO[0]}, ${COLOR_FUEGO[1]}, ${COLOR_FUEGO[2]}, 0.55)`;
+              ctx.fillRect(px, py, tam, tam);
             }
           }
         }
 
-        ctx.font = `${tam * 0.7}px sans-serif`;
+        dibujarReticula(tam, data.ancho, data.alto);
+
+        ctx.font = `${tam * 0.72}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-
         data.entidades.forEach(e => {
-          const glifo = GLIFOS[e.tipo] || '❓';
+          const glifo = GLIFOS[e.tipo] || '?';
           ctx.fillText(glifo, e.x * tam + tam / 2, e.y * tam + tam / 2);
         });
 
@@ -113,7 +337,7 @@ HTML_VISOR = """<!DOCTYPE html>
         divCronica.innerHTML = data.cronica.map(l => `<div class="linea-cronica">${l}</div>`).join('');
 
       } catch (err) {
-        console.error("Error al actualizar instantánea:", err);
+        console.error("Error al actualizar instantanea:", err);
       }
     }
     setInterval(actualizar, 250);
@@ -176,28 +400,114 @@ def construir_instantanea(
     reloj: Reloj,
     cronica: list[str],
 ) -> dict[str, Any]:
-    """Construye el DTO serializable para la interfaz web."""
+    """Construye el DTO serializable para la interfaz web.
+
+    Contrato honesto (Principio 4): cada campo expuesto aqui lee un
+    componente o propiedad que YA existe en el ECS -- ningun dato se
+    inventa o se aproxima para rellenar el esquema de la propuesta visual.
+    Ejemplos de omision deliberada: DimensionesFisicas.peso NO se expone
+    como "peso_kg" (su docstring dice explicitamente que la escala sigue
+    siendo abstracta, sin kilogramos reales todavia); Celda.elevacion/
+    lluvia/temperatura/tipo_agua se exponen tal cual, sin redondeos que
+    inventen precision que no existe.
+    """
     zona = mundo.territorio.zonas[0]
     censo: dict[str, int] = {}
-
     lista_entidades: list[dict[str, Any]] = []
 
-    # 1. Entidades Biológicas Vivas
+    # Plantas maduras/en crecimiento por celda (entidades ECS con
+    # Posicion, ver componentes/planta.py) -- se adjuntan a su celda en
+    # vez de mezclarse en la lista de "entidades" biologicas: para el
+    # renderizado del mapa son una propiedad del terreno, no un agente.
+    plantas_por_celda: dict[tuple[int, int], dict[str, Any]] = {}
+    for pid in sorted(gestor.entidades_con(Planta, Posicion)):
+        planta = gestor.obtener_componente(pid, Planta)
+        pos_p = gestor.obtener_componente(pid, Posicion)
+        if planta and pos_p:
+            plantas_por_celda[(pos_p.x, pos_p.y)] = {
+                "especie": planta.especie,
+                "etapa": round(planta.etapa, 3),
+            }
+
+    ticks_por_anio = Reloj.TICKS_POR_DIA * Reloj.DIAS_POR_ESTACION * Reloj.ESTACIONES_POR_ANIO
+
+    # 1. Entidades Biologicas Vivas
     for eid in sorted(gestor.entidades_con(Identidad, Posicion)):
         ident = gestor.obtener_componente(eid, Identidad)
         pos = gestor.obtener_componente(eid, Posicion)
-        if ident and pos:
-            esp = ident.especie.value
-            censo[esp] = censo.get(esp, 0) + 1
-            lista_entidades.append(
-                {
-                    "id": eid,
-                    "tipo": esp,
-                    "x": pos.x,
-                    "y": pos.y,
-                    "nombre": ident.nombre,
-                }
-            )
+        if not (ident and pos):
+            continue
+
+        esp = ident.especie.value
+        censo[esp] = censo.get(esp, 0) + 1
+
+        dato: dict[str, Any] = {
+            "id": eid,
+            "tipo": esp,
+            "nombre": ident.nombre,
+            "x": pos.x,
+            "y": pos.y,
+            "edad_anios": round((reloj.tick_actual - ident.tick_nacimiento) / ticks_por_anio, 2),
+            "id_madre": ident.id_madre,
+            "id_padre": ident.id_padre,
+        }
+
+        intencion = gestor.obtener_componente(eid, Intencion)
+        if intencion:
+            dato["accion"] = intencion.accion.value
+
+        reproduccion = gestor.obtener_componente(eid, Reproduccion)
+        if reproduccion:
+            dato["sexo"] = reproduccion.sexo.value
+
+        necesidades = gestor.obtener_componente(eid, Necesidades)
+        if necesidades:
+            dato["necesidades"] = {
+                "saciedad": round(necesidades.saciedad, 3),
+                "energia": round(necesidades.energia, 3),
+                "seguridad": round(necesidades.seguridad, 3),
+                "hidratacion": round(necesidades.hidratacion, 3),
+                "aliviado": round(necesidades.aliviado, 3),
+                "oxigenacion": round(necesidades.oxigenacion, 3),
+                "confort_termico": round(necesidades.confort_termico, 3),
+                "impulso_reproductivo": round(necesidades.impulso_reproductivo, 3),
+            }
+
+        pool_fisico = gestor.obtener_componente(eid, PoolFisico)
+        if pool_fisico:
+            dato["pool_fisico"] = {
+                "vitalidad": round(pool_fisico.vitalidad, 3),
+                "resistencia": round(pool_fisico.resistencia, 3),
+            }
+
+        dimensiones = gestor.obtener_componente(eid, DimensionesFisicas)
+        if dimensiones:
+            dato["dimensiones"] = {
+                "peso": round(dimensiones.peso, 3),
+                "altura_m": round(dimensiones.altura, 3),
+                "fuerza": round(dimensiones.fuerza, 3),
+                "agilidad": round(dimensiones.agilidad, 3),
+                "vitalidad_maxima": round(dimensiones.vitalidad_maxima, 3),
+                "resistencia_maxima": round(dimensiones.resistencia_maxima, 3),
+            }
+
+        pool_mental = gestor.obtener_componente(eid, PoolMental)
+        if pool_mental:
+            dato["pool_mental"] = {"estabilidad": round(pool_mental.estabilidad, 3)}
+
+        capacidad_mental = gestor.obtener_componente(eid, CapacidadMental)
+        if capacidad_mental:
+            dato["estabilidad_mental_maxima"] = round(capacidad_mental.estabilidad_mental_maxima, 3)
+
+        temperamento = gestor.obtener_componente(eid, Temperamento)
+        if temperamento:
+            dato["temperamento"] = {
+                "valentia": round(temperamento.valentia, 3),
+                "sociabilidad": round(temperamento.sociabilidad, 3),
+                "agresividad": round(temperamento.agresividad, 3),
+            }
+
+        lista_entidades.append(dato)
 
     # 2. Entidades Inertes (Necromasa)
     for nid in sorted(gestor.entidades_con(Necromasa, Posicion)):
@@ -216,35 +526,47 @@ def construir_instantanea(
                 }
             )
 
-    grid_data: list[list[dict[str, Any]]] = []
+    # 3. Grid de celdas -- solo campos que ya existen en nucleo/celda.py.
+    celdas_data: list[list[dict[str, Any]]] = []
     for y in range(zona.alto):
         fila: list[dict[str, Any]] = []
         for x in range(zona.ancho):
             c = zona.obtener_celda(x, y)
             fila.append(
                 {
-                    "terreno": c.tipo_terreno.value,
+                    "x": x,
+                    "y": y,
+                    "bioma": c.tipo_terreno.value,
+                    "elevacion": round(c.elevacion, 3),
+                    "lluvia": round(c.lluvia, 3),
+                    "temperatura": round(c.temperatura, 3),
                     "tiene_agua": c.tiene_agua,
+                    "tipo_agua": c.tipo_agua,
+                    "profundidad_agua": round(c.profundidad_agua, 3),
                     "profundidad_charco": round(c.profundidad_charco, 3),
                     "en_llamas": c.en_llamas,
-                    "fertilidad": round(c.fertilidad, 2),
+                    "fertilidad": round(c.fertilidad, 3),
+                    "recursos": {k: round(v, 2) for k, v in c.recursos.items()},
+                    "planta": plantas_por_celda.get((x, y)),
                 }
             )
-        grid_data.append(fila)
+        celdas_data.append(fila)
 
     clima_actual = getattr(zona, "clima_actual", None)
 
     return {
         "tick": reloj.tick_actual,
         "dia": reloj.dia,
+        "anio": reloj.anio,
         # (2026-08-23) mismo bug que en sistema_necesidades.py/sistema_flora.py:
         # Reloj.estacion es un int creciente, no el Enum Estacion.
         "estacion": estacion_actual(reloj.estacion).value,
         "clima": clima_actual.value if clima_actual else "despejado",
+        "semilla": mundo.config.get("semilla_por_defecto"),
         "ancho": zona.ancho,
         "alto": zona.alto,
         "censo": censo,
         "entidades": lista_entidades,
-        "grid": grid_data,
+        "celdas": celdas_data,
         "cronica": cronica,
     }
