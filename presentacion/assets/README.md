@@ -35,6 +35,17 @@ Cualquier `.png` dentro de esta carpeta cuenta como una variante de pico de
 montaña — sin convención de prefijo, todos son intercambiables hoy (solo
 hay una categoría de relieve por ahora).
 
+### `criaturas/<especie>_<n>.png`
+
+`<especie>` debe coincidir con una especie real de `componentes/identidad.py`
+(`gnomo`, `lobo`, `conejo`, `ardilla`; necromasa no es una criatura viva,
+se queda con su glifo neutro). La variante se elige por hash del ID de la
+entidad, no de su posición -- el mismo individuo conserva siempre la
+misma pose entre frames aunque se mueva. Solo se usa a partir del nivel
+de zoom "medio" (informe sección 4.2); a zoom muy alejado sigue siendo
+un punto de tinta mínimo, una ilustración ahí no se leería igual de bien
+y sería puro coste de dibujo.
+
 ### `agua/lago_<n>.png` y `agua/rio_<n>.png`
 
 `lago_<n>.png` también cubre pozas (mismo tratamiento visual, sin

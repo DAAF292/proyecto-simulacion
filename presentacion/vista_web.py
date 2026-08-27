@@ -304,7 +304,9 @@ HTML_VISOR = """<!DOCTYPE html>
     // concreta (o catalogoAssets.relieve.montana este vacio), esa
     // categoria sigue con el dibujo vectorial de siempre -- ver el guard
     // en dibujarVegetacion() y en dibujarStampsRelieveYFlora() mas abajo.
-    let catalogoAssets = { flora: {}, relieve: { montana: [] }, agua: { lago: [], rio: [] } };
+    let catalogoAssets = {
+      flora: {}, relieve: { montana: [] }, agua: { lago: [], rio: [] }, criaturas: {},
+    };
     const imagenesCache = {};
 
     async function cargarBibliotecaAssets() {
@@ -313,6 +315,7 @@ HTML_VISOR = """<!DOCTYPE html>
         if (!resp.ok) return;
         catalogoAssets = await resp.json();
         if (!catalogoAssets.agua) catalogoAssets.agua = { lago: [], rio: [] };
+        if (!catalogoAssets.criaturas) catalogoAssets.criaturas = {};
       } catch (err) {
         console.error('No se pudo leer /assets_manifest.json:', err);
         return;
@@ -324,6 +327,9 @@ HTML_VISOR = """<!DOCTYPE html>
       for (const nombre of catalogoAssets.relieve.montana) rutas.push('relieve/' + nombre);
       for (const clave in catalogoAssets.agua) {
         for (const nombre of catalogoAssets.agua[clave]) rutas.push('agua/' + nombre);
+      }
+      for (const especie in catalogoAssets.criaturas) {
+        for (const nombre of catalogoAssets.criaturas[especie]) rutas.push('criaturas/' + nombre);
       }
 
       await Promise.all(rutas.map((ruta) => new Promise((resolve) => {
@@ -695,6 +701,32 @@ HTML_VISOR = """<!DOCTYPE html>
       return resultado;
     }
 
+    // El contorno ya suavizado por Chaikin sigue leyendose "artificial"
+    // (Diego, 2026-08-27): Chaikin solo redondea esquinas, el resultado es
+    // una silueta demasiado uniforme -- una "burbuja" en vez de una costa
+    // real. Esto añade una ondulacion de baja frecuencia (dos senos
+    // superpuestos, como dos octavas de ruido) perpendicular al contorno,
+    // con fase fija por region (hash de su primera celda + semilla del
+    // mundo) para que no cambie de un frame a otro. No sustituye a
+    // Chaikin, se aplica DESPUES: Chaikin quita las esquinas de celda,
+    // esto rompe la regularidad que Chaikin por si solo deja perfecta.
+    function ondularContorno(puntos, amplitud, fase) {
+      let longitudAcum = 0;
+      const salida = [];
+      for (let i = 0; i < puntos.length; i++) {
+        const p0 = puntos[i], p1 = puntos[(i + 1) % puntos.length];
+        const dx = p1.x - p0.x, dy = p1.y - p0.y;
+        const seg = Math.hypot(dx, dy) || 1;
+        const nx = -dy / seg, ny = dx / seg;
+        const onda1 = Math.sin(longitudAcum / 42 + fase) * amplitud;
+        const onda2 = Math.sin(longitudAcum / 15 + fase * 2.3) * amplitud * 0.35;
+        const bulto = onda1 + onda2;
+        salida.push({ x: p0.x + nx * bulto, y: p0.y + ny * bulto });
+        longitudAcum += seg;
+      }
+      return salida;
+    }
+
     // Lavado de biomas como manchas organicas (una silueta suavizada por
     // region contigua) en vez de un fillRect por celda -- el borde entre
     // dos biomas vecinos ya no es la arista recta de la cuadricula.
@@ -718,7 +750,9 @@ HTML_VISOR = """<!DOCTYPE html>
         ctx.fillStyle = `rgba(${color}, 0.40)`;
         for (const cel of cluster) ctx.fillRect(cel.x * tam, cel.y * tam, tam, tam);
 
-        const contorno = suavizarChaikin(contornoDeCluster(cluster, tam), 2);
+        let contorno = suavizarChaikin(contornoDeCluster(cluster, tam), 2);
+        const fase = hash2(cluster[0].x, cluster[0].y, 211) * Math.PI * 2;
+        contorno = ondularContorno(contorno, tam * 0.3, fase);
         trazarPoligono(contorno);
         ctx.fillStyle = `rgba(${color}, 0.40)`;
         ctx.fill();
@@ -1216,30 +1250,56 @@ HTML_VISOR = """<!DOCTYPE html>
             return;
           }
 
-          const radioHalo = nivel === 'micro' ? 14 : 9;
-          ctx.beginPath();
-          ctx.arc(centro.x, centro.y, radioHalo, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(230,216,184,0.88)';
-          ctx.fill();
-          ctx.strokeStyle = seleccionada ? 'rgba(212,172,13,0.95)' : `rgba(${r},${g},${b},0.7)`;
-          ctx.lineWidth = seleccionada ? 2.2 : 1.2;
-          ctx.stroke();
+          // Retrato real (informe: sello por especie, no un icono generico)
+          // si hay assets/criaturas/<especie>_N.png -- variante elegida por
+          // hash del ID de la entidad (no de su posicion, que cambia cada
+          // tick) para que el mismo individuo conserve siempre la misma
+          // pose entre frames. Sin asset, cae al halo+runa de siempre.
+          const variantesCriatura = catalogoAssets.criaturas[e.tipo] || [];
+          const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
+          const imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
 
-          ctx.font = `${nivel === 'micro' ? 20 : 14}px 'Cinzel', Georgia, serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
-          ctx.fillText(runa, centro.x, centro.y + 1);
+          let radioEfectivo;
+          if (imgCriatura) {
+            const alturaImg = nivel === 'micro' ? 34 : 22;
+            const anchoImg = alturaImg * (imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1);
+            ctx.drawImage(imgCriatura, centro.x - anchoImg / 2, centro.y - alturaImg / 2, anchoImg, alturaImg);
+            if (seleccionada) {
+              ctx.beginPath();
+              ctx.ellipse(centro.x, centro.y + alturaImg / 2 - 2, anchoImg * 0.42, 4, 0, 0, Math.PI * 2);
+              ctx.strokeStyle = 'rgba(212,172,13,0.95)';
+              ctx.lineWidth = 1.6;
+              ctx.stroke();
+            }
+            radioEfectivo = alturaImg / 2;
+          } else {
+            const radioHalo = nivel === 'micro' ? 14 : 9;
+            ctx.beginPath();
+            ctx.arc(centro.x, centro.y, radioHalo, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(230,216,184,0.88)';
+            ctx.fill();
+            ctx.strokeStyle = seleccionada ? 'rgba(212,172,13,0.95)' : `rgba(${r},${g},${b},0.7)`;
+            ctx.lineWidth = seleccionada ? 2.2 : 1.2;
+            ctx.stroke();
+
+            ctx.font = `${nivel === 'micro' ? 20 : 14}px 'Cinzel', Georgia, serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+            ctx.fillText(runa, centro.x, centro.y + 1);
+            radioEfectivo = radioHalo;
+          }
 
           if (nivel === 'micro') {
             ctx.font = '10px Georgia, serif';
             ctx.fillStyle = 'rgba(36,26,15,0.9)';
             const etiqueta = e.nombre || (e.tipo === 'necromasa' ? `Restos (${e.origen || '?'})` : e.tipo);
-            ctx.fillText(etiqueta, centro.x, centro.y + radioHalo + 9);
+            ctx.textAlign = 'center';
+            ctx.fillText(etiqueta, centro.x, centro.y + radioEfectivo + 9);
 
             if (e.pool_fisico) {
               const anchoBarra = 26, altoBarra = 3;
-              const bx = centro.x - anchoBarra / 2, by = centro.y + radioHalo + 15;
+              const bx = centro.x - anchoBarra / 2, by = centro.y + radioEfectivo + 15;
               ctx.fillStyle = 'rgba(58,43,26,0.4)';
               ctx.fillRect(bx, by, anchoBarra, altoBarra);
               const vitalidad = Math.max(0, Math.min(1, e.pool_fisico.vitalidad));
@@ -1298,9 +1358,9 @@ def _agrupar_por_prefijo(carpeta: Path) -> dict[str, list[str]]:
 def construir_manifiesto_assets() -> dict[str, Any]:
     """Escanea RUTA_ASSETS en cada peticion (biblioteca pequeña, coste
     despreciable) y agrupa los archivos encontrados por categoria:
-    flora.especie y agua.{lago,rio} por prefijo de nombre de archivo,
-    relieve.montana con cualquier .png en esa carpeta (una unica
-    variante de sello hoy, sin distincion de nombre)."""
+    flora.especie, agua.{lago,rio} y criaturas.especie por prefijo de
+    nombre de archivo; relieve.montana con cualquier .png en esa carpeta
+    (una unica variante de sello hoy, sin distincion de nombre)."""
     relieve_montana: list[str] = []
     carpeta_relieve = RUTA_ASSETS / "relieve"
     if carpeta_relieve.is_dir():
@@ -1312,6 +1372,7 @@ def construir_manifiesto_assets() -> dict[str, Any]:
         "flora": _agrupar_por_prefijo(RUTA_ASSETS / "flora"),
         "relieve": {"montana": relieve_montana},
         "agua": _agrupar_por_prefijo(RUTA_ASSETS / "agua"),
+        "criaturas": _agrupar_por_prefijo(RUTA_ASSETS / "criaturas"),
     }
 
 
@@ -1355,7 +1416,9 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
         from urllib.parse import unquote
 
         destino = (RUTA_ASSETS / unquote(ruta_relativa)).resolve()
-        carpetas_publicas = (RUTA_ASSETS / "flora", RUTA_ASSETS / "relieve", RUTA_ASSETS / "agua")
+        carpetas_publicas = (
+            RUTA_ASSETS / "flora", RUTA_ASSETS / "relieve", RUTA_ASSETS / "agua", RUTA_ASSETS / "criaturas",
+        )
         if not any(destino.is_relative_to(c.resolve()) for c in carpetas_publicas):
             self.send_response(403)
             self.end_headers()
