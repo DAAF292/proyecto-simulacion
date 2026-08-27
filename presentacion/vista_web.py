@@ -119,6 +119,19 @@ HTML_VISOR = """<!DOCTYPE html>
       cursor: pointer;
     }
     #btn-centrar:hover { background: #efe2c0; }
+    .btn-modo {
+      font-family: 'IM Fell English', Georgia, serif;
+      font-size: 11.5px;
+      background: linear-gradient(180deg, #efe2c0, #cbb789);
+      color: var(--tinta-fuerte);
+      border: 1px solid #6b4a2c;
+      border-radius: 2px;
+      padding: 3px 10px;
+      cursor: pointer;
+    }
+    .btn-modo:hover { background: #efe2c0; }
+    .btn-modo.activo { background: #8a6a3e; color: #efe2c0; }
+    #grupo-modos { display: flex; gap: 4px; }
     #panel-lateral {
       flex: 1;
       min-width: 280px;
@@ -235,6 +248,11 @@ HTML_VISOR = """<!DOCTYPE html>
       <canvas id="canvas-mapa" width="700" height="700"></canvas>
       <div id="controles-mapa">
         <span id="lectura-zoom">Zoom: 1.00x</span>
+        <div id="grupo-modos">
+          <button class="btn-modo activo" id="btn-modo-codice" type="button" title="Mapa de siempre: lavado de biomas, sellos y criaturas">Codice</button>
+          <button class="btn-modo" id="btn-modo-relieve" type="button" title="Hipsometrico: alturas por tono sepia">Relieve</button>
+          <button class="btn-modo" id="btn-modo-hidro" type="button" title="Hidrografia: tierra en pergamino, agua por profundidad">Hidro</button>
+        </div>
         <button id="btn-centrar" type="button">Centrar mapa</button>
       </div>
     </div>
@@ -410,11 +428,104 @@ HTML_VISOR = """<!DOCTYPE html>
       return { lista: poolTinta, prefijo: prefijoTinta };
     }
 
+    // Pieza 2 (2026-08-27): construccion del elemento de cola Y-sorted de
+    // una criatura en ESPACIO DE MUNDO (escala con el zoom y se oculta tras
+    // los sellos de las celdas al sur, como un diorama). La variante por
+    // hash del id es la de siempre (el individuo conserva pose entre
+    // frames). El anclaje es el PIE de SU celda -- misma convencion que los
+    // picos de montana -- con un sesgo minimo que solo sirve para ganar
+    // empates contra el sello de la propia celda (una montana en su misma
+    // celda comparte baseY exacto: el habitante se ve de pie en la ladera,
+    // no dentro de la piedra); contra cualquier sello mas al sur sigue
+    // perdiendo y queda oculto. Sin asset de sprite, el halo+runa entra en
+    // la cola con el mismo anclaje para no mezclar dos reglas de oclusion.
+    const ALTURA_CRIATURA_POR_CELDA = 0.55;
+    // Calibracion provisional: altura de una criatura de referencia
+    // (ESCALA_ESPECIE 1) como fraccion del alto de una celda. Eleccion de
+    // legibilidad a ojo contra el visor real, no una medida del motor.
+
+    function construirElementoCriatura(e, tam) {
+      const variantesCriatura = catalogoAssets.criaturas[e.tipo] || [];
+      const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
+      const imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
+      const baseY = (e.y + 1) * tam;
+      const ordenY = baseY + tam * 0.01;
+      const cx = (e.x + 0.5) * tam;
+      const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
+      const runa = RUNAS[e.tipo] || '?';
+
+      if (imgCriatura) {
+        const alturaImg = tam * ALTURA_CRIATURA_POR_CELDA * (ESCALA_ESPECIE[e.tipo] ?? 1);
+        const anchoImg = alturaImg * (imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1);
+        return {
+          ordenY,
+          alturaVisual: alturaImg / 2,
+          dibujar: () => {
+            ctx.drawImage(imgCriatura, cx - anchoImg / 2, baseY - alturaImg, anchoImg, alturaImg);
+          },
+        };
+      }
+
+      const radioHalo = tam * 0.3;
+      return {
+        ordenY,
+        alturaVisual: radioHalo,
+        dibujar: () => {
+          ctx.beginPath();
+          ctx.arc(cx, baseY - radioHalo, radioHalo, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(230,216,184,0.88)';
+          ctx.fill();
+          ctx.strokeStyle = `rgba(${r},${g},${b},0.7)`;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          ctx.font = `${Math.max(10, tam * 0.5)}px 'Cinzel', Georgia, serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+          ctx.fillText(runa, cx, baseY - radioHalo);
+        },
+      };
+    }
+
+    // Pieza 2: anotaciones de criatura en ESPACIO DE PANTALLA, dibujadas
+    // DESPUES de la cola Y-sorted -- seleccion, nombre y barra de vitalidad
+    // nunca quedan ocultos por un sello (convencion cartografica: las
+    // etiquetas van sobre el mapa). alturaVisual es el semieje vertical del
+    // cuerpo dibujado en la cola, para apoyar las anotaciones en sus pies.
+    function dibujarAnotacionesEntidad(e, centro, alturaVisual, nivel, seleccionada) {
+      if (seleccionada) {
+        ctx.beginPath();
+        ctx.ellipse(centro.x, centro.y + alturaVisual - 2, alturaVisual * 0.85, 4, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(212,172,13,0.95)';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+      if (nivel !== 'micro') return;
+
+      ctx.font = '10px Georgia, serif';
+      ctx.fillStyle = 'rgba(36,26,15,0.9)';
+      const etiqueta = e.nombre || (e.tipo === 'necromasa' ? `Restos (${e.origen || '?'})` : e.tipo);
+      ctx.textAlign = 'center';
+      ctx.fillText(etiqueta, centro.x, centro.y + alturaVisual + 9);
+
+      if (e.pool_fisico) {
+        const anchoBarra = 26, altoBarra = 3;
+        const bx = centro.x - anchoBarra / 2, by = centro.y + alturaVisual + 15;
+        ctx.fillStyle = 'rgba(58,43,26,0.4)';
+        ctx.fillRect(bx, by, anchoBarra, altoBarra);
+        const vitalidad = Math.max(0, Math.min(1, e.pool_fisico.vitalidad));
+        ctx.fillStyle = vitalidad > 0.35 ? 'rgba(58,110,58,0.85)' : 'rgba(150,40,32,0.85)';
+        ctx.fillRect(bx, by, anchoBarra * vitalidad, altoBarra);
+      }
+    }
+
     // Estampado con Y-sorting (informe: montañas y flora ordenadas de
     // norte a sur en un unico pase, para que el sur oculte al norte).
     // Devuelve true si dibujo con assets reales la categoria de relieve
     // (para que el llamador sepa si debe caer al dibujarRelieve() vectorial).
-    function dibujarStampsRelieveYFlora(tam, data, frustum) {
+    // elementosExtra (pieza 2): cola de criaturas ya construida en espacio
+    // de mundo -- se mezcla en la misma ordenacion para oclusion real.
+    function dibujarStampsRelieveYFlora(tam, data, frustum, elementosExtra = []) {
       const poolMontana = poolTerreno(
         catalogoAssets.relieve.montana_color, 'relieve_color/',
         catalogoAssets.relieve.montana, 'relieve/',
@@ -441,9 +552,31 @@ HTML_VISOR = """<!DOCTYPE html>
           }
 
           if (c.planta) {
+            // Pieza nuevosAssetsDefinitivos (2026-08-27): el estado de la
+            // planta elige el pool cuando existen sellos para el -- fruto
+            // si la celda conserva recurso (manzanas / fruto_de_cactus) y
+            // brote si la etapa es baja. Solo a zoom de color: los sellos
+            // de estado existen solo en acuarela; a tinta (lejos) el genero
+            // base manda, igual que los estados finos de criaturas no se
+            // leen a zoom macro.
+            let claveEspecie = c.planta.especie;
+            if (estiloColorActivo()) {
+              const recursos = c.recursos || {};
+              if (c.planta.especie === 'manzano') {
+                if ((recursos.manzanas || 0) > 0 && (catalogoAssets.flora_color.manzano_fruto || []).length > 0) {
+                  claveEspecie = 'manzano_fruto';
+                } else if (c.planta.etapa < 0.35 && (catalogoAssets.flora_color.manzano_brote || []).length > 0) {
+                  claveEspecie = 'manzano_brote';
+                }
+              } else if (c.planta.especie === 'cactus') {
+                if ((recursos.fruto_de_cactus || 0) > 0 && (catalogoAssets.flora_color.cactus_fruto || []).length > 0) {
+                  claveEspecie = 'cactus_fruto';
+                }
+              }
+            }
             const poolPlanta = poolTerreno(
-              catalogoAssets.flora_color[c.planta.especie], 'flora_color/',
-              catalogoAssets.flora[c.planta.especie], 'flora/',
+              catalogoAssets.flora_color[claveEspecie], 'flora_color/',
+              catalogoAssets.flora[claveEspecie], 'flora/',
             );
             const nombre = elegirVariante(poolPlanta.lista, x, y, 93);
             const img = nombre ? imagenesCache[poolPlanta.prefijo + nombre] : null;
@@ -460,8 +593,17 @@ HTML_VISOR = """<!DOCTYPE html>
         }
       }
 
+      for (const extra of elementosExtra) elementos.push(extra);
+
       elementos.sort((a, b) => a.ordenY - b.ordenY);
       for (const el of elementos) {
+        // Pieza 2: los elementos de criatura traen su propio closure de
+        // dibujo (sprite o halo+runa en espacio de mundo); los de terreno
+        // siguen siendo {img, cx, baseY, escala} de toda la vida.
+        if (typeof el.dibujar === 'function') {
+          el.dibujar();
+          continue;
+        }
         const ancho = tam * 1.3 * el.escala;
         const alto = ancho * (el.img.naturalHeight / el.img.naturalWidth || 1);
         ctx.drawImage(el.img, el.cx - ancho / 2, el.baseY - alto, ancho, alto);
@@ -506,6 +648,68 @@ HTML_VISOR = """<!DOCTYPE html>
     let entidadSeleccionadaId = null;
     let modoSeguimiento = false;
     let ultimoDataConocido = null;   // ultima instantanea recibida, para hit-test e informes por id
+
+    // (2026-08-27, pieza 1 del plan visual aprobado por Diego) Las
+    // entidades saltaban de celda en celda a cada instantanea de 250ms:
+    // dibujarFrame leia data.entidades directamente. Este gestor mantiene
+    // una posicion animada por entidad que persigue la posicion real del
+    // ECS con el MISMO suavizado exponencial dependiente de dt que ya usa
+    // el seguimiento de camara (tau = 0.15 s). Calibracion provisional:
+    // es la constante de la camara reutilizada, no una medida del motor;
+    // si el movimiento se ve lento o nervioso, es un numero a ajustar
+    // contra el visor real. Una entidad recien vista (nacimiento) y un
+    // mundo nuevo (semilla distinta al reiniciar el motor) aparecen
+    // CLAVADOS en su celda, nunca deslizandose desde coordenadas viejas.
+    // El hit-test de click (entidadEnPunto) y el objetivo del seguimiento
+    // de camara siguen leyendo la posicion REAL de la instantanea: sobre
+    // ellos no debe influir un retardo estetico de dibujo.
+    class GestorAnimacionEntidades {
+      constructor(tau = 0.15) {
+        this.tau = tau;
+        this.porId = new Map();
+        this.semillaVista = null;
+      }
+
+      sincronizar(entidades, semilla) {
+        if (semilla !== undefined && this.semillaVista !== null && semilla !== this.semillaVista) {
+          this.porId.clear();
+        }
+        if (semilla !== undefined) this.semillaVista = semilla;
+
+        const vivas = new Set();
+        (entidades || []).forEach((ent) => {
+          vivas.add(ent.id);
+          const { x, y, ...resto } = ent;
+          let animada = this.porId.get(ent.id);
+          if (!animada) {
+            animada = { ...resto, tx: x, ty: y, x, y };
+            this.porId.set(ent.id, animada);
+          } else {
+            // El resto de campos (tipo, nombre, pool_fisico, origen...)
+            // se copian tal cual: el bucle de dibujo no cambia.
+            Object.assign(animada, resto);
+            animada.tx = x;
+            animada.ty = y;
+          }
+        });
+        for (const id of this.porId.keys()) {
+          if (!vivas.has(id)) this.porId.delete(id);
+        }
+      }
+
+      avanzar(dtSegundos) {
+        const alfa = 1 - Math.exp(-dtSegundos / this.tau);
+        this.porId.forEach((e) => {
+          e.x += (e.tx - e.x) * alfa;
+          e.y += (e.ty - e.y) * alfa;
+        });
+      }
+
+      lista() {
+        return Array.from(this.porId.values());
+      }
+    }
+    const animadorEntidades = new GestorAnimacionEntidades();
 
     // Hit-test contra la posicion en pantalla de cada entidad (misma
     // formula mundoAPantalla que usa el dibujado) -- selecciona la mas
@@ -574,6 +778,11 @@ HTML_VISOR = """<!DOCTYPE html>
     }, { passive: false });
 
     document.getElementById('btn-centrar').addEventListener('click', centrarCamara);
+
+    // Pieza 3: botones de modo de mapa (codice / relieve / hidro)
+    for (const m of ['codice', 'relieve', 'hidro']) {
+      document.getElementById('btn-modo-' + m).addEventListener('click', () => setModoMapa(m));
+    }
 
     // PRNG determinista (mulberry32) sembrado por instantanea.semilla --
     // el grano del pergamino debe ser el MISMO en cada recarga del mismo
@@ -803,6 +1012,80 @@ HTML_VISOR = """<!DOCTYPE html>
     // Lavado de biomas como manchas organicas (una silueta suavizada por
     // region contigua) en vez de un fillRect por celda -- el borde entre
     // dos biomas vecinos ya no es la arista recta de la cuadricula.
+    // Pieza 3 (2026-08-27): modos de mapa (overlays de lectura). Solo cambia
+    // la CAPA DE LAVADO del terreno: sellos, criaturas, agua trazada,
+    // charcos, fuego y anotaciones son identicos en los tres modos -- es un
+    // filtro de lectura del mismo mundo, no otro mundo.
+    //   codice  -> lavado organico de biomas de siempre (dibujarBiomas)
+    //   relieve -> hipsometrico: tono sepia por elevacion (0 = claro, 1 = oscuro)
+    //   hidro   -> tierra sin lavado (pergamino) y agua azul por profundidad
+    let modoMapa = 'codice';
+
+    function modoMapaActual() {
+      return modoMapa;
+    }
+
+    function setModoMapa(modo) {
+      if (!['codice', 'relieve', 'hidro'].includes(modo)) return;
+      modoMapa = modo;
+      for (const m of ['codice', 'relieve', 'hidro']) {
+        const btn = document.getElementById('btn-modo-' + m);
+        if (btn) btn.classList.toggle('activo', m === modo);
+      }
+    }
+
+    // Calibraciones provisionales (eleccion a ojo contra el visor real, no
+    // medidas del motor): extremos de la rampa hipsometrica y de la rampa
+    // de profundidad, y alfas de ambas aguadas.
+    const HIPSOMETRICO_CLARO = [225, 210, 175];   // tierras bajas: pergamino calido
+    const HIPSOMETRICO_OSCURO = [92, 74, 52];     // cumbres: tinta sepia
+    const AGUA_SOMERA = [166, 196, 212];
+    const AGUA_PROFUNDA = [38, 70, 92];
+    const PROFUNDIDAD_MAXIMA_AGUA = 2;            // celdas mas hondas que esto saturan el tono
+
+    function colorHipsometrico(elevacion) {
+      const e = Math.max(0, Math.min(1, elevacion));
+      return [0, 1, 2].map((i) =>
+        Math.round(HIPSOMETRICO_CLARO[i] + (HIPSOMETRICO_OSCURO[i] - HIPSOMETRICO_CLARO[i]) * e)
+      );
+    }
+
+    function colorAguaPorProfundidad(profundidad) {
+      const f = Math.max(0, Math.min(1, profundidad / PROFUNDIDAD_MAXIMA_AGUA));
+      return [0, 1, 2].map((i) =>
+        Math.round(AGUA_SOMERA[i] + (AGUA_PROFUNDA[i] - AGUA_SOMERA[i]) * f)
+      );
+    }
+
+    // Devuelve { relleno } para pintar la celda en los modos relieve/hidro,
+    // o null si la celda no lleva lavado en el modo actual (en hidro, la
+    // tierra deja ver el pergamino). En codice NUNCA se consulta: el lavado
+    // organico de dibujarBiomas manda y esa ruta queda intacta.
+    function lavadoDeCelda(celda) {
+      if (modoMapa === 'relieve') {
+        const [r, g, b] = colorHipsometrico(celda.elevacion || 0);
+        return { relleno: `rgba(${r}, ${g}, ${b}, 0.5)` };
+      }
+      if (modoMapa === 'hidro') {
+        if (!celda.tiene_agua) return null;
+        const [r, g, b] = colorAguaPorProfundidad(celda.profundidad_agua || 0);
+        return { relleno: `rgba(${r}, ${g}, ${b}, 0.6)` };
+      }
+      return null;
+    }
+
+    // Lavado por celda de los modos relieve/hidro (el codice no pasa por aqui).
+    function dibujarLavadoModo(tam, data, frustum) {
+      for (let y = frustum.yMin; y < frustum.yMax; y++) {
+        for (let x = frustum.xMin; x < frustum.xMax; x++) {
+          const lavado = lavadoDeCelda(data.celdas[y][x]);
+          if (!lavado) continue;
+          ctx.fillStyle = lavado.relleno;
+          ctx.fillRect(x * tam, y * tam, tam, tam);
+        }
+      }
+    }
+
     function dibujarBiomas(tam, data) {
       for (const { bioma, cluster } of componentesPorBioma(data)) {
         const base = COLOR_BIOMA[bioma] || [120, 110, 90];
@@ -1165,6 +1448,11 @@ HTML_VISOR = """<!DOCTYPE html>
       const colorActivo = estiloColorActivo();
       const poolLago = colorActivo && (catalogoAssets.agua.lago_color || []).length > 0
         ? catalogoAssets.agua.lago_color : (catalogoAssets.agua.lago || []);
+      // Cuerpo pequeno -> sello de poza (redondo, con su orilla de piedra);
+      // un lago estirado hasta el recuadro de 1-2 celdas ahogaba la orilla,
+      // y una poza estirada a una laguna grande se leia como mancha.
+      const poolPoza = colorActivo && (catalogoAssets.agua.poza_color || []).length > 0
+        ? catalogoAssets.agua.poza_color : (catalogoAssets.agua.poza || []);
       const variantesRio = catalogoAssets.agua.rio || [];
       const piezasRio = catalogoAssets.agua.piezas_rio || {};
       const piezasCargadas = colorActivo && ['recto', 'curva', 'cruce', 'te', 'gancho'].every(
@@ -1177,9 +1465,13 @@ HTML_VISOR = """<!DOCTYPE html>
         te: imagenesCache['agua/piezas_rio/te'],
         gancho: imagenesCache['agua/piezas_rio/gancho'],
       } : null;
+      // Umbral provisional: cuerpos de hasta 4 celdas usan poza. Calibracion
+      // a ojo contra el visor real (los sellos de poza son redondos; a partir
+      // de ~2x2 el sello de lago reparto su orilla mejor).
+      const poolDeCuerpo = (comp) => (comp.length <= 4 && poolPoza.length > 0) ? poolPoza : poolLago;
 
-      componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, poolLago));
-      componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, poolLago));
+      componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp)));
+      componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp)));
 
       for (const comp of componentesAgua(data, 'rio')) {
         if (comp.length < 2) { dibujarCuencaConAssets(tam, comp, poolLago); continue; }
@@ -1410,6 +1702,7 @@ HTML_VISOR = """<!DOCTYPE html>
         const data = await resp.json();
         if (!data.celdas) return;
         ultimoDataConocido = data;
+        animadorEntidades.sincronizar(data.entidades, data.semilla);
 
         document.getElementById('info-mundo').innerHTML =
           `<strong>Semilla:</strong> ${data.semilla} &middot; <strong>Tick:</strong> ${data.tick} &middot; ` +
@@ -1454,6 +1747,10 @@ HTML_VISOR = """<!DOCTYPE html>
       const dt = ultimoTiempoFrame === null ? 1 / 60 : Math.min(0.1, (tiempoAhora - ultimoTiempoFrame) / 1000);
       ultimoTiempoFrame = tiempoAhora;
 
+      // Pieza 1: avanza las posiciones animadas de las entidades hacia la
+      // posicion real de la ultima instantanea, con el mismo dt de la camara.
+      animadorEntidades.avanzar(dt);
+
       tam0 = canvas.width / data.ancho;
       const tam = tam0;
 
@@ -1483,7 +1780,10 @@ HTML_VISOR = """<!DOCTYPE html>
 
       const frustum = calcularFrustum(data);
       ctx.drawImage(pergaminoCache, 0, 0, data.ancho * tam, data.alto * tam);
-      dibujarBiomas(tam, data);
+      // Pieza 3: el lavado del terreno depende del modo activo. En codice,
+      // el lavado organico de biomas de siempre (ruta intacta).
+      if (modoMapa === 'codice') dibujarBiomas(tam, data);
+      else dibujarLavadoModo(tam, data, frustum);
 
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
@@ -1507,113 +1807,90 @@ HTML_VISOR = """<!DOCTYPE html>
         }
       }
 
-      const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum);
-      if (!montanaUsoAssets) dibujarRelieve(tam, data, frustum);
+      // Entidades: LOD por nivel de zoom (informe seccion 4.2) + pieza 2
+      // (2026-08-27, diseño cerrado con Diego): a zoom medio/micro las
+      // criaturas dejan de ser marcadores de pantalla y entran en la MISMA
+      // cola Y-sorted que montanas y flora -- un gnomo tras un pico al sur
+      // queda oculto tras el. A zoom macro (< 0.8) siguen siendo puntos de
+      // tinta en pantalla: de lejos el mapa sigue siendo un mapa, un
+      // marcador no participa en oclusiones.
+      const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
+      // Posiciones INTERPOLADAS (pieza 1): el bucle de dibujo lee del
+      // gestor de animacion, no de la instantanea cruda -- mismos campos,
+      // pero x/y avanzan suavemente entre instantaneas.
+      const entidadesAnimadas = animadorEntidades.lista();
+
+      // Cola de criaturas en espacio de mundo (solo medio/micro). El mapa
+      // id->alturaVisual alimenta la capa de anotaciones posterior. Margen
+      // de 2 celdas alrededor del frustum para no construir elementos que
+      // nunca entrarian en pantalla.
+      const visualesPorId = new Map();
+      let elementosCriaturas = [];
+      if (nivel !== 'macro') {
+        const margenCeldas = 2;
+        elementosCriaturas = entidadesAnimadas
+          .filter((e) => e.x > frustum.xMin - margenCeldas && e.x < frustum.xMax + margenCeldas &&
+                         e.y > frustum.yMin - margenCeldas && e.y < frustum.yMax + margenCeldas)
+          .map((e) => {
+            const el = construirElementoCriatura(e, tam);
+            visualesPorId.set(e.id, el.alturaVisual);
+            return el;
+          });
+      }
+
+      // Pieza 2: el agua (lagos/rios) va ANTES de la cola Y-sorted -- es
+      // terreno plano, no un objeto con altura. Estampandola despues, la
+      // orilla del sello de lago (que desborda su recuadro sobre las
+      // celdas de tierra vecinas por diseño) tapaba por completo a las
+      // criaturas que pisaban esas celdas -- regresion detectada contra el
+      // visor real: un conejo desaparecia bajo la orilla. Con el agua
+      // debajo, la orilla queda DETRAS de criaturas/arboles/picos, como
+      // pide un diorama. (El orden agua-despues era el de antes de la
+      // pieza 2; el cambio de capa es visible y pendiente de tu visto.)
       dibujarHidrografia(tam, data);
+      const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum, elementosCriaturas);
+      if (!montanaUsoAssets) dibujarRelieve(tam, data, frustum);
       dibujarVegetacion(tam, data, frustum);
       dibujarMarco(tam, data.ancho, data.alto);
 
       ctx.restore();
 
-      // Entidades: LOD por nivel de zoom (informe seccion 4.2), dibujadas
-      // en espacio de pantalla -- el tamano de runa/halo/etiqueta NO
-      // escala junto al mapa, lo decide el nivel de detalle actual, igual
-      // que un marcador de mapa real no cambia de tamano al hacer zoom.
-      const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
-      data.entidades.forEach(e => {
+      // A zoom macro: puntos de tinta en espacio de pantalla, como siempre
+      // (marcador de mapa, sin oclusiones -- decisión de diseño pieza 2).
+      if (nivel === 'macro') {
+        entidadesAnimadas.forEach(e => {
           const centro = mundoAPantalla((e.x + 0.5) * tam, (e.y + 0.5) * tam);
           const margen = 24;
           if (centro.x < -margen || centro.x > canvas.width + margen ||
               centro.y < -margen || centro.y > canvas.height + margen) return;
 
           const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
-          const runa = RUNAS[e.tipo] || '?';
           const seleccionada = e.id === entidadSeleccionadaId;
-
-          if (nivel === 'macro') {
+          ctx.beginPath();
+          ctx.arc(centro.x, centro.y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
+          ctx.fill();
+          if (seleccionada) {
             ctx.beginPath();
-            ctx.arc(centro.x, centro.y, 3, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
-            ctx.fill();
-            if (seleccionada) {
-              ctx.beginPath();
-              ctx.arc(centro.x, centro.y, 7, 0, Math.PI * 2);
-              ctx.strokeStyle = 'rgba(212,172,13,0.9)';
-              ctx.lineWidth = 1.5;
-              ctx.stroke();
-            }
-            return;
-          }
-
-          // Retrato real (informe: sello por especie, no un icono generico)
-          // si hay assets/criaturas/<especie>_N.png -- variante elegida por
-          // hash del ID de la entidad (no de su posicion, que cambia cada
-          // tick) para que el mismo individuo conserve siempre la misma
-          // pose entre frames. Sin asset, cae al halo+runa de siempre.
-          const variantesCriatura = catalogoAssets.criaturas[e.tipo] || [];
-          const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
-          const imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
-
-          let radioEfectivo;
-          if (imgCriatura) {
-            // (2026-08-27, feedback de Diego: "el conejo es mas grande que
-            // el gnomo") Antes toda especie usaba la misma alturaImg fija
-            // -- como cada recorte tiene su propio encuadre/margen dentro
-            // del lienzo (un conejo agachado deja mucho aire alrededor, un
-            // gnomo en pie casi llena el suyo), esa altura IGUAL en
-            // pixeles de pantalla no daba un tamano relativo realista
-            // entre especies. ESCALA_ESPECIE fija una proporcion a ojo
-            // (gnomo como referencia mas grande, lobo algo menor, conejo y
-            // ardilla claramente pequeños) -- no hay una medida real de
-            // "cm" en el ECS que calibrar contra, es una eleccion de
-            // legibilidad, no una medicion.
-            const alturaBase = nivel === 'micro' ? 34 : 22;
-            const alturaImg = alturaBase * (ESCALA_ESPECIE[e.tipo] ?? 1);
-            const anchoImg = alturaImg * (imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1);
-            ctx.drawImage(imgCriatura, centro.x - anchoImg / 2, centro.y - alturaImg / 2, anchoImg, alturaImg);
-            if (seleccionada) {
-              ctx.beginPath();
-              ctx.ellipse(centro.x, centro.y + alturaImg / 2 - 2, anchoImg * 0.42, 4, 0, 0, Math.PI * 2);
-              ctx.strokeStyle = 'rgba(212,172,13,0.95)';
-              ctx.lineWidth = 1.6;
-              ctx.stroke();
-            }
-            radioEfectivo = alturaImg / 2;
-          } else {
-            const radioHalo = nivel === 'micro' ? 14 : 9;
-            ctx.beginPath();
-            ctx.arc(centro.x, centro.y, radioHalo, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(230,216,184,0.88)';
-            ctx.fill();
-            ctx.strokeStyle = seleccionada ? 'rgba(212,172,13,0.95)' : `rgba(${r},${g},${b},0.7)`;
-            ctx.lineWidth = seleccionada ? 2.2 : 1.2;
+            ctx.arc(centro.x, centro.y, 7, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(212,172,13,0.9)';
+            ctx.lineWidth = 1.5;
             ctx.stroke();
-
-            ctx.font = `${nivel === 'micro' ? 20 : 14}px 'Cinzel', Georgia, serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
-            ctx.fillText(runa, centro.x, centro.y + 1);
-            radioEfectivo = radioHalo;
           }
+        });
+        return;
+      }
 
-          if (nivel === 'micro') {
-            ctx.font = '10px Georgia, serif';
-            ctx.fillStyle = 'rgba(36,26,15,0.9)';
-            const etiqueta = e.nombre || (e.tipo === 'necromasa' ? `Restos (${e.origen || '?'})` : e.tipo);
-            ctx.textAlign = 'center';
-            ctx.fillText(etiqueta, centro.x, centro.y + radioEfectivo + 9);
-
-            if (e.pool_fisico) {
-              const anchoBarra = 26, altoBarra = 3;
-              const bx = centro.x - anchoBarra / 2, by = centro.y + radioEfectivo + 15;
-              ctx.fillStyle = 'rgba(58,43,26,0.4)';
-              ctx.fillRect(bx, by, anchoBarra, altoBarra);
-              const vitalidad = Math.max(0, Math.min(1, e.pool_fisico.vitalidad));
-              ctx.fillStyle = vitalidad > 0.35 ? 'rgba(58,110,58,0.85)' : 'rgba(150,40,32,0.85)';
-              ctx.fillRect(bx, by, anchoBarra * vitalidad, altoBarra);
-            }
-          }
+      // A zoom medio/micro el cuerpo de la criatura ya se dibujo DENTRO de
+      // la cola Y-sorted (espacio de mundo, con oclusion real). Aqui solo
+      // queda la capa de anotaciones en pantalla: seleccion siempre, y
+      // nombre + barra de vitalidad a nivel micro.
+      entidadesAnimadas.forEach(e => {
+          const centro = mundoAPantalla((e.x + 0.5) * tam, (e.y + 0.5) * tam);
+          const margen = 24;
+          if (centro.x < -margen || centro.x > canvas.width + margen ||
+              centro.y < -margen || centro.y > canvas.height + margen) return;
+          dibujarAnotacionesEntidad(e, centro, visualesPorId.get(e.id) ?? tam * 0.3, nivel, e.id === entidadSeleccionadaId);
         });
     }
     requestAnimationFrame(dibujarFrame);

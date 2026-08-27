@@ -25,6 +25,19 @@ celda de forma determinista (hash de la semilla del mundo + posición), así
 que el mismo mundo siempre se ve igual entre recargas, y cuantas más
 variantes haya, menos se repite el patrón.
 
+**Sellos de estado (2026-08-27, fuente nuevosAssetsDefinitivos)** — solo
+existen en `flora_color/` y solo se usan a zoom de color:
+
+- `flora_color/manzano_fruto_<n>.png` — manzano con manzanas visibles; se
+  usa cuando la celda aún conserva recurso `manzanas`.
+- `flora_color/manzano_brote_<n>.png` — brote/sapotigo; se usa con
+  `planta.etapa < 0.35`.
+- `flora_color/manzano_seco_<n>.png` — árbol seco (reservado; hoy sin
+  gancho en el ECS que lo seleccione).
+- `flora_color/cactus_fruto_<n>.png` — saguaro con tunas; se usa cuando la
+  celda conserva recurso `fruto_de_cactus`.
+
+Sin esos sellos (o a tinta), la especie cae a su pool base `<especie>_<n>`.
 Un nombre que no coincida con ninguna especie real simplemente no se usa
 nunca (no rompe nada, tampoco hace nada) — evita erratas revisando contra
 la lista de arriba.
@@ -46,12 +59,17 @@ de zoom "medio" (informe sección 4.2); a zoom muy alejado sigue siendo
 un punto de tinta mínimo, una ilustración ahí no se leería igual de bien
 y sería puro coste de dibujo.
 
-### `agua/lago_<n>.png` y `agua/rio_<n>.png`
+### `agua/lago_<n>.png`, `agua/poza_<n>.png` y `agua/rio_<n>.png`
 
-`lago_<n>.png` también cubre pozas (mismo tratamiento visual, sin
-distinción hoy). Un lago/poza se estampa ajustado al recuadro real del
-cuerpo de agua (misma lógica que un pico de montaña o un árbol: la
-posición y el tamaño emergen de los datos reales).
+`lago_<n>.png` cubre cuerpos de agua grandes y medianos. Desde el
+2026-08-27 (fuente nuevosAssetsDefinitivos), los cuerpos pequeños — de 4
+celdas o menos — usan `agua/poza_<n>.png` cuando existe (sellos redondos
+con su orilla de piedra, mucho más legibles que un lago estirado a un
+recuadro de 1-2 celdas). Las parejas tinta/acuarela de esta fuente son
+alineadas 1:1 (mismo contorno dibujado en `agua/lago_<n>.png` y
+`agua/lago_color_<n>.png`). Un lago/poza se estampa ajustado al recuadro
+real del cuerpo de agua (misma lógica que un pico de montaña o un árbol:
+la posición y el tamaño emergen de los datos reales).
 
 Un río es distinto: es un CAMINO, no una mancha — el motor no le da al
 visor una "forma exacta de río" que un icono fijo pueda calzar bien, así
