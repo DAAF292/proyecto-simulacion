@@ -172,6 +172,21 @@ def sembrar_flora_inicial(
     config: dict[str, Any],
     rng_juego: random.Random,
 ) -> None:
+    # (2026-08-27) Al fusionar con origin/master aparecio una SEGUNDA
+    # implementacion de esta misma funcion (sembrar_flora_inicial(gestor,
+    # mundo), sin config ni rng, sembrando el 100% de las celdas
+    # tiene_recurso=True) escrita por otra sesion que detecto el mismo
+    # hueco de forma independiente -- su rama partia de un commit anterior
+    # a 2153b20, donde este arreglo con muestreo fraccional configurable
+    # todavia no existia, asi que desde su punto de partida el hueco
+    # seguia sin resolver. Se conserva esta version (la de aqui) porque es
+    # la mas completa: respeta fraccion_siembra_inicial (global y por
+    # especie) en vez de sembrar el 100%, que es precisamente la
+    # calibracion -- PROVISIONAL, ver docstring mas abajo -- que ya se
+    # habia decidido para dar a la propagacion varios frentes en vez de un
+    # mundo ya lleno desde el tick 0. La version descartada no se pierde:
+    # sigue en el historial de origin/master y en la rama de respaldo
+    # local si hiciera falta revisarla.
     """
     Siembra las entidades Planta fundadoras del mundo (2026-08-23,
     diagnóstico de inanición del mismo día): sin esto, sistema_flora.py
