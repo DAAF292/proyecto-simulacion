@@ -605,6 +605,115 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
+    // Contorno real de un cluster de celdas (mismo algoritmo que ya se usa
+    // para picos/lagos-sin-asset): recorre cada celda en sentido horario,
+    // se queda solo con las aristas que dan a fuera del cluster, y las
+    // encadena por sus puntos hasta formar el poligono de frontera exacto.
+    function contornoDeCluster(cluster, tam) {
+      const enCluster = new Set(cluster.map(c => c.x + ',' + c.y));
+      const dentro = (x, y) => enCluster.has(x + ',' + y);
+      const aristas = new Map();
+      for (const { x, y } of cluster) {
+        if (!dentro(x, y - 1)) aristas.set(`${x},${y}`, { x: x + 1, y: y });
+        if (!dentro(x + 1, y)) aristas.set(`${x+1},${y}`, { x: x + 1, y: y + 1 });
+        if (!dentro(x, y + 1)) aristas.set(`${x+1},${y+1}`, { x: x, y: y + 1 });
+        if (!dentro(x - 1, y)) aristas.set(`${x},${y+1}`, { x: x, y: y });
+      }
+      const usados = new Set();
+      let mejorBucle = [];
+      for (const inicioClave of aristas.keys()) {
+        if (usados.has(inicioClave)) continue;
+        const bucle = [];
+        let claveActual = inicioClave;
+        while (!usados.has(claveActual) && aristas.has(claveActual)) {
+          usados.add(claveActual);
+          const [px, py] = claveActual.split(',').map(Number);
+          bucle.push({ x: px, y: py });
+          const fin = aristas.get(claveActual);
+          claveActual = `${fin.x},${fin.y}`;
+        }
+        if (bucle.length > mejorBucle.length) mejorBucle = bucle;
+      }
+      return mejorBucle.map(p => ({ x: p.x * tam, y: p.y * tam }));
+    }
+
+    // Chaikin corner-cutting: redondea el contorno en bloques del grid
+    // hacia una silueta organica -- sin esto, el borde entre dos biomas
+    // vecinos es literalmente la arista recta de las celdas, que se nota
+    // mucho mas ahora que no hay reticula encima disimulandolo.
+    function suavizarChaikin(puntos, iteraciones) {
+      let pts = puntos;
+      for (let it = 0; it < iteraciones; it++) {
+        const nuevos = [];
+        for (let i = 0; i < pts.length; i++) {
+          const p0 = pts[i], p1 = pts[(i + 1) % pts.length];
+          nuevos.push({ x: p0.x * 0.75 + p1.x * 0.25, y: p0.y * 0.75 + p1.y * 0.25 });
+          nuevos.push({ x: p0.x * 0.25 + p1.x * 0.75, y: p0.y * 0.25 + p1.y * 0.75 });
+        }
+        pts = nuevos;
+      }
+      return pts;
+    }
+
+    function trazarPoligono(puntos) {
+      ctx.beginPath();
+      ctx.moveTo(puntos[0].x, puntos[0].y);
+      for (let i = 1; i <= puntos.length; i++) {
+        const p = puntos[i % puntos.length];
+        ctx.lineTo(p.x, p.y);
+      }
+    }
+
+    // Componentes conexas (4-vecinos) por bioma -- mismo patron que
+    // componentesAgua() de mas abajo, pero agrupando por Celda.bioma en
+    // vez de tipo_agua.
+    function componentesPorBioma(data) {
+      const visitado = new Set();
+      const resultado = [];
+      for (let y = 0; y < data.alto; y++) {
+        for (let x = 0; x < data.ancho; x++) {
+          const clave = x + ',' + y;
+          if (visitado.has(clave)) continue;
+          const bioma = data.celdas[y][x].bioma;
+          const pila = [[x, y]];
+          visitado.add(clave);
+          const cluster = [];
+          while (pila.length) {
+            const [cx, cy] = pila.pop();
+            cluster.push({ x: cx, y: cy, c: data.celdas[cy][cx] });
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = cx + dx, ny = cy + dy;
+              if (nx < 0 || ny < 0 || nx >= data.ancho || ny >= data.alto) continue;
+              const k = nx + ',' + ny;
+              if (visitado.has(k)) continue;
+              if (data.celdas[ny][nx].bioma === bioma) { visitado.add(k); pila.push([nx, ny]); }
+            }
+          }
+          resultado.push({ bioma, cluster });
+        }
+      }
+      return resultado;
+    }
+
+    // Lavado de biomas como manchas organicas (una silueta suavizada por
+    // region contigua) en vez de un fillRect por celda -- el borde entre
+    // dos biomas vecinos ya no es la arista recta de la cuadricula.
+    function dibujarBiomas(tam, data) {
+      for (const { bioma, cluster } of componentesPorBioma(data)) {
+        const base = COLOR_BIOMA[bioma] || [120, 110, 90];
+        // Modulacion "acuarela": la lluvia media del cluster oscurece el
+        // lavado -- mismo criterio que antes, ahora por region en vez de
+        // por celda individual (una region contigua tiene lluvia parecida
+        // de por si, al venir del mismo campo continuo).
+        const lluviaMedia = cluster.reduce((s, c) => s + c.c.lluvia, 0) / cluster.length;
+        const sombra = 1 - lluviaMedia * 0.22;
+        const contorno = suavizarChaikin(contornoDeCluster(cluster, tam), 2);
+        trazarPoligono(contorno);
+        ctx.fillStyle = `rgba(${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}, 0.40)`;
+        ctx.fill();
+      }
+    }
+
     // Componentes conexas (4-vecinos) de celdas con el mismo tipo_agua --
     // el motor (nucleo/agua.py) SI agrupa celdas en cuerpos de agua al
     // generarlas, pero solo persiste tipo/profundidad por celda, no un id
@@ -1034,19 +1143,12 @@ HTML_VISOR = """<!DOCTYPE html>
 
         const frustum = calcularFrustum(data);
         ctx.drawImage(pergaminoCache, 0, 0, data.ancho * tam, data.alto * tam);
+        dibujarBiomas(tam, data);
 
         for (let y = frustum.yMin; y < frustum.yMax; y++) {
           for (let x = frustum.xMin; x < frustum.xMax; x++) {
             const c = data.celdas[y][x];
             const px = x * tam, py = y * tam;
-
-            const base = COLOR_BIOMA[c.bioma] || [120, 110, 90];
-            // Modulacion "acuarela": la lluvia oscurece el lavado, la
-            // temperatura lo calienta levemente -- variacion determinista
-            // por celda (mismo dato cada frame), no ruido visual.
-            const sombra = 1 - c.lluvia * 0.22;
-            ctx.fillStyle = `rgba(${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}, 0.40)`;
-            ctx.fillRect(px, py, tam, tam);
 
             // Agua permanente (rio/lago/poza) ya no se pinta plana aqui --
             // dibujarHidrografia() la traza como forma vectorial despues de
