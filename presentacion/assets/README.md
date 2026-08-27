@@ -87,17 +87,9 @@ vez.
 
 ### Huecos en la biblioteca actual
 
-- **`agua/rio_<n>.png`** — sigue sin resolver. Diego subió
-  `presentacion/nuevosAssets/Gemini_Generated_Image_gfaoymgfaoymgfao.jpeg`,
-  un tileset de agua (lagos, ríos con curvas/cruces, cascadas) muy
-  completo, pero en **acuarela suave** (washes de color, sin tramado de
-  tinta) — el mismo estilo que ya se retiró una vez de este proyecto por
-  no encajar con el resto del mapa (ver hilo de "hojas de estilo
-  antiguo" más arriba en la memoria del proyecto). No se ha integrado
-  por ese motivo: mezclar un río en acuarela sobre un mapa entero en
-  tinta se vería peor que la doble orilla vectorial actual. Sin esto, el
-  río sigue con doble orilla vectorial. Si Diego confirma que quiere
-  aceptar ese estilo igualmente para el agua, se puede reconsiderar.
+Ninguno a fecha de esta actualización (ver "Pivote a LOD tinta/color" más
+abajo: el hueco de `agua/rio` que este apartado documentaba como sin
+resolver quedó cerrado ese mismo día).
 
 ### Resuelto (2026-08-27) — musgo y liquen
 
@@ -144,6 +136,15 @@ Esto es un diseño propuesto para dejar constancia, no una convención que
 el visor ya reconozca — cuando se implemente el lado del código, esta
 sección se actualizará para reflejarlo.
 
+**Nota (2026-08-27, más tarde el mismo día):** esta propuesta (un cluster
+entero de celdas se convierte en UNA imagen de formación agregada al
+alejar el zoom) sigue sin implementar, y es un eje DISTINTO del pivote
+de la siguiente sección — aquella cambia qué CONTENIDO se dibuja por
+celda según el zoom (tinta vs. color), esta cambiaría la GRANULARIDAD
+del dibujo (una imagen por celda vs. una imagen por cluster). Son
+compatibles entre sí, no alternativas — nada de lo de abajo cierra esta
+propuesta.
+
 ### Criaturas — cambio deliberado de estilo (2026-08-27)
 
 Diego subió 8 hojas nuevas en `presentacion/nuevosAssets/` (gnomo macho
@@ -184,3 +185,125 @@ sin usar todavía — el visor solo estampa una imagen estática por
 individuo (sin animación por estado), así que no había necesidad de
 extraerlas todas. Si en el futuro se añade animación por pose, esas
 hojas ya están en el repo listas para recortar más variantes.
+
+### Corrección — recortes de criaturas con caja de fondo visible (2026-08-27, más tarde el mismo día)
+
+Diego vio el resultado real en el visor y señaló "no está del todo
+bien" en los recortes de criaturas. Diagnóstico: el papel de fondo de
+esas hojas NO es blanco puro (~248,247,243 de media, no 255,255,255), y
+el primer recorte calculaba alfa como `(255 - max(R,G,B)) * 4` —
+insuficiente para llevar ese fondo casi-blanco a alfa 0 (quedaba en
+~20-30/255, una caja semitransparente visible como un halo rectangular
+detrás de `conejo_1`, `conejo_2` y los 4 `gnomo_*`). Sustituido por un
+algoritmo que estima el fondo REAL a partir de las esquinas de cada
+recorte (mediana, no blanco fijo) y aplica una zona muerta antes de
+empezar la rampa de alfa — sin caja visible en ninguna de las 16
+criaturas, verificado componiendo cada una sobre gris y sobre el verde
+oliva real del bioma antes de instalarlas. De paso, `gnomo_4` tenía una
+mancha residual de un trazo vecino en la hoja original colándose por el
+margen de recorte — corregido con padding asimétrico (menos margen en
+el lado hacia esa mancha).
+
+### Pivote a LOD tinta/color por zoom + río por piezas (2026-08-27, más tarde el mismo día)
+
+Instrucción de Diego: "quiero que sea todo a color en ese nivel de
+detalle... el entorno con estilo de tinta será cuando el zoom se aleje,
+de esa forma parecerá que estás viendo un mapa a medida que te acercas
+se dibuja un mundo real." Es decir: el contraste tinta/color entre
+entorno y criaturas de la sección anterior no era un desajuste a
+corregir, sino la mitad de una idea más amplia — el entorno TAMBIÉN
+pasa a color, pero solo de cerca.
+
+**Mecanismo (`ZOOM_ESTILO_COLOR = 1.6`, cliente en `vista_web.py`):**
+cada categoría de terreno (`flora`, `relieve`, `agua.lago`) gana una
+carpeta gemela `_color` (`flora_color/`, `relieve_color/`,
+`agua/lago_color_<n>.png`) con la misma convención de nombre que su
+gemela en tinta. Por debajo del umbral de zoom se sigue usando la
+biblioteca en tinta de siempre (comportamiento por defecto, sin
+cambios); a partir del umbral, `poolTerreno()` elige la carpeta `_color`
+si tiene contenido para esa clave concreta, con fallback automático a
+tinta si no lo tiene — ninguna categoría queda nunca sin dibujar.
+Extraído de las hojas `Gemini_Generated_Image_939a4j...` (mitad a
+color, cactus/manzano/hierba — sin variante de manzano CON manzanas
+visibles en esa mitad, la hoja no la trae, se usó el árbol genérico) y
+`Gemini_Generated_Image_mwy3o8...` (filas inferiores, montañas con
+lavado de color pero mismo trazo de tinta que las de siempre). `musgo`/
+`liquen` reutilizan los mismos PNG en ambas carpetas (ya tenían acento
+de color de origen).
+
+**Río — de sello único por curso a kit de piezas por celda
+(`agua/rio_piezas/{recto,curva,cruce,te,gancho}.png`, extraídas de
+`Gemini_Generated_Image_gfaoymgfaoymgfao.jpeg`):** con las piezas
+coloreadas aceptadas explícitamente por Diego ("ya se que estan
+coloreados"), el río pasa de un único sello estirado sobre el camino
+(aproximación de la iteración anterior) a un autotile real: cada celda
+mira su posición en el camino y dibuja recto/curva/gancho rotado según
+corresponda. `dibujarRioPiezas()` reemplaza a `dibujarRioConAssets()`
+en el escenario a color (el escenario en tinta sigue sin sello de río,
+cae al trazo vectorial de siempre — la hoja de agua no tiene mitad
+neutra).
+
+**Dos bugs reales encontrados corriendo el motor de verdad, ninguno
+detectable solo leyendo el código:**
+
+1. *Adyacencia cardinal estricta rompía el autotile.* Primer intento:
+   por cada celda de río, mirar sus 4 vecinos N/E/S/O DENTRO del mismo
+   componente conexo (flood-fill de `componentesAgua`) para elegir
+   pieza. En el visor real, el río salía como una cadena de "gancho"
+   (pieza de un solo brazo) repetida sin sentido. Causa, confirmada
+   contra `estado.json`: el camino que traza `nucleo/agua.py`
+   (`_trazar_rio`) SÍ avanza en diagonal entre celdas consecutivas
+   (`(21,13)->(20,14)` es un paso diagonal), así que la mayoría de
+   celdas no tenían ningún vecino cardinal real dentro de su propio
+   componente (que además quedaba fragmentado en trozos sueltos por la
+   misma razón). Arreglo: en vez de adyacencia real celda a celda,
+   reutilizar el camino ya ORDENADO por `ordenarCaminoRio()` (el mismo
+   que usa el trazado vectorial) y redondear la dirección hacia el
+   vecino anterior/siguiente en el camino al cardinal más cercano
+   (empate en diagonal exacta resuelto siempre hacia horizontal, regla
+   fija y simétrica).
+2. *Tramos anchos (2-3 celdas) rotos por el mismo autotile lineal.* Con
+   el bug 1 ya corregido, un delta/confluencia ancha (confirmado contra
+   `estado.json`: varias columnas de río en paralelo en la misma franja
+   de filas) seguía produciendo el mismo patrón de anillos repetidos,
+   porque el autotile de piezas asume un camino de un solo ancho de
+   celda en todo punto, y `ordenarCaminoRio` fuerza ese camino aunque
+   la forma real sea 2D. Arreglo: detectar celdas "anchas" (3+ vecinos
+   de río en un entorno de 8 direcciones, no solo los 2 del camino
+   lineal), agruparlas en sub-cuencas 4-conectadas, y estampar cada una
+   con `dibujarCuencaConAssets` (el mismo sello de `agua.lago`/
+   `lago_color` que ya usa cualquier lago real) en vez de forzar una
+   pieza de camino que no le corresponde — una ampliación de río se lee
+   simplemente como una laguna pequeña, honesto a lo que es la forma
+   real de esa zona.
+
+**Bug adicional, ajeno a la lógica de piezas:** `agua/lago_color_1.png`
+tenía una barra negra opaca ocupando todo el borde superior/izquierdo,
+visible en el visor como una caja rectangular junto a cualquier laguna
+pequeña que la usara. Causa: el recorte original partía de la esquina
+misma de la hoja fuente (`(0,0,520,451)`) y le restaba un margen de
+padding, llevando la coordenada de recorte a negativo (`-8,-8`) — PIL
+rellena de negro cualquier región de un `.crop()` que caiga fuera de los
+límites de la imagen origen, y el algoritmo de alfa (que compara cada
+píxel contra un fondo estimado de las esquinas) interpretaba ese negro
+sólido como primer plano opaco en vez de como el hueco fuera de imagen
+que era. Arreglo: recorte con coordenadas siempre dentro de los límites
+reales de la hoja (nunca restar padding en el lado que ya toca el borde
+de la imagen fuente) — lección aplicable a cualquier extracción futura
+que parta de la esquina de una hoja.
+
+**Verificación:** servidor real + Playwright en ambos escenarios (zoom
+por defecto en tinta sin cambios visibles; zoom > 1.6 con flora/relieve/
+lagos a color); un componente de río ancho real (delta de varias
+columnas) capturado antes y después de cada arreglo, confirmando cada
+diagnóstico contra `estado.json` en vez de suponer la causa; barrido
+automatizado (`numpy`) de los 20+ PNG nuevos buscando píxeles negros
+opacos en el borde de cada recorte, que fue lo que encontró el bug de
+`lago_color_1` después de que ya pareciera visualmente resuelto.
+Pendiente, como siempre: confirmación de Diego en su propio navegador.
+
+`agua/rio_piezas/{cruce,te}.png` quedan extraídas pero SIN USAR — el
+autotile por tangente de camino no intenta detectar confluencias reales
+de 3-4 brazos (un caso raro según el propio motor, y las celdas anchas
+ya caen a sello de laguna). Si en el futuro se quiere una detección
+explícita de confluencias, esas dos piezas ya están listas.

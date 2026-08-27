@@ -305,16 +305,34 @@ HTML_VISOR = """<!DOCTYPE html>
     // categoria sigue con el dibujo vectorial de siempre -- ver el guard
     // en dibujarVegetacion() y en dibujarStampsRelieveYFlora() mas abajo.
     let catalogoAssets = {
-      flora: {}, relieve: { montana: [] }, agua: { lago: [], rio: [] }, criaturas: {},
+      flora: {}, flora_color: {},
+      relieve: { montana: [], montana_color: [] },
+      agua: { lago: [], lago_color: [], rio: [], piezas_rio: {} },
+      criaturas: {},
     };
     const imagenesCache = {};
+
+    // Pivote LOD tinta/color (2026-08-27): a partir de este zoom el
+    // terreno (flora/relieve/lagos) pasa de la biblioteca en tinta a su
+    // gemela a color -- lejos parece un mapa, cerca "se dibuja un mundo
+    // real" (peticion explicita de Diego). Umbral propio, no reutiliza los
+    // 0.8/2.0 de LOD de entidades (gobiernan si una criatura muestra
+    // retrato o punto, un eje distinto). Si la carpeta _color de una
+    // categoria esta vacia, esa categoria sigue en tinta a cualquier zoom
+    // -- ver elegirCatalogoTerreno().
+    const ZOOM_ESTILO_COLOR = 1.6;
 
     async function cargarBibliotecaAssets() {
       try {
         const resp = await fetch('/assets_manifest.json');
         if (!resp.ok) return;
         catalogoAssets = await resp.json();
-        if (!catalogoAssets.agua) catalogoAssets.agua = { lago: [], rio: [] };
+        if (!catalogoAssets.flora_color) catalogoAssets.flora_color = {};
+        if (!catalogoAssets.relieve) catalogoAssets.relieve = { montana: [], montana_color: [] };
+        if (!catalogoAssets.relieve.montana_color) catalogoAssets.relieve.montana_color = [];
+        if (!catalogoAssets.agua) catalogoAssets.agua = { lago: [], lago_color: [], rio: [], piezas_rio: {} };
+        if (!catalogoAssets.agua.lago_color) catalogoAssets.agua.lago_color = [];
+        if (!catalogoAssets.agua.piezas_rio) catalogoAssets.agua.piezas_rio = {};
         if (!catalogoAssets.criaturas) catalogoAssets.criaturas = {};
       } catch (err) {
         console.error('No se pudo leer /assets_manifest.json:', err);
@@ -322,19 +340,28 @@ HTML_VISOR = """<!DOCTYPE html>
       }
       const rutas = [];
       for (const especie in catalogoAssets.flora) {
-        for (const nombre of catalogoAssets.flora[especie]) rutas.push('flora/' + nombre);
+        for (const nombre of catalogoAssets.flora[especie]) rutas.push(['flora/' + nombre, 'flora/' + nombre]);
       }
-      for (const nombre of catalogoAssets.relieve.montana) rutas.push('relieve/' + nombre);
+      for (const especie in catalogoAssets.flora_color) {
+        for (const nombre of catalogoAssets.flora_color[especie]) rutas.push(['flora_color/' + nombre, 'flora_color/' + nombre]);
+      }
+      for (const nombre of catalogoAssets.relieve.montana) rutas.push(['relieve/' + nombre, 'relieve/' + nombre]);
+      for (const nombre of catalogoAssets.relieve.montana_color) rutas.push(['relieve_color/' + nombre, 'relieve_color/' + nombre]);
       for (const clave in catalogoAssets.agua) {
-        for (const nombre of catalogoAssets.agua[clave]) rutas.push('agua/' + nombre);
+        if (clave === 'piezas_rio') continue;
+        for (const nombre of catalogoAssets.agua[clave]) rutas.push(['agua/' + nombre, 'agua/' + nombre]);
+      }
+      for (const pieza in catalogoAssets.agua.piezas_rio) {
+        const nombre = catalogoAssets.agua.piezas_rio[pieza];
+        rutas.push(['agua/rio_piezas/' + nombre, 'agua/piezas_rio/' + pieza]);
       }
       for (const especie in catalogoAssets.criaturas) {
-        for (const nombre of catalogoAssets.criaturas[especie]) rutas.push('criaturas/' + nombre);
+        for (const nombre of catalogoAssets.criaturas[especie]) rutas.push(['criaturas/' + nombre, 'criaturas/' + nombre]);
       }
 
-      await Promise.all(rutas.map((ruta) => new Promise((resolve) => {
+      await Promise.all(rutas.map(([ruta, clave]) => new Promise((resolve) => {
         const img = new Image();
-        img.onload = () => { imagenesCache[ruta] = img; resolve(); };
+        img.onload = () => { imagenesCache[clave] = img; resolve(); };
         img.onerror = () => resolve();   // asset roto/movido: se ignora, no rompe el visor
         img.src = '/assets/' + ruta;
       })));
@@ -356,12 +383,32 @@ HTML_VISOR = """<!DOCTYPE html>
       return lista[Math.floor(hash2(x, y, sal) * lista.length) % lista.length];
     }
 
+    function estiloColorActivo() {
+      return camara.zoom >= ZOOM_ESTILO_COLOR;
+    }
+
+    // Elige entre la carpeta _color y su gemela en tinta segun el zoom
+    // actual, cayendo siempre a tinta si la carpeta color esta vacia para
+    // esa clave concreta (biblioteca parcial, no rompe nada -- mismo
+    // criterio de "categoria vacia = vectorial/tinta" que ya regia antes
+    // de este pivote, solo que ahora con un escalon intermedio).
+    function poolTerreno(poolColor, prefijoColor, poolTinta, prefijoTinta) {
+      if (estiloColorActivo() && poolColor && poolColor.length > 0) {
+        return { lista: poolColor, prefijo: prefijoColor };
+      }
+      return { lista: poolTinta, prefijo: prefijoTinta };
+    }
+
     // Estampado con Y-sorting (informe: montañas y flora ordenadas de
     // norte a sur en un unico pase, para que el sur oculte al norte).
     // Devuelve true si dibujo con assets reales la categoria de relieve
     // (para que el llamador sepa si debe caer al dibujarRelieve() vectorial).
     function dibujarStampsRelieveYFlora(tam, data, frustum) {
-      const montanaConAssets = (catalogoAssets.relieve.montana || []).length > 0;
+      const poolMontana = poolTerreno(
+        catalogoAssets.relieve.montana_color, 'relieve_color/',
+        catalogoAssets.relieve.montana, 'relieve/',
+      );
+      const montanaConAssets = poolMontana.lista.length > 0;
       const elementos = [];
 
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
@@ -369,8 +416,8 @@ HTML_VISOR = """<!DOCTYPE html>
           const c = data.celdas[y][x];
 
           if (c.bioma === 'montana' && montanaConAssets) {
-            const nombre = elegirVariante(catalogoAssets.relieve.montana, x, y, 91);
-            const img = imagenesCache['relieve/' + nombre];
+            const nombre = elegirVariante(poolMontana.lista, x, y, 91);
+            const img = imagenesCache[poolMontana.prefijo + nombre];
             if (img) {
               const baseY = (y + 1) * tam;
               elementos.push({
@@ -383,9 +430,12 @@ HTML_VISOR = """<!DOCTYPE html>
           }
 
           if (c.planta) {
-            const variantes = catalogoAssets.flora[c.planta.especie] || [];
-            const nombre = elegirVariante(variantes, x, y, 93);
-            const img = nombre ? imagenesCache['flora/' + nombre] : null;
+            const poolPlanta = poolTerreno(
+              catalogoAssets.flora_color[c.planta.especie], 'flora_color/',
+              catalogoAssets.flora[c.planta.especie], 'flora/',
+            );
+            const nombre = elegirVariante(poolPlanta.lista, x, y, 93);
+            const img = nombre ? imagenesCache[poolPlanta.prefijo + nombre] : null;
             if (img) {
               const baseY = y * tam + tam * 0.85 + (hash2(x, y, 95) - 0.5) * tam * 0.3;
               elementos.push({
@@ -939,16 +989,177 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.stroke();
     }
 
-    function dibujarHidrografia(tam, data) {
-      const variantesLago = catalogoAssets.agua.lago || [];
-      const variantesRio = catalogoAssets.agua.rio || [];
+    // Kit de piezas de rio por celda (2026-08-27, sustituye al sello unico
+    // por curso de agua de dibujarRioConAssets para el escenario a color).
+    //
+    // Primer intento (retirado, ver historial de commits): agrupar por
+    // adyacencia cardinal estricta de componentesAgua() y elegir pieza por
+    // grado de vecinos N/E/S/O. Se rompio contra el motor real: el camino
+    // que traza nucleo/agua.py (_trazar_rio) SI puede avanzar en
+    // diagonal entre celdas consecutivas (confirmado inspeccionando
+    // estado.json -- p.ej. (21,13)->(20,14) es un paso diagonal, no
+    // cardinal), asi que la mayoria de celdas no tenian ningun vecino
+    // cardinal dentro de su propio componente conexo (que a su vez quedaba
+    // fragmentado en muchos trozos sueltos por la misma razon) y el visor
+    // real mostraba una cadena de "gancho" (pieza de un solo brazo)
+    // repetida sin sentido -- un fallo que solo se vio en el arnes visual
+    // contra el motor real, no en la logica de rotacion aislada (esa
+    // logica en si era correcta, la premisa de partida no).
+    //
+    // Solucion: en vez de mirar adyacencia real celda a celda, reusar el
+    // camino YA ordenado por ordenarCaminoRio() (el mismo que usa el
+    // trazado vectorial) y, para cada celda, redondear la direccion hacia
+    // su vecino anterior/siguiente en el camino al cardinal mas cercano
+    // (empate en diagonal exacta resuelto siempre hacia horizontal, regla
+    // fija y simetrica -- no depende de si el hash cae a un lado u otro).
+    // Con eso: extremo del camino (un solo vecino) -> gancho; direcciones
+    // opuestas -> recto; direcciones adyacentes -> curva. Una
+    // aproximacion deliberada (un paso diagonal se redondea a 2 tramos
+    // cardinales en vez de dibujarse literalmente en diagonal), no un
+    // trazado exacto -- coherente con como este mismo modulo ya describe
+    // el resto del sistema de sellos de rio. Las piezas cruce/te quedan
+    // en la biblioteca sin usar (confluencias reales son un caso raro
+    // segun el propio motor) -- ver README de assets.
+    function direccionCardinalMasCercana(dx, dy) {
+      if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 1 : 3;   // Este=1, Oeste=3
+      return dy >= 0 ? 2 : 0;                                     // Sur=2, Norte=0
+    }
 
-      componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, variantesLago));
-      componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, variantesLago));
+    function dibujarPiezaRotada(img, cx, cy, tam, rotClockwise) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rotClockwise * Math.PI / 2);
+      const overscan = 1.18;
+      ctx.drawImage(img, -tam * overscan / 2, -tam * overscan / 2, tam * overscan, tam * overscan);
+      ctx.restore();
+    }
+
+    function dibujarRioPiezas(tam, comp, piezas, poolLago) {
+      // El autotile de piezas asume un camino de UN solo ancho de celda.
+      // El motor no lo garantiza -- un delta, confluencia o recodo ancho
+      // deja tramos de 2-3 celdas de grosor (confirmado contra
+      // estado.json), y forzar ahi la logica de tangente anterior/
+      // siguiente produce el mismo tipo de patron repetido sin sentido
+      // que el bug de adyacencia cardinal ya corregido arriba. Deteccion:
+      // si una celda tiene 3 o mas vecinos de rio en su entorno de 8
+      // direcciones (no solo los 2 del camino lineal), es una celda
+      // "ancha/interior".
+      //
+      // Primer intento de relleno para esas celdas (retirado): un circulo
+      // dibujarCuenca por celda suelta -- correcto uno a uno, pero varias
+      // decenas de circulos semitransparentes solapados entre si en el
+      // arnes visual se veian como una mancha de costuras circulares
+      // duras, no como una laguna limpia. Sustituido por lo mismo que ya
+      // usa un lago/poza real: agrupar las celdas anchas contiguas (cuatro
+      // vecinos) en sub-cuencas y estampar sobre su recuadro real con
+      // dibujarCuencaConAssets (mismo sello de agua.lago/lago_color que
+      // el resto del mapa, con su propio fallback de circulos si tampoco
+      // hay sello disponible) -- una ampliacion de rio simplemente se lee
+      // como una laguna pequeña, que es honesto a lo que es.
+      const clavesComp = new Set(comp.map(c => c.x + ',' + c.y));
+      const mapaCeldas = new Map(comp.map(c => [c.x + ',' + c.y, c]));
+      function gradoReal(c) {
+        let n = 0;
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            if (clavesComp.has((c.x + dx) + ',' + (c.y + dy))) n++;
+          }
+        }
+        return n;
+      }
+
+      const anchasSet = new Set();
+      for (const c of comp) if (gradoReal(c) >= 3) anchasSet.add(c.x + ',' + c.y);
+
+      const visitadoAncho = new Set();
+      for (const clave of anchasSet) {
+        if (visitadoAncho.has(clave)) continue;
+        const pila = [mapaCeldas.get(clave)];
+        visitadoAncho.add(clave);
+        const sub = [];
+        while (pila.length) {
+          const actual = pila.pop();
+          sub.push(actual);
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const k = (actual.x + dx) + ',' + (actual.y + dy);
+            if (anchasSet.has(k) && !visitadoAncho.has(k)) {
+              visitadoAncho.add(k);
+              pila.push(mapaCeldas.get(k));
+            }
+          }
+        }
+        dibujarCuencaConAssets(tam, sub, poolLago);
+      }
+
+      const camino = ordenarCaminoRio(comp);
+      for (let i = 0; i < camino.length; i++) {
+        const celda = camino[i];
+        if (anchasSet.has(celda.x + ',' + celda.y)) continue;
+        const anterior = camino[i - 1];
+        const siguiente = camino[i + 1];
+        const cx = celda.x * tam + tam / 2, cy = celda.y * tam + tam / 2;
+
+        const dirHacia = (otra) => direccionCardinalMasCercana(otra.x - celda.x, otra.y - celda.y);
+
+        let img, rot;
+        if (anterior && siguiente) {
+          const dPrev = dirHacia(anterior), dSig = dirHacia(siguiente);
+          if (dPrev === (dSig + 2) % 4) {
+            img = piezas.recto;
+            rot = (dPrev === 0 || dPrev === 2) ? 1 : 0;
+          } else if (dPrev === dSig) {
+            // Paso diagonal seguido de otro que redondea al mismo cardinal
+            // (el camino "rebota" sobre el mismo eje) -- se aproxima como
+            // tramo recto en ese eje en vez de anadir una pieza dedicada.
+            img = piezas.recto;
+            rot = (dPrev === 0 || dPrev === 2) ? 1 : 0;
+          } else {
+            img = piezas.curva;
+            rot = 0;
+            for (let k = 0; k < 4; k++) {
+              const par = [k, (k + 3) % 4].sort((a, b) => a - b);
+              const objetivo = [dPrev, dSig].sort((a, b) => a - b);
+              if (par[0] === objetivo[0] && par[1] === objetivo[1]) { rot = k; break; }
+            }
+          }
+        } else if (anterior || siguiente) {
+          img = piezas.gancho;
+          const dir = dirHacia(anterior || siguiente);
+          rot = ((dir - 3) % 4 + 4) % 4;
+        } else {
+          dibujarCuenca(tam, [celda]);
+          continue;
+        }
+
+        dibujarPiezaRotada(img, cx, cy, tam, rot);
+      }
+    }
+
+    function dibujarHidrografia(tam, data) {
+      const colorActivo = estiloColorActivo();
+      const poolLago = colorActivo && (catalogoAssets.agua.lago_color || []).length > 0
+        ? catalogoAssets.agua.lago_color : (catalogoAssets.agua.lago || []);
+      const variantesRio = catalogoAssets.agua.rio || [];
+      const piezasRio = catalogoAssets.agua.piezas_rio || {};
+      const piezasCargadas = colorActivo && ['recto', 'curva', 'cruce', 'te', 'gancho'].every(
+        (k) => piezasRio[k] && imagenesCache['agua/piezas_rio/' + k],
+      );
+      const piezasImg = piezasCargadas ? {
+        recto: imagenesCache['agua/piezas_rio/recto'],
+        curva: imagenesCache['agua/piezas_rio/curva'],
+        cruce: imagenesCache['agua/piezas_rio/cruce'],
+        te: imagenesCache['agua/piezas_rio/te'],
+        gancho: imagenesCache['agua/piezas_rio/gancho'],
+      } : null;
+
+      componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, poolLago));
+      componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, poolLago));
 
       for (const comp of componentesAgua(data, 'rio')) {
-        if (comp.length < 2) { dibujarCuencaConAssets(tam, comp, variantesLago); continue; }
-        if (variantesRio.length > 0) dibujarRioConAssets(tam, comp, variantesRio);
+        if (comp.length < 2) { dibujarCuencaConAssets(tam, comp, poolLago); continue; }
+        if (piezasImg) dibujarRioPiezas(tam, comp, piezasImg, poolLago);
+        else if (variantesRio.length > 0) dibujarRioConAssets(tam, comp, variantesRio);
         else dibujarRioVectorial(tam, comp);
       }
     }
@@ -1363,23 +1574,49 @@ def _agrupar_por_prefijo(carpeta: Path) -> dict[str, list[str]]:
     return agrupado
 
 
+def _listar_pngs(carpeta: Path) -> list[str]:
+    """Cualquier .png de la carpeta cuenta como variante intercambiable,
+    sin convencion de prefijo -- mismo criterio que relieve/montana."""
+    if not carpeta.is_dir():
+        return []
+    return sorted(p.name for p in carpeta.iterdir() if p.is_file() and p.suffix.lower() == ".png")
+
+
+def _listar_pngs_por_nombre(carpeta: Path) -> dict[str, str]:
+    """Como _listar_pngs, pero expone cada pieza por su nombre de archivo
+    (sin extension) en vez de agruparlas como variantes -- para un kit de
+    piezas con significado funcional propio (recto/curva/cruce/te/gancho
+    de agua/rio_piezas/), no variantes esteticas intercambiables."""
+    if not carpeta.is_dir():
+        return {}
+    return {p.stem: p.name for p in sorted(carpeta.iterdir()) if p.is_file() and p.suffix.lower() == ".png"}
+
+
 def construir_manifiesto_assets() -> dict[str, Any]:
     """Escanea RUTA_ASSETS en cada peticion (biblioteca pequeña, coste
     despreciable) y agrupa los archivos encontrados por categoria:
     flora.especie, agua.{lago,rio} y criaturas.especie por prefijo de
     nombre de archivo; relieve.montana con cualquier .png en esa carpeta
-    (una unica variante de sello hoy, sin distincion de nombre)."""
-    relieve_montana: list[str] = []
-    carpeta_relieve = RUTA_ASSETS / "relieve"
-    if carpeta_relieve.is_dir():
-        relieve_montana = sorted(
-            p.name for p in carpeta_relieve.iterdir() if p.is_file() and p.suffix.lower() == ".png"
-        )
+    (sin distincion de nombre).
 
+    2026-08-27 (pivote LOD tinta/color): cada categoria de terreno gana un
+    segundo escenario -- flora_color/ y relieve_color/ (mismo convenio que
+    sus gemelas en tinta) y agua.lago_color -- que el visor solo usa a
+    partir de cierto nivel de zoom (ZOOM_ESTILO_COLOR en el cliente); si
+    una de estas carpetas esta vacia, el cliente simplemente sigue usando
+    la variante en tinta a cualquier zoom, no rompe nada. agua.piezas_rio
+    es un kit de piezas (no variantes) para el autotile de rio por celda,
+    ver dibujarRioPiezas() en el cliente."""
     return {
         "flora": _agrupar_por_prefijo(RUTA_ASSETS / "flora"),
-        "relieve": {"montana": relieve_montana},
-        "agua": _agrupar_por_prefijo(RUTA_ASSETS / "agua"),
+        "flora_color": _agrupar_por_prefijo(RUTA_ASSETS / "flora_color"),
+        "relieve": {
+            "montana": _listar_pngs(RUTA_ASSETS / "relieve"),
+            "montana_color": _listar_pngs(RUTA_ASSETS / "relieve_color"),
+        },
+        "agua": _agrupar_por_prefijo(RUTA_ASSETS / "agua") | {
+            "piezas_rio": _listar_pngs_por_nombre(RUTA_ASSETS / "agua" / "rio_piezas"),
+        },
         "criaturas": _agrupar_por_prefijo(RUTA_ASSETS / "criaturas"),
     }
 
@@ -1425,7 +1662,9 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
 
         destino = (RUTA_ASSETS / unquote(ruta_relativa)).resolve()
         carpetas_publicas = (
-            RUTA_ASSETS / "flora", RUTA_ASSETS / "relieve", RUTA_ASSETS / "agua", RUTA_ASSETS / "criaturas",
+            RUTA_ASSETS / "flora", RUTA_ASSETS / "flora_color",
+            RUTA_ASSETS / "relieve", RUTA_ASSETS / "relieve_color",
+            RUTA_ASSETS / "agua", RUTA_ASSETS / "criaturas",
         )
         if not any(destino.is_relative_to(c.resolve()) for c in carpetas_publicas):
             self.send_response(403)
