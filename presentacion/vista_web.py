@@ -284,6 +284,17 @@ HTML_VISOR = """<!DOCTYPE html>
       'necromasa': [90, 81, 72],
     };
 
+    // Tamano relativo entre especies al dibujar el retrato real (ver uso en
+    // dibujarFrame): gnomo como referencia, el resto proporcionado a ojo
+    // (no hay una medida en cm en el ECS que calibrar). Sin entrada aqui
+    // -> escala 1 (mismo tamano que antes de esta correccion).
+    const ESCALA_ESPECIE = {
+      'gnomo':   1,
+      'lobo':    0.85,
+      'conejo':  0.5,
+      'ardilla': 0.4,
+    };
+
     // Color por especie de planta (config/constantes.yaml, flora.especies --
     // exactamente estas cinco existen hoy en el catalogo, ninguna inventada).
     const COLOR_ESPECIE = {
@@ -1069,8 +1080,28 @@ HTML_VISOR = """<!DOCTYPE html>
         return n;
       }
 
+      const camino = ordenarCaminoRio(comp);
+      const dirHaciaDesde = (celda, otra) => direccionCardinalMasCercana(otra.x - celda.x, otra.y - celda.y);
+
+      // (2026-08-27, feedback de Diego con captura real: un fragmento
+      // corto en forma de "L" -- p.ej. (0,28)->(1,28)->(0,29), dos pasos
+      // diagonales consecutivos -- se veia como un gancho suelto sin
+      // conectar. Causa: direccionCardinalMasCercana() redondea CADA paso
+      // por separado, y dos pasos diagonales en la misma "L" pueden
+      // redondear los dos al MISMO cardinal (el desempate fijo hacia
+      // horizontal) aunque el camino real gire -- la celda del medio
+      // elegia "recto" con una orientacion que no encajaba con sus
+      // vecinos reales, geometricamente incoherente. Igual que con las
+      // celdas anchas: en vez de forzar una pieza que no le corresponde,
+      // esa celda cae al mismo sello de laguna pequeña.
       const anchasSet = new Set();
       for (const c of comp) if (gradoReal(c) >= 3) anchasSet.add(c.x + ',' + c.y);
+      for (let i = 1; i < camino.length - 1; i++) {
+        const celda = camino[i];
+        const dPrev = dirHaciaDesde(celda, camino[i - 1]);
+        const dSig = dirHaciaDesde(celda, camino[i + 1]);
+        if (dPrev === dSig) anchasSet.add(celda.x + ',' + celda.y);
+      }
 
       const visitadoAncho = new Set();
       for (const clave of anchasSet) {
@@ -1092,26 +1123,20 @@ HTML_VISOR = """<!DOCTYPE html>
         dibujarCuencaConAssets(tam, sub, poolLago);
       }
 
-      const camino = ordenarCaminoRio(comp);
       for (let i = 0; i < camino.length; i++) {
         const celda = camino[i];
         if (anchasSet.has(celda.x + ',' + celda.y)) continue;
         const anterior = camino[i - 1];
         const siguiente = camino[i + 1];
         const cx = celda.x * tam + tam / 2, cy = celda.y * tam + tam / 2;
-
-        const dirHacia = (otra) => direccionCardinalMasCercana(otra.x - celda.x, otra.y - celda.y);
+        const dirHacia = (otra) => dirHaciaDesde(celda, otra);
 
         let img, rot;
         if (anterior && siguiente) {
           const dPrev = dirHacia(anterior), dSig = dirHacia(siguiente);
+          // dPrev === dSig ya no puede llegar aqui (se filtro arriba a
+          // anchasSet); solo quedan opuesto (recto) o adyacente (curva).
           if (dPrev === (dSig + 2) % 4) {
-            img = piezas.recto;
-            rot = (dPrev === 0 || dPrev === 2) ? 1 : 0;
-          } else if (dPrev === dSig) {
-            // Paso diagonal seguido de otro que redondea al mismo cardinal
-            // (el camino "rebota" sobre el mismo eje) -- se aproxima como
-            // tramo recto en ese eje en vez de anadir una pieza dedicada.
             img = piezas.recto;
             rot = (dPrev === 0 || dPrev === 2) ? 1 : 0;
           } else {
@@ -1356,7 +1381,29 @@ HTML_VISOR = """<!DOCTYPE html>
       filtroCronica = ev.target.value.toLowerCase();
     });
 
-    async function actualizar() {
+    // (2026-08-27, corrigiendo feedback de Diego contra el visor real --
+    // "el zoom no es fluido, las criaturas saltan como con lag") Antes,
+    // TODO el dibujo del canvas vivia dentro de actualizar(), disparado por
+    // un solo setInterval(actualizar, 250) -- es decir, el mapa entero solo
+    // se REPINTABA 4 veces por segundo, encadenado a cuando llegaba un
+    // fetch nuevo. Arrastrar/hacer zoom con el raton SI actualizaba
+    // camara.zoom/offsetX/Y al instante, pero la pantalla no reflejaba ese
+    // cambio hasta el siguiente tick del intervalo -- de ahi el zoom a
+    // trompicones y las criaturas "saltando" de una posicion a la
+    // siguiente sin ningun paso intermedio. Esto ya era asi antes del
+    // pivote a color de hoy, pero se ha notado mas porque cada repintado
+    // ahora hace mas trabajo (composicion de sellos a color, autotile de
+    // rio), alargando el tiempo entre fotogramas visibles.
+    //
+    // Separado en dos bucles independientes: obtenerDatos() seguisiendo
+    // por polling a 250ms (frecuencia del propio motor, no tiene sentido
+    // pedir mas rapido), solo actualiza el ESTADO (ultimoDataConocido) y
+    // los paneles de texto/cronica -- nunca toca el canvas directamente.
+    // dibujarFrame() corre en requestAnimationFrame (el ritmo del
+    // navegador, tipicamente 60Hz) y SOLO dibuja, leyendo siempre el
+    // ultimo estado conocido -- el pan/zoom del raton se refleja en el
+    // fotogramas siguiente, no en el proximo tick de red.
+    async function obtenerDatos() {
       try {
         const resp = await fetch('/estado.json');
         if (!resp.ok) return;
@@ -1374,77 +1421,106 @@ HTML_VISOR = """<!DOCTYPE html>
           `<strong>Conejos:</strong> ${data.censo.conejo || 0} &middot; <strong>Ardillas:</strong> ${data.censo.ardilla || 0}<br>` +
           `<strong>Restos (Necromasa):</strong> ${data.censo.necromasa || 0}`;
 
-        tam0 = canvas.width / data.ancho;
-        const tam = tam0;
-
-        // Modo seguimiento (informe seccion 6.1): la camara persigue a la
-        // entidad seleccionada, con suavizado exponencial en vez de un
-        // salto brusco cada tick -- solo mueve offsetX/offsetY, el zoom
-        // actual del usuario se respeta.
-        if (modoSeguimiento && entidadSeleccionadaId !== null) {
-          const objetivo = data.entidades.find((en) => en.id === entidadSeleccionadaId);
-          if (objetivo) {
-            const deseadoX = canvas.width / 2 - (objetivo.x + 0.5) * tam * camara.zoom;
-            const deseadoY = canvas.height / 2 - (objetivo.y + 0.5) * tam * camara.zoom;
-            camara.offsetX += (deseadoX - camara.offsetX) * 0.15;
-            camara.offsetY += (deseadoY - camara.offsetY) * 0.15;
-          }
-        }
-
         const claveActual = `${data.semilla}:${data.ancho}:${data.alto}`;
         if (pergaminoClave !== claveActual) {
           pergaminoCache = construirPergamino(data.semilla, data.ancho, data.alto);
           pergaminoClave = claveActual;
         }
 
-        document.getElementById('lectura-zoom').textContent = `Zoom: ${camara.zoom.toFixed(2)}x`;
+        actualizarFicha(data);
 
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.save();
-        ctx.translate(camara.offsetX, camara.offsetY);
-        ctx.scale(camara.zoom, camara.zoom);
+        const divCronica = document.getElementById('cronica');
+        const lineasFiltradas = filtroCronica
+          ? data.cronica.filter((l) => l.toLowerCase().includes(filtroCronica))
+          : data.cronica;
+        divCronica.innerHTML = lineasFiltradas.map(l => `<div class="linea-cronica">${l}</div>`).join('');
+      } catch (err) {
+        console.error("Error al actualizar instantanea:", err);
+      }
+    }
+    setInterval(obtenerDatos, 250);
+    obtenerDatos();
 
-        const frustum = calcularFrustum(data);
-        ctx.drawImage(pergaminoCache, 0, 0, data.ancho * tam, data.alto * tam);
-        dibujarBiomas(tam, data);
+    let ultimoTiempoFrame = null;
 
-        for (let y = frustum.yMin; y < frustum.yMax; y++) {
-          for (let x = frustum.xMin; x < frustum.xMax; x++) {
-            const c = data.celdas[y][x];
-            const px = x * tam, py = y * tam;
+    function dibujarFrame(tiempoAhora) {
+      requestAnimationFrame(dibujarFrame);
+      const data = ultimoDataConocido;
+      if (!data || !pergaminoCache) return;
 
-            // Agua permanente (rio/lago/poza) ya no se pinta plana aqui --
-            // dibujarHidrografia() la traza como forma vectorial despues de
-            // esta pasada. El charco efimero SI se queda plano: es una
-            // mancha de un tick, no un cuerpo geografico que merezca trazo.
-            if (c.profundidad_charco > 0) {
-              const intensidad = Math.min(1, c.profundidad_charco / 0.3);
-              ctx.fillStyle = `rgba(${COLOR_CHARCO[0]}, ${COLOR_CHARCO[1]}, ${COLOR_CHARCO[2]}, ${0.15 + intensidad * 0.3})`;
-              ctx.fillRect(px, py, tam, tam);
-            }
+      // Delta de tiempo real entre fotogramas (no un contador de ticks),
+      // para que el suavizado de camara.seguimiento converja al mismo
+      // ritmo real independientemente de a cuantos Hz dibuje el navegador.
+      const dt = ultimoTiempoFrame === null ? 1 / 60 : Math.min(0.1, (tiempoAhora - ultimoTiempoFrame) / 1000);
+      ultimoTiempoFrame = tiempoAhora;
 
-            if (c.en_llamas) {
-              ctx.fillStyle = `rgba(${COLOR_FUEGO[0]}, ${COLOR_FUEGO[1]}, ${COLOR_FUEGO[2]}, 0.55)`;
-              ctx.fillRect(px, py, tam, tam);
-            }
+      tam0 = canvas.width / data.ancho;
+      const tam = tam0;
+
+      // Modo seguimiento (informe seccion 6.1): la camara persigue a la
+      // entidad seleccionada con suavizado exponencial dependiente de dt
+      // (antes era un salto de 0.15 fijo por cada tick de red de 250ms --
+      // mismo suavizado en el tiempo, pero ahora interpolado en cada
+      // fotograma en vez de en escalones de 250ms).
+      if (modoSeguimiento && entidadSeleccionadaId !== null) {
+        const objetivo = data.entidades.find((en) => en.id === entidadSeleccionadaId);
+        if (objetivo) {
+          const deseadoX = canvas.width / 2 - (objetivo.x + 0.5) * tam * camara.zoom;
+          const deseadoY = canvas.height / 2 - (objetivo.y + 0.5) * tam * camara.zoom;
+          const alfa = 1 - Math.exp(-dt / 0.15);
+          camara.offsetX += (deseadoX - camara.offsetX) * alfa;
+          camara.offsetY += (deseadoY - camara.offsetY) * alfa;
+        }
+      }
+
+      document.getElementById('lectura-zoom').textContent = `Zoom: ${camara.zoom.toFixed(2)}x`;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(camara.offsetX, camara.offsetY);
+      ctx.scale(camara.zoom, camara.zoom);
+
+      const frustum = calcularFrustum(data);
+      ctx.drawImage(pergaminoCache, 0, 0, data.ancho * tam, data.alto * tam);
+      dibujarBiomas(tam, data);
+
+      for (let y = frustum.yMin; y < frustum.yMax; y++) {
+        for (let x = frustum.xMin; x < frustum.xMax; x++) {
+          const c = data.celdas[y][x];
+          const px = x * tam, py = y * tam;
+
+          // Agua permanente (rio/lago/poza) ya no se pinta plana aqui --
+          // dibujarHidrografia() la traza como forma vectorial despues de
+          // esta pasada. El charco efimero SI se queda plano: es una
+          // mancha de un tick, no un cuerpo geografico que merezca trazo.
+          if (c.profundidad_charco > 0) {
+            const intensidad = Math.min(1, c.profundidad_charco / 0.3);
+            ctx.fillStyle = `rgba(${COLOR_CHARCO[0]}, ${COLOR_CHARCO[1]}, ${COLOR_CHARCO[2]}, ${0.15 + intensidad * 0.3})`;
+            ctx.fillRect(px, py, tam, tam);
+          }
+
+          if (c.en_llamas) {
+            ctx.fillStyle = `rgba(${COLOR_FUEGO[0]}, ${COLOR_FUEGO[1]}, ${COLOR_FUEGO[2]}, 0.55)`;
+            ctx.fillRect(px, py, tam, tam);
           }
         }
+      }
 
-        const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum);
-        if (!montanaUsoAssets) dibujarRelieve(tam, data, frustum);
-        dibujarHidrografia(tam, data);
-        dibujarVegetacion(tam, data, frustum);
-        dibujarMarco(tam, data.ancho, data.alto);
+      const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum);
+      if (!montanaUsoAssets) dibujarRelieve(tam, data, frustum);
+      dibujarHidrografia(tam, data);
+      dibujarVegetacion(tam, data, frustum);
+      dibujarMarco(tam, data.ancho, data.alto);
 
-        ctx.restore();
+      ctx.restore();
 
-        // Entidades: LOD por nivel de zoom (informe seccion 4.2), dibujadas
-        // en espacio de pantalla -- el tamano de runa/halo/etiqueta NO
-        // escala junto al mapa, lo decide el nivel de detalle actual, igual
-        // que un marcador de mapa real no cambia de tamano al hacer zoom.
-        const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
-        data.entidades.forEach(e => {
+      // Entidades: LOD por nivel de zoom (informe seccion 4.2), dibujadas
+      // en espacio de pantalla -- el tamano de runa/halo/etiqueta NO
+      // escala junto al mapa, lo decide el nivel de detalle actual, igual
+      // que un marcador de mapa real no cambia de tamano al hacer zoom.
+      const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
+      data.entidades.forEach(e => {
           const centro = mundoAPantalla((e.x + 0.5) * tam, (e.y + 0.5) * tam);
           const margen = 24;
           if (centro.x < -margen || centro.x > canvas.width + margen ||
@@ -1480,7 +1556,19 @@ HTML_VISOR = """<!DOCTYPE html>
 
           let radioEfectivo;
           if (imgCriatura) {
-            const alturaImg = nivel === 'micro' ? 34 : 22;
+            // (2026-08-27, feedback de Diego: "el conejo es mas grande que
+            // el gnomo") Antes toda especie usaba la misma alturaImg fija
+            // -- como cada recorte tiene su propio encuadre/margen dentro
+            // del lienzo (un conejo agachado deja mucho aire alrededor, un
+            // gnomo en pie casi llena el suyo), esa altura IGUAL en
+            // pixeles de pantalla no daba un tamano relativo realista
+            // entre especies. ESCALA_ESPECIE fija una proporcion a ojo
+            // (gnomo como referencia mas grande, lobo algo menor, conejo y
+            // ardilla claramente pequeños) -- no hay una medida real de
+            // "cm" en el ECS que calibrar contra, es una eleccion de
+            // legibilidad, no una medicion.
+            const alturaBase = nivel === 'micro' ? 34 : 22;
+            const alturaImg = alturaBase * (ESCALA_ESPECIE[e.tipo] ?? 1);
             const anchoImg = alturaImg * (imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1);
             ctx.drawImage(imgCriatura, centro.x - anchoImg / 2, centro.y - alturaImg / 2, anchoImg, alturaImg);
             if (seleccionada) {
@@ -1527,20 +1615,8 @@ HTML_VISOR = """<!DOCTYPE html>
             }
           }
         });
-
-        actualizarFicha(data);
-
-        const divCronica = document.getElementById('cronica');
-        const lineasFiltradas = filtroCronica
-          ? data.cronica.filter((l) => l.toLowerCase().includes(filtroCronica))
-          : data.cronica;
-        divCronica.innerHTML = lineasFiltradas.map(l => `<div class="linea-cronica">${l}</div>`).join('');
-
-      } catch (err) {
-        console.error("Error al actualizar instantanea:", err);
-      }
     }
-    setInterval(actualizar, 250);
+    requestAnimationFrame(dibujarFrame);
   </script>
 </body>
 </html>

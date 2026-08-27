@@ -307,3 +307,90 @@ autotile por tangente de camino no intenta detectar confluencias reales
 de 3-4 brazos (un caso raro según el propio motor, y las celdas anchas
 ya caen a sello de laguna). Si en el futuro se quiere una detección
 explícita de confluencias, esas dos piezas ya están listas.
+
+### Feedback real de Diego en su navegador (2026-08-27, más tarde el mismo día)
+
+Diego probó el visor real (no una captura mía) y reportó, con capturas:
+"no veo ríos, si lo acerco se ve así [fragmento roto]... las criaturas
+saltan como si fuese con lag, el zoom no es fluido, las criaturas no
+conservan un tamaño realista, el conejo es más grande que el gnomo...
+no se ve ni un solo árbol en todo el mapa". Cinco hallazgos reales,
+cuatro corregidos, uno documentado como límite de datos del motor (no
+del visor):
+
+1. **Zoom no fluido + criaturas "con lag".** Causa raíz real: TODO el
+   dibujo del canvas vivía dentro de `actualizar()`, disparado por un
+   único `setInterval(actualizar, 250)` — el mapa entero solo se
+   REPINTABA 4 veces por segundo, encadenado a cuando llegaba un fetch
+   nuevo. Arrastrar/hacer zoom actualizaba `camara.zoom`/`offsetX/Y` al
+   instante, pero la pantalla no lo reflejaba hasta el siguiente tick
+   del intervalo. Ya era así antes del pivote de hoy, pero se ha notado
+   más porque cada repintado ahora hace más trabajo (composición de
+   sellos a color, autotile de río), alargando el hueco entre
+   fotogramas visibles. Arreglo: separado en `obtenerDatos()` (fetch +
+   paneles de texto, sigue a 250ms, es la cadencia real del motor) y
+   `dibujarFrame()` (todo el `ctx.*`, ahora en su propio bucle
+   `requestAnimationFrame`, al ritmo del navegador). El seguimiento de
+   cámara (`modoSeguimiento`) pasó de un paso fijo de 0.15 por tick de
+   red a una interpolación exponencial por delta de tiempo real
+   (`1 - Math.exp(-dt/0.15)`), mismo tiempo de convergencia, ahora
+   suave en vez de a saltos de 250ms. Medido con Playwright: 60fps
+   reales en el escenario más pesado (zoom alto, a color, con autotile
+   de río activo) — el redibujado no era el cuello de botella real, el
+   intervalo sí lo era.
+2. **Río roto al acercar el zoom.** Confirmado contra `estado.json`:
+   la captura de Diego correspondía a un fragmento corto en forma de
+   "L" (dos pasos diagonales seguidos, p.ej. `(0,28)->(1,28)->(0,29)`).
+   `direccionCardinalMasCercana()` redondea cada paso por separado, y
+   dos pasos diagonales de una "L" pueden redondear los dos al MISMO
+   cardinal (el desempate fijo hacia horizontal) aunque el camino real
+   gire — la celda del medio elegía la pieza "recto" con una
+   orientación que no encajaba con sus vecinos reales. Mismo criterio
+   que las celdas anchas: esa celda cae ahora al sello de laguna
+   pequeña en vez de forzar una pieza geométricamente incoherente.
+   Verificado repitiendo el zoom exacto de la captura de Diego sobre el
+   mismo fragmento (semilla fija) antes/después del arreglo.
+3. **Criaturas sin tamaño relativo realista.** Causa: `alturaImg` era
+   una constante fija (34px/22px según nivel de zoom) igual para las 4
+   especies — un conejo agachado con mucho aire alrededor de su propio
+   recorte y un gnomo en pie que casi llena el suyo acaban con la misma
+   altura EN PANTALLA pese a representar animales de tamaño muy
+   distinto. Nueva constante `ESCALA_ESPECIE` (gnomo=1, lobo=0.85,
+   conejo=0.5, ardilla=0.4 — elección de legibilidad a ojo, no hay una
+   medida en cm en el ECS contra la que calibrar) multiplica la altura
+   base por especie. Verificado visualmente: gnomo > lobo > conejo >
+   ardilla, consistente en el visor real.
+4. **Montañas repetitivas / mapa no se siente único.** `relieve_color`
+   solo tenía 3 variantes — con 85 celdas de montaña en este mundo
+   formando una sola cordillera grande, 3 siluetas se notan mucho más
+   que las 11 de la biblioteca en tinta. Añadidas 3 variantes más
+   (`montana_color_4/5/6`, mismas filas de picos nítidos de
+   `Gemini_Generated_Image_mwy3o8...` que las 3 ya usadas) — 6 en total.
+   Mejora real pero parcial: con una cordillera muy densa la repetición
+   sigue siendo perceptible con cualquier número finito de variantes
+   fijas; la propuesta de LOD por cluster documentada más arriba
+   (`relieve/macizo_<n>.png`, una imagen por cordillera entera en vez
+   de por celda) es la vía de fondo si esto sigue sin convencer, no
+   implementada todavía.
+5. **"No se ve ni un solo árbol en todo el mapa" — límite de datos del
+   motor, NO del visor, sin tocar.** Verificado contra `estado.json`
+   real: en este mundo (semilla fija) solo existen **2 entidades
+   Planta de especie manzano** en las 1600 celdas del grid — bosque es
+   apenas el 12% del terreno (194/1600 celdas) y `fraccion_siembra_inicial`
+   (0.08, marcada PROVISIONAL en `config/constantes.yaml` desde antes
+   de esta sesión) se aplica sobre ese 12%. Con solo 2 árboles en todo
+   el mundo, es esperable no encontrar ninguno con un vistazo rápido —
+   el visor SÍ los dibuja (confirmado con las coordenadas reales de
+   esos 2 manzanos), el problema es la escasez de datos que dibujar, no
+   el dibujo en sí. Esto es una decisión de calibración del motor
+   (cuánta flora nace, no cómo se pinta), fuera del alcance de este
+   README y de lo que se me ha pedido tocar hoy — señalado explícitamente
+   en vez de forzar una densidad visual que no reflejaría el estado
+   real de la simulación.
+
+**Verificación:** servidor real + Playwright reproduciendo cada síntoma
+con las coordenadas reales de `estado.json` antes/después de cada
+arreglo (no capturas genéricas); medición de FPS real vía
+`requestAnimationFrame` para el punto 1. Pendiente, como siempre:
+confirmación de Diego en su propio navegador — el sandbox sigue sin uno
+real disponible.
