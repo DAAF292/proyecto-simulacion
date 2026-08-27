@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import http.server
 import json
+import mimetypes
+import re
 import threading
+from pathlib import Path
 from typing import Any
 
 from componentes.capacidad_mental import CapacidadMental
@@ -293,6 +296,108 @@ HTML_VISOR = """<!DOCTYPE html>
 
     let pergaminoCache = null;   // canvas offscreen con grano, cacheado por semilla+tamano
     let pergaminoClave = null;
+
+    // Biblioteca de assets externos (sellos cartograficos) -- ver
+    // presentacion/assets/README.md. Este archivo nunca genera estas
+    // imagenes, solo las detecta (si alguien las coloca ahi) y las usa.
+    // Mientras catalogoAssets.flora[especie] este vacio para una especie
+    // concreta (o catalogoAssets.relieve.montana este vacio), esa
+    // categoria sigue con el dibujo vectorial de siempre -- ver el guard
+    // en dibujarVegetacion() y en dibujarStampsRelieveYFlora() mas abajo.
+    let catalogoAssets = { flora: {}, relieve: { montana: [] } };
+    const imagenesCache = {};
+
+    async function cargarBibliotecaAssets() {
+      try {
+        const resp = await fetch('/assets_manifest.json');
+        if (!resp.ok) return;
+        catalogoAssets = await resp.json();
+      } catch (err) {
+        console.error('No se pudo leer /assets_manifest.json:', err);
+        return;
+      }
+      const rutas = [];
+      for (const especie in catalogoAssets.flora) {
+        for (const nombre of catalogoAssets.flora[especie]) rutas.push('flora/' + nombre);
+      }
+      for (const nombre of catalogoAssets.relieve.montana) rutas.push('relieve/' + nombre);
+
+      await Promise.all(rutas.map((ruta) => new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => { imagenesCache[ruta] = img; resolve(); };
+        img.onerror = () => resolve();   // asset roto/movido: se ignora, no rompe el visor
+        img.src = '/assets/' + ruta;
+      })));
+    }
+    cargarBibliotecaAssets();
+
+    // Hash determinista [0,1) por celda -- mismo par (x,y,sal) da siempre
+    // el mismo valor, para que la variante/jitter elegidos no cambien de
+    // un frame a otro (nada de parpadeo por recalcular con Math.random()).
+    function hash2(x, y, sal) {
+      let h = (x * 374761393 + y * 668265263 + sal * 2147483647) | 0;
+      h = (h ^ (h >>> 13)) * 1274126177;
+      h = (h ^ (h >>> 16)) >>> 0;
+      return h / 4294967296;
+    }
+
+    function elegirVariante(lista, x, y, sal) {
+      if (!lista || lista.length === 0) return null;
+      return lista[Math.floor(hash2(x, y, sal) * lista.length) % lista.length];
+    }
+
+    // Estampado con Y-sorting (informe: montañas y flora ordenadas de
+    // norte a sur en un unico pase, para que el sur oculte al norte).
+    // Devuelve true si dibujo con assets reales la categoria de relieve
+    // (para que el llamador sepa si debe caer al dibujarRelieve() vectorial).
+    function dibujarStampsRelieveYFlora(tam, data, frustum) {
+      const montanaConAssets = (catalogoAssets.relieve.montana || []).length > 0;
+      const elementos = [];
+
+      for (let y = frustum.yMin; y < frustum.yMax; y++) {
+        for (let x = frustum.xMin; x < frustum.xMax; x++) {
+          const c = data.celdas[y][x];
+
+          if (c.bioma === 'montana' && montanaConAssets) {
+            const nombre = elegirVariante(catalogoAssets.relieve.montana, x, y, 91);
+            const img = imagenesCache['relieve/' + nombre];
+            if (img) {
+              const baseY = (y + 1) * tam;
+              elementos.push({
+                img, ordenY: baseY,
+                cx: x * tam + tam / 2 + (hash2(x, y, 92) - 0.5) * tam * 0.3,
+                baseY,
+                escala: 1.3 + c.elevacion * 0.7,
+              });
+            }
+          }
+
+          if (c.planta) {
+            const variantes = catalogoAssets.flora[c.planta.especie] || [];
+            const nombre = elegirVariante(variantes, x, y, 93);
+            const img = nombre ? imagenesCache['flora/' + nombre] : null;
+            if (img) {
+              const baseY = y * tam + tam * 0.85 + (hash2(x, y, 95) - 0.5) * tam * 0.3;
+              elementos.push({
+                img, ordenY: baseY,
+                cx: x * tam + tam / 2 + (hash2(x, y, 94) - 0.5) * tam * 0.5,
+                baseY,
+                escala: 0.4 + c.planta.etapa * 0.6,
+              });
+            }
+          }
+        }
+      }
+
+      elementos.sort((a, b) => a.ordenY - b.ordenY);
+      for (const el of elementos) {
+        const ancho = tam * 1.3 * el.escala;
+        const alto = ancho * (el.img.naturalHeight / el.img.naturalWidth || 1);
+        ctx.drawImage(el.img, el.cx - ancho / 2, el.baseY - alto, ancho, alto);
+      }
+
+      return montanaConAssets;
+    }
 
     // Camara afin (informe seccion 4.1): tam0 es el tamano de celda de
     // referencia con zoom=1 (todo el grid cabe exacto en el canvas), fijado
@@ -668,6 +773,9 @@ HTML_VISOR = """<!DOCTYPE html>
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           if (!c.planta) continue;
+          // Esta especie ya tiene assets reales cargados -- la dibuja
+          // dibujarStampsRelieveYFlora() como sello, no como vectorial.
+          if ((catalogoAssets.flora[c.planta.especie] || []).length > 0) continue;
           const cx = x * tam + tam / 2, cy = y * tam + tam / 2;
           const escala = 0.32 + 0.68 * c.planta.etapa;
           const [r, g, b] = COLOR_ESPECIE[c.planta.especie] || [90, 110, 70];
@@ -917,7 +1025,8 @@ HTML_VISOR = """<!DOCTYPE html>
           }
         }
 
-        dibujarRelieve(tam, data, frustum);
+        const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum);
+        if (!montanaUsoAssets) dibujarRelieve(tam, data, frustum);
         dibujarHidrografia(tam, data);
         dibujarVegetacion(tam, data, frustum);
         dibujarReticula(tam, data.ancho, data.alto);
@@ -1006,6 +1115,44 @@ HTML_VISOR = """<!DOCTYPE html>
 """
 
 
+RUTA_ASSETS = Path(__file__).resolve().parent / "assets"
+"""Biblioteca de imagenes externas (sellos cartograficos) que ALGUIEN
+aporta -- este archivo NUNCA genera ni dibuja estas imagenes, solo las
+detecta y las sirve. Ver presentacion/assets/README.md para la
+convencion de nombres exacta. Mientras una categoria no tenga ningun
+PNG todavia, el cliente cae de vuelta al dibujo vectorial de
+dibujarVegetacion()/dibujarRelieve() -- ninguna categoria vacia rompe
+el visor ni queda en blanco."""
+
+_PATRON_ARCHIVO_FLORA = re.compile(r"^([a-z_]+)_\d+\.png$")
+
+
+def construir_manifiesto_assets() -> dict[str, Any]:
+    """Escanea RUTA_ASSETS en cada peticion (biblioteca pequeña, coste
+    despreciable) y agrupa los archivos encontrados por categoria --
+    flora.especie (prefijo del nombre de archivo, antes del ultimo
+    "_N.png") y relieve.montana (cualquier .png en esa carpeta, sin
+    distincion de nombre). No exige que el prefijo de flora coincida con
+    una especie real del catalogo -- si no coincide, simplemente ningun
+    Celda.planta.especie lo va a seleccionar nunca, inofensivo."""
+    flora: dict[str, list[str]] = {}
+    carpeta_flora = RUTA_ASSETS / "flora"
+    if carpeta_flora.is_dir():
+        for archivo in sorted(carpeta_flora.iterdir()):
+            m = _PATRON_ARCHIVO_FLORA.match(archivo.name)
+            if m and archivo.is_file():
+                flora.setdefault(m.group(1), []).append(archivo.name)
+
+    relieve_montana: list[str] = []
+    carpeta_relieve = RUTA_ASSETS / "relieve"
+    if carpeta_relieve.is_dir():
+        relieve_montana = sorted(
+            p.name for p in carpeta_relieve.iterdir() if p.is_file() and p.suffix.lower() == ".png"
+        )
+
+    return {"flora": flora, "relieve": {"montana": relieve_montana}}
+
+
 class ManejadorWeb(http.server.BaseHTTPRequestHandler):
     """Manejador HTTP simple sin librerías externas."""
 
@@ -1023,9 +1170,43 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             payload = self.servidor_ref.instantanea_json if self.servidor_ref else "{}"
             self.wfile.write(payload.encode("utf-8"))
+        elif self.path == "/assets_manifest.json":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(construir_manifiesto_assets()).encode("utf-8"))
+        elif self.path.startswith("/assets/"):
+            self._servir_asset(self.path[len("/assets/") :])
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _servir_asset(self, ruta_relativa: str) -> None:
+        """Sirve un archivo de RUTA_ASSETS. Resuelve la ruta final y
+        verifica que siga colgando de RUTA_ASSETS antes de leerla --
+        sin esto, un path.startswith("/assets/") con "../../" en la URL
+        serviria cualquier archivo legible del sistema (vulnerabilidad
+        de path traversal), no solo la biblioteca de imagenes."""
+        from urllib.parse import unquote
+
+        destino = (RUTA_ASSETS / unquote(ruta_relativa)).resolve()
+        try:
+            destino.relative_to(RUTA_ASSETS.resolve())
+        except ValueError:
+            self.send_response(403)
+            self.end_headers()
+            return
+
+        if not destino.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        tipo, _ = mimetypes.guess_type(str(destino))
+        self.send_response(200)
+        self.send_header("Content-Type", tipo or "application/octet-stream")
+        self.end_headers()
+        self.wfile.write(destino.read_bytes())
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
