@@ -94,7 +94,27 @@ HTML_VISOR = """<!DOCTYPE html>
       border-radius: 3px;
       box-shadow: 0 0 22px rgba(0,0,0,0.55);
     }
-    #canvas-mapa { display: block; background: var(--pergamino); }
+    #canvas-mapa { display: block; background: var(--pergamino); cursor: grab; touch-action: none; }
+    #canvas-mapa.arrastrando { cursor: grabbing; }
+    #controles-mapa {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 11.5px;
+      color: var(--pergamino-oscuro);
+    }
+    #btn-centrar {
+      font-family: 'IM Fell English', Georgia, serif;
+      font-size: 11.5px;
+      background: linear-gradient(180deg, #efe2c0, #cbb789);
+      color: var(--tinta-fuerte);
+      border: 1px solid #6b4a2c;
+      border-radius: 2px;
+      padding: 3px 10px;
+      cursor: pointer;
+    }
+    #btn-centrar:hover { background: #efe2c0; }
     #panel-lateral {
       flex: 1;
       min-width: 280px;
@@ -146,10 +166,14 @@ HTML_VISOR = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Regio Septentrionalis: Vallis Runica</h1>
-  <div id="subtitulo">Un Mundo Vivo &mdash; Codice de Simulacion (Paso 1: pergamino, acuarela de biomas, reticula)</div>
+  <div id="subtitulo">Un Mundo Vivo &mdash; Codice de Simulacion (Paso 3: camara interactiva, runas Futhark, LOD)</div>
   <div id="contenedor">
     <div id="marco-mapa">
       <canvas id="canvas-mapa" width="700" height="700"></canvas>
+      <div id="controles-mapa">
+        <span id="lectura-zoom">Zoom: 1.00x</span>
+        <button id="btn-centrar" type="button">Centrar mapa</button>
+      </div>
     </div>
     <div id="panel-lateral">
       <div class="card" id="info-mundo">Cargando...</div>
@@ -160,7 +184,7 @@ HTML_VISOR = """<!DOCTYPE html>
       </div>
     </div>
   </div>
-  <div id="footer-nota">Runas, camara interactiva, hidrografia vectorial y panel de inspeccion ECS llegan en pasos posteriores de esta misma propuesta.</div>
+  <div id="footer-nota">Rueda del raton: zoom (centrado en el cursor). Arrastrar: desplazar el mapa. El panel de inspeccion ECS con ficha de criatura y seguimiento llega en el paso siguiente de esta misma propuesta.</div>
 
   <script>
     const canvas = document.getElementById('canvas-mapa');
@@ -179,7 +203,18 @@ HTML_VISOR = """<!DOCTYPE html>
     const COLOR_AGUA = [58, 92, 122];
     const COLOR_CHARCO = [90, 130, 160];
     const COLOR_FUEGO = [168, 58, 38];
-    const GLIFOS = { 'gnomo': '🧙', 'lobo': '🐺', 'conejo': '🐇', 'ardilla': '🐿️', 'necromasa': '🦴' };
+    // Runas Futhark por especie (informe seccion 5 -- catalogo de identidad):
+    // Gebo/gnomo, Laguz/lobo, Kaunan/conejo, Ansuz/ardilla. Necromasa no es
+    // una criatura consciente ni figura en ese catalogo -- se queda con un
+    // glifo neutro en vez de inventarle una runa que el informe no le da.
+    const RUNAS = { 'gnomo': 'ᚷ', 'lobo': 'ᛚ', 'conejo': 'ᚲ', 'ardilla': 'ᚨ', 'necromasa': '🦴' };
+    const COLOR_INK_ESPECIE = {
+      'gnomo':   [44, 92, 138],
+      'lobo':    [138, 44, 44],
+      'conejo':  [138, 106, 28],
+      'ardilla': [44, 122, 58],
+      'necromasa': [90, 81, 72],
+    };
 
     // Color por especie de planta (config/constantes.yaml, flora.especies --
     // exactamente estas cinco existen hoy en el catalogo, ninguna inventada).
@@ -193,6 +228,79 @@ HTML_VISOR = """<!DOCTYPE html>
 
     let pergaminoCache = null;   // canvas offscreen con grano, cacheado por semilla+tamano
     let pergaminoClave = null;
+
+    // Camara afin (informe seccion 4.1): tam0 es el tamano de celda de
+    // referencia con zoom=1 (todo el grid cabe exacto en el canvas), fijado
+    // la primera vez que se conoce data.ancho. offsetX/offsetY y zoom los
+    // mueve la interaccion de raton -- ver mundoAPantalla()/pantallaAMundo()
+    // mas abajo para la formula de transformacion.
+    const ZOOM_MINIMO = 0.4, ZOOM_MAXIMO = 4.5;
+    let tam0 = null;
+    const camara = { zoom: 1, offsetX: 0, offsetY: 0 };
+
+    function centrarCamara() {
+      camara.zoom = 1;
+      camara.offsetX = 0;
+      camara.offsetY = 0;
+    }
+
+    function mundoAPantalla(x, y) {
+      return { x: x * camara.zoom + camara.offsetX, y: y * camara.zoom + camara.offsetY };
+    }
+
+    // Frustum culling (informe seccion 4.1): rango de celdas realmente
+    // visible en el canvas dado el zoom/offset actuales -- los bucles de
+    // dibujo de terreno/vegetacion solo recorren este rango, no el grid
+    // completo, aunque a 28x28 el ahorro real hoy sea modesto.
+    function calcularFrustum(data) {
+      const escala = tam0 * camara.zoom;
+      const xMin = Math.max(0, Math.floor(-camara.offsetX / escala));
+      const xMax = Math.min(data.ancho, Math.ceil((canvas.width - camara.offsetX) / escala));
+      const yMin = Math.max(0, Math.floor(-camara.offsetY / escala));
+      const yMax = Math.min(data.alto, Math.ceil((canvas.height - camara.offsetY) / escala));
+      return { xMin, xMax, yMin, yMax };
+    }
+
+    // --- Interaccion: arrastrar para desplazar, rueda para zoom ---------
+    let arrastrando = false;
+    let ultimoPunteroX = 0, ultimoPunteroY = 0;
+
+    canvas.addEventListener('mousedown', (ev) => {
+      arrastrando = true;
+      canvas.classList.add('arrastrando');
+      ultimoPunteroX = ev.clientX;
+      ultimoPunteroY = ev.clientY;
+    });
+    window.addEventListener('mouseup', () => {
+      arrastrando = false;
+      canvas.classList.remove('arrastrando');
+    });
+    window.addEventListener('mousemove', (ev) => {
+      if (!arrastrando) return;
+      const dx = ev.clientX - ultimoPunteroX, dy = ev.clientY - ultimoPunteroY;
+      ultimoPunteroX = ev.clientX;
+      ultimoPunteroY = ev.clientY;
+      camara.offsetX += dx * (canvas.width / canvas.clientWidth);
+      camara.offsetY += dy * (canvas.height / canvas.clientHeight);
+    });
+    canvas.addEventListener('wheel', (ev) => {
+      ev.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
+      const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
+
+      const zoomAnterior = camara.zoom;
+      const factor = Math.exp(-ev.deltaY * 0.001);
+      camara.zoom = Math.min(ZOOM_MAXIMO, Math.max(ZOOM_MINIMO, camara.zoom * factor));
+
+      // Zoom centrado en el cursor: el punto del mundo bajo el raton debe
+      // quedarse fijo en pantalla antes y despues de escalar.
+      const razon = camara.zoom / zoomAnterior;
+      camara.offsetX = px - (px - camara.offsetX) * razon;
+      camara.offsetY = py - (py - camara.offsetY) * razon;
+    }, { passive: false });
+
+    document.getElementById('btn-centrar').addEventListener('click', centrarCamara);
 
     // PRNG determinista (mulberry32) sembrado por instantanea.semilla --
     // el grano del pergamino debe ser el MISMO en cada recarga del mismo
@@ -242,51 +350,56 @@ HTML_VISOR = """<!DOCTYPE html>
     }
 
     function dibujarReticula(tam, ancho, alto) {
+      // Llamada dentro del contexto ya escalado por la camara (ctx.scale) --
+      // lineWidth/tamano de fuente se dividen por camara.zoom para que la
+      // tinta se vea igual de fina en pantalla sin importar el nivel de
+      // acercamiento, aunque las lineas sigan alineadas exactas con el mundo.
+      const compensa = 1 / camara.zoom;
       ctx.strokeStyle = 'rgba(58,43,26,0.28)';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = compensa;
       for (let x = 0; x <= ancho; x++) {
         ctx.beginPath();
-        ctx.moveTo(x * tam + 0.5, 0);
-        ctx.lineTo(x * tam + 0.5, alto * tam);
+        ctx.moveTo(x * tam, 0);
+        ctx.lineTo(x * tam, alto * tam);
         ctx.stroke();
       }
       for (let y = 0; y <= alto; y++) {
         ctx.beginPath();
-        ctx.moveTo(0, y * tam + 0.5);
-        ctx.lineTo(ancho * tam, y * tam + 0.5);
+        ctx.moveTo(0, y * tam);
+        ctx.lineTo(ancho * tam, y * tam);
         ctx.stroke();
       }
 
-      // Marco perimetral con numeracion (paso 1 del pipeline: "Reticula y
+      // Marco perimetral con numeracion (pipeline paso "Reticula y
       // Cenefas"), sin cartela heraldica todavia -- eso llega con el resto
       // de la identidad grafica en un paso posterior.
       ctx.strokeStyle = 'rgba(36,26,15,0.85)';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(1.5, 1.5, ancho * tam - 3, alto * tam - 3);
+      ctx.lineWidth = compensa * 3;
+      ctx.strokeRect(0.75 * compensa, 0.75 * compensa, ancho * tam - 1.5 * compensa, alto * tam - 1.5 * compensa);
 
       ctx.fillStyle = 'rgba(36,26,15,0.75)';
-      ctx.font = `${Math.max(9, tam * 0.32)}px Georgia, serif`;
+      ctx.font = `${Math.max(9, tam * 0.32) * compensa}px Georgia, serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       const paso = Math.max(1, Math.round(ancho / 14));
       for (let x = 0; x < ancho; x += paso) {
-        ctx.fillText(String(x + 1), x * tam + tam / 2, 3);
+        ctx.fillText(String(x + 1), x * tam + tam / 2, 3 * compensa);
       }
       ctx.textAlign = 'left';
       for (let y = 0; y < alto; y += paso) {
-        ctx.fillText(String(y + 1), 3, y * tam + tam / 2 - 5);
+        ctx.fillText(String(y + 1), 3 * compensa, y * tam + tam / 2 - 5 * compensa);
       }
     }
 
     // Paso 2: relieve, hidrografia vectorial y vegetacion --------------
 
-    function dibujarRelieve(tam, data) {
+    function dibujarRelieve(tam, data, frustum) {
       // Silueta triangular con sombreado este por celda de bioma Montana
       // (LOD macro de la propuesta) -- sin isolineas de curva de nivel
-      // todavia, eso queda para cuando haya camara/zoom real (Paso 3) y
-      // tenga sentido un trazo mas fino que una celda entera.
-      for (let y = 0; y < data.alto; y++) {
-        for (let x = 0; x < data.ancho; x++) {
+      // todavia, eso queda para cuando el zoom micro le de sentido a un
+      // trazo mas fino que una celda entera.
+      for (let y = frustum.yMin; y < frustum.yMax; y++) {
+        for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           if (c.bioma !== 'montana') continue;
           const cx = x * tam + tam / 2;
@@ -442,13 +555,20 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
-    function dibujarVegetacion(tam, data) {
+    function dibujarVegetacion(tam, data, frustum) {
       // Sin lista de entidades aparte: se recorre celdas[][] en el mismo
       // orden Y ascendente que el resto del lienzo -- el pintado de una
       // fila mas al sur pisa a la de mas al norte, mismo Y-sorting norte-
       // sur que pide la propuesta, gratis por el orden del bucle.
-      for (let y = 0; y < data.alto; y++) {
-        for (let x = 0; x < data.ancho; x++) {
+      //
+      // LOD macro (informe seccion 4.2): con el mapa muy alejado, dibujar
+      // una planta por celda individual es ruido visual sin ganar nada --
+      // el lavado de bioma de la pasada anterior ya sugiere la vegetacion
+      // como masa. Se omite esta capa entera por debajo de zoom 0.8, igual
+      // que la tabla LOD de bosques pide "relleno plano" a esa escala.
+      if (camara.zoom < 0.8) return;
+      for (let y = frustum.yMin; y < frustum.yMax; y++) {
+        for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           if (!c.planta) continue;
           const cx = x * tam + tam / 2, cy = y * tam + tam / 2;
@@ -520,16 +640,27 @@ HTML_VISOR = """<!DOCTYPE html>
           `<strong>Conejos:</strong> ${data.censo.conejo || 0} &middot; <strong>Ardillas:</strong> ${data.censo.ardilla || 0}<br>` +
           `<strong>Restos (Necromasa):</strong> ${data.censo.necromasa || 0}`;
 
-        const tam = canvas.width / data.ancho;
+        tam0 = canvas.width / data.ancho;
+        const tam = tam0;
         const claveActual = `${data.semilla}:${data.ancho}:${data.alto}`;
         if (pergaminoClave !== claveActual) {
           pergaminoCache = construirPergamino(data.semilla, data.ancho, data.alto);
           pergaminoClave = claveActual;
         }
-        ctx.drawImage(pergaminoCache, 0, 0);
 
-        for (let y = 0; y < data.alto; y++) {
-          for (let x = 0; x < data.ancho; x++) {
+        document.getElementById('lectura-zoom').textContent = `Zoom: ${camara.zoom.toFixed(2)}x`;
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(camara.offsetX, camara.offsetY);
+        ctx.scale(camara.zoom, camara.zoom);
+
+        const frustum = calcularFrustum(data);
+        ctx.drawImage(pergaminoCache, 0, 0, data.ancho * tam, data.alto * tam);
+
+        for (let y = frustum.yMin; y < frustum.yMax; y++) {
+          for (let x = frustum.xMin; x < frustum.xMax; x++) {
             const c = data.celdas[y][x];
             const px = x * tam, py = y * tam;
 
@@ -558,17 +689,66 @@ HTML_VISOR = """<!DOCTYPE html>
           }
         }
 
-        dibujarRelieve(tam, data);
+        dibujarRelieve(tam, data, frustum);
         dibujarHidrografia(tam, data);
-        dibujarVegetacion(tam, data);
+        dibujarVegetacion(tam, data, frustum);
         dibujarReticula(tam, data.ancho, data.alto);
 
-        ctx.font = `${tam * 0.72}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.restore();
+
+        // Entidades: LOD por nivel de zoom (informe seccion 4.2), dibujadas
+        // en espacio de pantalla -- el tamano de runa/halo/etiqueta NO
+        // escala junto al mapa, lo decide el nivel de detalle actual, igual
+        // que un marcador de mapa real no cambia de tamano al hacer zoom.
+        const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
         data.entidades.forEach(e => {
-          const glifo = GLIFOS[e.tipo] || '?';
-          ctx.fillText(glifo, e.x * tam + tam / 2, e.y * tam + tam / 2);
+          const centro = mundoAPantalla((e.x + 0.5) * tam, (e.y + 0.5) * tam);
+          const margen = 24;
+          if (centro.x < -margen || centro.x > canvas.width + margen ||
+              centro.y < -margen || centro.y > canvas.height + margen) return;
+
+          const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
+          const runa = RUNAS[e.tipo] || '?';
+
+          if (nivel === 'macro') {
+            ctx.beginPath();
+            ctx.arc(centro.x, centro.y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
+            ctx.fill();
+            return;
+          }
+
+          const radioHalo = nivel === 'micro' ? 14 : 9;
+          ctx.beginPath();
+          ctx.arc(centro.x, centro.y, radioHalo, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(230,216,184,0.88)';
+          ctx.fill();
+          ctx.strokeStyle = `rgba(${r},${g},${b},0.7)`;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          ctx.font = `${nivel === 'micro' ? 20 : 14}px 'Cinzel', Georgia, serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+          ctx.fillText(runa, centro.x, centro.y + 1);
+
+          if (nivel === 'micro') {
+            ctx.font = '10px Georgia, serif';
+            ctx.fillStyle = 'rgba(36,26,15,0.9)';
+            const etiqueta = e.nombre || (e.tipo === 'necromasa' ? `Restos (${e.origen || '?'})` : e.tipo);
+            ctx.fillText(etiqueta, centro.x, centro.y + radioHalo + 9);
+
+            if (e.pool_fisico) {
+              const anchoBarra = 26, altoBarra = 3;
+              const bx = centro.x - anchoBarra / 2, by = centro.y + radioHalo + 15;
+              ctx.fillStyle = 'rgba(58,43,26,0.4)';
+              ctx.fillRect(bx, by, anchoBarra, altoBarra);
+              const vitalidad = Math.max(0, Math.min(1, e.pool_fisico.vitalidad));
+              ctx.fillStyle = vitalidad > 0.35 ? 'rgba(58,110,58,0.85)' : 'rgba(150,40,32,0.85)';
+              ctx.fillRect(bx, by, anchoBarra * vitalidad, altoBarra);
+            }
+          }
         });
 
         const divCronica = document.getElementById('cronica');
