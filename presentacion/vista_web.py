@@ -555,46 +555,16 @@ HTML_VISOR = """<!DOCTYPE html>
       return off;
     }
 
-    function dibujarReticula(tam, ancho, alto) {
-      // Llamada dentro del contexto ya escalado por la camara (ctx.scale) --
-      // lineWidth/tamano de fuente se dividen por camara.zoom para que la
-      // tinta se vea igual de fina en pantalla sin importar el nivel de
-      // acercamiento, aunque las lineas sigan alineadas exactas con el mundo.
+    function dibujarMarco(tam, ancho, alto) {
+      // Diego pidio quitar la reticula (2026-08-27): el mapa no debe leerse
+      // como celdas a nivel visual, aunque la simulacion siga siendo un
+      // grid por dentro. Se queda solo el marco perimetral -- sin lineas
+      // internas ni numeracion de coordenadas (esta ultima solo tenia
+      // sentido como referencia de esa reticula que ya no esta).
       const compensa = 1 / camara.zoom;
-      ctx.strokeStyle = 'rgba(58,43,26,0.28)';
-      ctx.lineWidth = compensa;
-      for (let x = 0; x <= ancho; x++) {
-        ctx.beginPath();
-        ctx.moveTo(x * tam, 0);
-        ctx.lineTo(x * tam, alto * tam);
-        ctx.stroke();
-      }
-      for (let y = 0; y <= alto; y++) {
-        ctx.beginPath();
-        ctx.moveTo(0, y * tam);
-        ctx.lineTo(ancho * tam, y * tam);
-        ctx.stroke();
-      }
-
-      // Marco perimetral con numeracion (pipeline paso "Reticula y
-      // Cenefas"), sin cartela heraldica todavia -- eso llega con el resto
-      // de la identidad grafica en un paso posterior.
       ctx.strokeStyle = 'rgba(36,26,15,0.85)';
       ctx.lineWidth = compensa * 3;
       ctx.strokeRect(0.75 * compensa, 0.75 * compensa, ancho * tam - 1.5 * compensa, alto * tam - 1.5 * compensa);
-
-      ctx.fillStyle = 'rgba(36,26,15,0.75)';
-      ctx.font = `${Math.max(9, tam * 0.32) * compensa}px Georgia, serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      const paso = Math.max(1, Math.round(ancho / 14));
-      for (let x = 0; x < ancho; x += paso) {
-        ctx.fillText(String(x + 1), x * tam + tam / 2, 3 * compensa);
-      }
-      ctx.textAlign = 'left';
-      for (let y = 0; y < alto; y += paso) {
-        ctx.fillText(String(y + 1), 3 * compensa, y * tam + tam / 2 - 5 * compensa);
-      }
     }
 
     // Paso 2: relieve, hidrografia vectorial y vegetacion --------------
@@ -840,6 +810,12 @@ HTML_VISOR = """<!DOCTYPE html>
           // Esta especie ya tiene assets reales cargados -- la dibuja
           // dibujarStampsRelieveYFlora() como sello, no como vectorial.
           if ((catalogoAssets.flora[c.planta.especie] || []).length > 0) continue;
+          // Diego pidio quitar el tapiz vectorial de hierba silvestre por
+          // ahora (2026-08-27) mientras no exista un asset real para ella
+          // -- la celda se queda solo con el lavado de bioma de base, sin
+          // relleno provisional. En cuanto haya flora/hierba_silvestre_*.png
+          // el guard de arriba ya la desvia sola al sistema de sellos.
+          if (c.planta.especie === 'hierba_silvestre') continue;
           const cx = x * tam + tam / 2, cy = y * tam + tam / 2;
           const escala = 0.32 + 0.68 * c.planta.etapa;
           const [r, g, b] = COLOR_ESPECIE[c.planta.especie] || [90, 110, 70];
@@ -1093,7 +1069,7 @@ HTML_VISOR = """<!DOCTYPE html>
         if (!montanaUsoAssets) dibujarRelieve(tam, data, frustum);
         dibujarHidrografia(tam, data);
         dibujarVegetacion(tam, data, frustum);
-        dibujarReticula(tam, data.ancho, data.alto);
+        dibujarMarco(tam, data.ancho, data.alto);
 
         ctx.restore();
 
