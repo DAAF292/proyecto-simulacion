@@ -304,7 +304,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // concreta (o catalogoAssets.relieve.montana este vacio), esa
     // categoria sigue con el dibujo vectorial de siempre -- ver el guard
     // en dibujarVegetacion() y en dibujarStampsRelieveYFlora() mas abajo.
-    let catalogoAssets = { flora: {}, relieve: { montana: [] } };
+    let catalogoAssets = { flora: {}, relieve: { montana: [] }, agua: { lago: [], rio: [] } };
     const imagenesCache = {};
 
     async function cargarBibliotecaAssets() {
@@ -312,6 +312,7 @@ HTML_VISOR = """<!DOCTYPE html>
         const resp = await fetch('/assets_manifest.json');
         if (!resp.ok) return;
         catalogoAssets = await resp.json();
+        if (!catalogoAssets.agua) catalogoAssets.agua = { lago: [], rio: [] };
       } catch (err) {
         console.error('No se pudo leer /assets_manifest.json:', err);
         return;
@@ -321,6 +322,9 @@ HTML_VISOR = """<!DOCTYPE html>
         for (const nombre of catalogoAssets.flora[especie]) rutas.push('flora/' + nombre);
       }
       for (const nombre of catalogoAssets.relieve.montana) rutas.push('relieve/' + nombre);
+      for (const clave in catalogoAssets.agua) {
+        for (const nombre of catalogoAssets.agua[clave]) rutas.push('agua/' + nombre);
+      }
 
       await Promise.all(rutas.map((ruta) => new Promise((resolve) => {
         const img = new Image();
@@ -725,35 +729,95 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
+    // Estampa una imagen ajustada al recuadro real (en pixeles de mundo)
+    // de un cluster de celdas, con un margen para que la mancha organica
+    // del sello sobresalga un poco de las celdas exactas (igual que la
+    // silueta vectorial que sustituye nunca fue un rectangulo perfecto).
+    function estamparEnRecuadro(img, cluster, tam, margen) {
+      const minX = Math.min(...cluster.map(c => c.x)), maxX = Math.max(...cluster.map(c => c.x));
+      const minY = Math.min(...cluster.map(c => c.y)), maxY = Math.max(...cluster.map(c => c.y));
+      const anchoBase = (maxX - minX + 1) * tam, altoBase = (maxY - minY + 1) * tam;
+      const w = anchoBase * margen, h = altoBase * margen;
+      const cx = (minX + maxX + 1) / 2 * tam, cy = (minY + maxY + 1) / 2 * tam;
+      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    }
+
+    function dibujarCuencaConAssets(tam, comp, variantesLago) {
+      const nombre = elegirVariante(variantesLago, comp[0].x, comp[0].y, 96);
+      const img = nombre ? imagenesCache['agua/' + nombre] : null;
+      if (!img) { dibujarCuenca(tam, comp); return; }
+      estamparEnRecuadro(img, comp, tam, 1.35);
+    }
+
+    // Un rio es un CAMINO, no una mancha -- un sello prediseñado no puede
+    // calzar sus curvas exactas celda a celda (a diferencia de un lago o
+    // una montaña, que son razonablemente compactos). Aproximacion
+    // deliberada: se estampa UNA vez por curso de agua conectado, a su
+    // proporcion original (sin deformar), escalado por la longitud real
+    // del camino y con un giro de 90 grados si el curso es mas alto que
+    // ancho -- no es un trazado exacto, es la pieza mas experimental del
+    // sistema de sellos (ver presentacion/assets/README.md).
+    function dibujarRioConAssets(tam, comp, variantesRio) {
+      const camino = ordenarCaminoRio(comp);
+      const nombre = elegirVariante(variantesRio, camino[0].x, camino[0].y, 97);
+      const img = nombre ? imagenesCache['agua/' + nombre] : null;
+      if (!img) { dibujarRioVectorial(tam, comp); return; }
+
+      const minX = Math.min(...comp.map(c => c.x)), maxX = Math.max(...comp.map(c => c.x));
+      const minY = Math.min(...comp.map(c => c.y)), maxY = Math.max(...comp.map(c => c.y));
+      const cx = (minX + maxX + 1) / 2 * tam, cy = (minY + maxY + 1) / 2 * tam;
+      const vertical = (maxY - minY) > (maxX - minX);
+
+      const largo = tam * (comp.length * 0.62 + 1.5);
+      const relacion = img.naturalHeight / img.naturalWidth || 0.3;
+      let w = largo, h = largo * relacion;
+      if (vertical) { const t = w; w = h; h = t; }
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (vertical) ctx.rotate(Math.PI / 2);
+      ctx.drawImage(img, -largo / 2, -(largo * relacion) / 2, largo, largo * relacion);
+      ctx.restore();
+    }
+
+    function dibujarRioVectorial(tam, comp) {
+      if (comp.length < 2) { dibujarCuenca(tam, comp); return; }
+
+      const camino = ordenarCaminoRio(comp).map(p => ({
+        x: p.x * tam + tam / 2, y: p.y * tam + tam / 2, profundidad: p.profundidad,
+      }));
+      const profundidadMedia = camino.reduce((s, p) => s + p.profundidad, 0) / camino.length;
+      const anchoBase = tam * (0.28 + Math.min(1, profundidadMedia / 1.5) * 0.4);
+
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Halo translucido (el agua moja mas alla del cauce firme).
+      ctx.beginPath();
+      trazarSpline(camino);
+      ctx.strokeStyle = 'rgba(58,92,122,0.35)';
+      ctx.lineWidth = anchoBase * 1.8;
+      ctx.stroke();
+
+      // Cauce central, tinta de agua profunda.
+      ctx.beginPath();
+      trazarSpline(camino);
+      ctx.strokeStyle = 'rgba(28,45,64,0.75)';
+      ctx.lineWidth = anchoBase;
+      ctx.stroke();
+    }
+
     function dibujarHidrografia(tam, data) {
-      componentesAgua(data, 'lago').forEach(comp => dibujarCuenca(tam, comp));
-      componentesAgua(data, 'poza').forEach(comp => dibujarCuenca(tam, comp));
+      const variantesLago = catalogoAssets.agua.lago || [];
+      const variantesRio = catalogoAssets.agua.rio || [];
+
+      componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, variantesLago));
+      componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, variantesLago));
 
       for (const comp of componentesAgua(data, 'rio')) {
-        if (comp.length < 2) { dibujarCuenca(tam, comp); continue; }
-
-        const camino = ordenarCaminoRio(comp).map(p => ({
-          x: p.x * tam + tam / 2, y: p.y * tam + tam / 2, profundidad: p.profundidad,
-        }));
-        const profundidadMedia = camino.reduce((s, p) => s + p.profundidad, 0) / camino.length;
-        const anchoBase = tam * (0.28 + Math.min(1, profundidadMedia / 1.5) * 0.4);
-
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        // Halo translucido (el agua moja mas alla del cauce firme).
-        ctx.beginPath();
-        trazarSpline(camino);
-        ctx.strokeStyle = 'rgba(58,92,122,0.35)';
-        ctx.lineWidth = anchoBase * 1.8;
-        ctx.stroke();
-
-        // Cauce central, tinta de agua profunda.
-        ctx.beginPath();
-        trazarSpline(camino);
-        ctx.strokeStyle = 'rgba(28,45,64,0.75)';
-        ctx.lineWidth = anchoBase;
-        ctx.stroke();
+        if (comp.length < 2) { dibujarCuencaConAssets(tam, comp, variantesLago); continue; }
+        if (variantesRio.length > 0) dibujarRioConAssets(tam, comp, variantesRio);
+        else dibujarRioVectorial(tam, comp);
       }
     }
 
@@ -1124,25 +1188,30 @@ PNG todavia, el cliente cae de vuelta al dibujo vectorial de
 dibujarVegetacion()/dibujarRelieve() -- ninguna categoria vacia rompe
 el visor ni queda en blanco."""
 
-_PATRON_ARCHIVO_FLORA = re.compile(r"^([a-z_]+)_\d+\.png$")
+_PATRON_ARCHIVO_CON_PREFIJO = re.compile(r"^([a-z_]+)_\d+\.png$")
+
+
+def _agrupar_por_prefijo(carpeta: Path) -> dict[str, list[str]]:
+    """flora/<clave>_<n>.png y agua/<clave>_<n>.png comparten la misma
+    convencion -- el prefijo antes del ultimo "_N.png" agrupa variantes.
+    No exige que el prefijo coincida con una clave real conocida (especie
+    de flora, o 'lago'/'rio' en agua): si no coincide, simplemente nada
+    lo selecciona nunca, inofensivo."""
+    agrupado: dict[str, list[str]] = {}
+    if carpeta.is_dir():
+        for archivo in sorted(carpeta.iterdir()):
+            m = _PATRON_ARCHIVO_CON_PREFIJO.match(archivo.name)
+            if m and archivo.is_file():
+                agrupado.setdefault(m.group(1), []).append(archivo.name)
+    return agrupado
 
 
 def construir_manifiesto_assets() -> dict[str, Any]:
     """Escanea RUTA_ASSETS en cada peticion (biblioteca pequeña, coste
-    despreciable) y agrupa los archivos encontrados por categoria --
-    flora.especie (prefijo del nombre de archivo, antes del ultimo
-    "_N.png") y relieve.montana (cualquier .png en esa carpeta, sin
-    distincion de nombre). No exige que el prefijo de flora coincida con
-    una especie real del catalogo -- si no coincide, simplemente ningun
-    Celda.planta.especie lo va a seleccionar nunca, inofensivo."""
-    flora: dict[str, list[str]] = {}
-    carpeta_flora = RUTA_ASSETS / "flora"
-    if carpeta_flora.is_dir():
-        for archivo in sorted(carpeta_flora.iterdir()):
-            m = _PATRON_ARCHIVO_FLORA.match(archivo.name)
-            if m and archivo.is_file():
-                flora.setdefault(m.group(1), []).append(archivo.name)
-
+    despreciable) y agrupa los archivos encontrados por categoria:
+    flora.especie y agua.{lago,rio} por prefijo de nombre de archivo,
+    relieve.montana con cualquier .png en esa carpeta (una unica
+    variante de sello hoy, sin distincion de nombre)."""
     relieve_montana: list[str] = []
     carpeta_relieve = RUTA_ASSETS / "relieve"
     if carpeta_relieve.is_dir():
@@ -1150,7 +1219,11 @@ def construir_manifiesto_assets() -> dict[str, Any]:
             p.name for p in carpeta_relieve.iterdir() if p.is_file() and p.suffix.lower() == ".png"
         )
 
-    return {"flora": flora, "relieve": {"montana": relieve_montana}}
+    return {
+        "flora": _agrupar_por_prefijo(RUTA_ASSETS / "flora"),
+        "relieve": {"montana": relieve_montana},
+        "agua": _agrupar_por_prefijo(RUTA_ASSETS / "agua"),
+    }
 
 
 class ManejadorWeb(http.server.BaseHTTPRequestHandler):
@@ -1193,7 +1266,7 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
         from urllib.parse import unquote
 
         destino = (RUTA_ASSETS / unquote(ruta_relativa)).resolve()
-        carpetas_publicas = (RUTA_ASSETS / "flora", RUTA_ASSETS / "relieve")
+        carpetas_publicas = (RUTA_ASSETS / "flora", RUTA_ASSETS / "relieve", RUTA_ASSETS / "agua")
         if not any(destino.is_relative_to(c.resolve()) for c in carpetas_publicas):
             self.send_response(403)
             self.end_headers()

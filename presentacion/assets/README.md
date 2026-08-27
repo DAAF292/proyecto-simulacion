@@ -35,6 +35,22 @@ Cualquier `.png` dentro de esta carpeta cuenta como una variante de pico de
 montaña — sin convención de prefijo, todos son intercambiables hoy (solo
 hay una categoría de relieve por ahora).
 
+### `agua/lago_<n>.png` y `agua/rio_<n>.png`
+
+`lago_<n>.png` también cubre pozas (mismo tratamiento visual, sin
+distinción hoy). Un lago/poza se estampa ajustado al recuadro real del
+cuerpo de agua (misma lógica que un pico de montaña o un árbol: la
+posición y el tamaño emergen de los datos reales).
+
+Un río es distinto: es un CAMINO, no una mancha — el motor no le da al
+visor una "forma exacta de río" que un icono fijo pueda calzar bien, así
+que `rio_<n>.png` se estampa una vez por curso de agua conectado, a su
+tamaño y proporción originales (sin deformar), centrado sobre el camino
+real y escalado según cuántas celdas tiene ese río. Es una aproximación
+deliberada, no un trazado exacto celda a celda — si el resultado no
+convence visualmente, dilo, es la pieza más experimental de las tres
+categorías.
+
 ## Especificación de cada imagen
 
 - **Formato:** PNG con fondo transparente (canal alfa).
