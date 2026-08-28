@@ -88,6 +88,8 @@ const FRAGMENTO_EXPORT = `
   colorAguaPorProfundidad: typeof colorAguaPorProfundidad !== 'undefined' ? colorAguaPorProfundidad : undefined,
   colorLavadoContinuo: typeof colorLavadoContinuo !== 'undefined' ? colorLavadoContinuo : undefined,
   dibujarFormacionesMacro: typeof dibujarFormacionesMacro !== 'undefined' ? dibujarFormacionesMacro : undefined,
+  dibujarMarcoCodice: typeof dibujarMarcoCodice !== 'undefined' ? dibujarMarcoCodice : undefined,
+  dibujarMarco: typeof dibujarMarco !== 'undefined' ? dibujarMarco : undefined,
   FORMACIONES_POR_BIOMA: typeof FORMACIONES_POR_BIOMA !== 'undefined' ? FORMACIONES_POR_BIOMA : undefined,
   // Registrador que muta la tabla DESDE el realm del vm (anadir propiedades
   // a objetos creados dentro del sandbox desde fuera no propaga al binding

@@ -914,6 +914,50 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.strokeRect(0.75 * compensa, 0.75 * compensa, ancho * tam - 1.5 * compensa, alto * tam - 1.5 * compensa);
     }
 
+    // Circulo 4 (2026-08-27): marco de CODICE a zoom macro -- la vista de
+    // atlas del mapa objetivo de Diego lleva reticula fina con coordenadas
+    // numeradas y doble borde. Concilia la retirada de la reticula de
+    // antes: a medio/micro el mapa sigue siendo un mundo sin rejilla; a
+    // macro es un mapa de atlas, y los atlas llevan reticula. Coordenadas
+    // 1..N en los cuatro lados, en tinta tenue.
+    function dibujarMarcoCodice(tam, ancho, alto) {
+      const compensa = 1 / camara.zoom;
+
+      // 1. Doble borde: grueso exterior + fino interior separado.
+      ctx.strokeStyle = 'rgba(36,26,15,0.9)';
+      ctx.lineWidth = compensa * 4;
+      ctx.strokeRect(0.75 * compensa, 0.75 * compensa, ancho * tam - 1.5 * compensa, alto * tam - 1.5 * compensa);
+      ctx.strokeStyle = 'rgba(36,26,15,0.55)';
+      ctx.lineWidth = compensa;
+      const separacion = 6 * compensa;
+      ctx.strokeRect(separacion, separacion, ancho * tam - 2 * separacion, alto * tam - 2 * separacion);
+
+      // 2. Reticula fina interior (tinta tenue, entre borde y borde).
+      ctx.strokeStyle = 'rgba(36,26,15,0.18)';
+      ctx.lineWidth = compensa * 0.5;
+      ctx.beginPath();
+      for (let x = 1; x < ancho; x++) { ctx.moveTo(x * tam, separacion); ctx.lineTo(x * tam, alto * tam - separacion); }
+      for (let y = 1; y < alto; y++) { ctx.moveTo(separacion, y * tam); ctx.lineTo(ancho * tam - separacion, y * tam); }
+      ctx.stroke();
+
+      // 3. Numeros de coordenada (1..N) centrados en cada celda, sobre los
+      // cuatro bordes. Cinzel/serif pequena, tinta media.
+      ctx.fillStyle = 'rgba(36,26,15,0.55)';
+      ctx.font = `${Math.max(8, Math.round(tam * 0.32))}px 'Cinzel', Georgia, serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let x = 0; x < ancho; x++) {
+        const cx = x * tam + tam / 2;
+        ctx.fillText(String(x + 1), cx, separacion / 2 + 1);
+        ctx.fillText(String(x + 1), cx, alto * tam - separacion / 2 - 1);
+      }
+      for (let y = 0; y < alto; y++) {
+        const cy = y * tam + tam / 2;
+        ctx.fillText(String(y + 1), separacion / 2 + 1, cy);
+        ctx.fillText(String(y + 1), ancho * tam - separacion / 2 - 1, cy);
+      }
+    }
+
     // Paso 2: relieve, hidrografia vectorial y vegetacion --------------
 
     function dibujarRelieve(tam, data, frustum) {
@@ -2005,7 +2049,10 @@ HTML_VISOR = """<!DOCTYPE html>
       const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum, elementosCriaturas, formaciones);
       if (!montanaUsoAssets && !(formaciones && formaciones.relieve)) dibujarRelieve(tam, data, frustum);
       dibujarVegetacion(tam, data, frustum);
-      dibujarMarco(tam, data.ancho, data.alto);
+      // Circulo 4: a macro el marco es el de codice (reticula de atlas con
+      // coordenadas); a medio/micro, el perimetral clasico sin rejilla.
+      if (esMacro) dibujarMarcoCodice(tam, data.ancho, data.alto);
+      else dibujarMarco(tam, data.ancho, data.alto);
 
       ctx.restore();
 
