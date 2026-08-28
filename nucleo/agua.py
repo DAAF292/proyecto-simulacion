@@ -167,7 +167,7 @@ def _picos(campo_elevacion: list, ancho: int, alto: int, umbral: float) -> list:
     return nacimientos
 
 
-def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, alto: int, max_pasos: int):
+def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, alto: int, max_pasos: int, coste_giro: float = 0.0):
     """Descenso de pendiente desde (x, y): en cada paso se mueve a la
     celda vecina de MENOR elevacion, solo si es estrictamente menor que
     la actual -- si ninguna vecina lo es, es un minimo local. Termina en
@@ -185,9 +185,23 @@ def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, al
     max_pasos es una cota de seguridad, no deberia alcanzarse nunca en la
     practica: la elevacion desciende estrictamente en cada paso, asi que
     el camino no puede repetir celda y esta acotado por el numero total
-    de celdas del mapa."""
+    de celdas del mapa.
+
+    (2026-08-28) coste_giro: INERCIA DEL CAUCE. El descenso por minimo
+    puro no tiene memoria -- cada paso reevalua desde cero -- y en un
+    valle ancho y casi plano el cauce oscila entre las paredes del valle
+    celda a celda: meandro sinusoidal artificial de periodo constante
+    ("codorniz", capturas de Diego contra el visor real). Un cauce real
+    tiende a la recta: excavo su lecho, desviar el flujo cuesta. Entre
+    los vecinos ESTRICTAMENTE menores (la fisica no cambia: el agua
+    nunca sube), se penaliza el cambio de direccion: recto 0, giro de
+    90 grados coste_giro, de 180 grados 2*coste_giro. Calibracion
+    provisional en config agua.coste_giro_rio -- el valor debe superar
+    la ondulacion local del valle (diferencias vecinas ~0.006-0.02)
+    sin superar el gradiente principal del valle (~0.06-0.08)."""
     camino = [(x, y)]
     cx, cy = x, y
+    prev_dx, prev_dy = 0, 0
     for _ in range(max_pasos):
         if cx == 0 or cx == ancho - 1 or cy == 0 or cy == alto - 1:
             return camino, "borde"
@@ -200,7 +214,20 @@ def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, al
         if not candidatos:
             return camino, "minimo_local"
 
-        cx, cy = min(candidatos, key=lambda p: campo_elevacion[p[0]][p[1]])
+        if coste_giro > 0.0 and (prev_dx or prev_dy):
+            def puntuacion(p):
+                dx, dy = p[0] - cx, p[1] - cy
+                if (dx, dy) == (prev_dx, prev_dy):
+                    giro = 0.0
+                elif (dx, dy) == (-prev_dx, -prev_dy):
+                    giro = 2.0
+                else:
+                    giro = 1.0
+                return campo_elevacion[p[0]][p[1]] + coste_giro * giro
+            cx, cy = min(candidatos, key=puntuacion)
+        else:
+            cx, cy = min(candidatos, key=lambda p: campo_elevacion[p[0]][p[1]])
+        prev_dx, prev_dy = cx - camino[-1][0], cy - camino[-1][1]
         camino.append((cx, cy))
         if (cx, cy) in agua:
             return camino, "fundido"
@@ -353,7 +380,10 @@ def generar_cuerpos_agua(campo_elevacion: list, rng: random.Random, config_agua:
     max_pasos = ancho * alto  # cota de seguridad, ver docstring de _trazar_rio
 
     for nx, ny in nacimientos:
-        camino, final = _trazar_rio(nx, ny, campo_elevacion, agua, ancho, alto, max_pasos)
+        camino, final = _trazar_rio(
+            nx, ny, campo_elevacion, agua, ancho, alto, max_pasos,
+            coste_giro=float(config_agua.get("coste_giro_rio", 0.0)),
+        )
         # El cauce se reserva en `agua` ANTES de generar sus orillas --
         # si no, el gradiente de una celda del cauce podria "inundarse a
         # si mismo" al buscar orilla, o invadir el cauce de otra celda

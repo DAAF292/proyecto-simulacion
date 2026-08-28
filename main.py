@@ -234,7 +234,13 @@ def sembrar_flora_inicial(
 
     celdas_por_especie: dict[str, list[tuple[int, int]]] = {}
     for x, y, celda in zona.celdas():
-        if celda.tiene_recurso:
+        # (2026-08-28) Ley fisica: la flora no crece sumergida. El agua es
+        # una capa independiente del bioma (la celda conserva bosque Y
+        # tipo_agua 'lago'), y sin este guard la siembra inicial ponia
+        # plantas en celdas de rio/lago/poza que el visor estampaba sobre
+        # el agua. El bono de ribera (nucleo/flora.py:factor_ribera) mira
+        # celdas VECINAS con agua, no sumergidas: no cambia con esto.
+        if celda.tiene_recurso and not celda.tiene_agua:
             celdas_por_especie.setdefault(celda.tipo_recurso, []).append((x, y))
 
     for especie_key, celdas in celdas_por_especie.items():
