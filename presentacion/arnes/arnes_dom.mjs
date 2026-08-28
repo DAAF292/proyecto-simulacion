@@ -86,6 +86,7 @@ const FRAGMENTO_EXPORT = `
   lavadoDeCelda: typeof lavadoDeCelda !== 'undefined' ? lavadoDeCelda : undefined,
   colorHipsometrico: typeof colorHipsometrico !== 'undefined' ? colorHipsometrico : undefined,
   colorAguaPorProfundidad: typeof colorAguaPorProfundidad !== 'undefined' ? colorAguaPorProfundidad : undefined,
+  dibujarFormacionesMacro: typeof dibujarFormacionesMacro !== 'undefined' ? dibujarFormacionesMacro : undefined,
 });
 `;
 
@@ -128,4 +129,5 @@ export function cargarVisor() {
   exportados.limpiarCtxVisor = () => { if (ctxDelVisor.actual) ctxDelVisor.actual.llamadas.length = 0; };
   return exportados;
 }
+
 

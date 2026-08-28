@@ -1,4 +1,4 @@
-"""
+﻿"""
 presentacion/vista_web.py
 
 Servidor HTTP integrado para monitoreo visual en tiempo real del mundo en el navegador.
@@ -293,7 +293,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // Gebo/gnomo, Laguz/lobo, Kaunan/conejo, Ansuz/ardilla. Necromasa no es
     // una criatura consciente ni figura en ese catalogo -- se queda con un
     // glifo neutro en vez de inventarle una runa que el informe no le da.
-    const RUNAS = { 'gnomo': 'ᚷ', 'lobo': 'ᛚ', 'conejo': 'ᚲ', 'ardilla': 'ᚨ', 'necromasa': '🦴' };
+    const RUNAS = { 'gnomo': 'áš·', 'lobo': 'á›š', 'conejo': 'áš²', 'ardilla': 'áš¨', 'necromasa': 'ðŸ¦´' };
     const COLOR_INK_ESPECIE = {
       'gnomo':   [44, 92, 138],
       'lobo':    [138, 44, 44],
@@ -536,13 +536,13 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
-    // Estampado con Y-sorting (informe: montañas y flora ordenadas de
+    // Estampado con Y-sorting (informe: montaÃ±as y flora ordenadas de
     // norte a sur en un unico pase, para que el sur oculte al norte).
     // Devuelve true si dibujo con assets reales la categoria de relieve
     // (para que el llamador sepa si debe caer al dibujarRelieve() vectorial).
     // elementosExtra (pieza 2): cola de criaturas ya construida en espacio
     // de mundo -- se mezcla en la misma ordenacion para oclusion real.
-    function dibujarStampsRelieveYFlora(tam, data, frustum, elementosExtra = []) {
+    function dibujarStampsRelieveYFlora(tam, data, frustum, elementosExtra = [], formaciones = null) {
       const poolMontana = poolTerreno(
         catalogoAssets.relieve.montana_color, 'relieve_color/',
         catalogoAssets.relieve.montana, 'relieve/',
@@ -554,7 +554,11 @@ HTML_VISOR = """<!DOCTYPE html>
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
 
-          if (c.bioma === 'montana' && montanaConAssets) {
+          // Circulo 2: con formaciones activas, los sellos por celda de
+          // montana no se dibujan (la cordillera del cluster los taparia
+          // con un sello suyo). Sin formaciones (biblioteca vacia), el
+          // por-celda de siempre queda intacto.
+          if (c.bioma === 'montana' && montanaConAssets && !(formaciones && formaciones.relieve)) {
             const nombre = elegirVariante(poolMontana.lista, x, y, 91);
             const img = imagenesCache[poolMontana.prefijo + nombre];
             if (img) {
@@ -568,7 +572,7 @@ HTML_VISOR = """<!DOCTYPE html>
             }
           }
 
-          if (c.planta) {
+          if (c.planta && !(formaciones && formaciones.flora && c.bioma === 'bosque')) {
             // Pieza nuevosAssetsDefinitivos (2026-08-27): el estado de la
             // planta elige el pool cuando existen sellos para el -- fruto
             // si la celda conserva recurso (manzanas / fruto_de_cactus) y
@@ -803,7 +807,7 @@ HTML_VISOR = """<!DOCTYPE html>
 
     // PRNG determinista (mulberry32) sembrado por instantanea.semilla --
     // el grano del pergamino debe ser el MISMO en cada recarga del mismo
-    // mundo, no ruido distinto cada frame (eso rompería la ilusion de un
+    // mundo, no ruido distinto cada frame (eso romperÃ­a la ilusion de un
     // mapa fisico real, no una textura decorativa aleatoria).
     function mulberry32(a) {
       return function () {
@@ -991,7 +995,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // El contorno ya suavizado por Chaikin sigue leyendose "artificial"
     // (Diego, 2026-08-27): Chaikin solo redondea esquinas, el resultado es
     // una silueta demasiado uniforme -- una "burbuja" en vez de una costa
-    // real. Esto añade una ondulacion de baja frecuencia (dos senos
+    // real. Esto aÃ±ade una ondulacion de baja frecuencia (dos senos
     // superpuestos, como dos octavas de ruido) perpendicular al contorno,
     // con fase fija por region (hash de su primera celda + semilla del
     // mundo) para que no cambie de un frame a otro. No sustituye a
@@ -1242,9 +1246,39 @@ HTML_VISOR = """<!DOCTYPE html>
       estamparEnRecuadro(img, comp, tam, 1.35);
     }
 
-    // Un rio es un CAMINO, no una mancha -- un sello prediseñado no puede
+    // Circulo 2 (2026-08-27): a zoom macro el mapa es PERGAMINO PURO con
+    // sellos de FORMACION -- la generalizacion cartografica propuesta por
+    // Diego en el README: cada cluster de montana se estampa como UNA
+    // cordillera y cada cluster de bosque como UNA masa forestal, en vez
+    // de un sello por celda que a esta escala era ruido. Los sellos salen
+    // de las hojas nuevosAssetsDefinitivos (cordilleras de la hoja de
+    // montanas, masas de la de bosque). Devuelve {relieve, flora}:
+    // true cuando cada tipo de formacion se estampo -- el llamador
+    // suprime entonces los sellos POR CELDA de esa categoria, que aqui
+    // solo taparian el sello de formacion. Sin biblioteca, cae a false y
+    // el estampado por celda de siempre queda intacto.
+    function dibujarFormacionesMacro(tam, data, frustum) {
+      const cordilleras = catalogoAssets.relieve.cordillera || [];
+      const masas = catalogoAssets.flora.masa_bosque || [];
+      const resultado = { relieve: false, flora: false };
+      if (cordilleras.length === 0 && masas.length === 0) return resultado;
+      for (const comp of componentesPorBioma(data)) {
+        if (comp.bioma === 'montana' && cordilleras.length > 0) {
+          const nombre = elegirVariante(cordilleras, comp.cluster[0].x, comp.cluster[0].y, 71);
+          const img = nombre ? imagenesCache['relieve/' + nombre] : null;
+          if (img) { estamparEnRecuadro(img, comp.cluster, tam, 1.25); resultado.relieve = true; }
+        } else if (comp.bioma === 'bosque' && masas.length > 0) {
+          const nombre = elegirVariante(masas, comp.cluster[0].x, comp.cluster[0].y, 73);
+          const img = nombre ? imagenesCache['flora/' + nombre] : null;
+          if (img) { estamparEnRecuadro(img, comp.cluster, tam, 1.2); resultado.flora = true; }
+        }
+      }
+      return resultado;
+    }
+
+    // Un rio es un CAMINO, no una mancha -- un sello prediseÃ±ado no puede
     // calzar sus curvas exactas celda a celda (a diferencia de un lago o
-    // una montaña, que son razonablemente compactos). Aproximacion
+    // una montaÃ±a, que son razonablemente compactos). Aproximacion
     // deliberada: se estampa UNA vez por curso de agua conectado, a su
     // proporcion original (sin deformar), escalado por la longitud real
     // del camino y con un giro de 90 grados si el curso es mas alto que
@@ -1366,7 +1400,7 @@ HTML_VISOR = """<!DOCTYPE html>
       // dibujarCuencaConAssets (mismo sello de agua.lago/lago_color que
       // el resto del mapa, con su propio fallback de circulos si tampoco
       // hay sello disponible) -- una ampliacion de rio simplemente se lee
-      // como una laguna pequeña, que es honesto a lo que es.
+      // como una laguna pequeÃ±a, que es honesto a lo que es.
       const clavesComp = new Set(comp.map(c => c.x + ',' + c.y));
       const mapaCeldas = new Map(comp.map(c => [c.x + ',' + c.y, c]));
       function gradoReal(c) {
@@ -1393,7 +1427,7 @@ HTML_VISOR = """<!DOCTYPE html>
       // elegia "recto" con una orientacion que no encajaba con sus
       // vecinos reales, geometricamente incoherente. Igual que con las
       // celdas anchas: en vez de forzar una pieza que no le corresponde,
-      // esa celda cae al mismo sello de laguna pequeña.
+      // esa celda cae al mismo sello de laguna pequeÃ±a.
       const anchasSet = new Set();
       for (const c of comp) if (gradoReal(c) >= 3) anchasSet.add(c.x + ',' + c.y);
       for (let i = 1; i < camino.length - 1; i++) {
@@ -1461,7 +1495,7 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
-    function dibujarHidrografia(tam, data) {
+    function dibujarHidrografia(tam, data, rioFino = false) {
       const colorActivo = estiloColorActivo();
       const poolLago = colorActivo && (catalogoAssets.agua.lago_color || []).length > 0
         ? catalogoAssets.agua.lago_color : (catalogoAssets.agua.lago || []);
@@ -1470,9 +1504,11 @@ HTML_VISOR = """<!DOCTYPE html>
       // y una poza estirada a una laguna grande se leia como mancha.
       const poolPoza = colorActivo && (catalogoAssets.agua.poza_color || []).length > 0
         ? catalogoAssets.agua.poza_color : (catalogoAssets.agua.poza || []);
-      const variantesRio = catalogoAssets.agua.rio || [];
+      // Circulo 2: a zoom macro el rio es linea de plumilla (vectorial
+      // fino), nunca piezas de autotile -- son detalle de cerca.
+      const variantesRio = rioFino ? [] : (catalogoAssets.agua.rio || []);
       const piezasRio = catalogoAssets.agua.piezas_rio || {};
-      const piezasCargadas = colorActivo && ['recto', 'curva', 'cruce', 'te', 'gancho'].every(
+      const piezasCargadas = !rioFino && colorActivo && ['recto', 'curva', 'cruce', 'te', 'gancho'].every(
         (k) => piezasRio[k] && imagenesCache['agua/piezas_rio/' + k],
       );
       const piezasImg = piezasCargadas ? {
@@ -1622,7 +1658,7 @@ HTML_VISOR = """<!DOCTYPE html>
       }
 
       if (e.tipo === 'necromasa') {
-        cont.innerHTML = `<h3>🦴 Restos &middot; ${e.origen}</h3>` +
+        cont.innerHTML = `<h3>ðŸ¦´ Restos &middot; ${e.origen}</h3>` +
           `<div class="fila-stat"><span>Posicion</span><span>(${e.x}, ${e.y})</span></div>` +
           `<div class="fila-stat"><span>Masa organica</span><span>${e.masa} kg</span></div>` +
           `<div class="fila-botones"><button class="accion-ficha" id="btn-deseleccionar">Cerrar ficha</button></div>`;
@@ -1796,11 +1832,21 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.scale(camara.zoom, camara.zoom);
 
       const frustum = calcularFrustum(data);
+      // El nivel de zoom decide TODO el camino de render (lavado, sellos,
+      // formaciones, criaturas) -- se calcula antes que nada.
+      const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
       ctx.drawImage(pergaminoCache, 0, 0, data.ancho * tam, data.alto * tam);
-      // Pieza 3: el lavado del terreno depende del modo activo. En codice,
-      // el lavado organico de biomas de siempre (ruta intacta).
-      if (modoMapa === 'codice') dibujarBiomas(tam, data);
-      else dibujarLavadoModo(tam, data, frustum);
+      // Circulo 2: a zoom macro el mapa es PERGAMINO PURO -- sin lavado
+      // de color de biomas en modo codice (los sellos de formacion
+      // definen montanas y bosques; las zonas se leen por el sello, no
+      // por una aguada de reticula). Los modos relieve/hidro SI lavan
+      // aunque sea macro: son filtros de lectura que el usuario pide
+      // explicitamente. Medio/micro conservan el lavado organico.
+      const esMacro = nivel === 'macro';
+      if (!esMacro || modoMapa !== 'codice') {
+        if (modoMapa === 'codice') dibujarBiomas(tam, data);
+        else dibujarLavadoModo(tam, data, frustum);
+      }
 
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
@@ -1811,7 +1857,10 @@ HTML_VISOR = """<!DOCTYPE html>
           // dibujarHidrografia() la traza como forma vectorial despues de
           // esta pasada. El charco efimero SI se queda plano: es una
           // mancha de un tick, no un cuerpo geografico que merezca trazo.
-          if (c.profundidad_charco > 0) {
+          // El charco efimero SI se queda plano (a macro ni eso: a esa
+          // escala una mancha de un tick es ruido), no un cuerpo
+          // geografico que merezca trazo.
+          if (!esMacro && c.profundidad_charco > 0) {
             const intensidad = Math.min(1, c.profundidad_charco / 0.3);
             ctx.fillStyle = `rgba(${COLOR_CHARCO[0]}, ${COLOR_CHARCO[1]}, ${COLOR_CHARCO[2]}, ${0.15 + intensidad * 0.3})`;
             ctx.fillRect(px, py, tam, tam);
@@ -1830,8 +1879,9 @@ HTML_VISOR = """<!DOCTYPE html>
       // cola Y-sorted que montanas y flora -- un gnomo tras un pico al sur
       // queda oculto tras el. A zoom macro (< 0.8) siguen siendo puntos de
       // tinta en pantalla: de lejos el mapa sigue siendo un mapa, un
-      // marcador no participa en oclusiones.
-      const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
+      // marcador no participa en oclusiones. (La declaracion de `nivel` y
+      // `entidadesAnimadas` subio al principio de dibujarFrame con el
+      // circulo 2: el camino de lavado la consulta antes.)
       // Posiciones INTERPOLADAS (pieza 1): el bucle de dibujo lee del
       // gestor de animacion, no de la instantanea cruda -- mismos campos,
       // pero x/y avanzan suavemente entre instantaneas.
@@ -1858,23 +1908,27 @@ HTML_VISOR = """<!DOCTYPE html>
       // Pieza 2: el agua (lagos/rios) va ANTES de la cola Y-sorted -- es
       // terreno plano, no un objeto con altura. Estampandola despues, la
       // orilla del sello de lago (que desborda su recuadro sobre las
-      // celdas de tierra vecinas por diseño) tapaba por completo a las
+      // celdas de tierra vecinas por diseÃ±o) tapaba por completo a las
       // criaturas que pisaban esas celdas -- regresion detectada contra el
       // visor real: un conejo desaparecia bajo la orilla. Con el agua
       // debajo, la orilla queda DETRAS de criaturas/arboles/picos, como
       // pide un diorama. (El orden agua-despues era el de antes de la
       // pieza 2; el cambio de capa es visible y pendiente de tu visto.)
-      dibujarHidrografia(tam, data);
-      const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum, elementosCriaturas);
-      if (!montanaUsoAssets) dibujarRelieve(tam, data, frustum);
+      // Circulo 2: a macro, rios de plumilla fina y sellos de formacion
+      // (cordilleras/masas); los sellos por celda cubiertos por una
+      // formacion se suprimen dentro de dibujarStampsRelieveYFlora.
+      dibujarHidrografia(tam, data, esMacro);
+      const formaciones = esMacro ? dibujarFormacionesMacro(tam, data, frustum) : null;
+      const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum, elementosCriaturas, formaciones);
+      if (!montanaUsoAssets && !(formaciones && formaciones.relieve)) dibujarRelieve(tam, data, frustum);
       dibujarVegetacion(tam, data, frustum);
       dibujarMarco(tam, data.ancho, data.alto);
 
       ctx.restore();
 
       // A zoom macro: puntos de tinta en espacio de pantalla, como siempre
-      // (marcador de mapa, sin oclusiones -- decisión de diseño pieza 2).
-      // Adición de Diego (2026-08-27): de lejos solo se marcan las
+      // (marcador de mapa, sin oclusiones -- decisiÃ³n de diseÃ±o pieza 2).
+      // AdiciÃ³n de Diego (2026-08-27): de lejos solo se marcan las
       // CRIATURAS CONSCIENTES con la runa de su especie -- el conejo que
       // no mira, el lobo que acecha: eso es detalle de cerca. El filtro
       // lee del DTO (estabilidad_mental_maxima existe solo para quienes
@@ -1968,7 +2022,7 @@ def _listar_pngs_por_nombre(carpeta: Path) -> dict[str, str]:
 
 
 def construir_manifiesto_assets() -> dict[str, Any]:
-    """Escanea RUTA_ASSETS en cada peticion (biblioteca pequeña, coste
+    """Escanea RUTA_ASSETS en cada peticion (biblioteca pequeÃ±a, coste
     despreciable) y agrupa los archivos encontrados por categoria:
     flora.especie, agua.{lago,rio} y criaturas.especie por prefijo de
     nombre de archivo; relieve.montana con cualquier .png en esa carpeta
@@ -1997,7 +2051,7 @@ def construir_manifiesto_assets() -> dict[str, Any]:
 
 
 class ManejadorWeb(http.server.BaseHTTPRequestHandler):
-    """Manejador HTTP simple sin librerías externas."""
+    """Manejador HTTP simple sin librerÃ­as externas."""
 
     servidor_ref: ServidorWeb | None = None
 
@@ -2270,3 +2324,5 @@ def construir_instantanea(
         "celdas": celdas_data,
         "cronica": cronica,
     }
+
+
