@@ -286,6 +286,56 @@ HTML_VISOR = """<!DOCTYPE html>
       'desierto': [176, 150, 84],
       'tundra':   [188, 184, 170],
     };
+    // Circulo 2 generalizado (feedback de Diego: "que sea generalizado
+    // para anadir nuevos biomas sin romper lo anterior"): cada bioma con
+    // sellos de FORMACION a zoom macro declara aqui su pool. Anadir un
+    // bioma nuevo = anadir sus assets + UNA entrada en esta tabla; la
+    // funcion de estampado no cambia. Biomas sin entrada (pradera) se
+    // quedan con sus sellos por celda (matas de hierba, etc.).
+    // 'suprime' indica que categoria de sellos por celda sustituye la
+    // formacion (montana -> relieve: los picos dentro de la cordillera
+    // duplicarian; bosque -> flora: los arboles dentro de la masa
+    // duplicarian; desierto/tundra suprimen NADA -- sus saguaros y pinos
+    // son individuos que pisan sobre la region, como pide el objetivo).
+    const UMBRALES_LAVADO_DEFECTO = {
+      umbral_elevacion_montana: 0.47,
+      umbral_temperatura_tundra: 0.25,
+      umbral_lluvia_desierto: 0.24,
+      umbral_lluvia_bosque: 0.62,
+    };
+    let umbralesLavado = null;   // se actualiza con el DTO cuando llega
+
+    const PALETA_LAVADO = {
+      pradera: [122, 138, 74],
+      montana: [110, 104, 96],
+      tundra: [188, 184, 170],
+      desierto: [176, 150, 84],
+      bosque: [46, 74, 42],
+    };
+    const BANDA_LAVADO = 0.2;    // anchura de la transicion alrededor de cada umbral
+
+
+    function _mezclar(a, b, t) {
+      return [
+        Math.round(a[0] + (b[0] - a[0]) * t),
+        Math.round(a[1] + (b[1] - a[1]) * t),
+        Math.round(a[2] + (b[2] - a[2]) * t),
+      ];
+    }
+
+    function _rampa(valor, umbral, banda) {
+      // 0 antes del umbral-banda/2, 1 despues del umbral+banda/2, suave
+      // dentro (smoothstep, mismo criterio que nucleo/campo_continuo.py).
+      const t = Math.max(0, Math.min(1, (valor - (umbral - banda / 2)) / banda));
+      return t * t * (3 - 2 * t);
+    }
+
+    const FORMACIONES_POR_BIOMA = {
+      montana:  { raiz: 'relieve', pool: 'cordillera', carpeta: 'relieve/', margen: 1.25, sal: 71, suprime: 'relieve' },
+      bosque:   { raiz: 'flora', pool: 'masa_bosque', carpeta: 'flora/', margen: 1.2, sal: 73, suprime: 'flora' },
+      desierto: { raiz: 'relieve', pool: 'masa_desierto', carpeta: 'relieve/', margen: 1.3, sal: 75, suprime: null },
+      tundra:   { raiz: 'relieve', pool: 'masa_tundra', carpeta: 'relieve/', margen: 1.3, sal: 77, suprime: null },
+    };
     const COLOR_AGUA = [58, 92, 122];
     const COLOR_CHARCO = [90, 130, 160];
     const COLOR_FUEGO = [168, 58, 38];
@@ -1096,6 +1146,38 @@ HTML_VISOR = """<!DOCTYPE html>
     }
 
     // Lavado por celda de los modos relieve/hidro (el codice no pasa por aqui).
+    // Circulo 3 (2026-08-27): el lavado de biomas a medio/micro es un
+    // CAMPO CONTINUO. Antes: clasificar cada celda y pintar rectangulos de
+    // color plano -- transiciones duras entre bloques ("los colores y las
+    // transiciones no son naturales", Diego). Ahora el color se MEZCLA
+    // segun los campos continuos de la celda (lluvia/temperatura/
+    // elevacion) con rampas suaves alrededor de los umbrales del motor
+    // (que llegan por el DTO: una sola fuente de verdad). El orden de
+    // mezcla replica el arbol de nucleo/bioma.py para que lavado y
+    // clasificacion cuenten la misma historia.
+    function colorLavadoContinuo(c) {
+      const U = umbralesLavado || UMBRALES_LAVADO_DEFECTO;
+      const P = PALETA_LAVADO;
+      let color = P.pradera;
+      const tDesierto = 1 - _rampa(c.lluvia || 0, U.umbral_lluvia_desierto, BANDA_LAVADO);
+      color = _mezclar(color, P.desierto, tDesierto);
+      color = _mezclar(color, P.bosque, _rampa(c.lluvia || 0, U.umbral_lluvia_bosque, BANDA_LAVADO));
+      const tTundra = 1 - _rampa(c.temperatura || 0, U.umbral_temperatura_tundra, BANDA_LAVADO);
+      color = _mezclar(color, P.tundra, tTundra);
+      color = _mezclar(color, P.montana, _rampa(c.elevacion || 0, U.umbral_elevacion_montana, BANDA_LAVADO));
+      return [color[0], color[1], color[2], 90];
+    }
+
+    function dibujarLavadoContinuo(tam, data, frustum) {
+      for (let y = frustum.yMin; y < frustum.yMax; y++) {
+        for (let x = frustum.xMin; x < frustum.xMax; x++) {
+          const [r, g, b, a] = colorLavadoContinuo(data.celdas[y][x]);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+          ctx.fillRect(x * tam, y * tam, tam, tam);
+        }
+      }
+    }
+
     function dibujarLavadoModo(tam, data, frustum) {
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
@@ -1248,30 +1330,27 @@ HTML_VISOR = """<!DOCTYPE html>
 
     // Circulo 2 (2026-08-27): a zoom macro el mapa es PERGAMINO PURO con
     // sellos de FORMACION -- la generalizacion cartografica propuesta por
-    // Diego en el README: cada cluster de montana se estampa como UNA
-    // cordillera y cada cluster de bosque como UNA masa forestal, en vez
-    // de un sello por celda que a esta escala era ruido. Los sellos salen
-    // de las hojas nuevosAssetsDefinitivos (cordilleras de la hoja de
-    // montanas, masas de la de bosque). Devuelve {relieve, flora}:
-    // true cuando cada tipo de formacion se estampo -- el llamador
-    // suprime entonces los sellos POR CELDA de esa categoria, que aqui
-    // solo taparian el sello de formacion. Sin biblioteca, cae a false y
-    // el estampado por celda de siempre queda intacto.
+    // Diego en el README: cada cluster de un bioma con formacion declarada
+    // en FORMACIONES_POR_BIOMA se estampa como UN sello de formacion, en
+    // vez de un sello por celda que a esta escala era ruido. La funcion es
+    // generica: el conocimiento de que sello usa cada bioma vive en la
+    // tabla. Devuelve un objeto con true por cada bioma formado mas las
+    // categorias 'suprime' activadas -- el llamador suprime entonces los
+    // sellos por celda de esas categorias. Sin biblioteca, el objeto sale
+    // vacio y el estampado por celda de siempre queda intacto.
     function dibujarFormacionesMacro(tam, data, frustum) {
-      const cordilleras = catalogoAssets.relieve.cordillera || [];
-      const masas = catalogoAssets.flora.masa_bosque || [];
-      const resultado = { relieve: false, flora: false };
-      if (cordilleras.length === 0 && masas.length === 0) return resultado;
+      const resultado = {};
       for (const comp of componentesPorBioma(data)) {
-        if (comp.bioma === 'montana' && cordilleras.length > 0) {
-          const nombre = elegirVariante(cordilleras, comp.cluster[0].x, comp.cluster[0].y, 71);
-          const img = nombre ? imagenesCache['relieve/' + nombre] : null;
-          if (img) { estamparEnRecuadro(img, comp.cluster, tam, 1.25); resultado.relieve = true; }
-        } else if (comp.bioma === 'bosque' && masas.length > 0) {
-          const nombre = elegirVariante(masas, comp.cluster[0].x, comp.cluster[0].y, 73);
-          const img = nombre ? imagenesCache['flora/' + nombre] : null;
-          if (img) { estamparEnRecuadro(img, comp.cluster, tam, 1.2); resultado.flora = true; }
-        }
+        const cfg = FORMACIONES_POR_BIOMA[comp.bioma];
+        if (!cfg) continue;
+        const pool = (catalogoAssets[cfg.raiz] || {})[cfg.pool] || [];
+        if (pool.length === 0) continue;
+        const nombre = elegirVariante(pool, comp.cluster[0].x, comp.cluster[0].y, cfg.sal);
+        const img = nombre ? imagenesCache[cfg.carpeta + nombre] : null;
+        if (!img) continue;
+        estamparEnRecuadro(img, comp.cluster, tam, cfg.margen);
+        resultado[comp.bioma] = true;
+        if (cfg.suprime) resultado[cfg.suprime] = true;
       }
       return resultado;
     }
@@ -1756,6 +1835,7 @@ HTML_VISOR = """<!DOCTYPE html>
         if (!data.celdas) return;
         ultimoDataConocido = data;
         animadorEntidades.sincronizar(data.entidades, data.semilla);
+        if (data.bioma_umbrales) umbralesLavado = data.bioma_umbrales;
 
         document.getElementById('info-mundo').innerHTML =
           `<strong>Semilla:</strong> ${data.semilla} &middot; <strong>Tick:</strong> ${data.tick} &middot; ` +
@@ -1842,9 +1922,12 @@ HTML_VISOR = """<!DOCTYPE html>
       // por una aguada de reticula). Los modos relieve/hidro SI lavan
       // aunque sea macro: son filtros de lectura que el usuario pide
       // explicitamente. Medio/micro conservan el lavado organico.
+      // Circulo 3: a medio/micro el modo codice pinta el CAMPO CONTINUO de
+      // biomas (mezcla suave por lluvia/temperatura/elevacion). A macro,
+      // pergamino puro como en el circulo 2.
       const esMacro = nivel === 'macro';
-      if (!esMacro || modoMapa !== 'codice') {
-        if (modoMapa === 'codice') dibujarBiomas(tam, data);
+      if (!esMacro) {
+        if (modoMapa === 'codice') dibujarLavadoContinuo(tam, data, frustum);
         else dibujarLavadoModo(tam, data, frustum);
       }
 
@@ -2317,6 +2400,22 @@ def construir_instantanea(
         "estacion": estacion_actual(reloj.estacion).value,
         "clima": clima_actual.value if clima_actual else "despejado",
         "semilla": mundo.config.get("semilla_por_defecto"),
+        # Circulo 3: umbrales del clasificador para el lavado continuo del
+        # visor -- una sola fuente de verdad (config bioma).
+        "bioma_umbrales": {
+            "umbral_elevacion_montana": mundo.config.get("bioma", {}).get("umbral_elevacion_montana", 0.47),
+            "umbral_temperatura_tundra": mundo.config.get("bioma", {}).get("umbral_temperatura_tundra", 0.25),
+            "umbral_lluvia_desierto": mundo.config.get("bioma", {}).get("umbral_lluvia_desierto", 0.24),
+            "umbral_lluvia_bosque": mundo.config.get("bioma", {}).get("umbral_lluvia_bosque", 0.62),
+        },
+        # Circulo 3: umbrales del clasificador para el lavado continuo del
+        # visor -- una sola fuente de verdad (config bioma).
+        "bioma_umbrales": {
+            "umbral_elevacion_montana": mundo.config.get("bioma", {}).get("umbral_elevacion_montana", 0.47),
+            "umbral_temperatura_tundra": mundo.config.get("bioma", {}).get("umbral_temperatura_tundra", 0.25),
+            "umbral_lluvia_desierto": mundo.config.get("bioma", {}).get("umbral_lluvia_desierto", 0.24),
+            "umbral_lluvia_bosque": mundo.config.get("bioma", {}).get("umbral_lluvia_bosque", 0.62),
+        },
         "ancho": zona.ancho,
         "alto": zona.alto,
         "censo": censo,
@@ -2324,5 +2423,6 @@ def construir_instantanea(
         "celdas": celdas_data,
         "cronica": cronica,
     }
+
 
 

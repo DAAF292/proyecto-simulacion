@@ -16,7 +16,7 @@ function dataGrid(mapa) {
   const alto = filas.length, ancho = filas[0].length;
   const celdas = filas.map((fila, y) => fila.split('').map((ch, x) => ({
     x, y,
-    bioma: ch === '^' ? 'montana' : (ch === 'T' ? 'bosque' : 'pradera'),
+    bioma: ch === '^' ? 'montana' : (ch === 'T' ? 'bosque' : (ch === '~' ? 'desierto' : (ch === '*' ? 'tundra' : (ch === 'v' ? 'volcan' : 'pradera')))),
     planta: null, elevacion: ch === '^' ? 0.8 : 0.2,
   })));
   return { ancho, alto, celdas };
@@ -25,7 +25,7 @@ function dataGrid(mapa) {
 function limpiar() {
   visor.catalogoAssets.flora = {};
   visor.catalogoAssets.flora_color = {};
-  visor.catalogoAssets.relieve = { montana: [], montana_color: [], cordillera: [] };
+  visor.catalogoAssets.relieve = { montana: [], montana_color: [], cordillera: [], masa_desierto: [], masa_tundra: [] };
   visor.catalogoAssets.criaturas = {};
   for (const k of Object.keys(visor.imagenesCache)) delete visor.imagenesCache[k];
   visor.camara.zoom = 0.5;
@@ -39,6 +39,49 @@ function imgFalsa(nw = 600, nh = 300) {
 function drawImages() {
   return visor.llamadasCtxUltimas().filter((l) => l.prop === 'drawImage');
 }
+
+test('la formacion es GENERAL: un bioma nuevo en la tabla funciona sin tocar la funcion', () => {
+  limpiar();
+  const data = dataGrid(`
+    ........
+    ..vvv...
+    ........
+  `);
+  // 'v' ya nace como bioma 'volcan' (mapeado en dataGrid) -- lo unico que
+  // registra el bioma nuevo es la ENTRADA EN LA TABLA de abajo:
+  const imgVolcan = imgFalsa(500, 200);
+  visor.catalogoAssets.relieve.cordillera = ['c1.png'];
+  visor.imagenesCache['relieve/c1.png'] = imgVolcan;
+  visor.FORMACIONES_POR_BIOMA.volcan = { raiz: 'relieve', pool: 'cordillera', carpeta: 'relieve/', margen: 1.25, sal: 79 };
+
+  const r = visor.dibujarFormacionesMacro(TAM, data, FRUSTUM);
+  assert.equal(r.volcan, true, 'el bioma nuevo recibe su sello de formacion');
+  assert.equal(drawImages().length, 1);
+  delete visor.FORMACIONES_POR_BIOMA.volcan;
+});
+
+test('desierto y tundra tambien tienen formacion a macro (dunas y ventisqueros)', () => {
+  limpiar();
+  const data = dataGrid(`
+    ..~~~~..
+    ..~~~~..
+    .****...
+    .****...
+  `);
+  const imgDuna = imgFalsa(600, 110);
+  const imgVentisquero = imgFalsa(600, 80);
+  visor.catalogoAssets.relieve.masa_desierto = ['duna_1.png'];
+  visor.catalogoAssets.relieve.masa_tundra = ['ventis_1.png'];
+  visor.imagenesCache['relieve/duna_1.png'] = imgDuna;
+  visor.imagenesCache['relieve/ventis_1.png'] = imgVentisquero;
+
+  const r = visor.dibujarFormacionesMacro(TAM, data, FRUSTUM);
+  assert.equal(r.desierto, true, 'cluster de desierto -> sello de dunas');
+  assert.equal(r.tundra, true, 'cluster de tundra -> sello de ventisqueros');
+  const dibujos = drawImages();
+  assert.equal(dibujos.length, 2, 'un cluster conectado por bioma, un sello');
+  assert.deepEqual(dibujos.map((d) => d.args[0]).sort(), [imgDuna, imgVentisquero].sort());
+});
 
 test('un cluster de montana se estampa como UNA cordillera ajustada a su recuadro', () => {
   limpiar();
@@ -90,7 +133,7 @@ test('un cluster de bosque se estampa como masa forestal y las praderas no gener
     ........
   `);
   const rPradera = visor.dibujarFormacionesMacro(TAM, pradera, FRUSTUM);
-  assert.equal(rPradera.relieve || rPradera.flora, false, 'pradera pura: cero formaciones');
+  assert.ok(!(rPradera.relieve || rPradera.flora), 'pradera pura: cero formaciones');
   assert.equal(drawImages().length, 0);
 });
 
@@ -126,6 +169,9 @@ test('sin biblioteca de formaciones no se estampa nada (fallback a por-celda int
     ........
   `);
   const r = visor.dibujarFormacionesMacro(TAM, data, FRUSTUM);
-  assert.equal(r.relieve || r.flora, false, 'sin biblioteca no hay formaciones');
+  assert.ok(!(r.relieve || r.flora), 'sin biblioteca no hay formaciones');
   assert.equal(drawImages().length, 0, 'cero estampados');
 });
+
+
+

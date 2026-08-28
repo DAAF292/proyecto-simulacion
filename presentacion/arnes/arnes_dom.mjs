@@ -86,7 +86,16 @@ const FRAGMENTO_EXPORT = `
   lavadoDeCelda: typeof lavadoDeCelda !== 'undefined' ? lavadoDeCelda : undefined,
   colorHipsometrico: typeof colorHipsometrico !== 'undefined' ? colorHipsometrico : undefined,
   colorAguaPorProfundidad: typeof colorAguaPorProfundidad !== 'undefined' ? colorAguaPorProfundidad : undefined,
+  colorLavadoContinuo: typeof colorLavadoContinuo !== 'undefined' ? colorLavadoContinuo : undefined,
   dibujarFormacionesMacro: typeof dibujarFormacionesMacro !== 'undefined' ? dibujarFormacionesMacro : undefined,
+  FORMACIONES_POR_BIOMA: typeof FORMACIONES_POR_BIOMA !== 'undefined' ? FORMACIONES_POR_BIOMA : undefined,
+  // Registrador que muta la tabla DESDE el realm del vm (anadir propiedades
+  // a objetos creados dentro del sandbox desde fuera no propaga al binding
+  // que lee la funcion -- peculiaridad de Node vm, no del visor).
+  tablaDesdeScript: typeof FORMACIONES_POR_BIOMA !== 'undefined' ? () => Object.keys(FORMACIONES_POR_BIOMA).join(',') + ' | refIgual: ' + (FORMACIONES_POR_BIOMA === undefined ? '?' : 'dentro') : undefined,
+  registrarFormacion: typeof FORMACIONES_POR_BIOMA !== 'undefined'
+    ? (bioma, cfg) => { FORMACIONES_POR_BIOMA[bioma] = cfg; }
+    : undefined,
 });
 `;
 
@@ -129,5 +138,7 @@ export function cargarVisor() {
   exportados.limpiarCtxVisor = () => { if (ctxDelVisor.actual) ctxDelVisor.actual.llamadas.length = 0; };
   return exportados;
 }
+
+
 
 
