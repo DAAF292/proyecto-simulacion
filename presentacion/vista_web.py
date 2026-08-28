@@ -330,7 +330,12 @@ HTML_VISOR = """<!DOCTYPE html>
       return t * t * (3 - 2 * t);
     }
 
-    const FORMACIONES_POR_BIOMA = {
+    const     FORMACIONES_POR_BIOMA = {
+      // (2026-08-28) La entrada montana estuvo FUERA de la tabla parte del
+      // dia: cfg=undefined -> la formacion no estampaba NADA ni marcaba
+      // la supresion, y el por-celda estampaba las panoramicas celda a
+      // celda (diagnostico del arnes: SONDA 'reading raiz'). Diego pide
+      // explicitamente una formacion de imagen como la de bosques.
       montana:  { raiz: 'relieve', pool: 'cordillera', carpeta: 'relieve/', margen: 1.25, sal: 71, suprime: 'relieve' },
       bosque:   { raiz: 'flora', pool: 'masa_bosque', carpeta: 'flora/', margen: 1.2, sal: 73, suprime: 'flora' },
       desierto: { raiz: 'relieve', pool: 'masa_desierto', carpeta: 'relieve/', margen: 1.3, sal: 75, suprime: null },
@@ -386,7 +391,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // en dibujarVegetacion() y en dibujarStampsRelieveYFlora() mas abajo.
     let catalogoAssets = {
       flora: {}, flora_color: {},
-      relieve: { montana: [], montana_color: [] },
+      relieve: { montana: [], cordillera: [], montana_color: [] },
       agua: { lago: [], lago_color: [], rio: [], piezas_rio: {} },
       criaturas: {},
     };
@@ -400,7 +405,12 @@ HTML_VISOR = """<!DOCTYPE html>
     // retrato o punto, un eje distinto). Si la carpeta _color de una
     // categoria esta vacia, esa categoria sigue en tinta a cualquier zoom
     // -- ver elegirCatalogoTerreno().
-    const ZOOM_ESTILO_COLOR = 1.6;
+    const     // (2026-08-28) 1.6 -> 1.0: el rango medio en tinta (0.8-1.6) leia las
+    // cordilleras de plumilla como BLOQUES NEGROS sobre el lavado (capturas
+    // de Diego: "pasa de macro a micro pero aun no se ha renderizado lo de
+    // las montanas"). El color entra nada mas salir de macro; el pergamino
+    // de plumilla queda solo para el mapa completo de un vistazo.
+    ZOOM_ESTILO_COLOR = 1.0;
 
     async function cargarBibliotecaAssets() {
       try {
@@ -426,6 +436,7 @@ HTML_VISOR = """<!DOCTYPE html>
         for (const nombre of catalogoAssets.flora_color[especie]) rutas.push(['flora_color/' + nombre, 'flora_color/' + nombre]);
       }
       for (const nombre of catalogoAssets.relieve.montana) rutas.push(['relieve/' + nombre, 'relieve/' + nombre]);
+      for (const nombre of catalogoAssets.relieve.cordillera || []) rutas.push(['relieve/' + nombre, 'relieve/' + nombre]);
       for (const nombre of catalogoAssets.relieve.montana_color) rutas.push(['relieve_color/' + nombre, 'relieve_color/' + nombre]);
       for (const clave in catalogoAssets.agua) {
         if (clave === 'piezas_rio') continue;
@@ -437,6 +448,12 @@ HTML_VISOR = """<!DOCTYPE html>
       }
       for (const especie in catalogoAssets.criaturas) {
         for (const nombre of catalogoAssets.criaturas[especie]) rutas.push(['criaturas/' + nombre, 'criaturas/' + nombre]);
+      }
+      for (const especie in catalogoAssets.criaturas_poses) {
+        for (const pose in catalogoAssets.criaturas_poses[especie]) {
+          const nombre = catalogoAssets.criaturas_poses[especie][pose];
+          rutas.push(['criaturas_poses/' + nombre, 'criaturas_poses/' + nombre]);
+        }
       }
 
       await Promise.all(rutas.map(([ruta, clave]) => new Promise((resolve) => {
@@ -481,24 +498,97 @@ HTML_VISOR = """<!DOCTYPE html>
 
     // Pieza 2 (2026-08-27): construccion del elemento de cola Y-sorted de
     // una criatura en ESPACIO DE MUNDO (escala con el zoom y se oculta tras
-    // los sellos de las celdas al sur, como un diorama). La variante por
-    // hash del id es la de siempre (el individuo conserva pose entre
-    // frames). El anclaje es el PIE de SU celda -- misma convencion que los
-    // picos de montana -- con un sesgo minimo que solo sirve para ganar
-    // empates contra el sello de la propia celda (una montana en su misma
-    // celda comparte baseY exacto: el habitante se ve de pie en la ladera,
-    // no dentro de la piedra); contra cualquier sello mas al sur sigue
-    // perdiendo y queda oculto. Sin asset de sprite, el halo+runa entra en
-    // la cola con el mismo anclaje para no mezclar dos reglas de oclusion.
+    // los sellos de las celdas al sur, como un diorama). 2026-08-28: la
+    // pose se resuelve por ESTADO DEL ECS (poses de criaturas_poses/,
+    // kit por especie): herida (vitalidad), durmiendo/forrajeando (accion),
+    // andar/idle por direccion de marcha (ultima direccion persiste en el
+    // animador), y muerto para necromasa segun su especie de origen. El
+    // anclaje es el PIE de SU celda -- misma convencion que los picos de
+    // montana -- con un sesgo minimo que solo sirve para ganar empates
+    // contra el sello de la propia celda; contra cualquier sello mas al
+    // sur sigue perdiendo y queda oculto. Sin pose disponible, cae al
+    // sprite generico de criaturas/ (variante por hash del id) y, sin
+    // ningun asset, al halo+runa en la cola con el mismo anclaje.
     const ALTURA_CRIATURA_POR_CELDA = 0.55;
-    // Calibracion provisional: altura de una criatura de referencia
+    // Calibracion provisional: lado mayor de una criatura de referencia
     // (ESCALA_ESPECIE 1) como fraccion del alto de una celda. Eleccion de
     // legibilidad a ojo contra el visor real, no una medida del motor.
+    // El lado mayor manda (no la altura): las poses tumbadas (muerto,
+    // herido, aspecto ~2:1) no desbordan la celda.
+    const EN_MARCHA_EPSILON = 0.02;
+    // celdas de distancia entre posicion suavizada y objetivo ECS a partir
+    // de las cuales la criatura cuenta como "en marcha" (pose de andar).
+    const UMBRAL_HERIDO_POSE = 0.35;
+    // Mismo umbral que pinta la barra de vitalidad en rojo: debajo, la
+    // criatura muestra su pose herida. Calibracion provisional.
+    const ACCIONES_FORRAJEANDO = new Set(['comer', 'cazar', 'beber']);
+    // comer/cazar/beber comparten la pose de forrajeo (los sheets no traen
+    // pose de bebida): aproximacion documentada, no un hallazgo perfecto.
+
+    // Resuelve el fichero de pose con cadena de fallback: pose pedida ->
+    // pose lateral E (especies sin piezas frontales/traseradas) -> null
+    // (el llamador cae al sprite generico). El este (E) es la direccion
+    // nativa de TODOS los recortes: oeste se resuelve espejando en el
+    // canvas, nunca con piezas nativas izquierdas (evita dobles espejos).
+    function imagenPose(especie, pose) {
+      const kit = catalogoAssets.criaturas_poses[especie] || {};
+      const intentos = {
+        'forrajeando': ['forrajeando', 'idle_e'],
+        'durmiendo': ['durmiendo', 'idle_e'],
+        'herido': ['herido', 'idle_e'],
+        'muerto': ['muerto'],
+        'idle_s': ['idle_s', 'idle_e'],
+        'idle_n': ['idle_n', 'idle_e'],
+        'idle_e': ['idle_e'],
+        'idle_o': ['idle_e'],
+        'andar_s': ['andar_s', 'andar_e', 'idle_e'],
+        'andar_n': ['andar_n', 'andar_e', 'idle_e'],
+        'andar_e': ['andar_e'],
+        'andar_o': ['andar_e'],
+      }[pose] || [pose];
+      for (const p of intentos) {
+        const nombre = kit[p];
+        if (nombre && imagenesCache['criaturas_poses/' + nombre]) {
+          return imagenesCache['criaturas_poses/' + nombre];
+        }
+      }
+      return null;
+    }
+
+    // Estado del ECS -> nombre de pose. Las poses de suelo (forrajeando,
+    // durmiendo, herido, muerto) llevan dir null: no se orientan por la
+    // marcha, no se espejan nunca. Prioridad: muerto > herido > dormir >
+    // forrajeo > marcha > idle.
+    function resolverPose(e) {
+      if (e.tipo === 'necromasa') return { pose: 'muerto', dir: null };
+      const vitalidad = e.pool_fisico ? e.pool_fisico.vitalidad : 1;
+      if (vitalidad < UMBRAL_HERIDO_POSE) return { pose: 'herido', dir: null };
+      if (e.accion === 'dormir') return { pose: 'durmiendo', dir: null };
+      if (ACCIONES_FORRAJEANDO.has(e.accion)) return { pose: 'forrajeando', dir: null };
+      const dx = e.tx - e.x, dy = e.ty - e.y;
+      const enMarcha = Math.abs(dx) + Math.abs(dy) > EN_MARCHA_EPSILON;
+      // huir/huida_erratica/buscar_pareja/crisis_violenta caen aqui:
+      // andan si se mueven, idle si no (aproximacion documentada);
+      // catatonia/aliviarse quedan en idle con la ultima direccion.
+      const dir = enMarcha
+        ? (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'e' : 'o') : (dy > 0 ? 's' : 'n'))
+        : (e.ultimaDir || 's');
+      return { pose: (enMarcha ? 'andar_' : 'idle_') + dir, dir };
+    }
 
     function construirElementoCriatura(e, tam) {
-      const variantesCriatura = catalogoAssets.criaturas[e.tipo] || [];
-      const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
-      const imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
+      const resuelta = resolverPose(e);
+      let imgCriatura = null;
+      if (e.tipo === 'necromasa') {
+        if (e.origen) imgCriatura = imagenPose(e.origen, 'muerto');
+      } else {
+        imgCriatura = imagenPose(e.tipo, resuelta.pose);
+      }
+      if (!imgCriatura) {
+        const variantesCriatura = catalogoAssets.criaturas[e.tipo] || [];
+        const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
+        imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
+      }
       const baseY = (e.y + 1) * tam;
       const ordenY = baseY + tam * 0.01;
       const cx = (e.x + 0.5) * tam;
@@ -506,21 +596,16 @@ HTML_VISOR = """<!DOCTYPE html>
       const runa = RUNAS[e.tipo] || '?';
 
       if (imgCriatura) {
-        const alturaImg = tam * ALTURA_CRIATURA_POR_CELDA * (ESCALA_ESPECIE[e.tipo] ?? 1);
-        const anchoImg = alturaImg * (imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1);
+        const lado = tam * ALTURA_CRIATURA_POR_CELDA * (ESCALA_ESPECIE[e.tipo] ?? 1);
+        const aspecto = imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1;
+        const alturaImg = aspecto >= 1 ? lado / aspecto : lado;
+        const anchoImg = aspecto >= 1 ? lado : lado * aspecto;
+        const espejar = resuelta.dir === 'o';
         return {
           ordenY,
           alturaVisual: alturaImg / 2,
           dibujar: () => {
-            // Adicion de Diego (2026-08-27): la direccion de marcha se
-            // refleja en el dibujo -- los recortes de los sheets nuevos
-            // nacen mirando a la DERECHA, asi que una criatura que se
-            // mueve hacia la izquierda se dibuja espejada. La posicion
-            // objetivo (tx) es la del ECS: la orientacion sigue a donde
-            // VA, no al temblor del suavizado. Necromasa (sin rumbo) y
-            // criaturas quietas conservan la ultima orientacion.
-            const haciaLaIzquierda = e.tx !== undefined && e.tx < e.x - 0.001;
-            if (haciaLaIzquierda) {
+            if (espejar) {
               ctx.save();
               ctx.translate(cx, 0);
               ctx.scale(-1, 1);
@@ -592,7 +677,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // (para que el llamador sepa si debe caer al dibujarRelieve() vectorial).
     // elementosExtra (pieza 2): cola de criaturas ya construida en espacio
     // de mundo -- se mezcla en la misma ordenacion para oclusion real.
-    function dibujarStampsRelieveYFlora(tam, data, frustum, elementosExtra = [], formaciones = null) {
+    function dibujarStampsRelieveYFlora(tam, data, frustum, elementosExtra = [], formaciones = null, nivel = null) {
       const poolMontana = poolTerreno(
         catalogoAssets.relieve.montana_color, 'relieve_color/',
         catalogoAssets.relieve.montana, 'relieve/',
@@ -608,7 +693,19 @@ HTML_VISOR = """<!DOCTYPE html>
           // montana no se dibujan (la cordillera del cluster los taparia
           // con un sello suyo). Sin formaciones (biblioteca vacia), el
           // por-celda de siempre queda intacto.
-          if (c.bioma === 'montana' && montanaConAssets && !(formaciones && formaciones.relieve)) {
+          // (2026-08-28) Guard de agua: ni pico ni planta en celdas con
+          // agua permanente -- el sello desborda su celda y tapaba el
+          // lago vecino (capturas de Diego); la capa de agua pinta esas
+          // celdas y cualquier sello terrestre ahi es ruido.
+          // (2026-08-28) Menos profusion, mas tamano (feedback de Diego
+          // contra el visor real): solo ~la mitad de las celdas de
+          // montana llevan sello (hash determinista) y la base sube a
+          // 2.6 -- picos definidos en vez de muro continuo.
+          // (2026-08-28) Los sellos de pico SOLO a color (sepia): en tinta la
+          // ilustracion se funde en masa oscura y el relieve vectorial
+          // dibuja la montana.
+          if (c.bioma === 'montana' && !c.tipo_agua && montanaConAssets && estiloColorActivo()
+              && !(formaciones && formaciones.relieve) && hash2(x, y, 99) < 0.5) {
             const nombre = elegirVariante(poolMontana.lista, x, y, 91);
             const img = imagenesCache[poolMontana.prefijo + nombre];
             if (img) {
@@ -617,12 +714,17 @@ HTML_VISOR = """<!DOCTYPE html>
                 img, ordenY: baseY,
                 cx: x * tam + tam / 2 + (hash2(x, y, 92) - 0.5) * tam * 0.3,
                 baseY,
-                escala: 1.3 + c.elevacion * 0.7,
+                // (2026-08-28) Jerarquia de escala: la montana DOMINA el
+                // paisaje -- base 2.6 (3.4-5.2 celdas de ancho en las
+                // celdas estampadas) frente a la flora a base 1.0
+                // (0.4-1.0). Antes compartian base 1.3 y las cordilleras
+                // competian con las matas de hierba.
+                escala: 2.0 + c.elevacion * 0.7, base: 2.6,
               });
             }
           }
 
-          if (c.planta && !(formaciones && formaciones.flora && c.bioma === 'bosque')) {
+          if (c.planta && !c.tipo_agua && !(formaciones && formaciones.flora && c.bioma === 'bosque')) {
             // Pieza nuevosAssetsDefinitivos (2026-08-27): el estado de la
             // planta elige el pool cuando existen sellos para el -- fruto
             // si la celda conserva recurso (manzanas / fruto_de_cactus) y
@@ -657,7 +759,7 @@ HTML_VISOR = """<!DOCTYPE html>
                 img, ordenY: baseY,
                 cx: x * tam + tam / 2 + (hash2(x, y, 94) - 0.5) * tam * 0.5,
                 baseY,
-                escala: 0.4 + c.planta.etapa * 0.6,
+                escala: 0.4 + c.planta.etapa * 0.6, base: 1.0,
               });
             }
           }
@@ -675,7 +777,9 @@ HTML_VISOR = """<!DOCTYPE html>
           el.dibujar();
           continue;
         }
-        const ancho = tam * 1.3 * el.escala;
+        // base por categoria (2026-08-28): montana 2.0, flora 1.0 -- la
+        // jerarquia de escala vive aqui, no en formulas sueltas.
+        const ancho = tam * (el.base || 1.3) * el.escala;
         const alto = ancho * (el.img.naturalHeight / el.img.naturalWidth || 1);
         ctx.drawImage(el.img, el.cx - ancho / 2, el.baseY - alto, ancho, alto);
       }
@@ -771,8 +875,15 @@ HTML_VISOR = """<!DOCTYPE html>
       avanzar(dtSegundos) {
         const alfa = 1 - Math.exp(-dtSegundos / this.tau);
         this.porId.forEach((e) => {
-          e.x += (e.tx - e.x) * alfa;
-          e.y += (e.ty - e.y) * alfa;
+          // La ultima direccion de marcha persiste por individuo: cuando
+          // la criatura para, conserva la pose idle orientada hacia donde
+          // camino por ultima vez (la resolucion de pose la lee).
+          const dx = e.tx - e.x, dy = e.ty - e.y;
+          if (Math.abs(dx) + Math.abs(dy) > EN_MARCHA_EPSILON) {
+            e.ultimaDir = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'e' : 'o') : (dy > 0 ? 's' : 'n');
+          }
+          e.x += dx * alfa;
+          e.y += dy * alfa;
         });
       }
 
@@ -959,36 +1070,54 @@ HTML_VISOR = """<!DOCTYPE html>
 
     function dibujarRelieve(tam, data, frustum) {
       // Silueta triangular con sombreado este por celda de bioma Montana
-      // (LOD macro de la propuesta) -- sin isolineas de curva de nivel
-      // todavia, eso queda para cuando el zoom micro le de sentido a un
-      // trazo mas fino que una celda entera.
+      // (LOD macro de la propuesta).
+      // (2026-08-28, v3) Historial: v1 = triangulo identico por celda en
+      // rejilla (papel pintado, feedback de Diego); v2 = hashes de
+      // variacion sin damero, pero los picos apenas se solapaban y TODOS
+      // se trazaban: enjambre de piramides sueltas (render de referencia).
+      // La v3 lee como CORDILLERA: semiancho > media celda (los vecinos
+      // se solapan), base en el borde de celda (las filas se funden, sin
+      // terrazas), altura variable por hash + elevacion real, y TRAZO
+      // SELECTIVO -- solo se traza el pico cuyo vecino sur no es montana
+      // o es mas bajo: los picos ocultos detras quedan solo con relleno,
+      // sus patas ya no cruzan el cuerpo del pico de delante (asi se
+      // dibuja una cordillera de plumilla; trazarlo todo era lo que
+      // producia las cruces de la v1).
+      const alturaDe = (x, y) => {
+        const c = data.celdas[y] && data.celdas[y][x];
+        if (!c || c.bioma !== 'montana') return 0;
+        const esc = 0.55 + 0.55 * hash2(x, y, 101);
+        return tam * 0.95 * esc * (0.65 + 0.5 * Math.min(0.6, c.elevacion));
+      };
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           if (c.bioma !== 'montana') continue;
-          const cx = x * tam + tam / 2;
-          const base = y * tam + tam * 0.86;
-          const apice = y * tam + tam * (0.22 - Math.min(0.14, c.elevacion * 0.14));
-          const izq = x * tam + tam * 0.08;
-          const der = x * tam + tam * 0.92;
+          const cx = x * tam + tam * (0.5 + (hash2(x, y, 102) - 0.5) * 0.3);
+          const base = (y + 1) * tam;
+          const apice = base - alturaDe(x, y);
+          const semiancho = tam * (0.62 + 0.23 * hash2(x, y, 104));
+          const izq = cx - semiancho, der = cx + semiancho;
 
           ctx.beginPath();
           ctx.moveTo(cx, apice); ctx.lineTo(izq, base); ctx.lineTo(cx, base);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(150,140,124,0.5)';
+          ctx.fillStyle = 'rgba(150,140,124,0.45)';
           ctx.fill();
 
           ctx.beginPath();
           ctx.moveTo(cx, apice); ctx.lineTo(der, base); ctx.lineTo(cx, base);
           ctx.closePath();
-          ctx.fillStyle = 'rgba(94,84,70,0.5)';
+          ctx.fillStyle = 'rgba(94,84,70,0.45)';
           ctx.fill();
 
-          ctx.strokeStyle = 'rgba(58,43,26,0.4)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(izq, base); ctx.lineTo(cx, apice); ctx.lineTo(der, base);
-          ctx.stroke();
+          if (alturaDe(x, y) >= alturaDe(x, y + 1)) {
+            ctx.strokeStyle = 'rgba(58,43,26,0.55)';
+            ctx.lineWidth = Math.max(0.8, tam * 0.03);
+            ctx.beginPath();
+            ctx.moveTo(izq, base); ctx.lineTo(cx, apice); ctx.lineTo(der, base);
+            ctx.stroke();
+          }
         }
       }
     }
@@ -1359,14 +1488,157 @@ HTML_VISOR = """<!DOCTYPE html>
       const anchoBase = (maxX - minX + 1) * tam, altoBase = (maxY - minY + 1) * tam;
       const w = anchoBase * margen, h = altoBase * margen;
       const cx = (minX + maxX + 1) / 2 * tam, cy = (minY + maxY + 1) / 2 * tam;
-      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+      // Contain (2026-08-28): el sello ENCAJA en el recuadro ampliado sin
+      // deformarse. Estirar ancho y alto por separado deformaba las
+      // orillas de los lagos y achataba/estiraba cordilleras y bosques
+      // (capturas de Diego: el bosque gigante a un tercio del mapa). El
+      // sobrante del recuadro queda de lavado/pergamino, no como hueco
+      // del sello: mejor cobertura insuficiente que silueta falsa.
+      const esc = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+      const dw = img.naturalWidth * esc, dh = img.naturalHeight * esc;
+      ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+    }
+
+    // Sello de agua cuyo encuadre natural encaja con la FORMA del cuerpo:
+    // elegir por hash podia caer a un sello cuadrado para una laguna
+    // alargada y el contain lo encogeria dejando pergamino a los lados.
+    // Desempate determinista: a delta igual decide el hash de siempre.
+    function selloPorAspecto(variantes, comp, tam, sal) {
+      if (!variantes || variantes.length === 0) return null;
+      const minX = Math.min(...comp.map(c => c.x)), maxX = Math.max(...comp.map(c => c.x));
+      const minY = Math.min(...comp.map(c => c.y)), maxY = Math.max(...comp.map(c => c.y));
+      const anchoBase = (maxX - minX + 1) * tam, altoBase = (maxY - minY + 1) * tam;
+      const aspectoCluster = anchoBase / altoBase;
+      let mejor = null, mejorDelta = Infinity;
+      for (const nombre of variantes) {
+        const img = imagenesCache['agua/' + nombre];
+        if (!img) continue;
+        const delta = Math.abs(img.naturalWidth / img.naturalHeight - aspectoCluster);
+        if (delta < mejorDelta - 1e-6 || (Math.abs(delta - mejorDelta) <= 1e-6 && hash2(comp[0].x, comp[0].y, sal) < 0.5)) {
+          mejorDelta = delta;
+          mejor = img;
+        }
+      }
+      return mejor;
+    }
+
+    // (2026-08-28, decision de Diego: FUERA los sellos de imagen de
+    // cuerpos de agua -- lago/poza pintados) El agua se PINTA: silueta
+    // organica del cuerpo (contorno + Chaikin + ondulacion, el pipeline
+    // de silueta de los biomas) con relleno DINAMICO por profundidad
+    // real de celda -- orilla clara, banda media, nucleo profundo --
+    // nunca un azul monocromo. A zoom de tinta (estiloColorActivo()
+    // falso) el agua es una AGUADA apagada integrada en el pergamino:
+    // un solo lavado translucido + contorno de tinta, sin bandas (el
+    // detalle de profundidad no se lee de lejos y el color solido
+    // quedaba superpuesto sobre un mapa en tinta -- capturas de Diego).
+    // Los PNG de agua quedan en disco sin referenciar, como el resto de
+    // bibliotecas retiradas.
+    const AGUA_COLOR = {
+      orilla: [168, 196, 210], medio: [108, 148, 172], profundo: [56, 88, 118],
+      contorno: [28, 40, 51],
+    };
+    const AGUA_TINTA = {
+      relleno: [104, 120, 130], contorno: [36, 26, 15],
+    };
+
+    function contraerPoligono(poly, delta) {
+      // (2026-08-28) Offset del contorno hacia DENTRO por la bisectriz de
+      // las normales de las aristas adyacentes, con delta constante. El
+      // sentido interno (horario/antihorario) se detecta con el area
+      // firmada; en coordenadas de pantalla (y hacia abajo) un area
+      // positiva es un poligono visualmente horario y la rotacion
+      // (dy,-dx) apunta hacia FUERA, de ahi el signo negativo -- sin
+      // esto, el contorno se expandiria en vez de contraerse. A diferencia
+      // de escalar hacia el centroide, funciona en cuerpos concavos y da
+      // bandas de grosor constante.
+      if (delta <= 0 || poly.length < 3) return poly;
+      let area2 = 0;
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i], b = poly[(i + 1) % poly.length];
+        area2 += a.x * b.y - b.x * a.y;
+      }
+      const s = area2 > 0 ? -1 : 1;
+      return poly.map((p, i) => {
+        const a = poly[(i - 1 + poly.length) % poly.length];
+        const b = poly[(i + 1) % poly.length];
+        let nx = (b.y - a.y) * s, ny = (a.x - b.x) * s;
+        const len = Math.hypot(nx, ny) || 1;
+        return { x: p.x + (nx / len) * delta, y: p.y + (ny / len) * delta };
+      });
+    }
+
+    function pintarCuerpoAgua(comp, tam, sal) {
+      // (2026-08-28, v4) HACHURADO horizontal clasico de los mapas de
+      // plumilla: relleno de agua + trazos ondulados paralelos recortados
+      // por la silueta (clip). Historial: v2 bandas contraidas (bordes
+      // duros), v3 manchas por celda (burbujas, feedback de Diego) --
+      // ambas retiradas. El hachurado es UNA textura uniforme, no
+      // acumulaciones ni bandas.
+      if (comp.length === 0) return;
+      const tinta = !estiloColorActivo();
+      let silueta = suavizarChaikin(contornoDeCluster(comp, tam), 2);
+      const fase = hash2(comp[0].x, comp[0].y, sal) * Math.PI * 2;
+
+      trazarPoligono(silueta);
+      if (tinta) {
+        ctx.fillStyle = `rgba(${AGUA_TINTA.relleno.join(',')}, 0.28)`;
+        ctx.fill();
+      } else {
+        ctx.fillStyle = `rgba(${AGUA_COLOR.orilla.join(',')}, 0.95)`;
+        ctx.fill();
+      }
+
+      // Trazos ondulados horizontales dentro de la silueta (clip).
+      ctx.save();
+      trazarPoligono(silueta);
+      ctx.clip();
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const c of comp) {
+        if (c.x < minX) minX = c.x;
+        if (c.x > maxX) maxX = c.x;
+        if (c.y < minY) minY = c.y;
+        if (c.y > maxY) maxY = c.y;
+      }
+      const colorTrazo = tinta ? AGUA_TINTA.contorno : AGUA_COLOR.profundo;
+      const alfaTrazo = tinta ? 0.30 : 0.32;
+      ctx.strokeStyle = `rgba(${colorTrazo.join(',')}, ${alfaTrazo})`;
+      ctx.lineWidth = Math.max(0.7, tam * 0.055);
+      const paso = tam * 0.38;
+      let ypx = minY * tam;
+      let fila = 0;
+      while (ypx <= (maxY + 1) * tam) {
+        ctx.beginPath();
+        let px = (minX - 0.5) * tam;
+        let primero = true;
+        while (px <= (maxX + 1.5) * tam) {
+          const py = ypx + Math.sin(px / (tam * 0.9) + fase + fila * 0.7) * tam * 0.09;
+          if (primero) { ctx.moveTo(px, py); primero = false; }
+          else ctx.lineTo(px, py);
+          px += tam * 0.22;
+        }
+        ctx.stroke();
+        ypx += paso;
+        fila++;
+      }
+      ctx.restore();
+
+      // Contorno de orilla.
+      trazarPoligono(silueta);
+      ctx.strokeStyle = tinta
+        ? `rgba(${AGUA_TINTA.contorno.join(',')}, 0.55)`
+        : `rgba(${AGUA_COLOR.contorno.join(',')}, 0.6)`;
+      ctx.lineWidth = tinta ? 1.1 : 1.0;
+      ctx.stroke();
     }
 
     function dibujarCuencaConAssets(tam, comp, variantesLago) {
-      const nombre = elegirVariante(variantesLago, comp[0].x, comp[0].y, 96);
-      const img = nombre ? imagenesCache['agua/' + nombre] : null;
-      if (!img) { dibujarCuenca(tam, comp); return; }
-      estamparEnRecuadro(img, comp, tam, 1.35);
+      // (2026-08-28) Ya no estampa sellos de imagen: el agua se pinta
+      // (pintarCuerpoAgua, decision de Diego). La firma conserva el
+      // nombre y el argumento de variantes para no reescribir el
+      // llamador; el argumento queda sin uso, y los PNG de agua siguen
+      // en disco sin referenciar.
+      pintarCuerpoAgua(comp, tam, 96);
     }
 
     // Circulo 2 (2026-08-27): a zoom macro el mapa es PERGAMINO PURO con
@@ -1379,17 +1651,25 @@ HTML_VISOR = """<!DOCTYPE html>
     // categorias 'suprime' activadas -- el llamador suprime entonces los
     // sellos por celda de esas categorias. Sin biblioteca, el objeto sale
     // vacio y el estampado por celda de siempre queda intacto.
-    function dibujarFormacionesMacro(tam, data, frustum) {
+    function dibujarFormacionesMacro(tam, data, frustum, soloBiomas = null) {
       const resultado = {};
       for (const comp of componentesPorBioma(data)) {
         const cfg = FORMACIONES_POR_BIOMA[comp.bioma];
         if (!cfg) continue;
+        if (soloBiomas && !soloBiomas.includes(comp.bioma)) continue;
+        // (2026-08-28) Las celdas del cluster con agua permanente quedan
+        // FUERA del sello de formacion: el recuadro de un cluster de
+        // montana/bosque que linda con un lago abarcaba el agua y el
+        // sello estampado encima la tapaba (capturas de Diego: picos
+        // sobre el lago). Esas celdas las pinta la capa de agua.
+        const cluster = comp.cluster.filter(c => !c.c.tipo_agua);
+        if (cluster.length === 0) continue;
         const pool = (catalogoAssets[cfg.raiz] || {})[cfg.pool] || [];
         if (pool.length === 0) continue;
-        const nombre = elegirVariante(pool, comp.cluster[0].x, comp.cluster[0].y, cfg.sal);
+        const nombre = elegirVariante(pool, cluster[0].x, cluster[0].y, cfg.sal);
         const img = nombre ? imagenesCache[cfg.carpeta + nombre] : null;
         if (!img) continue;
-        estamparEnRecuadro(img, comp.cluster, tam, cfg.margen);
+        estamparEnRecuadro(img, cluster, tam, cfg.margen);
         resultado[comp.bioma] = true;
         if (cfg.suprime) resultado[cfg.suprime] = true;
       }
@@ -1428,30 +1708,13 @@ HTML_VISOR = """<!DOCTYPE html>
     }
 
     function dibujarRioVectorial(tam, comp) {
-      if (comp.length < 2) { dibujarCuenca(tam, comp); return; }
-
-      const camino = ordenarCaminoRio(comp).map(p => ({
-        x: p.x * tam + tam / 2, y: p.y * tam + tam / 2, profundidad: p.profundidad,
-      }));
-      const profundidadMedia = camino.reduce((s, p) => s + p.profundidad, 0) / camino.length;
-      const anchoBase = tam * (0.28 + Math.min(1, profundidadMedia / 1.5) * 0.4);
-
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      // Halo translucido (el agua moja mas alla del cauce firme).
-      ctx.beginPath();
-      trazarSpline(camino);
-      ctx.strokeStyle = 'rgba(58,92,122,0.35)';
-      ctx.lineWidth = anchoBase * 1.8;
-      ctx.stroke();
-
-      // Cauce central, tinta de agua profunda.
-      ctx.beginPath();
-      trazarSpline(camino);
-      ctx.strokeStyle = 'rgba(28,45,64,0.75)';
-      ctx.lineWidth = anchoBase;
-      ctx.stroke();
+      // (2026-08-28) El rio es un cuerpo de agua alargado y se pinta con
+      // el MISMO pipeline que lagos y pozas (banda organica del contorno
+      // de su cauce+orillas, bandas de profundidad). Historial: la
+      // spline por centros rebotaba cauce-orilla en dientes de sierra
+      // (la orilla NO es superficial: 0.001-0.03 unidades x escala 100
+      // = hasta 3 m, indistinguible del cauce por profundidad).
+      pintarCuerpoAgua(comp, tam, 213);
     }
 
     // Kit de piezas de rio por celda (2026-08-27, sustituye al sello unico
@@ -1624,34 +1887,28 @@ HTML_VISOR = """<!DOCTYPE html>
       // y una poza estirada a una laguna grande se leia como mancha.
       const poolPoza = colorActivo && (catalogoAssets.agua.poza_color || []).length > 0
         ? catalogoAssets.agua.poza_color : (catalogoAssets.agua.poza || []);
-      // Circulo 2: a zoom macro el rio es linea de plumilla (vectorial
-      // fino), nunca piezas de autotile -- son detalle de cerca.
-      const variantesRio = rioFino ? [] : (catalogoAssets.agua.rio || []);
-      const piezasRio = catalogoAssets.agua.piezas_rio || {};
-      const piezasCargadas = !rioFino && colorActivo && ['recto', 'curva', 'cruce', 'te', 'gancho'].every(
-        (k) => piezasRio[k] && imagenesCache['agua/piezas_rio/' + k],
-      );
-      const piezasImg = piezasCargadas ? {
-        recto: imagenesCache['agua/piezas_rio/recto'],
-        curva: imagenesCache['agua/piezas_rio/curva'],
-        cruce: imagenesCache['agua/piezas_rio/cruce'],
-        te: imagenesCache['agua/piezas_rio/te'],
-        gancho: imagenesCache['agua/piezas_rio/gancho'],
-      } : null;
+      // (2026-08-28) El autotile de piezas del rio se retiro del camino
+      // (serpientes de gancho, ver el comentario del bloque de rios mas
+      // abajo): los rios son spline vectorial siempre. Las variables
+      // variantesRio/piezasRio de aqui murieron con ese cambio.
       // Umbral provisional: cuerpos de hasta 4 celdas usan poza. Calibracion
       // a ojo contra el visor real (los sellos de poza son redondos; a partir
       // de ~2x2 el sello de lago reparto su orilla mejor).
       const poolDeCuerpo = (comp) => (comp.length <= 4 && poolPoza.length > 0) ? poolPoza : poolLago;
 
+      // (2026-08-28) El RIO se traza PRIMERO: al desembocar, el sello del
+      // lago (con su orilla) tapa la boca del rio -- antes se pintaba el
+      // meandro azul ENCIMA del agua del lago (capturas de Diego). Y el
+      // rio es SIEMPRE spline vectorial: el autotile de piezas
+      // (dibujarRioPiezas) produce serpientes de gancho repetido contra
+      // caminos reales del motor -- mismo tipo de fallo que su historial
+      // ya documenta -- y se retira del camino (el material queda en
+      // disco sin uso, como el resto de bibliotecas retiradas).
+      for (const comp of componentesAgua(data, 'rio')) {
+        dibujarRioVectorial(tam, comp);
+      }
       componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp)));
       componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp)));
-
-      for (const comp of componentesAgua(data, 'rio')) {
-        if (comp.length < 2) { dibujarCuencaConAssets(tam, comp, poolLago); continue; }
-        if (piezasImg) dibujarRioPiezas(tam, comp, piezasImg, poolLago);
-        else if (variantesRio.length > 0) dibujarRioConAssets(tam, comp, variantesRio);
-        else dibujarRioVectorial(tam, comp);
-      }
     }
 
     function dibujarVegetacion(tam, data, frustum) {
@@ -2041,9 +2298,32 @@ HTML_VISOR = """<!DOCTYPE html>
       // Circulo 2: a macro, rios de plumilla fina y sellos de formacion
       // (cordilleras/masas); los sellos por celda cubiertos por una
       // formacion se suprimen dentro de dibujarStampsRelieveYFlora.
+      // (2026-08-28) El ORDEN de capa cambia: formaciones PRIMERO, agua
+      // despues. Antes el agua iba antes que las formaciones y la masa de
+      // bosque estampada encima tapaba el rio que la cruzaba (capturas de
+      // Diego, render de referencia macro). Geograficamente el rio/lago
+      // esta EN el bosque, no debajo: agua tras formaciones, y antes que
+      // los sellos por celda para que la orilla siga quedando DETRAS de
+      // criaturas/arboles/picos (regresion del conejo, pieza 2).
+      // (2026-08-28, reparto de la montana por rangos, con la formacion de
+      // imagen RESTAURADA (fue el bug: sin entrada en la tabla no
+      // estampaba nada):
+      //   macro: TODAS las formaciones de imagen, montana incluida --
+      //     una cordillera por masa, como la de bosques (pide Diego).
+      //   medio-tinta (0.8-1.0): solo la de montana (por celda no: las
+      //     panoramicas solapadas a tinta se funden en masa).
+      //   color (>=1.0): sin formaciones -> sellos por celda sepia.
+      const formaciones = nivel === 'macro'
+        ? dibujarFormacionesMacro(tam, data, frustum, null)
+        : (nivel === 'medio' && !estiloColorActivo())
+          ? dibujarFormacionesMacro(tam, data, frustum, ['montana'])
+          : null;
       dibujarHidrografia(tam, data, esMacro);
-      const formaciones = esMacro ? dibujarFormacionesMacro(tam, data, frustum) : null;
-      const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum, elementosCriaturas, formaciones);
+      const montanaUsoAssets = dibujarStampsRelieveYFlora(tam, data, frustum, elementosCriaturas, formaciones, nivel);
+      // (2026-08-28) El vectorial vuelve a ser SOLO el fallback sin
+      // biblioteca (Diego: "no un conjunto de triangulos" cuando hay
+      // formaciones de imagen): con formaciones activas formaciones.
+      // relieve lo suprime, con por-celda de color lo cubre montanaUsoAssets.
       if (!montanaUsoAssets && !(formaciones && formaciones.relieve)) dibujarRelieve(tam, data, frustum);
       dibujarVegetacion(tam, data, frustum);
       // Circulo 4: a macro el marco es el de codice (reticula de atlas con
@@ -2145,6 +2425,25 @@ def _listar_pngs(carpeta: Path) -> list[str]:
     return sorted(p.name for p in carpeta.iterdir() if p.is_file() and p.suffix.lower() == ".png")
 
 
+def _agrupar_poses(carpeta: Path) -> dict[str, dict[str, str]]:
+    """criaturas_poses/{especie}_{pose}.png expone un KIT de poses por
+    especie (idle_s/idle_n/idle_e, andar_s/n/e, forrajeando, durmiendo,
+    herido, muerto) -- igual que agua.piezas_rio, piezas con significado
+    funcional propio, NO variantes esteticas intercambiables. La especie
+    es el primer token del nombre; la pose, todo lo que va detras. Un
+    kit incompleto para una especie no rompe nada: el cliente resuelve
+    cadena de fallback hasta el sprite generico de criaturas/."""
+    agrupado: dict[str, dict[str, str]] = {}
+    if carpeta.is_dir():
+        for archivo in sorted(carpeta.iterdir()):
+            if not archivo.is_file() or archivo.suffix.lower() != ".png":
+                continue
+            especie, _, pose = archivo.stem.partition("_")
+            if especie and pose:
+                agrupado.setdefault(especie, {})[pose] = archivo.name
+    return agrupado
+
+
 def _listar_pngs_por_nombre(carpeta: Path) -> dict[str, str]:
     """Como _listar_pngs, pero expone cada pieza por su nombre de archivo
     (sin extension) en vez de agruparlas como variantes -- para un kit de
@@ -2156,11 +2455,12 @@ def _listar_pngs_por_nombre(carpeta: Path) -> dict[str, str]:
 
 
 def construir_manifiesto_assets() -> dict[str, Any]:
-    """Escanea RUTA_ASSETS en cada peticion (biblioteca pequeÃ±a, coste
+    """    Escanea RUTA_ASSETS en cada peticion (biblioteca pequeÃ±a, coste
     despreciable) y agrupa los archivos encontrados por categoria:
     flora.especie, agua.{lago,rio} y criaturas.especie por prefijo de
-    nombre de archivo; relieve.montana con cualquier .png en esa carpeta
-    (sin distincion de nombre).
+    nombre de archivo; criaturas_poses.especie como kit de piezas con
+    significado funcional (una pose por estado del ECS); relieve.montana
+    con cualquier .png en esa carpeta (sin distincion de nombre).
 
     2026-08-27 (pivote LOD tinta/color): cada categoria de terreno gana un
     segundo escenario -- flora_color/ y relieve_color/ (mismo convenio que
@@ -2174,13 +2474,22 @@ def construir_manifiesto_assets() -> dict[str, Any]:
         "flora": _agrupar_por_prefijo(RUTA_ASSETS / "flora"),
         "flora_color": _agrupar_por_prefijo(RUTA_ASSETS / "flora_color"),
         "relieve": {
-            "montana": _listar_pngs(RUTA_ASSETS / "relieve"),
+            # (2026-08-28) montana/cordillera separados por prefijo: las
+            # cordilleras son KIT de formacion macro (FORMACIONES_POR_BIOMA
+            # lee 'cordillera'), nunca variantes por celda -- mezcladas en
+            # la misma lista, el por-celda podia comprimir una cordillera
+            # entera a 3 celdas y a zoom lejano su trama se fundia en un
+            # bloque de tinta (capturas de Diego). Con el pool separado, la
+            # formacion de montana vuelve a funcionar en el navegador.
+            "montana": [n for n in _listar_pngs(RUTA_ASSETS / "relieve") if n.startswith("montana_")],
+            "cordillera": [n for n in _listar_pngs(RUTA_ASSETS / "relieve") if n.startswith("cordillera_")],
             "montana_color": _listar_pngs(RUTA_ASSETS / "relieve_color"),
         },
         "agua": _agrupar_por_prefijo(RUTA_ASSETS / "agua") | {
             "piezas_rio": _listar_pngs_por_nombre(RUTA_ASSETS / "agua" / "rio_piezas"),
         },
         "criaturas": _agrupar_por_prefijo(RUTA_ASSETS / "criaturas"),
+        "criaturas_poses": _agrupar_poses(RUTA_ASSETS / "criaturas_poses"),
     }
 
 
@@ -2228,6 +2537,7 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             RUTA_ASSETS / "flora", RUTA_ASSETS / "flora_color",
             RUTA_ASSETS / "relieve", RUTA_ASSETS / "relieve_color",
             RUTA_ASSETS / "agua", RUTA_ASSETS / "criaturas",
+            RUTA_ASSETS / "criaturas_poses",
         )
         if not any(destino.is_relative_to(c.resolve()) for c in carpetas_publicas):
             self.send_response(403)
