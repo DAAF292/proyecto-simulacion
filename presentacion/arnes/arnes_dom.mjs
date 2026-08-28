@@ -62,6 +62,7 @@ function crearCtxMock() {
     },
     set(destino, prop, valor) {
       destino[prop] = valor;
+      destino.llamadas.push({ prop: 'set:' + String(prop), args: [valor] });
       return true;
     },
   });
@@ -140,6 +141,7 @@ export function cargarVisor() {
   exportados.limpiarCtxVisor = () => { if (ctxDelVisor.actual) ctxDelVisor.actual.llamadas.length = 0; };
   return exportados;
 }
+
 
 
 

@@ -914,47 +914,44 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.strokeRect(0.75 * compensa, 0.75 * compensa, ancho * tam - 1.5 * compensa, alto * tam - 1.5 * compensa);
     }
 
-    // Circulo 4 (2026-08-27): marco de CODICE a zoom macro -- la vista de
-    // atlas del mapa objetivo de Diego lleva reticula fina con coordenadas
-    // numeradas y doble borde. Concilia la retirada de la reticula de
-    // antes: a medio/micro el mapa sigue siendo un mundo sin rejilla; a
-    // macro es un mapa de atlas, y los atlas llevan reticula. Coordenadas
-    // 1..N en los cuatro lados, en tinta tenue.
-    function dibujarMarcoCodice(tam, ancho, alto) {
-      const compensa = 1 / camara.zoom;
+﻿    // Circulo 4 v2 (2026-08-27, feedback de Diego: numeros y reticula eran
+    // invisibles a 0.43x porque todo escalaba con el mundo): el marco de
+    // codice vive en ESPACIO DE PANTALLA -- trazo y tipografia de tamano
+    // constante, anclados al rectangulo del mapa en pantalla. Se llama
+    // DESPUES de restaurar la transformacion del mundo. Con celdas
+    // pequenas en pantalla se numera cada k celdas para no amontonar.
+    function dibujarMarcoCodice(ancho, alto, celdaPantalla, origenX, origenY) {
+      const w = ancho * celdaPantalla, h = alto * celdaPantalla;
 
-      // 1. Doble borde: grueso exterior + fino interior separado.
       ctx.strokeStyle = 'rgba(36,26,15,0.9)';
-      ctx.lineWidth = compensa * 4;
-      ctx.strokeRect(0.75 * compensa, 0.75 * compensa, ancho * tam - 1.5 * compensa, alto * tam - 1.5 * compensa);
+      ctx.lineWidth = 3;
+      ctx.strokeRect(origenX + 1, origenY + 1, w - 2, h - 2);
       ctx.strokeStyle = 'rgba(36,26,15,0.55)';
-      ctx.lineWidth = compensa;
-      const separacion = 6 * compensa;
-      ctx.strokeRect(separacion, separacion, ancho * tam - 2 * separacion, alto * tam - 2 * separacion);
+      ctx.lineWidth = 1;
+      const sep = 6;
+      ctx.strokeRect(origenX + sep, origenY + sep, w - 2 * sep, h - 2 * sep);
 
-      // 2. Reticula fina interior (tinta tenue, entre borde y borde).
       ctx.strokeStyle = 'rgba(36,26,15,0.18)';
-      ctx.lineWidth = compensa * 0.5;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      for (let x = 1; x < ancho; x++) { ctx.moveTo(x * tam, separacion); ctx.lineTo(x * tam, alto * tam - separacion); }
-      for (let y = 1; y < alto; y++) { ctx.moveTo(separacion, y * tam); ctx.lineTo(ancho * tam - separacion, y * tam); }
+      for (let x = 1; x < ancho; x++) { ctx.moveTo(origenX + x * celdaPantalla, origenY + sep); ctx.lineTo(origenX + x * celdaPantalla, origenY + h - sep); }
+      for (let y = 1; y < alto; y++) { ctx.moveTo(origenX + sep, origenY + y * celdaPantalla); ctx.lineTo(origenX + w - sep, origenY + y * celdaPantalla); }
       ctx.stroke();
 
-      // 3. Numeros de coordenada (1..N) centrados en cada celda, sobre los
-      // cuatro bordes. Cinzel/serif pequena, tinta media.
       ctx.fillStyle = 'rgba(36,26,15,0.55)';
-      ctx.font = `${Math.max(8, Math.round(tam * 0.32))}px 'Cinzel', Georgia, serif`;
+      ctx.font = '10px Georgia, serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (let x = 0; x < ancho; x++) {
-        const cx = x * tam + tam / 2;
-        ctx.fillText(String(x + 1), cx, separacion / 2 + 1);
-        ctx.fillText(String(x + 1), cx, alto * tam - separacion / 2 - 1);
+      const cada = Math.max(1, Math.ceil(22 / celdaPantalla));
+      for (let x = 0; x < ancho; x += cada) {
+        const cx = origenX + x * celdaPantalla + celdaPantalla / 2;
+        ctx.fillText(String(x + 1), cx, origenY + sep / 2);
+        ctx.fillText(String(x + 1), cx, origenY + h - sep / 2);
       }
-      for (let y = 0; y < alto; y++) {
-        const cy = y * tam + tam / 2;
-        ctx.fillText(String(y + 1), separacion / 2 + 1, cy);
-        ctx.fillText(String(y + 1), ancho * tam - separacion / 2 - 1, cy);
+      for (let y = 0; y < alto; y += cada) {
+        const cy = origenY + y * celdaPantalla + celdaPantalla / 2;
+        ctx.fillText(String(y + 1), origenX + sep / 2, cy);
+        ctx.fillText(String(y + 1), origenX + w - sep / 2, cy);
       }
     }
 
@@ -2051,14 +2048,21 @@ HTML_VISOR = """<!DOCTYPE html>
       dibujarVegetacion(tam, data, frustum);
       // Circulo 4: a macro el marco es el de codice (reticula de atlas con
       // coordenadas); a medio/micro, el perimetral clasico sin rejilla.
-      if (esMacro) dibujarMarcoCodice(tam, data.ancho, data.alto);
-      else dibujarMarco(tam, data.ancho, data.alto);
+      // Circulo 4 v2: a medio/micro, perimetral clasico (espacio de mundo).
+      // A macro, el marco de codice se dibuja DESPUES de restaurar la
+      // transformacion, en espacio de pantalla: trazo y numeros de tamano
+      // constante a cualquier zoom.
+      if (!esMacro) dibujarMarco(tam, data.ancho, data.alto);
 
       ctx.restore();
 
+      // Circulo 4 v2: el marco de codice en ESPACIO DE PANTALLA, sobre el
+      // rectangulo del mapa ya proyectado (trazo y numeros constantes).
+      if (esMacro) dibujarMarcoCodice(data.ancho, data.alto, tam * camara.zoom, camara.offsetX, camara.offsetY);
+
       // A zoom macro: puntos de tinta en espacio de pantalla, como siempre
-      // (marcador de mapa, sin oclusiones -- decisiÃ³n de diseÃ±o pieza 2).
-      // AdiciÃ³n de Diego (2026-08-27): de lejos solo se marcan las
+      // (marcador de mapa, sin oclusiones -- decisión de diseño pieza 2).
+      // Adición de Diego (2026-08-27): de lejos solo se marcan las
       // CRIATURAS CONSCIENTES con la runa de su especie -- el conejo que
       // no mira, el lobo que acecha: eso es detalle de cerca. El filtro
       // lee del DTO (estabilidad_mental_maxima existe solo para quienes
