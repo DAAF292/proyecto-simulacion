@@ -284,16 +284,36 @@ HTML_VISOR = """<!DOCTYPE html>
       'necromasa': [90, 81, 72],
     };
 
-    // Tamano relativo entre especies al dibujar el retrato real (ver uso en
-    // dibujarFrame): gnomo como referencia, el resto proporcionado a ojo
-    // (no hay una medida en cm en el ECS que calibrar). Sin entrada aqui
-    // -> escala 1 (mismo tamano que antes de esta correccion).
-    const ESCALA_ESPECIE = {
-      'gnomo':   1,
-      'lobo':    0.85,
-      'conejo':  0.5,
-      'ardilla': 0.4,
-    };
+    // (2026-08-27, correccion tras feedback de Diego: "el gnomo es mas
+    // pequeño que el lobo en codigo, la representacion debe responder a
+    // las medidas fisicas que tienen en el motor, no a una regla que tu
+    // definas"). Version anterior (ESCALA_ESPECIE, retirada): una
+    // constante por especie inventada a ojo, con gnomo como el mas
+    // grande -- ni verificada contra config/constantes.yaml ni pedida,
+    // y ademas al reves de lo que dice el propio motor: gnomo pesa
+    // [8,15], lobo [60,90] (rangos_raciales) -- DimensionesFisicas.peso
+    // es literalmente el sustituto declarado de la vieja "Categoria.
+    // tamano" (ver docstring de componentes/dimensiones_fisicas.py), asi
+    // que es el dato real a usar para el tamano visual, no altura ni una
+    // eleccion mia.
+    //
+    // e.dimensiones.peso ya viene en el JSON (construir_instantanea, sin
+    // cambios necesarios ahi) por INDIVIDUO, no por especie -- dos lobos
+    // de la misma camada no tienen por que pesar igual (rango racial +
+    // sorteo individual, el patron ya establecido en el proyecto). La
+    // escala usa raiz cubica del peso (si el peso fuese proporcional a
+    // un volumen, el tamano lineal escala con su raiz cubica -- una
+    // relacion fisica real, no una curva elegida a ojo) normalizada
+    // contra PESO_MAX_REFERENCIA, el maximo real de cualquier rango
+    // racial hoy (lobo, 90 -- rangos_raciales.lobo.peso en
+    // config/constantes.yaml). Si alguna vez se añade una especie con
+    // peso mayor, esta constante quedaria desactualizada -- documentado
+    // aqui a proposito para que sea facil de encontrar y corregir.
+    const PESO_MAX_REFERENCIA = 90;
+    function escalaPorPeso(entidad) {
+      if (!entidad.dimensiones) return 1;
+      return Math.cbrt(entidad.dimensiones.peso) / Math.cbrt(PESO_MAX_REFERENCIA);
+    }
 
     // Color por especie de planta (config/constantes.yaml, flora.especies --
     // exactamente estas cinco existen hoy en el catalogo, ninguna inventada).
@@ -1162,12 +1182,25 @@ HTML_VISOR = """<!DOCTYPE html>
     }
 
     function dibujarHidrografia(tam, data) {
+      // (2026-08-27, feedback de Diego: "me parece horrible como quedan
+      // los lagos o cuerpos de agua cuando el zoom se aleja, deberiamos
+      // seguir usando las imagenes... no los trazados esos matematicos")
+      // El lago YA usaba siempre un sello real a cualquier zoom (tinta
+      // agua.lago o color agua.lago_color, nunca vectorial mientras
+      // poolLago no este vacio) -- el problema real era solo el RIO: las
+      // piezas de agua.rio_piezas solo se activaban con colorActivo, asi
+      // que a zoom de tinta (sin ningun sello de rio en tinta en la
+      // biblioteca) siempre caia al trazo vectorial (dibujarRioVectorial,
+      // el "trazado matematico" real que senala Diego). Las piezas son
+      // imagenes reales igual que un lago -- no hay motivo para
+      // reservarlas solo al escenario a color, asi que ahora se usan a
+      // cualquier zoom en cuanto estan cargadas.
       const colorActivo = estiloColorActivo();
       const poolLago = colorActivo && (catalogoAssets.agua.lago_color || []).length > 0
         ? catalogoAssets.agua.lago_color : (catalogoAssets.agua.lago || []);
       const variantesRio = catalogoAssets.agua.rio || [];
       const piezasRio = catalogoAssets.agua.piezas_rio || {};
-      const piezasCargadas = colorActivo && ['recto', 'curva', 'cruce', 'te', 'gancho'].every(
+      const piezasCargadas = ['recto', 'curva', 'cruce', 'te', 'gancho'].every(
         (k) => piezasRio[k] && imagenesCache['agua/piezas_rio/' + k],
       );
       const piezasImg = piezasCargadas ? {
@@ -1556,19 +1589,11 @@ HTML_VISOR = """<!DOCTYPE html>
 
           let radioEfectivo;
           if (imgCriatura) {
-            // (2026-08-27, feedback de Diego: "el conejo es mas grande que
-            // el gnomo") Antes toda especie usaba la misma alturaImg fija
-            // -- como cada recorte tiene su propio encuadre/margen dentro
-            // del lienzo (un conejo agachado deja mucho aire alrededor, un
-            // gnomo en pie casi llena el suyo), esa altura IGUAL en
-            // pixeles de pantalla no daba un tamano relativo realista
-            // entre especies. ESCALA_ESPECIE fija una proporcion a ojo
-            // (gnomo como referencia mas grande, lobo algo menor, conejo y
-            // ardilla claramente pequeños) -- no hay una medida real de
-            // "cm" en el ECS que calibrar contra, es una eleccion de
-            // legibilidad, no una medicion.
+            // Tamano relativo real (ver escalaPorPeso arriba): antes toda
+            // especie usaba la misma alturaBase fija en pixeles, sin
+            // relacion con DimensionesFisicas.peso de cada individuo.
             const alturaBase = nivel === 'micro' ? 34 : 22;
-            const alturaImg = alturaBase * (ESCALA_ESPECIE[e.tipo] ?? 1);
+            const alturaImg = alturaBase * escalaPorPeso(e);
             const anchoImg = alturaImg * (imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1);
             ctx.drawImage(imgCriatura, centro.x - anchoImg / 2, centro.y - alturaImg / 2, anchoImg, alturaImg);
             if (seleccionada) {

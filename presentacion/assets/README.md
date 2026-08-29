@@ -394,3 +394,48 @@ arreglo (no capturas genéricas); medición de FPS real vía
 `requestAnimationFrame` para el punto 1. Pendiente, como siempre:
 confirmación de Diego en su propio navegador — el sandbox sigue sin uno
 real disponible.
+
+### Segunda ronda de feedback real (2026-08-27, mismo día): tamaño por dato real, no por regla mía; río sin trazo vectorial a ningún zoom
+
+Diego corrigió directamente dos cosas de la ronda anterior:
+
+1. **"El gnomo es más pequeño que el lobo en código, la representación
+   de las figuras debe responder a las medidas físicas que tienen en
+   el motor, no a una regla que tú definas."** Tenía razón sobre el
+   motor, y yo no lo había comprobado: `ESCALA_ESPECIE` (retirada) era
+   una constante inventada a ojo con gnomo como el más grande —
+   exactamente al revés de `rangos_raciales` en
+   `config/constantes.yaml` (gnomo peso `[8,15]`, lobo `[60,90]`).
+   `DimensionesFisicas.peso` es literalmente el sustituto declarado de
+   la vieja `Categoria.tamano` (docstring de
+   `componentes/dimensiones_fisicas.py`) — el dato de tamaño real ya
+   existía, `construir_instantanea` ya lo exponía como
+   `entidad.dimensiones.peso` (por INDIVIDUO, no por especie: rango
+   racial + sorteo propio, sin tocar el backend), y simplemente no lo
+   estaba usando. Sustituido por `escalaPorPeso()`: raíz cúbica del
+   peso normalizada contra `PESO_MAX_REFERENCIA = 90` (el máximo real
+   de cualquier rango racial hoy, lobo) — raíz cúbica porque si el peso
+   fuese proporcional a un volumen, el tamaño lineal escala con su raíz
+   cúbica, una relación física real, no una curva elegida a ojo.
+   Verificado contra pares gnomo/lobo reales de `estado.json` (peso
+   real ~9-14 vs ~70-89 en el mundo de prueba).
+2. **"También me parece horrible como quedan los lagos o cuerpos de
+   agua cuando el zoom se aleja, deberíamos seguir usando las imágenes
+   de cuerpos de agua no los trazados esos matemáticos."** El lago YA
+   usaba siempre un sello real a cualquier zoom (tinta `agua.lago` o
+   color `agua.lago_color`, nunca vectorial mientras el catálogo no
+   esté vacío) — el problema real era solo el RÍO: `agua.rio_piezas`
+   solo se activaba con `estiloColorActivo()`, así que a zoom de tinta
+   (sin ningún sello de río en tinta en la biblioteca) siempre caía a
+   `dibujarRioVectorial`, el trazado matemático real que señalaba
+   Diego. Quitada esa condición — las piezas de río son imágenes
+   reales igual que un lago, no hay motivo para reservarlas solo al
+   escenario a color. Verificado: la vista general por defecto (zoom
+   1, antes con el río como una serpiente azul gruesa dibujada con
+   `quadraticCurveTo`) ahora muestra el mismo autotile de piezas que a
+   zoom alto.
+
+**Verificación:** mismo criterio que la ronda anterior — Playwright
+contra pares gnomo/lobo reales (`estado.json`) para el punto 1, captura
+de la vista general antes/después para el punto 2. Pendiente:
+confirmación de Diego en su propio navegador.
