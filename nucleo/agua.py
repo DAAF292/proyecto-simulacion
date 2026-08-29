@@ -167,7 +167,7 @@ def _picos(campo_elevacion: list, ancho: int, alto: int, umbral: float) -> list:
     return nacimientos
 
 
-def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, alto: int, max_pasos: int):
+def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, alto: int, max_pasos: int, coste_giro: float = 0.0):
     """Descenso de pendiente desde (x, y): en cada paso se mueve a la
     celda vecina de MENOR elevacion, solo si es estrictamente menor que
     la actual -- si ninguna vecina lo es, es un minimo local. Termina en
@@ -185,9 +185,23 @@ def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, al
     max_pasos es una cota de seguridad, no deberia alcanzarse nunca en la
     practica: la elevacion desciende estrictamente en cada paso, asi que
     el camino no puede repetir celda y esta acotado por el numero total
-    de celdas del mapa."""
+    de celdas del mapa.
+
+    (2026-08-28) coste_giro: INERCIA DEL CAUCE. El descenso por minimo
+    puro no tiene memoria -- cada paso reevalua desde cero -- y en un
+    valle ancho y casi plano el cauce oscila entre las paredes del valle
+    celda a celda: meandro sinusoidal artificial de periodo constante
+    ("codorniz", capturas de Diego contra el visor real). Un cauce real
+    tiende a la recta: excavo su lecho, desviar el flujo cuesta. Entre
+    los vecinos ESTRICTAMENTE menores (la fisica no cambia: el agua
+    nunca sube), se penaliza el cambio de direccion: recto 0, giro de
+    90 grados coste_giro, de 180 grados 2*coste_giro. Calibracion
+    provisional en config agua.coste_giro_rio -- el valor debe superar
+    la ondulacion local del valle (diferencias vecinas ~0.006-0.02)
+    sin superar el gradiente principal del valle (~0.06-0.08)."""
     camino = [(x, y)]
     cx, cy = x, y
+    prev_dx, prev_dy = 0, 0
     for _ in range(max_pasos):
         if cx == 0 or cx == ancho - 1 or cy == 0 or cy == alto - 1:
             return camino, "borde"
@@ -200,7 +214,20 @@ def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, al
         if not candidatos:
             return camino, "minimo_local"
 
-        cx, cy = min(candidatos, key=lambda p: campo_elevacion[p[0]][p[1]])
+        if coste_giro > 0.0 and (prev_dx or prev_dy):
+            def puntuacion(p):
+                dx, dy = p[0] - cx, p[1] - cy
+                if (dx, dy) == (prev_dx, prev_dy):
+                    giro = 0.0
+                elif (dx, dy) == (-prev_dx, -prev_dy):
+                    giro = 2.0
+                else:
+                    giro = 1.0
+                return campo_elevacion[p[0]][p[1]] + coste_giro * giro
+            cx, cy = min(candidatos, key=puntuacion)
+        else:
+            cx, cy = min(candidatos, key=lambda p: campo_elevacion[p[0]][p[1]])
+        prev_dx, prev_dy = cx - camino[-1][0], cy - camino[-1][1]
         camino.append((cx, cy))
         if (cx, cy) in agua:
             return camino, "fundido"
@@ -209,9 +236,13 @@ def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, al
 
 
 def _flood_fill_banda(mx: int, my: int, campo_elevacion: list, agua: set, ancho: int, alto: int, banda: float, tope_tamano: int) -> set:
-    """Cuenca alrededor de un minimo (mx, my): BFS que suma celdas
-    vecinas cuya elevacion no supere la del minimo mas 'banda' -- acota la
-    extension de un lago/poza a su entorno inmediato. Sin este tope, una
+    """Cuenca alrededor de un minimo (mx, my): flood-fill con pila (LIFO,
+    expansion en profundidad -- CORRECCION de docstring 2026-08-29: decia
+    "BFS" y usaba frontera.pop(); el orden de recorrido solo decide que
+    celdas concretas entran cuando se alcanza tope_tamano, deterministic
+    en cualquier caso) que suma celdas vecinas cuya elevacion no supere la
+    del minimo mas 'banda' -- acota la extension de un lago/poza a su
+    entorno inmediato. Sin este tope, una
     cuenca poco profunda sobre un campo de value noise podria devorar
     facilmente cualquier ondulacion cercana (mismo riesgo senalado antes
     de implementar: "podriamos acabar con charcos por todo el mapa")."""
@@ -353,7 +384,10 @@ def generar_cuerpos_agua(campo_elevacion: list, rng: random.Random, config_agua:
     max_pasos = ancho * alto  # cota de seguridad, ver docstring de _trazar_rio
 
     for nx, ny in nacimientos:
-        camino, final = _trazar_rio(nx, ny, campo_elevacion, agua, ancho, alto, max_pasos)
+        camino, final = _trazar_rio(
+            nx, ny, campo_elevacion, agua, ancho, alto, max_pasos,
+            coste_giro=float(config_agua.get("coste_giro_rio", 0.0)),
+        )
         # El cauce se reserva en `agua` ANTES de generar sus orillas --
         # si no, el gradiente de una celda del cauce podria "inundarse a
         # si mismo" al buscar orilla, o invadir el cauce de otra celda
@@ -367,7 +401,18 @@ def generar_cuerpos_agua(campo_elevacion: list, rng: random.Random, config_agua:
             config_agua["techo_banda_rio"], escala,
         )
         for celda, profundidad in riberas.items():
-            resultado[celda] = InfoAgua("rio", profundidad)
+            previa = resultado.get(celda)
+            if previa is None:
+                resultado[celda] = InfoAgua("rio", profundidad)
+            else:
+                # (2026-08-29) Celda que ya es agua de OTRO cuerpo (fundido
+                # con su cauce o su lago): se conserva su tipo y se toma la
+                # profundidad mayor -- la misma regla de maximo que
+                # _generar_riberas_rio aplica dentro de un mismo rio, ahora
+                # tambien entre cuerpos distintos. Antes se sobrescribia sin
+                # mas: la boca de un lago podia relabelarse 'rio' y una
+                # ribera somera podia RETIRAR profundidad al cuerpo ajeno.
+                resultado[celda] = combinar_profundidad_cuerpos(previa, profundidad)
             agua.add(celda)
         # Cualquier celda del cauce que por lo que sea no recibiera
         # profundidad de _generar_riberas_rio (caso limite: rio de una
@@ -422,3 +467,48 @@ def hay_agua_potable(celda) -> bool:
 
 def profundidad_agua_potable(celda) -> float:
     return max(celda.profundidad_agua, celda.profundidad_charco)
+
+
+# --- Combinacion entre cuerpos distintos (2026-08-29). Las riberas de un
+# rio pueden alcanzar celdas que ya son agua de OTRO cuerpo (un cauce que
+# se funde con un lago o con otro rio). Antes de esta fecha el bucle de
+# generar_cuerpos_agua sobrescribia la entrada existente sin mas: la celda
+# cambiaba de tipo y podia incluso PERDER profundidad si la ribera nueva
+# era mas somera.
+def combinar_profundidad_cuerpos(previa: InfoAgua, profundidad: float) -> InfoAgua:
+    """Une la InfoAgua ya asignada a una celda con una profundidad nueva
+    que le llega de otro cuerpo: conserva el tipo del cuerpo previo y se
+    queda con la profundidad MAYOR -- una celda esta tan cerca del nivel
+    de agua de la cuenca que mas la cubre, nunca menos (la misma regla de
+    maximo que _generar_riberas_rio aplica entre riberas de un mismo rio,
+    aplicada tambien entre cuerpos distintos)."""
+    if profundidad > previa.profundidad_metros:
+        return InfoAgua(previa.tipo, profundidad)
+    return previa
+
+
+# --- Colocacion de nacimientos (2026-08-29). La altura del hijo se sortea
+# con mutacion propia (nucleo/entidad.py:nacer_criatura) y puede ser menor
+# que la de su madre, que SI vadeaba la celda del parto -- el mismo
+# invariant de profundidad que sistema_movimiento.py mantiene en cada paso
+# de movimiento, aplicado al momento de nacer.
+def celda_nacimiento_segura(zona, pos_x: int, pos_y: int, altura: float) -> tuple[int, int]:
+    """Celda donde puede colocarse un recien nacido de 'altura' metros sin
+    que el motor lo coloque en agua mas honda que su propia estatura. Si la
+    celda natal es vadeable, se queda; si no, se elige la vecina (4-vecinos,
+    orden fijo) de MENOR profundidad que si sea vadeable, empate a la
+    primera; si ninguna vecina lo es, nace donde esta y la asfixia opera
+    como en cualquier otro sitio -- ninguna garantia escrita a mano, la
+    consecuencia fisica es quien decide."""
+    if profundidad_agua_potable(zona.obtener_celda(pos_x, pos_y)) <= altura:
+        return pos_x, pos_y
+    mejor: tuple[int, int] | None = None
+    mejor_prof = 0.0
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        nx, ny = pos_x + dx, pos_y + dy
+        if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
+            prof = profundidad_agua_potable(zona.obtener_celda(nx, ny))
+            if prof <= altura and (mejor is None or prof < mejor_prof):
+                mejor = (nx, ny)
+                mejor_prof = prof
+    return mejor if mejor is not None else (pos_x, pos_y)

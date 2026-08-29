@@ -8,10 +8,14 @@ continua -- mas facil de razonar y de depurar visualmente, mismo criterio
 de simplicidad que llevo a nucleo/campo_continuo.py a elegir value noise
 en vez de Perlin):
 
-1. Elevacion alta -> Montana, incondicional (una cumbre es una cumbre sin
-   importar la lluvia o temperatura local -- regla dominante, igual que
-   en Dwarf Fortress).
-2. Temperatura muy baja -> Tundra.
+1. Temperatura muy baja -> Tundra. Desde el circulo 1 de generacion
+   causal (2026-08-27) esta regla manda: con relieve orografico real la
+   temperatura de las cumbres CAE por el gradiente termico, asi que una
+   cumbre fria es una cumbre nevada (tundra de altura) -- la ley vieja
+   "elevacion alta -> Montana incondicional" asumia elevacion-ruido sin
+   estructura y enterraba esta fisica; la inversion la libera (leyes y
+   pruebas: tests/test_bioma.py).
+2. Elevacion alta (pero no congelada) -> Montana.
 3. Lluvia escasa -> Desierto (arido).
 4. Lluvia abundante -> Bosque (denso).
 5. Resto (elevacion/temperatura/lluvia todas moderadas) -> Pradera.
@@ -38,10 +42,10 @@ from nucleo.celda import TipoTerreno
 
 
 def clasificar_bioma(elevacion: float, lluvia: float, temperatura: float, config_bioma: dict) -> TipoTerreno:
-    if elevacion > config_bioma["umbral_elevacion_montana"]:
-        return TipoTerreno.MONTANA
     if temperatura < config_bioma["umbral_temperatura_tundra"]:
         return TipoTerreno.TUNDRA
+    if elevacion > config_bioma["umbral_elevacion_montana"]:
+        return TipoTerreno.MONTANA
     if lluvia < config_bioma["umbral_lluvia_desierto"]:
         return TipoTerreno.DESIERTO
     if lluvia > config_bioma["umbral_lluvia_bosque"]:

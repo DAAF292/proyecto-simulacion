@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from nucleo.agua import hay_agua_potable
 from nucleo.celda import Celda
 from nucleo.clima import Clima, Estacion
 
@@ -97,8 +98,14 @@ def recursos_alimento(especie_cfg: dict[str, Any]) -> list:
 def factor_ribera(celda: Celda, bono_ribera: float = 0.2) -> float:
     """
     Retorna un multiplicador adicional si la celda cuenta con agua superficial.
+
+    (2026-08-29) El criterio de "agua superficial" lo aporta el combinador
+    unico nucleo/agua.py:hay_agua_potable, en vez de repetir aqui a mano el
+    mismo `or` -- exactamente lo que el docstring de ese combinador pide no
+    hacer ("sin que cada consumidor tenga que repetir el mismo or/max por
+    su cuenta"). Sin cambio de comportamiento: la condicion era identica.
     """
-    if celda.tiene_agua or celda.profundidad_charco > 0.0:
+    if hay_agua_potable(celda):
         return 1.0 + bono_ribera
     return 1.0
 

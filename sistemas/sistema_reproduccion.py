@@ -146,6 +146,7 @@ from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
+from nucleo.agua import celda_nacimiento_segura
 from nucleo.ciclo_vital import TICKS_POR_ANIO, edad_ticks, es_adulto
 from nucleo.entidad import nacer_criatura
 from nucleo.eventos import BusEventos, Evento, Severidad
@@ -175,7 +176,7 @@ def _macho_elegible_en_contacto(
     return None
 
 
-def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actual: int) -> None:
+def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, zona) -> None:
     rangos_raciales = config["rangos_raciales"]
     mutacion_fraccion = config["reproduccion"]["mutacion_fraccion"]
 
@@ -195,6 +196,18 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
             id_hijo = nacer_criatura(
                 gestor, rng, posicion_madre.x, posicion_madre.y, identidad_madre.especie,
                 rangos_raciales, tick_actual, id_madre, gestacion, mutacion_fraccion,
+            )
+            # (2026-08-29) El parto no coloca a la criatura en agua mas
+            # honda que su propia altura (ver nucleo/agua.py:
+            # celda_nacimiento_segura): la altura del hijo se sortea con
+            # mutacion propia y puede ser menor que la de su madre, que si
+            # vadeaba esa celda. Antes de este guard, un hijo podia nacer
+            # sumergido y morir ahogado por una tirada de dados invisible,
+            # sin ninguna decision en juego detras.
+            pos_hijo = gestor.obtener_componente(id_hijo, Posicion)
+            dims_hijo = gestor.obtener_componente(id_hijo, DimensionesFisicas)
+            pos_hijo.x, pos_hijo.y = celda_nacimiento_segura(
+                zona, posicion_madre.x, posicion_madre.y, dims_hijo.altura
             )
             # nombre/tick_nacimiento (2026-08-23): se leen de la Identidad
             # que nacer_criatura acaba de construir en vez de recomponerlos
@@ -228,24 +241,29 @@ class SistemaReproduccion:
     Envoltorio de clase (2026-08-23, mismo motivo que SistemaCapacidadFisica
     y SistemaDecision): quedó como función suelta `actualizar()`, pero
     main.py ya instancia `SistemaReproduccion(config, rng_juego)` y llama
-    `.ejecutar(gestor, reloj, bus_eventos)` -- ambas cosas coinciden
+    `.ejecutar(gestor, mundo, reloj, bus_eventos)` -- ambas cosas coinciden
     exactamente con lo que `actualizar()` necesita (config y rng propios,
-    reloj.tick_actual, bus_eventos), así que no hace falta tocar main.py.
+    zona para la celda del parto, reloj.tick_actual, bus_eventos), así que
+    no hace falta tocar main.py más allá de pasar mundo.
     """
 
     def __init__(self, config: dict, rng) -> None:
         self.config = config
         self.rng = rng
 
-    def ejecutar(self, gestor, reloj, bus_eventos: BusEventos) -> None:
-        actualizar(gestor, self.config, self.rng, bus_eventos, reloj.tick_actual)
+    def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos) -> None:
+        # (2026-08-29) zona pasa a ser necesaria: el nacimiento consulta la
+        # profundidad de agua de la celda del parto (celda_nacimiento_segura).
+        # Mismo patron de acceso que ya usan clima/descomposicion/flora.
+        zona = mundo.territorio.zonas[0]
+        actualizar(gestor, self.config, self.rng, bus_eventos, reloj.tick_actual, zona)
 
 
-def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int) -> None:
+def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, zona) -> None:
     # Correccion 2026-08-20 (ver docstring del modulo, seccion "Cadencia"):
     # ya NO hay gate de "una vez al dia" -- tanto nacimientos como
     # concepcion se evaluan cada tick.
-    _resolver_nacimientos(gestor, config, rng, bus, tick_actual)
+    _resolver_nacimientos(gestor, config, rng, bus, tick_actual, zona)
 
     rangos_raciales = config["rangos_raciales"]
 

@@ -185,7 +185,11 @@ class SistemaFlora:
             nx, ny = origen_x + dx, origen_y + dy
             if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
                 celda_dest = zona.obtener_celda(nx, ny)
-                if celda_dest.tipo_terreno in biomas_compatibles:
+                # (2026-08-28) Ley fisica: la flora no crece sumergida --
+                # mismo guard que sembrar_flora_inicial (main.py). El agua
+                # es capa independiente del bioma: sin esto, la propagacion
+                # colonizaba celdas de rio/lago/poza de su mismo bioma.
+                if celda_dest.tipo_terreno in biomas_compatibles and not celda_dest.tiene_agua:
                     if (nx, ny) not in posiciones_planta:
                         crear_planta(gestor, especie_nombre, nx, ny, etapa=0.1)
                         posiciones_planta.add((nx, ny))

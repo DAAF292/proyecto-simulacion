@@ -95,9 +95,15 @@ def sembrar_poblacion_inicial(
     for y in range(zona.alto):
         for x in range(zona.ancho):
             celda = zona.obtener_celda(x, y)
-            if celda.tipo_terreno == TipoTerreno.BOSQUE:
+            # (2026-08-29) Ley fisica, mismo guard que la siembra de flora
+            # (2026-08-28): la poblacion fundadora no nace sumergida. Sin
+            # este filtro, un fundador que cayera en una celda con
+            # profundidad mayor que su altura arrancaba la partida drenando
+            # oxigeno -- una loteria de colocacion fijada por la semilla,
+            # no una consecuencia de decisiones en juego.
+            if celda.tipo_terreno == TipoTerreno.BOSQUE and not celda.tiene_agua:
                 celdas_bosque.append((x, y))
-            elif celda.tipo_terreno == TipoTerreno.PRADERA:
+            elif celda.tipo_terreno == TipoTerreno.PRADERA and not celda.tiene_agua:
                 celdas_pradera.append((x, y))
 
     # Respaldo de seguridad ante semillas con escasa generación de bosque.
@@ -234,7 +240,13 @@ def sembrar_flora_inicial(
 
     celdas_por_especie: dict[str, list[tuple[int, int]]] = {}
     for x, y, celda in zona.celdas():
-        if celda.tiene_recurso:
+        # (2026-08-28) Ley fisica: la flora no crece sumergida. El agua es
+        # una capa independiente del bioma (la celda conserva bosque Y
+        # tipo_agua 'lago'), y sin este guard la siembra inicial ponia
+        # plantas en celdas de rio/lago/poza que el visor estampaba sobre
+        # el agua. El bono de ribera (nucleo/flora.py:factor_ribera) mira
+        # celdas VECINAS con agua, no sumergidas: no cambia con esto.
+        if celda.tiene_recurso and not celda.tiene_agua:
             celdas_por_especie.setdefault(celda.tipo_recurso, []).append((x, y))
 
     for especie_key, celdas in celdas_por_especie.items():
@@ -276,7 +288,9 @@ def ejecutar_tick(
     sistemas["necesidades"].ejecutar(gestor, mundo, reloj, bus_eventos)
     sistemas["capacidad_fisica"].ejecutar(gestor)
     sistemas["capacidad_mental"].ejecutar(gestor)
-    sistemas["reproduccion"].ejecutar(gestor, reloj, bus_eventos)
+    # (2026-08-29) reproduccion recibe mundo: el nacimiento consulta la
+    # profundidad de agua de la celda del parto (celda_nacimiento_segura).
+    sistemas["reproduccion"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
     # ---------------------------------------------------------
     # CIERRE DE TICK Y CADENCIAS TEMPORALES
