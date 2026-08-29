@@ -6,7 +6,9 @@ especie tiene mayor utilidad, y la guarda en su componente Intencion.
 
 Utilidad v1 (deliberadamente simple, sin personalidad ni histeresis --
 ver informe de implementacion para el razonamiento de por que se dejan
-fuera de esta primera version). Bajo la convencion nueva la urgencia de
+fuera de esta primera version; SUPERADO el 2026-08-29 por el COMPROMISO
+DE SATISFACCION, documentado mas abajo -- la oscilacion que la ausencia
+de histeresis predecia se manifesto como microsuenos de 1 tick). Bajo la convencion nueva la urgencia de
 una necesidad es (1.0 - valor), no el valor crudo -- una necesidad plena
 (1.0) no debe competir por atencion, una en crisis (0.0) si:
   Cualquier especie: utilidad(huir)      = 1.0 - seguridad (prioridad maxima en empate)
@@ -128,6 +130,80 @@ en cada tick que dura, para no inundar la cronica) -- se detecta
 comparando la Intencion de este tick contra la del tick anterior, antes
 de sobreescribirla.
 
+COMPROMISO DE SATISFACCION (ley B, 2026-08-29, diseno conjunto con Diego
+tras el diagnostico de microsuenos de ese mismo dia): la observacion del
+motor real (arnes de diagnostico, semilla 42, 3000 ticks) mostro que el
+argmax puro sin memoria del curso de accion produce rachas de dormir de
+1.04 ticks de media (43025 rachas, 100% interrumpidas antes de llenar
+energia), un churn de 39.5 cambios de accion por 100 ticks, y ninguna
+necesidad que llegue nunca a saturarse (energia/saciedad/aliviado llenos
+el 0.18% de los ticks). La causa es estructural, no un bug: la utilidad
+de la accion que se esta ejecutando CAE mientras se ejecuta (dormir
+recupera energia; alimentarse la satura) mientras las utilidades
+competidoras SUBEN por decaimiento continuo, de modo que el argmax
+conmuta de vuelta en cuanto cualquier otra urgencia iguala a la propia --
+el 100% de interrupcion es consecuencia necesaria de la ley, no mala
+suerte. El informe de implementacion (7.4) ya lo preveia ("sin
+histeresis... una entidad puede oscilar entre dos acciones de utilidad
+casi identica tick a tick") y lo dejo aparcado a proposito.
+
+La ley confirmada por Diego: una accion de SATISFACCION (dormir, comer,
+beber, aliviarse -- las cuatro que resuelven una necesidad concreta)
+se MANTIENE mientras su necesidad objetivo no alcance la plenitud
+(1.0), salvo interrupcion por:
+  1. OTRA necesidad fisica con accion asociada por debajo de
+     decision.umbral_crisis_interrupcion (PROVISIONAL 0.2): el hambre
+     real despierta a quien duerme, la incomodidad leve no. Se evalua
+     sobre las cuatro necesidades con accion de satisfaccion asociada
+     (saciedad/energia/hidratacion/aliviado) EXCLUYENDO la que la
+     accion actual esta resolviendo -- dormir a traves de la propia
+     falta de energia es exactamente el punto del compromiso.
+     Oxigenacion queda fuera del chequeo deliberadamente: no tiene
+     accion de satisfaccion asociada (nada que hacer al interrumpir),
+     y la seguridad entra por la via de huir (punto 2).
+  2. Amenaza real: si el argmax normal elegiria HUIR, el compromiso se
+     levanta -- una criatura dormida huye de un peligro, igual que hoy.
+La crisis mental (override completo, arriba) sigue por ENCIMA del
+compromiso: quien esta en crisis no mantiene curso de accion alguno.
+
+Al interrumpirse el compromiso NO se fuerza la accion de la necesidad en
+crisis: se levanta el compromiso y decide el argmax normal -- el
+compromiso solo sostiene, nunca manda. Consecuencia emergente aceptada
+(no es una regla escrita): una criatura agotada Y hambrienta puede
+seguir durmiendo porque el argmax sigue prefiriendo dormir (urgencia de
+energia mayor que la de saciedad) -- mismo tipo de jerarquia Maslow que
+ya gobierna el resto del sistema.
+
+El compromiso NO aplica a cazar, huir, buscar pareja ni deambular:
+cazar no satisface saciedad por si mismo (la resuelve la captura en
+sistema_depredacion.py, un evento, no una accion sostenida), y el resto
+no son acciones de satisfaccion. Asimetria declarada: el lobo (medio
+cazar) no tiene compromiso de alimentacion mientras gnomo/conejo/
+ardilla (medio recolectar) si -- si al observar el motor se siente como
+un hueco, extender el compromiso a CAZAR es el punto unico de cambio.
+
+PLENITUD EFECTIVA (2026-08-29, hallazgo del primer arnes de verificacion
+de la ley B): en la Fase 3 la recuperacion (sistema_recursos.py: comer,
+beber, aliviarse) y el decaimiento (sistema_necesidades.py) ocurren en
+el MISMO tick, asi que el valor registrado de una necesidad que acabo de
+tocar el techo es 1.0 - tasa_de_decay, nunca 1.0 exacto -- salvo energia,
+cuya recuperacion por sueno es excluyente con su decaimiento. Con la
+condicion ingenua ">= 1.0" el compromiso de comer/beber/aliviarse nunca
+se libera: el regimen observado fue comer-excesivo (55.1% de los ticks,
+rachas de comer de hasta 562 ticks que solo acaban cuando OTRA necesidad
+entra en crisis, 0/8969 rachas terminando en plenitud registrada) y un
+mundo forrajeado hasta el hueso. La condicion corregida compara contra el
+TECHO EFECTIVO de registro: 1.0 menos la tasa de decay de esa necesidad
+(para la especie, si la tiene en config). Es exacto por construccion
+(post-decay de un clamp a 1.0) y no anade estado; cuando el periodo de
+plenitud suprima el decay del tick de la transicion, el valor registrado
+pasara a ser 1.0 exacto y esta condicion seguira siendo cierta.
+
+No hay componentes nuevos: la propia Intencion es el estado del
+compromiso (comparar la accion elegida contra la accion actual). El
+umbral vive en config/constantes.yaml seccion decision, marcado
+PROVISIONAL pendiente de calibrar contra el harness completo.
+
 BUSCAR_PAREJA (2026-08-20, diseno conjunto de reproduccion tras la
 investigacion de por que la reproduccion casi nunca ocurria -- ver
 sistema_movimiento.py y sistema_reproduccion.py): utilidad = 1.0 -
@@ -150,6 +226,27 @@ comer/beber/dormir/aliviarse, todas con alguna consecuencia mas
 inmediata si se ignoran. Sin gating por agotamiento (a diferencia de
 cazar) -- buscar pareja no es un esfuerzo fisico sostenido equivalente,
 es basicamente caminar, la misma accion de base que deambular.
+
+TERCER GATE DE BUSCAR_PAREJA (2026-08-29, hallazgo del arnes de
+verificacion de la ley B, confirmado por Diego): la formula
+utilidad = 1.0 - impulso_reproductivo deja ganar a buscar pareja con
+impulso decaido a 0.0 (utilidad 1.0, maxima) SOBRE cualquier necesidad
+fisica no en crisis exacta -- criaturas con saciedad 0.05 y energia 0.05
+pasando el 80% de sus ticks buscando pareja mientras mueren de
+inanicion (semilla 42, eid 6 en t=1500-1579). El regimen de
+micro-interrupciones anterior lo enmascaraba: las necesidades nunca
+llegaban a crisis real, asi que la utilidad de pareja nunca superaba a
+una fisica apurada. Esto contradecia la intencion YA documentada en esta
+misma seccion ("no tiene sentido que compita por delante de
+comer/beber/dormir/aliviarse") y la jerarquia tipo Maslow del resto del
+sistema -- era una inconsistencia entre el diseno escrito y la
+implementacion, no una decision nueva. Correccion en el mismo patron de
+los gates existentes (adulto/gestando): utilidad forzada a 0.0 mientras
+CUALQUIER necesidad fisica con accion de satisfaccion (saciedad,
+energia, hidratacion, aliviado -- el mismo universo del compromiso) este
+por debajo de decision.umbral_atencion_pareja (PROVISIONAL 0.5). Buscar
+pareja queda asi reservado a individuos fisicamente resueltos; con las
+fisicas sanas su utilidad funciona como siempre.
 """
 from componentes.gestacion import Gestacion
 from componentes.identidad import Identidad
@@ -163,6 +260,61 @@ from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.eventos import BusEventos, Evento, Severidad
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
+
+# COMPROMISO DE SATISFACCION (2026-08-29, ver docstring del modulo): las
+# cuatro acciones que resuelven una necesidad concreta y la necesidad que
+# cada una satisface. Cazar NO esta: la saciedad del depredador se resuelve
+# en la captura (sistema_depredacion.py), no en la accion sostenida.
+_NECESIDAD_SATISFECHA = {
+    Accion.DORMIR: "energia",
+    Accion.COMER: "saciedad",
+    Accion.BEBER: "hidratacion",
+    Accion.ALIVIARSE: "aliviado",
+}
+
+# Necesidades fisicas con accion de satisfaccion asociada: el universo sobre
+# el que se evalua la interrupcion por crisis (excluyendo siempre la que la
+# accion comprometida esta resolviendo).
+_NECESIDADES_FISICAS = ("saciedad", "energia", "hidratacion", "aliviado")
+
+# Clave de config con la tasa de decay por tick de cada necesidad fisica:
+# define el techo efectivo de registro (ver PLENITUD EFECTIVA en el
+# docstring del modulo).
+_CLAVE_TASA_DECAY = {
+    "saciedad": "tasa_perdida_saciedad_por_tick",
+    "energia": "tasa_perdida_energia_por_tick",
+    "hidratacion": "tasa_perdida_hidratacion_por_tick",
+    "aliviado": "tasa_perdida_aliviado_por_tick",
+}
+
+
+def _compromiso_mantiene(
+    accion_actual: Accion,
+    necesidades: Necesidades,
+    elegida: Accion,
+    umbral_crisis: float,
+    techos: dict[str, float],
+) -> bool:
+    """
+    Devuelve True si el curso de accion actual debe MANTENERSE aunque el
+    argmax de este tick elija otra cosa (ley B, 2026-08-29). False cuando:
+    la accion actual no es de satisfaccion, su necesidad ya alcanzo el
+    techo efectivo de plenitud (compromiso liberado), el argmax elegiria
+    HUIR (amenaza real), o hay OTRA necesidad fisica en crisis. Levantar
+    el compromiso solo devuelve la decision al argmax normal -- nunca
+    fuerza una accion concreta.
+    """
+    nombre_nec = _NECESIDAD_SATISFECHA.get(accion_actual)
+    if nombre_nec is None:
+        return False
+    if getattr(necesidades, nombre_nec) >= techos[nombre_nec]:
+        return False
+    if elegida == Accion.HUIR:
+        return False
+    for otra in _NECESIDADES_FISICAS:
+        if otra != nombre_nec and getattr(necesidades, otra) < umbral_crisis:
+            return False
+    return True
 
 
 def _tipo_crisis(temperamento: Temperamento, config_crisis: dict) -> Accion:
@@ -202,7 +354,32 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
     base_deambular = config["decision"]["utilidad_deambular_base"]
     config_crisis = config["crisis_mental"]
     umbral_crisis = config_crisis["umbral_estabilidad_crisis"]
+    # COMPROMISO DE SATISFACCION (2026-08-29): umbral de crisis interrumpible
+    # del compromiso, PROVISIONAL 0.2 -- ver docstring del modulo y
+    # config/constantes.yaml seccion decision.
+    umbral_crisis_interrupcion = float(config["decision"]["umbral_crisis_interrupcion"])
+    # Tercer gate de BUSCAR_PAREJA (2026-08-29): ninguna busqueda de pareja
+    # con una necesidad fisica por debajo de este valor, PROVISIONAL 0.5.
+    umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
     rangos_raciales = config["rangos_raciales"]
+
+    # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
+    # docstring del modulo): cache local por llamada -- cuatro especies x
+    # cuatro necesidades por tick, coste despreciable, sin estado persistido.
+    cfg_nec = config.get("necesidades", {})
+    defecto_nec = cfg_nec.get("defecto", {})
+    techos_por_especie: dict[str, dict[str, float]] = {}
+
+    def techos_de(especie: str) -> dict[str, float]:
+        techos = techos_por_especie.get(especie)
+        if techos is None:
+            cfg_esp = cfg_nec.get(especie, {})
+            techos = {
+                necesidad: 1.0 - float(cfg_esp.get(clave, defecto_nec.get(clave, 0.0)))
+                for necesidad, clave in _CLAVE_TASA_DECAY.items()
+            }
+            techos_por_especie[especie] = techos
+        return techos
 
     for id_entidad in gestor.entidades_con(
         Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento, Reproduccion
@@ -252,13 +429,21 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         # BUSCAR_PAREJA (2026-08-20, ver docstring del modulo): gateada a
         # 0.0 si no es adulto o si ya gestando (solo la hembra puede
         # gestar) -- fraccion_madurez es ahora por especie (rangos_
-        # raciales), no un unico valor global.
+        # raciales), no un unico valor global. Tercer gate anadido el
+        # 2026-08-29 (hallazgo del arnes post ley B, confirmado por Diego,
+        # ver docstring del modulo): ninguna busqueda de pareja con una
+        # necesidad fisica por debajo de decision.umbral_atencion_pareja.
         edad = edad_ticks(identidad.tick_nacimiento, tick_actual)
         fraccion_madurez = rangos_raciales[identidad.especie.value]["fraccion_madurez"]
         adulto = es_adulto(edad, identidad.especie.value, rangos_raciales, fraccion_madurez)
         gestando = gestor.obtener_componente(id_entidad, Gestacion) is not None
+        fisica_bajo_umbral = any(
+            getattr(necesidades, n) < umbral_atencion_pareja
+            for n in _NECESIDADES_FISICAS
+        )
         utilidad_buscar_pareja = (
-            0.0 if (not adulto or gestando) else (1.0 - necesidades.impulso_reproductivo)
+            0.0 if (not adulto or gestando or fisica_bajo_umbral)
+            else (1.0 - necesidades.impulso_reproductivo)
         )
 
         candidatas = (
@@ -273,4 +458,17 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         # max() con esta lista respeta el orden de prioridad en empates
         # porque conserva el primer maximo encontrado.
         _, elegida = max(candidatas, key=lambda par: par[0])
-        intencion.accion = elegida
+
+        # COMPROMISO DE SATISFACCION (ley B, 2026-08-29, ver docstring del
+        # modulo y _compromiso_mantiene): si el curso de accion actual es una
+        # satisfaccion en curso y nada urgente lo interrumpe, prevalece sobre
+        # el argmax de este tick. En caso contrario la accion elegida se
+        # asigna como hasta ahora.
+        if not _compromiso_mantiene(
+            intencion.accion,
+            necesidades,
+            elegida,
+            umbral_crisis_interrupcion,
+            techos_de(identidad.especie.value),
+        ):
+            intencion.accion = elegida

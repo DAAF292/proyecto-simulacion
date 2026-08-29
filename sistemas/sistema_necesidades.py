@@ -5,6 +5,44 @@ Sistema metabólico y de balance fisiológico interno (Fase 3).
 Gestiona el decaimiento de necesidades básicas, la recuperación por sueño,
 la deriva térmica ambiental, la asfixia por inmersión y la mortalidad metabólica
 con depósito de necromasa y emisión de eventos espaciales.
+
+PERIODO DE PLENITUD (2026-08-29, incremento 2 del diseño de microsueños,
+confirmado por Diego junto con la ley B de compromiso de satisfaccion de
+sistema_decision.py): una necesidad que alcanza la plenitud (1.0) no decae
+durante necesidades.defecto.ticks_plenitud ticks; pasado el periodo, decae
+con su tasa lineal de siempre. Es la saciedad post-ingesta biologica: el
+estomago lleno suprime la señal de hambre un tiempo, y el hambre emerge
+despues gradualmente -- "como algo y estoy lleno durante un tiempo y luego
+empieza un hambre gradual" (Diego, sesion de diseño). Sin este periodo el
+decay arrancaba el tick siguiente a la plenitud, y la urgencia volvia a
+manifestarse de inmediato.
+
+Decisiones de diseño de la pieza:
+  - Cubre las CUATRO necesidades fisicas con accion de satisfaccion asociada
+    (saciedad, energia, hidratacion, aliviado) -- el mismo universo que el
+    compromiso de sistema_decision.py. Seguridad (recuperacion pasiva
+    ambiental), impulso reproductivo (reset por concepcion) y oxigenacion
+    (transitoria de inmersion) se quedan fuera: su plenitud no llega por
+    una accion de satisfaccion.
+  - El armado es por TRANSICION de estado (valor registrado del tick
+    anterior < 1.0 <= valor actual), no por introspeccion de la accion: si
+    una comida llena la hidratacion por su valor_hidratacion, el periodo de
+    hidratacion se arma igual -- es la ley fisica, no un guion de accion.
+    El default del valor previo es 1.0, asi que los recien nacidos/spawn
+    (todas las necesidades a 1.0) NO arman periodo y empiezan a decaer como
+    siempre.
+  - El tick de la transicion registra 1.0 exacto (el decay del propio tick
+    se suprime): ver PLENITUD EFECTIVA en sistema_decision.py -- este
+    comportamiento deja de ser un artefacto y pasa a ser la definicion.
+  - Para energia, la recuperacion por sueño sigue operando siempre; el
+    periodo solo suprime la fatiga despierta, y dormir no consume el
+    contador (un sueño dentro del periodo deja el periodo intacto).
+  - Timers internos del sistema, NO persistidos (tras cargar partida, el
+    decay reanuda hasta la proxima saciedad -- misma clase que oxigenacion)
+    y purgados por tick para las entidades eliminadas.
+  - ticks_plenitud=0 lo desactiva por completo (decaimiento clasico),
+    lo que permite comparar ley B sola contra ley B + plenitud con el
+    arnes de diagnostico.
 """
 
 from __future__ import annotations
@@ -33,6 +71,12 @@ class SistemaNecesidades:
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
         self.config = config
         self.rng = rng
+        # PERIODO DE PLENITUD (2026-08-29, ver docstring del modulo): estado
+        # transitorio del sistema, NO persistido -- tras cargar una partida,
+        # las necesidades reanudan su decay normal hasta la proxima saciedad
+        # (misma clase que oxigenacion: se recalcula a partir del estado vivo).
+        self._plenitud_prev: dict[tuple[int, str], float] = {}
+        self._plenitud_restante: dict[tuple[int, str], int] = {}
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -66,6 +110,46 @@ class SistemaNecesidades:
             self.defecto.get("probabilidad_muerte_ahogamiento", 0.5)
         )
 
+        # PERIODO DE PLENITUD (2026-08-29, diseno con Diego tras el
+        # diagnostico de microsuenos): ticks sin decay tras alcanzar la
+        # plenitud. 0 lo desactiva. PROVISIONAL, ver config/constantes.yaml.
+        self.ticks_plenitud: int = int(self.defecto.get("ticks_plenitud", 0))
+
+    def _registrar_plenitud(self, eid: int, nombre: str, valor_actual: float) -> None:
+        """
+        Arma el periodo de plenitud si la necesidad acaba de tocar el techo
+        (transicion: valor registrado del tick anterior < 1.0 <= valor actual).
+        Actualiza siempre el valor previo del tick. Con ticks_plenitud=0 no
+        arma nunca y el comportamiento es identico al decaimiento clasico.
+        """
+        key = (eid, nombre)
+        prev = self._plenitud_prev.get(key, 1.0)
+        if self.ticks_plenitud > 0 and prev < 1.0 <= valor_actual:
+            self._plenitud_restante[key] = self.ticks_plenitud
+        self._plenitud_prev[key] = valor_actual
+
+    def _decay_con_plenitud(self, eid: int, nombre: str, valor_actual: float, tasa: float) -> float:
+        """
+        Decaimiento de una necesidad con periodo de plenitud (2026-08-29,
+        ver docstring del modulo): si el periodo esta activo, el valor se
+        mantiene sin decay un tick y el contador corre; si no, decae con su
+        tasa. La transicion a plenitud se evalua sobre el valor PRE-decay de
+        este tick (post-recuperacion de sistema_recursos.py, que corre antes
+        en la Fase 3) contra el valor registrado al final del tick anterior
+        -- asi el tick de la transicion registra 1.0 exacto, sin el recorte
+        del decay del mismo tick (el artefacto de pipeline que hace
+        inalcanzable el 1.0 registrado para las necesidades que se
+        recuperan y decaen en el mismo tick, ver PLENITUD EFECTIVA en
+        sistema_decision.py).
+        """
+        self._registrar_plenitud(eid, nombre, valor_actual)
+        key = (eid, nombre)
+        restante = self._plenitud_restante.get(key, 0)
+        if restante > 0:
+            self._plenitud_restante[key] = restante - 1
+            return valor_actual
+        return max(0.0, valor_actual - tasa)
+
     def ejecutar(
         self,
         gestor: GestorEntidades,
@@ -92,7 +176,7 @@ class SistemaNecesidades:
             celda = zona.obtener_celda(pos.x, pos.y)
             cfg_esp = self.cfg_nec.get(ident.especie.value, self.defecto)
 
-            # 1. Decaimiento continuo de Saciedad, Hidratación, Aliviado y Energía
+            # Tasas de decaimiento por especie (lectura de config)
             tasa_hambre = float(
                 cfg_esp.get(
                     "tasa_perdida_saciedad_por_tick",
@@ -118,15 +202,25 @@ class SistemaNecesidades:
                 )
             )
 
-            nec.saciedad = max(0.0, nec.saciedad - tasa_hambre)
-            nec.hidratacion = max(0.0, nec.hidratacion - tasa_sed)
-            nec.aliviado = max(0.0, nec.aliviado - tasa_alivio)
+            # 1. Decaimiento continuo de Saciedad, Hidratación y Aliviado,
+            #    cada uno con su PERIODO DE PLENITUD (2026-08-29, ver
+            #    _decay_con_plenitud y docstring del modulo).
+            nec.saciedad = self._decay_con_plenitud(eid, "saciedad", nec.saciedad, tasa_hambre)
+            nec.hidratacion = self._decay_con_plenitud(
+                eid, "hidratacion", nec.hidratacion, tasa_sed
+            )
+            nec.aliviado = self._decay_con_plenitud(eid, "aliviado", nec.aliviado, tasa_alivio)
 
-            # 2. Resolución de Sueño vs Fatiga
+            # 2. Resolución de Sueño vs Fatiga (con periodo de plenitud: la
+            #    recuperacion por sueno sigue operando siempre; el periodo
+            #    solo suprime la fatiga despierta y no se consume durmiendo).
             if intencion is not None and intencion.accion == Accion.DORMIR:
                 nec.energia = min(1.0, nec.energia + self.tasa_recup_energia)
+                self._registrar_plenitud(eid, "energia", nec.energia)
             else:
-                nec.energia = max(0.0, nec.energia - tasa_energia)
+                nec.energia = self._decay_con_plenitud(
+                    eid, "energia", nec.energia, tasa_energia
+                )
 
             # 3. Asfixia por inmersión
             prof_agua = profundidad_agua_potable(celda)
@@ -191,6 +285,19 @@ class SistemaNecesidades:
                     ident=ident,
                     causa=causa_muerte,
                 )
+
+        # Purga de timers de plenitud de entidades que ya no existen
+        # (muertes de este tick incluidas -- sus keys se limpian en el tick
+        # siguiente, un tick de residuo es inofensivo). `entidades` es el
+        # snapshot del inicio del tick: los nacidos este tick (reproduccion,
+        # mas tarde en la Fase 3) no tienen keys todavia y no hacen falta.
+        vivos = set(entidades)
+        self._plenitud_prev = {
+            k: v for k, v in self._plenitud_prev.items() if k[0] in vivos
+        }
+        self._plenitud_restante = {
+            k: v for k, v in self._plenitud_restante.items() if k[0] in vivos
+        }
 
     def _resolver_deceso(
         self,
