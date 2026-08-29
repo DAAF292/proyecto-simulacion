@@ -30,30 +30,47 @@ function dibujoUnico() {
   return dibujos[0].args;
 }
 
+// (2026-08-29, fix de auditoria) ESCALA_ESPECIE fue retirada del visor
+// (commit eea8104, en paralelo a esta pieza de poses): el tamano por
+// especie ahora es escalaPorPeso(), raiz cubica de DimensionesFisicas.peso
+// normalizada contra el peso maximo real de rangos_raciales (90kg, lobo).
+// Estos tres tests seguian referenciando la tabla retirada -- se
+// actualizan para pasar dimensiones.peso en las entidades mock (un valor
+// medio del rango racial real de config/constantes.yaml) y calcular el
+// lado esperado con escalaPorPeso(), exactamente como hace
+// construirElementoCriatura() de verdad. El factor de densidad por pose
+// (ESCALA_POSE) no cambia: sigue siendo el objeto de esta prueba.
+const PESO_CONEJO = 2.0; // rango racial real [1.5, 3.0], config/constantes.yaml
+
 test('la pose tumbada se dibuja con su factor de densidad, no con el lado mayor puro', () => {
   limpiarBiblioteca();
   // conejo durmiendo: contenido 318x237 px, ancla de la especie idle_e 296
-  // px de alto -> factor 318/296 = 1.074. Sin factor, el visor dibuja el
-  // lado mayor a 0.55*celda*ESCALA secos y la pose colapsa.
+  // px de alto -> factor 318/237 = 1.074. Sin factor, el visor dibuja el
+  // lado mayor a 0.55*celda*escala secos y la pose colapsa.
   visor.catalogoAssets.criaturas_poses.conejo.durmiendo = 'c_d.png';
   visor.imagenesCache['criaturas_poses/c_d.png'] = imagenFalsa(318, 237);
   visor.limpiarCtxVisor();
-  visor.construirElementoCriatura({ id: 1, tipo: 'conejo', x: 1, y: 1, accion: 'dormir' }, TAM).dibujar();
+  const entidad = { id: 1, tipo: 'conejo', x: 1, y: 1, accion: 'dormir', dimensiones: { peso: PESO_CONEJO } };
+  visor.construirElementoCriatura(entidad, TAM).dibujar();
   const [, , , dw, dh] = dibujoUnico();
-  const lado = TAM * 0.55 * visor.ESCALA_ESPECIE.conejo * 1.074;
+  const lado = TAM * 0.55 * visor.escalaPorPeso(entidad) * 1.074;
   assert.ok(Math.abs(dw - lado) < 0.001, `ancho = lado con factor de pose (${dw} vs ${lado})`);
   assert.ok(Math.abs(dh - lado * (237 / 318)) < 0.001, `alto por aspecto (${dh} vs ${lado * (237 / 318)})`);
 });
 
 test('el necromasa hereda el factor de la pose muerto de su especie de origen', () => {
   limpiarBiblioteca();
-  // lobo muerto: contenido 507x168, ancla idle_e 284 -> factor 507/284 = 1.785
+  // lobo muerto: contenido 507x168, ancla idle_e 284 -> factor 507/284 = 1.785.
+  // necromasa no tiene DimensionesFisicas propio (restos inertes): escalaPorPeso()
+  // devuelve ESCALA_NECROMASA sin mirar `dimensiones`, por tipo=='necromasa'.
   visor.catalogoAssets.criaturas_poses.lobo.muerto = 'l_m.png';
   visor.imagenesCache['criaturas_poses/l_m.png'] = imagenFalsa(507, 168);
   visor.limpiarCtxVisor();
-  visor.construirElementoCriatura({ id: 2, tipo: 'necromasa', origen: 'lobo', x: 1, y: 1 }, TAM).dibujar();
+  const entidad = { id: 2, tipo: 'necromasa', origen: 'lobo', x: 1, y: 1 };
+  visor.construirElementoCriatura(entidad, TAM).dibujar();
   const [, , , dw, dh] = dibujoUnico();
-  const lado = TAM * 0.55 * visor.ESCALA_ESPECIE.necromasa * 1.785;
+  const lado = TAM * 0.55 * visor.escalaPorPeso(entidad) * 1.785;
+  assert.ok(Math.abs(lado - TAM * 0.55 * visor.ESCALA_NECROMASA * 1.785) < 0.001, 'necromasa usa ESCALA_NECROMASA');
   assert.ok(Math.abs(dw - lado) < 0.001, `ancho = lado con factor muerto (${dw} vs ${lado})`);
   assert.ok(Math.abs(dh - lado * (168 / 507)) < 0.001, `alto por aspecto (${dh} vs ${lado * (168 / 507)})`);
 });
@@ -65,9 +82,10 @@ test('el factor corresponde a la pose resuelta tras el fallback, no a la pedida'
   visor.catalogoAssets.criaturas_poses.conejo.idle_e = 'c_i.png';
   visor.imagenesCache['criaturas_poses/c_i.png'] = imagenFalsa(292, 296);
   visor.limpiarCtxVisor();
-  visor.construirElementoCriatura({ id: 3, tipo: 'conejo', x: 1, y: 1, accion: 'comer' }, TAM).dibujar();
+  const entidad = { id: 3, tipo: 'conejo', x: 1, y: 1, accion: 'comer', dimensiones: { peso: PESO_CONEJO } };
+  visor.construirElementoCriatura(entidad, TAM).dibujar();
   const [, , , dw, dh] = dibujoUnico();
-  const lado = TAM * 0.55 * visor.ESCALA_ESPECIE.conejo;
+  const lado = TAM * 0.55 * visor.escalaPorPeso(entidad);
   assert.ok(Math.abs(dh - lado) < 0.001, `aspecto < 1: alto = lado (${dh} vs ${lado})`);
   assert.ok(Math.abs(dw - lado * (292 / 296)) < 0.001, `ancho por aspecto (${dw} vs ${lado * (292 / 296)})`);
 });

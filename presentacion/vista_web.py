@@ -497,8 +497,19 @@ HTML_VISOR = """<!DOCTYPE html>
       for (const especie in catalogoAssets.flora_color) {
         for (const nombre of catalogoAssets.flora_color[especie]) rutas.push(['flora_color/' + nombre, 'flora_color/' + nombre]);
       }
-      for (const nombre of catalogoAssets.relieve.montana) rutas.push(['relieve/' + nombre, 'relieve/' + nombre]);
-      for (const nombre of catalogoAssets.relieve.cordillera || []) rutas.push(['relieve/' + nombre, 'relieve/' + nombre]);
+      // (2026-08-29, fix de auditoria) Generico por prefijo, igual que
+      // flora arriba: antes solo 'montana' y 'cordillera' se cargaban
+      // (hardcodeados), asi que masa_desierto/masa_tundra -- declaradas
+      // en FORMACIONES_POR_BIOMA y ya agrupadas por
+      // construir_manifiesto_assets() via _agrupar_por_prefijo -- nunca
+      // llegaban a precargarse: dibujarFormacionesMacro() encontraba
+      // pool=[] para esos dos biomas y caia en silencio al estampado
+      // por-celda de siempre. 'montana_color' es la unica clave especial
+      // (viene de relieve_color/, no de relieve/) y se excluye aqui.
+      for (const clave in catalogoAssets.relieve) {
+        if (clave === 'montana_color') continue;
+        for (const nombre of catalogoAssets.relieve[clave] || []) rutas.push(['relieve/' + nombre, 'relieve/' + nombre]);
+      }
       for (const nombre of catalogoAssets.relieve.montana_color) rutas.push(['relieve_color/' + nombre, 'relieve_color/' + nombre]);
       for (const clave in catalogoAssets.agua) {
         if (clave === 'piezas_rio') continue;
@@ -2020,7 +2031,21 @@ HTML_VISOR = """<!DOCTYPE html>
           if (!c.planta) continue;
           // Esta especie ya tiene assets reales cargados -- la dibuja
           // dibujarStampsRelieveYFlora() como sello, no como vectorial.
-          if ((catalogoAssets.flora[c.planta.especie] || []).length > 0) continue;
+          // (2026-08-29, fix de auditoria) Antes solo miraba
+          // catalogoAssets.flora (tinta): liquen y musgo solo tienen
+          // assets en flora_color/, sin gemela en tinta, asi que este
+          // guard nunca se disparaba para ellos a zoom de color -- se
+          // dibujaba el sello real (via poolTerreno() en
+          // dibujarStampsRelieveYFlora) Y ADEMAS la elipse vectorial
+          // semitransparente encima, doble capa visible en cualquier
+          // celda de montana con liquen o de tundra con musgo. Mismo
+          // poolTerreno() que usa el estampado real, para que este guard
+          // decida exactamente lo mismo que decide si habra un sello.
+          const poolExistente = poolTerreno(
+            catalogoAssets.flora_color[c.planta.especie], 'flora_color/',
+            catalogoAssets.flora[c.planta.especie], 'flora/',
+          );
+          if ((poolExistente.lista || []).length > 0) continue;
           // Diego pidio quitar el tapiz vectorial de hierba silvestre por
           // ahora (2026-08-27) mientras no exista un asset real para ella
           // -- la celda se queda solo con el lavado de bioma de base, sin
@@ -2572,8 +2597,21 @@ def construir_manifiesto_assets() -> dict[str, Any]:
             # entera a 3 celdas y a zoom lejano su trama se fundia en un
             # bloque de tinta (capturas de Diego). Con el pool separado, la
             # formacion de montana vuelve a funcionar en el navegador.
-            "montana": [n for n in _listar_pngs(RUTA_ASSETS / "relieve") if n.startswith("montana_")],
-            "cordillera": [n for n in _listar_pngs(RUTA_ASSETS / "relieve") if n.startswith("cordillera_")],
+            #
+            # (2026-08-29, fix de auditoria) Generalizado a
+            # _agrupar_por_prefijo(), igual que flora/agua/criaturas: la
+            # version anterior solo reconocia 'montana_' y 'cordillera_'
+            # a mano, asi que 'masa_desierto_*.png' y 'masa_tundra_*.png'
+            # -- ya en disco, ya declarados en FORMACIONES_POR_BIOMA --
+            # nunca aparecian en el manifiesto. dibujarFormacionesMacro()
+            # encontraba siempre pool=[] para esos dos biomas y caia en
+            # silencio al estampado por-celda, sin ningun error visible
+            # (un test que simulaba los datos en memoria en vez de pasar
+            # por este manifiesto real daba falso verde). El regex de
+            # _agrupar_por_prefijo ya separa correctamente cada prefijo
+            # (montana/cordillera/masa_desierto/masa_tundra) en su propia
+            # clave -- no hace falta filtrar a mano.
+            **_agrupar_por_prefijo(RUTA_ASSETS / "relieve"),
             "montana_color": _listar_pngs(RUTA_ASSETS / "relieve_color"),
         },
         "agua": _agrupar_por_prefijo(RUTA_ASSETS / "agua") | {

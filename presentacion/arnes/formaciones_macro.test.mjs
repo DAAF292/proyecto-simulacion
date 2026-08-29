@@ -103,9 +103,21 @@ test('un cluster de montana se estampa como UNA cordillera ajustada a su recuadr
   assert.equal(dibujos.length, 1);
   const [im, dx, dy, dw, dh] = dibujos[0].args;
   assert.equal(im, img);
-  // cluster x 3..5, y 2..3 -> caja 3*TAM de ancho, 2*TAM de alto (con margen 1.25)
-  assert.ok(Math.abs(dw - 3 * TAM * 1.25) < 0.001, `ancho ajustado al recuadro (${dw})`);
-  assert.ok(Math.abs(dh - 2 * TAM * 1.25) < 0.001, `alto ajustado al recuadro (${dh})`);
+  // cluster x 3..5, y 2..3 -> recuadro ampliado 3*TAM de ancho, 2*TAM de
+  // alto (margen 1.25). (2026-08-29, fix de auditoria) Esta asercion
+  // asumia estiramiento no-uniforme (ancho y alto ajustados cada uno por
+  // separado al recuadro) -- desactualizada desde el fix de "contain" en
+  // estamparEnRecuadro() (2026-08-28, ver su comentario: estirar por
+  // separado deformaba orillas de lagos y cordilleras). El sello real
+  // ENCAJA sin deformarse: se escala por el menor de los dos ratios
+  // (ancho/alto), asi que un solo lado toca el borde del recuadro y el
+  // otro queda con margen de pergamino -- exactamente lo que reproduce
+  // este calculo, replicando la formula real de estamparEnRecuadro().
+  const wRecuadro = 3 * TAM * 1.25, hRecuadro = 2 * TAM * 1.25;
+  const escEsperada = Math.min(wRecuadro / img.naturalWidth, hRecuadro / img.naturalHeight);
+  assert.ok(Math.abs(dw - img.naturalWidth * escEsperada) < 0.001, `ancho = naturalWidth*escala contain (${dw})`);
+  assert.ok(Math.abs(dh - img.naturalHeight * escEsperada) < 0.001, `alto = naturalHeight*escala contain (${dh})`);
+  assert.ok(dw <= wRecuadro + 0.001 && dh <= hRecuadro + 0.001, 'el sello nunca desborda el recuadro ampliado');
 });
 
 test('un cluster de bosque se estampa como masa forestal y las praderas no generan formacion', () => {

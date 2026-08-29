@@ -81,8 +81,17 @@ const FRAGMENTO_EXPORT = `
   imagenesCache: typeof imagenesCache !== 'undefined' ? imagenesCache : undefined,
   camara: typeof camara !== 'undefined' ? camara : undefined,
   hash2: typeof hash2 !== 'undefined' ? hash2 : undefined,
+  // (2026-08-29, fix de auditoria) ESCALA_ESPECIE fue retirada del visor
+  // (commit eea8104: sustituida por escalaPorPeso(), basada en el peso
+  // real del ECS -- ver presentacion/assets/README.md, "tamano por dato
+  // real, no por regla mia"). Se mantiene el export por si algun test
+  // viejo la referencia (queda undefined, mismo patron que el resto de
+  // esta lista), y se anaden los tres nombres nuevos.
   ESCALA_ESPECIE: typeof ESCALA_ESPECIE !== 'undefined' ? ESCALA_ESPECIE : undefined,
   ESCALA_POSE: typeof ESCALA_POSE !== 'undefined' ? ESCALA_POSE : undefined,
+  escalaPorPeso: typeof escalaPorPeso !== 'undefined' ? escalaPorPeso : undefined,
+  PESO_MAX_REFERENCIA: typeof PESO_MAX_REFERENCIA !== 'undefined' ? PESO_MAX_REFERENCIA : undefined,
+  ESCALA_NECROMASA: typeof ESCALA_NECROMASA !== 'undefined' ? ESCALA_NECROMASA : undefined,
   modoMapaActual: typeof modoMapaActual !== 'undefined' ? modoMapaActual : undefined,
   setModoMapa: typeof setModoMapa !== 'undefined' ? setModoMapa : undefined,
   lavadoDeCelda: typeof lavadoDeCelda !== 'undefined' ? lavadoDeCelda : undefined,

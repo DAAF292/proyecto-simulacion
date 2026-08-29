@@ -63,7 +63,11 @@ test('construirElementoCriatura ancla la criatura al suelo de su celda con sesgo
   assert.equal(dibujos.length, 1, 'el sprite de la criatura se estampa con drawImage');
   const [im, dx, dy, dw, dh] = dibujos[0].args;
   assert.equal(im, img);
-  const altoEsperado = TAM * 0.55 * (visor.ESCALA_ESPECIE.gnomo ?? 1);
+  // (2026-08-29, fix de auditoria) ESCALA_ESPECIE fue retirada (commit
+  // eea8104) en favor de escalaPorPeso(), basada en el peso real del ECS
+  // -- la entidad de este test no trae `dimensiones`, y escalaPorPeso()
+  // devuelve 1 en ese caso (mismo valor por defecto que ya usaba `?? 1`).
+  const altoEsperado = TAM * 0.55 * visor.escalaPorPeso({ tipo: 'gnomo' });
   assert.ok(Math.abs(dh - altoEsperado) < 0.001, `altura world-space proporcional a la celda (${dh})`);
   assert.ok(Math.abs(dw - altoEsperado * (img.naturalWidth / img.naturalHeight)) < 0.001);
   assert.ok(Math.abs((dy + dh) - baseY) < 0.001, 'el PIE del sprite toca el suelo de la celda');

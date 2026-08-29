@@ -120,7 +120,16 @@ def test_ley_el_charco_no_se_acumula_sobre_agua_permanente():
 # --- Ley: la lisis hibrica gasta el agua tisular igual en cualquier celda,
 # pero el aporte de charco solo se escribe sobre tierra firme.
 def test_ley_la_lisis_no_aporta_charco_sobre_agua_permanente():
+    # (2026-08-29, fix de auditoria) `Posicion := __import__(...).Posicion(x=0, y=0)`
+    # ligaba el nombre Posicion a la INSTANCIA recien creada, no a la
+    # clase -- la siguiente llamada Posicion(x=1, y=0) fallaba con
+    # TypeError: 'Posicion' object is not callable. El mecanismo que este
+    # test pretende verificar (la lisis no aporta charco sobre agua
+    # permanente) ya funcionaba correctamente en sistema_descomposicion.py;
+    # era un fallo del propio test, no del motor. Import normal, como el
+    # resto del archivo.
     from componentes.necromasa import Necromasa
+    from componentes.posicion import Posicion
     from nucleo.entidad import GestorEntidades
     from sistemas.sistema_descomposicion import SistemaDescomposicion
 
@@ -131,8 +140,7 @@ def test_ley_la_lisis_no_aporta_charco_sobre_agua_permanente():
 
     gestor = GestorEntidades()
     eid_tierra = gestor.crear_entidad()
-    gestor.anadir_componente(eid_tierra, Posicion := __import__(
-        "componentes.posicion", fromlist=["Posicion"]).Posicion(x=0, y=0))
+    gestor.anadir_componente(eid_tierra, Posicion(x=0, y=0))
     gestor.anadir_componente(
         eid_tierra,
         Necromasa(masa_organica=10.0, agua_tisular=1.0, tasa_putrefaccion=0.0, origen_especie="conejo"),

@@ -43,6 +43,28 @@ Decisiones de diseño de la pieza:
   - ticks_plenitud=0 lo desactiva por completo (decaimiento clasico),
     lo que permite comparar ley B sola contra ley B + plenitud con el
     arnes de diagnostico.
+
+DRENAJE REAL DE SEGURIDAD POR AMENAZA (2026-08-29, fix de auditoria):
+Necesidades.seguridad se inicializaba a 1.0 y esta funcion solo la subia
+(recuperacion pasiva, paso 5 mas abajo) -- ninguna linea de todo el
+repositorio la bajaba nunca, pese a que config/constantes.yaml ya
+declaraba necesidades.defecto.tasa_perdida_seguridad_por_amenaza=0.3 sin
+que nadie la leyera, y pese a que el propio docstring de
+nucleo/amenaza.py listaba a este modulo como consumidor del drenaje.
+Consecuencia en cascada (antes de este fix): utilidad_huir = 1.0 -
+seguridad (sistema_decision.py) era 0.0 SIEMPRE, por debajo de la
+utilidad fija de deambular -- HUIR no podia ganar el argmax nunca, y el
+drenaje de estabilidad mental "por amenaza sostenida"
+(sistema_capacidad_mental.py) tampoco tenia jamas efecto real. Corregido
+aqui: cada tick se busca la amenaza mas cercana (misma funcion que ya
+usa HUIR en sistema_movimiento.py, nucleo.amenaza.
+posicion_amenaza_mas_cercana, criatura mayor o celda en llamas dentro
+del radio de percepcion) -- si hay alguna, seguridad drena
+tasa_perdida_seguridad_por_amenaza; si no, se recupera pasivamente como
+ya hacia. PROVISIONAL: la tasa de drenaje (0.3) estaba declarada de
+antemano en config pero nunca se habia calibrado contra el motor en
+marcha porque nunca se habia ejecutado -- pendiente de observar contra
+el harness completo si produce huidas razonables o excesivas.
 """
 
 from __future__ import annotations
@@ -56,10 +78,12 @@ from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from nucleo.agua import profundidad_agua_potable
+from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.clima import estacion_actual
 from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
+from nucleo.percepcion import radio_individual
 from nucleo.reloj import Reloj
 
 
@@ -98,6 +122,23 @@ class SistemaNecesidades:
         )
         self.tasa_recup_seguridad: float = float(
             self.defecto.get("tasa_recuperacion_seguridad", 0.05)
+        )
+        # DRENAJE REAL DE SEGURIDAD POR AMENAZA (2026-08-29, ver docstring
+        # del modulo): tasa ya declarada en config, nunca leida hasta este
+        # fix.
+        self.tasa_drenaje_seguridad: float = float(
+            self.defecto.get("tasa_perdida_seguridad_por_amenaza", 0.3)
+        )
+        cfg_per = self.config.get("percepcion", {})
+        self.radio_min: int = int(cfg_per.get("radio_minimo_celdas", 0))
+        self.radio_max: int = int(cfg_per.get("radio_maximo_celdas", 4))
+        # Mismo umbral de disposicion que usa HUIR en sistema_movimiento.py
+        # (ver su comentario de fix hermano): se reutiliza
+        # depredacion.umbral_disposicion_caza en vez de inventar una
+        # constante nueva -- misma magnitud (disposicion logaritmica por
+        # peso), aplicada en sentido contrario.
+        self.umbral_disposicion_amenaza: float = float(
+            self.config.get("depredacion", {}).get("umbral_disposicion_caza", 0.5)
         )
 
         self.prob_muerte_inanicion: float = float(
@@ -250,8 +291,18 @@ class SistemaNecesidades:
                     obj_termico, nec.confort_termico - self.tasa_deriva_termica
                 )
 
-            # 5. Recuperación pasiva de Seguridad
-            if nec.seguridad < 1.0:
+            # 5. Seguridad: drena si hay amenaza percibida, se recupera si no
+            #    (2026-08-29, ver DRENAJE REAL DE SEGURIDAD POR AMENAZA en el
+            #    docstring del modulo -- antes de este fix solo se recuperaba,
+            #    nunca drenaba).
+            radio_amenaza = radio_individual(dims.agudeza_sensorial, self.radio_min, self.radio_max)
+            amenaza_pos = posicion_amenaza_mas_cercana(
+                gestor, zona, eid, pos.x, pos.y, radio_amenaza,
+                dims.peso, self.umbral_disposicion_amenaza,
+            )
+            if amenaza_pos is not None:
+                nec.seguridad = max(0.0, nec.seguridad - self.tasa_drenaje_seguridad)
+            elif nec.seguridad < 1.0:
                 nec.seguridad = min(1.0, nec.seguridad + self.tasa_recup_seguridad)
 
             # 6. Decaimiento de impulso reproductivo

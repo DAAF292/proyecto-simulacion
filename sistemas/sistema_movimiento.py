@@ -91,6 +91,21 @@ class SistemaMovimiento:
         self.peso_referencia_deteccion_plena: float = float(
             cfg_dep.get("peso_referencia_deteccion_plena", 0.1)
         )
+        # (2026-08-29, fix de auditoría) _calcular_huida llamaba a
+        # posicion_amenaza_mas_cercana sin cachear peso_propio ni
+        # umbral_disposicion, que la función exige sin valores por
+        # defecto -- TypeError en cuanto HUIR llegara a elegirse (nunca
+        # había ocurrido en la práctica porque, hasta esta misma sesión,
+        # Necesidades.seguridad no drenaba nunca y utilidad_huir era 0.0
+        # siempre; ver el fix hermano en sistema_necesidades.py). Reutiliza
+        # depredacion.umbral_disposicion_caza en vez de inventar una
+        # constante nueva: es la misma magnitud (disposición logarítmica
+        # por peso) aplicada en sentido contrario -- "cuánto más grande
+        # que yo cuenta como amenaza" es simétrico a "cuánto más pequeño
+        # que yo cuenta como presa viable".
+        self.umbral_disposicion_amenaza: float = float(
+            cfg_dep.get("umbral_disposicion_caza", 0.5)
+        )
 
     def ejecutar(self, gestor: GestorEntidades, mundo: Mundo) -> None:
         """
@@ -126,7 +141,7 @@ class SistemaMovimiento:
             if accion == Accion.DORMIR:
                 continue
             elif accion == Accion.HUIR:
-                dx, dy = self._calcular_huida(gestor, zona, eid, pos.x, pos.y, radio)
+                dx, dy = self._calcular_huida(gestor, zona, eid, pos.x, pos.y, dims.peso, radio)
             elif accion == Accion.CAZAR:
                 dx, dy = self._calcular_caza(gestor, eid, pos.x, pos.y, dims.peso, radio)
             elif accion == Accion.COMER:
@@ -201,10 +216,14 @@ class SistemaMovimiento:
         entidad_id: int,
         pos_x: int,
         pos_y: int,
+        peso_propio: float,
         radio: int,
     ) -> tuple[int, int]:
         """Calcula el vector opuesto a la amenaza más cercana percibida."""
-        amenaza_pos = posicion_amenaza_mas_cercana(gestor, zona, entidad_id, pos_x, pos_y, radio)
+        amenaza_pos = posicion_amenaza_mas_cercana(
+            gestor, zona, entidad_id, pos_x, pos_y, radio,
+            peso_propio, self.umbral_disposicion_amenaza,
+        )
         if amenaza_pos is None:
             return self._paso_aleatorio()
 
