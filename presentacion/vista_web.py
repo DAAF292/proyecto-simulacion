@@ -369,6 +369,32 @@ HTML_VISOR = """<!DOCTYPE html>
       'necromasa': 0.45,   // restos bajos: un craneo a la altura de un gnomo seria un monstruo
     };
 
+    // (2026-08-28) Factor de DENSIDAD por pose: no todas las poses de una
+    // especie comparten proporciones -- el galope es largo y bajo, el
+    // cadaver estirado, la posicion de pie alta y estrecha -- y forzar el
+    // lado mayor de cualquiera al mismo valor aplanaba las anchas a
+    // astillas (captura y medicion de Diego). La hoja fuente de cada
+    // especie (nuevosAssetsDefinitivos/criaturas) dibuja TODAS sus poses a
+    // la misma escala: el ancla es la altura de contenido de idle_e y el
+    // factor de cada pose es lado_mayor_de_contenido / ancla, medido con
+    // PIL recorte a recorte (idle_e no entra: su factor es 1 por
+    // definicion). PROVISIONAL: valores de medicion automatica, pendientes
+    // de validacion visual de Diego en el visor real -- una pose concreta
+    // que se lea mal se recalibra aqui a mano, sin tocar el mecanismo.
+    const ESCALA_POSE = {
+      'gnomo':   { 'andar_e': 1.031, 'andar_n': 1.028, 'andar_s': 1.021,
+                   'durmiendo': 1.836, 'forrajeando': 1.150, 'herido': 1.343,
+                   'idle_n': 1.014, 'idle_s': 1.010, 'muerto': 1.745 },
+      'lobo':    { 'andar_e': 1.475, 'andar_n': 0.979, 'andar_s': 1.021,
+                   'durmiendo': 1.250, 'forrajeando': 1.275, 'herido': 1.637,
+                   'idle_n': 1.011, 'idle_s': 1.018, 'muerto': 1.785 },
+      'conejo':  { 'andar_e': 1.821, 'durmiendo': 1.074, 'forrajeando': 1.436,
+                   'herido': 1.703, 'idle_n': 1.024, 'muerto': 1.993 },
+      'ardilla': { 'andar_e': 2.064, 'durmiendo': 1.053, 'forrajeando': 1.057,
+                   'herido': 1.950, 'idle_n': 0.989, 'idle_s': 1.014,
+                   'muerto': 2.082 },
+    };
+
     // Color por especie de planta (config/constantes.yaml, flora.especies --
     // exactamente estas cinco existen hoy en el catalogo, ninguna inventada).
     const COLOR_ESPECIE = {
@@ -394,6 +420,11 @@ HTML_VISOR = """<!DOCTYPE html>
       relieve: { montana: [], cordillera: [], montana_color: [] },
       agua: { lago: [], lago_color: [], rio: [], piezas_rio: {} },
       criaturas: {},
+      // (2026-08-28) Kit de poses: como el resto, llega por manifest, pero
+      // imagenPose() lo lee en cada frame -- sin semilla aqui, un manifest
+      // que tarde (o el arnes mock-DOM, donde el fetch siempre falla) deja
+      // catalogoAssets.criaturas_poses undefined y el visor casca.
+      criaturas_poses: {},
     };
     const imagenesCache = {};
 
@@ -424,6 +455,7 @@ HTML_VISOR = """<!DOCTYPE html>
         if (!catalogoAssets.agua.lago_color) catalogoAssets.agua.lago_color = [];
         if (!catalogoAssets.agua.piezas_rio) catalogoAssets.agua.piezas_rio = {};
         if (!catalogoAssets.criaturas) catalogoAssets.criaturas = {};
+        if (!catalogoAssets.criaturas_poses) catalogoAssets.criaturas_poses = {};
       } catch (err) {
         console.error('No se pudo leer /assets_manifest.json:', err);
         return;
@@ -513,8 +545,12 @@ HTML_VISOR = """<!DOCTYPE html>
     // Calibracion provisional: lado mayor de una criatura de referencia
     // (ESCALA_ESPECIE 1) como fraccion del alto de una celda. Eleccion de
     // legibilidad a ojo contra el visor real, no una medida del motor.
-    // El lado mayor manda (no la altura): las poses tumbadas (muerto,
-    // herido, aspecto ~2:1) no desbordan la celda.
+    // (2026-08-28) El lado ya no manda solo: se multiplica por el factor
+    // de densidad de la pose resuelta (ESCALA_POSE) -- antes las poses
+    // anchas (tumbadas, galope) colapsaban a astillas al forzar su lado
+    // mayor al mismo valor que el de una pose de pie. Una pose tumbada
+    // puede desbordar la celda en su eje largo: es la proporcion anatomi-
+    // ca de la hoja fuente, no un desajuste.
     const EN_MARCHA_EPSILON = 0.02;
     // celdas de distancia entre posicion suavizada y objetivo ECS a partir
     // de las cuales la criatura cuenta como "en marcha" (pose de andar).
@@ -531,7 +567,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // nativa de TODOS los recortes: oeste se resuelve espejando en el
     // canvas, nunca con piezas nativas izquierdas (evita dobles espejos).
     function imagenPose(especie, pose) {
-      const kit = catalogoAssets.criaturas_poses[especie] || {};
+      const kit = (catalogoAssets.criaturas_poses || {})[especie] || {};
       const intentos = {
         'forrajeando': ['forrajeando', 'idle_e'],
         'durmiendo': ['durmiendo', 'idle_e'],
@@ -549,7 +585,10 @@ HTML_VISOR = """<!DOCTYPE html>
       for (const p of intentos) {
         const nombre = kit[p];
         if (nombre && imagenesCache['criaturas_poses/' + nombre]) {
-          return imagenesCache['criaturas_poses/' + nombre];
+          // Devuelve TAMBIEN la pose resuelta: el factor de escala
+          // (ESCALA_POSE) es el de la pose cuyo fichero se dibuja, no el
+          // de la pedida -- un fallback a idle_e debe medir como idle_e.
+          return { img: imagenesCache['criaturas_poses/' + nombre], pose: p };
         }
       }
       return null;
@@ -579,10 +618,13 @@ HTML_VISOR = """<!DOCTYPE html>
     function construirElementoCriatura(e, tam) {
       const resuelta = resolverPose(e);
       let imgCriatura = null;
+      let poseResuelta = null;
       if (e.tipo === 'necromasa') {
-        if (e.origen) imgCriatura = imagenPose(e.origen, 'muerto');
+        const hallada = e.origen ? imagenPose(e.origen, 'muerto') : null;
+        if (hallada) { imgCriatura = hallada.img; poseResuelta = hallada.pose; }
       } else {
-        imgCriatura = imagenPose(e.tipo, resuelta.pose);
+        const hallada = imagenPose(e.tipo, resuelta.pose);
+        if (hallada) { imgCriatura = hallada.img; poseResuelta = hallada.pose; }
       }
       if (!imgCriatura) {
         const variantesCriatura = catalogoAssets.criaturas[e.tipo] || [];
@@ -596,7 +638,9 @@ HTML_VISOR = """<!DOCTYPE html>
       const runa = RUNAS[e.tipo] || '?';
 
       if (imgCriatura) {
-        const lado = tam * ALTURA_CRIATURA_POR_CELDA * (ESCALA_ESPECIE[e.tipo] ?? 1);
+        const especiePose = e.tipo === 'necromasa' ? e.origen : e.tipo;
+        const factorPose = (poseResuelta && ESCALA_POSE[especiePose] && ESCALA_POSE[especiePose][poseResuelta]) || 1;
+        const lado = tam * ALTURA_CRIATURA_POR_CELDA * (ESCALA_ESPECIE[e.tipo] ?? 1) * factorPose;
         const aspecto = imgCriatura.naturalWidth / imgCriatura.naturalHeight || 1;
         const alturaImg = aspecto >= 1 ? lado / aspecto : lado;
         const anchoImg = aspecto >= 1 ? lado : lado * aspecto;

@@ -82,6 +82,7 @@ const FRAGMENTO_EXPORT = `
   camara: typeof camara !== 'undefined' ? camara : undefined,
   hash2: typeof hash2 !== 'undefined' ? hash2 : undefined,
   ESCALA_ESPECIE: typeof ESCALA_ESPECIE !== 'undefined' ? ESCALA_ESPECIE : undefined,
+  ESCALA_POSE: typeof ESCALA_POSE !== 'undefined' ? ESCALA_POSE : undefined,
   modoMapaActual: typeof modoMapaActual !== 'undefined' ? modoMapaActual : undefined,
   setModoMapa: typeof setModoMapa !== 'undefined' ? setModoMapa : undefined,
   lavadoDeCelda: typeof lavadoDeCelda !== 'undefined' ? lavadoDeCelda : undefined,
