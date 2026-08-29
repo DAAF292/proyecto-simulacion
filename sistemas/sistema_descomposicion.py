@@ -118,10 +118,17 @@ class SistemaDescomposicion:
                 nec.agua_tisular = max(0.0, nec.agua_tisular - delta_agua)
 
                 aporte_charco_m = (delta_agua * 0.001) / (self.metros_por_celda ** 2)
-                celda.profundidad_charco = min(
-                    self.techo_profundidad_charco,
-                    celda.profundidad_charco + aporte_charco_m,
-                )
+                # (2026-08-29) Mismo criterio que _actualizar_charcos en
+                # sistema_recursos.py: la lisis hídrica solo aporta charco
+                # sobre tierra firme; el agua de un cuerpo permanente se
+                # incorpora a él, no a un campo de charco que ahí no
+                # significa nada. La lisis en sí (el gasto de agua_tisular)
+                # opera igual en ambas.
+                if not celda.tiene_agua:
+                    celda.profundidad_charco = min(
+                        self.techo_profundidad_charco,
+                        celda.profundidad_charco + aporte_charco_m,
+                    )
 
             # 4. Mineralización completa
             if nec.masa_organica <= self.umbral_purga_masa:

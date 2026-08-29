@@ -140,6 +140,12 @@ class SistemaRecursos:
         for y in range(zona.alto):
             for x in range(zona.ancho):
                 celda = zona.obtener_celda(x, y)
+                # (2026-08-29) El charco es agua EFIMERA sobre tierra firme:
+                # sobre una celda de agua permanente el campo no significa
+                # nada (hay_agua_potable/profundidad_agua_potable ya miran
+                # ambas capas) y solo ensuciaria el estado persistido.
+                if celda.tiene_agua:
+                    continue
                 if tasa_gen > 0.0:
                     celda.profundidad_charco = min(techo_charco, celda.profundidad_charco + tasa_gen)
                 elif celda.profundidad_charco > 0.0:

@@ -95,9 +95,15 @@ def sembrar_poblacion_inicial(
     for y in range(zona.alto):
         for x in range(zona.ancho):
             celda = zona.obtener_celda(x, y)
-            if celda.tipo_terreno == TipoTerreno.BOSQUE:
+            # (2026-08-29) Ley fisica, mismo guard que la siembra de flora
+            # (2026-08-28): la poblacion fundadora no nace sumergida. Sin
+            # este filtro, un fundador que cayera en una celda con
+            # profundidad mayor que su altura arrancaba la partida drenando
+            # oxigeno -- una loteria de colocacion fijada por la semilla,
+            # no una consecuencia de decisiones en juego.
+            if celda.tipo_terreno == TipoTerreno.BOSQUE and not celda.tiene_agua:
                 celdas_bosque.append((x, y))
-            elif celda.tipo_terreno == TipoTerreno.PRADERA:
+            elif celda.tipo_terreno == TipoTerreno.PRADERA and not celda.tiene_agua:
                 celdas_pradera.append((x, y))
 
     # Respaldo de seguridad ante semillas con escasa generación de bosque.
@@ -282,7 +288,9 @@ def ejecutar_tick(
     sistemas["necesidades"].ejecutar(gestor, mundo, reloj, bus_eventos)
     sistemas["capacidad_fisica"].ejecutar(gestor)
     sistemas["capacidad_mental"].ejecutar(gestor)
-    sistemas["reproduccion"].ejecutar(gestor, reloj, bus_eventos)
+    # (2026-08-29) reproduccion recibe mundo: el nacimiento consulta la
+    # profundidad de agua de la celda del parto (celda_nacimiento_segura).
+    sistemas["reproduccion"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
     # ---------------------------------------------------------
     # CIERRE DE TICK Y CADENCIAS TEMPORALES
