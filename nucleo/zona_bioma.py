@@ -41,6 +41,7 @@ from nucleo.orografia import (
 from nucleo.celda import Celda, TipoTerreno
 from nucleo.clima import Clima
 from nucleo.flora import recursos_alimento
+from nucleo.materiales import generar_vetas_minerales
 
 
 class ZonaBioma:
@@ -156,6 +157,7 @@ def generar_zona_bioma(
     config_agua: dict,
     config_materiales: dict,
     config_sustrato_por_bioma: dict,
+    config_generacion_vetas: dict,
     ancho: int,
     alto: int,
 ) -> ZonaBioma:
@@ -277,8 +279,26 @@ def generar_zona_bioma(
     # CÍRCULO 1 de materiales físicos (2026-08-30, ver config/materiales.yaml
     # y nucleo/celda.py:tipo_sustrato/humedad_subsuelo): mapeo bioma->material
     # fijo, mismo criterio de lookup determinista que biomas[(x,y)] arriba.
+    # Calculado en una pasada PREVIA a la construcción de Celda (no inline
+    # en el bucle principal, como antes) porque la colocación de vetas de
+    # mineral (más abajo) necesita conocer TODAS las celdas de piedra del
+    # mundo antes de que exista ninguna Celda todavía.
     sustrato_por_bioma = config_sustrato_por_bioma
     catalogo_materiales = config_materiales
+    tipo_sustrato_por_celda = {
+        (x, y): sustrato_por_bioma.get(biomas[(x, y)].value, "")
+        for x in range(ancho) for y in range(alto)
+    }
+
+    # Vetas de mineral (2026-08-30, ver nucleo/materiales.py): restringidas
+    # a celdas de sustrato piedra (montaña) -- coherente con que el
+    # hierro/cobre real aparece sobre todo en roca ígnea/metamórfica.
+    celdas_piedra = {
+        pos for pos, sustrato in tipo_sustrato_por_celda.items() if sustrato == "piedra"
+    }
+    vetas_minerales = generar_vetas_minerales(
+        rng, catalogo_materiales, config_generacion_vetas, celdas_piedra, ancho, alto
+    )
 
     grid = [[None] * alto for _ in range(ancho)]
     for x in range(ancho):
@@ -289,7 +309,8 @@ def generar_zona_bioma(
             profundidad_agua = info_agua.profundidad_metros if info_agua else 0.0
             tiene_agua = tipo_agua != ""
 
-            tipo_sustrato = sustrato_por_bioma.get(tipo.value, "")
+            tipo_sustrato = tipo_sustrato_por_celda[(x, y)]
+            deposito_mineral = vetas_minerales.get((x, y), "")
             capacidad_retencion = float(
                 catalogo_materiales.get(tipo_sustrato, {}).get("capacidad_retencion", 0.0)
             )
@@ -312,7 +333,7 @@ def generar_zona_bioma(
                 recursos=recursos_iniciales, tiene_recurso=tiene_recurso,
                 tipo_recurso=especie_key, tiene_agua=tiene_agua, tipo_agua=tipo_agua,
                 profundidad_agua=profundidad_agua, tipo_sustrato=tipo_sustrato,
-                humedad_subsuelo=humedad_subsuelo,
+                humedad_subsuelo=humedad_subsuelo, deposito_mineral=deposito_mineral,
             )
 
     return ZonaBioma(ancho=ancho, alto=alto, grid=grid)

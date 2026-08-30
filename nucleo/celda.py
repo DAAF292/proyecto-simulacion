@@ -200,6 +200,24 @@ class Celda:
     de producción vegetal, sustituye al antiguo factor_ribera -- una celda
     con agua permanente da el mismo bono de siempre, pero como consecuencia
     de la ley general de humedad, no como caso especial hardcodeado)."""
+    deposito_mineral: str = ""
+    """Vetas de mineral (2026-08-30, ver nucleo/materiales.py y la
+    conversación de diseño con Diego). Ortogonal a tipo_sustrato -- una
+    celda de sustrato 'piedra' puede además tener una veta de 'hierro' o
+    'cobre' dentro; el mineral no sustituye a la roca, existe dentro de
+    ella (mismo criterio que tiene_agua es ortogonal al bioma). "" si no
+    hay veta -- la inmensa mayoría de celdas de piedra. Determinista de
+    la semilla (colocación de vetas en generación), NO se persiste, mismo
+    motivo que tipo_sustrato. ALCANCE DELIBERADAMENTE ACOTADO (Diego,
+    2026-08-30, tras señalar un problema real: "cual es la profundidad
+    del suelo? ahora es una celda, pero hacia donde va eso?"): este campo
+    es la MISMA abstracción plana que ya usan flora y agua -- un recurso
+    presente en la celda, sin geometría de profundidad real. Si el motor
+    llega a tener un eje de profundidad de verdad (cuevas, estructuras
+    subterráneas), es una decisión de arquitectura aparte, no resuelta ni
+    asumida aquí. Sin consumidor mecánico todavía -- declarado con
+    intención, mismo criterio que tipo_agua/madera/fibra: la extracción
+    real exige Inventario y una acción de minería, círculo muy posterior."""
     profundidad_charco: float = 0.0
     """Charco efimero (pieza 3 de la revision del sistema de agua pedida
     por Diego, 2026-08-21 -- "quizas la tormenta y lluvia podrian generar

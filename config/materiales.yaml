@@ -218,12 +218,40 @@ materiales:
 # generación (nucleo/zona_bioma.py) para fijar Celda.tipo_sustrato. Bosque
 # y pradera comparten arcilla a propósito (vega fértil, mismo criterio que
 # ya comparten textura de terreno en el visor histórico) -- montaña,
-# desierto y tundra tienen cada una la suya. Hierro/cobre NO aparecen aquí
-# todavía: son sustrato de VETA localizada (círculo de minería, muy
-# posterior), no el material base de ningún bioma entero.
+# desierto y tundra tienen cada una la suya. Hierro/cobre NO aparecen
+# aquí: no son el material BASE de ningún bioma entero, son vetas
+# localizadas dentro de piedra -- ver generacion_vetas más abajo.
 sustrato_por_bioma:
   montana: piedra
   bosque: arcilla
   pradera: arcilla
   desierto: arena
   tundra: tierra
+
+# --- Generación de vetas de mineral (2026-08-30) --------------------------
+# Coloca cada material con 'abundancia' (hoy hierro y cobre) dentro de
+# celdas de sustrato piedra -- ver nucleo/materiales.py para el algoritmo
+# completo (dos formas, mancha o filón, sorteadas por veta individual, no
+# una forma fija por mineral -- "por qué tenemos que utilizar un solo
+# sistema? no podemos usar ambos indistintamente? eso le dará más
+# variedad", Diego 2026-08-30). Sin consumidor mecánico todavía -- coloca
+# el dato en el mundo (Celda.deposito_mineral), la extracción real exige
+# Inventario y una acción de minería.
+#
+# PROVISIONAL en su totalidad -- valores de partida razonados, medidos
+# contra terreno real (ver commit de esta pieza) pero no contra ningún
+# efecto sobre el motor en marcha, porque todavía no hay ningún efecto
+# que observar.
+generacion_vetas:
+  # Fracción del total de celdas de piedra del mundo que se convierte en
+  # veta de un material, por unidad de abundancia -- hierro (abundancia
+  # 0.6) apunta a 0.6*0.08=4.8% de la piedra, cobre (0.35) a 2.8%.
+  escala_abundancia_a_fraccion_piedra: 0.08
+  # Tamaño objetivo de una veta individual, en celdas -- de aquí se
+  # deriva cuántas vetas separadas salen (objetivo_total / esto), mismo
+  # patrón que flora.especies.*.celdas_por_mancha_objetivo.
+  celdas_por_veta_objetivo: 4
+  # Probabilidad de que una veta concreta sea filón en vez de mancha.
+  prob_filon_vs_mancha: 0.5
+  longitud_filon_celdas: [2, 5]
+  anchura_filon_celdas: [0.6, 1.1]

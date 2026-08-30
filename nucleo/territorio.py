@@ -46,6 +46,7 @@ class Territorio:
             config["agua"],
             config["materiales"],
             config["sustrato_por_bioma"],
+            config["generacion_vetas"],
             ancho,
             alto,
         )
