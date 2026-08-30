@@ -30,7 +30,8 @@ from componentes.gestacion import Gestacion
 from componentes.reproduccion import Reproduccion
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
-from nucleo.entidad import GestorEntidades
+from nucleo.construccion import construccion_propia
+from nucleo.entidad import GestorEntidades, crear_construccion
 from nucleo.memoria import objetivo_recordado
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
@@ -162,6 +163,8 @@ class SistemaMovimiento:
                 )
             elif accion == Accion.BUSCAR_PAREJA:
                 dx, dy = self._calcular_pareja(gestor, eid, ident.especie, pos.x, pos.y, radio)
+            elif accion == Accion.CONSTRUIR:
+                dx, dy = self._calcular_construir(gestor, eid, pos.x, pos.y)
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
                     gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
@@ -793,6 +796,41 @@ class SistemaMovimiento:
                     return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
 
         return (0, 0)
+
+    def _calcular_construir(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+    ) -> tuple[int, int]:
+        """
+        REFUGIO CONSTRUIDO -- Pieza 2 de interacción física (2026-08-30,
+        ver componentes/construccion.py, nucleo/construccion.py y la
+        conversación de diseño con Diego). Localiza la Construccion tipo
+        "refugio" propia de esta entidad; si no existe todavía (primera
+        vez que Accion.CONSTRUIR se elige), la crea en la posición ACTUAL
+        de quien construye -- sin lógica de selección de sitio, esa
+        pregunta ("dónde establecería un asentamiento una criatura
+        consciente") sigue abierta y no se resuelve aquí de forma
+        implícita. Una vez existe, camina hacia ella igual que
+        _calcular_dormir camina hacia el refugio recordado.
+
+        La transferencia real de materiales (Inventario ->
+        Construccion.materiales) NO ocurre aquí -- sistema_recursos.py la
+        resuelve una vez la entidad está en la misma celda, mismo reparto
+        de responsabilidades que COMER/BEBER (este sistema decide hacia
+        dónde ir, sistema_recursos.py decide qué pasa al llegar).
+        """
+        cid = construccion_propia(gestor, entidad_id, "refugio")
+        if cid is None:
+            crear_construccion(gestor, pos_x, pos_y, "refugio", propietario_id=entidad_id)
+            return (0, 0)
+
+        con_pos = gestor.obtener_componente(cid, Posicion)
+        if con_pos is None or (con_pos.x == pos_x and con_pos.y == pos_y):
+            return (0, 0)
+        return self._acercarse_a(pos_x, pos_y, con_pos.x, con_pos.y)
 
     def _acercarse_a(self, ox: int, oy: int, tx: int, ty: int) -> tuple[int, int]:
         """Calcula el paso unitario Manhattan más directo hacia el objetivo."""

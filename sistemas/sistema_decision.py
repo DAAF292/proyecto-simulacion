@@ -248,15 +248,19 @@ por debajo de decision.umbral_atencion_pareja (PROVISIONAL 0.5). Buscar
 pareja queda asi reservado a individuos fisicamente resueltos; con las
 fisicas sanas su utilidad funciona como siempre.
 """
+from componentes.capacidad_mental import CapacidadMental
+from componentes.construccion import Construccion
 from componentes.gestacion import Gestacion
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
+from componentes.inventario import Inventario
 from componentes.necesidades import Necesidades
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.ciclo_vital import edad_ticks, es_adulto
+from nucleo.construccion import construccion_propia, masa_apta_construccion
 from nucleo.eventos import BusEventos, Evento, Severidad
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
@@ -317,6 +321,31 @@ def _compromiso_mantiene(
     return True
 
 
+def _compromiso_construir_mantiene(
+    gestor,
+    id_entidad: int,
+    necesidades: Necesidades,
+    elegida: Accion,
+    umbral_crisis_interrupcion: float,
+) -> bool:
+    """Análogo a _compromiso_mantiene (2026-08-30, refugio construido)
+    pero CONSTRUIR no resuelve un campo de Necesidades -- se mantiene
+    mientras la construcción propia siga sin terminar, no haya amenaza
+    real (HUIR gana) y ninguna necesidad física esté en crisis real
+    (mismo umbral y universo que el resto del compromiso, un gnomo no
+    debería morir de hambre por seguir construyendo)."""
+    if elegida == Accion.HUIR:
+        return False
+    for nombre in _NECESIDADES_FISICAS:
+        if getattr(necesidades, nombre) < umbral_crisis_interrupcion:
+            return False
+    cid = construccion_propia(gestor, id_entidad, "refugio")
+    if cid is None:
+        return False
+    construccion = gestor.obtener_componente(cid, Construccion)
+    return construccion is not None and construccion.progreso < 1.0
+
+
 def _tipo_crisis(temperamento: Temperamento, config_crisis: dict) -> Accion:
     if temperamento.valentia < config_crisis["umbral_valentia_huida_erratica"]:
         return Accion.HUIDA_ERRATICA
@@ -361,6 +390,12 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
     # Tercer gate de BUSCAR_PAREJA (2026-08-29): ninguna busqueda de pareja
     # con una necesidad fisica por debajo de este valor, PROVISIONAL 0.5.
     umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
+    # CONSTRUIR (2026-08-30, ver docstring del modulo y
+    # nucleo/construccion.py): mismo umbral de agencia que ya exime del
+    # sesgo de territorio -- construir es agencia consciente, no instinto.
+    umbral_consciencia_agencia = float(config["decision"].get("umbral_consciencia_agencia", 0.3))
+    utilidad_construir_base = float(config["decision"].get("utilidad_construir_base", 0.3))
+    catalogo_materiales = config.get("materiales", {})
     rangos_raciales = config["rangos_raciales"]
 
     # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
@@ -382,7 +417,8 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         return techos
 
     for id_entidad in gestor.entidades_con(
-        Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento, Reproduccion
+        Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento, Reproduccion,
+        CapacidadMental, Inventario,
     ):
         necesidades = gestor.obtener_componente(id_entidad, Necesidades)
         intencion = gestor.obtener_componente(id_entidad, Intencion)
@@ -390,6 +426,8 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         pool = gestor.obtener_componente(id_entidad, PoolFisico)
         pool_mental = gestor.obtener_componente(id_entidad, PoolMental)
         temperamento = gestor.obtener_componente(id_entidad, Temperamento)
+        cap_mental = gestor.obtener_componente(id_entidad, CapacidadMental)
+        inventario = gestor.obtener_componente(id_entidad, Inventario)
         agotado = pool.resistencia <= 0.0
 
         if pool_mental.estabilidad <= umbral_crisis:
@@ -446,6 +484,28 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
             else (1.0 - necesidades.impulso_reproductivo)
         )
 
+        # CONSTRUIR (2026-08-30, ver docstring del modulo y
+        # nucleo/construccion.py): gateada a 0.0 salvo consciente, sin
+        # refugio propio ya TERMINADO, y con algo de masa apta en el
+        # Inventario para aportar este tick (sin recoleccion todavia --
+        # ver conversacion de diseno -- esta compuerta no se abre en el
+        # motor real hasta que exista una accion que llene Inventario;
+        # verificado hoy solo con un inventario sembrado a mano).
+        utilidad_construir = 0.0
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            cid_refugio = construccion_propia(gestor, id_entidad, "refugio")
+            refugio_terminado = False
+            if cid_refugio is not None:
+                construccion_actual = gestor.obtener_componente(cid_refugio, Construccion)
+                refugio_terminado = (
+                    construccion_actual is not None and construccion_actual.progreso >= 1.0
+                )
+            tiene_material_apto = (
+                masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0
+            )
+            if not refugio_terminado and tiene_material_apto:
+                utilidad_construir = utilidad_construir_base
+
         candidatas = (
             (utilidad_huir, Accion.HUIR),
             (utilidad_alimentarse, accion_alimentarse),
@@ -453,6 +513,7 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
             (1.0 - necesidades.energia, Accion.DORMIR),
             (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
             (utilidad_buscar_pareja, Accion.BUSCAR_PAREJA),
+            (utilidad_construir, Accion.CONSTRUIR),
             (base_deambular, Accion.DEAMBULAR),
         )
         # max() con esta lista respeta el orden de prioridad en empates
@@ -462,13 +523,21 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         # COMPROMISO DE SATISFACCION (ley B, 2026-08-29, ver docstring del
         # modulo y _compromiso_mantiene): si el curso de accion actual es una
         # satisfaccion en curso y nada urgente lo interrumpe, prevalece sobre
-        # el argmax de este tick. En caso contrario la accion elegida se
-        # asigna como hasta ahora.
-        if not _compromiso_mantiene(
-            intencion.accion,
-            necesidades,
-            elegida,
-            umbral_crisis_interrupcion,
-            techos_de(identidad.especie.value),
-        ):
+        # el argmax de este tick. CONSTRUIR usa su propio compromiso dedicado
+        # (2026-08-30, _compromiso_construir_mantiene): no resuelve una
+        # Necesidades, resuelve el progreso de la construccion propia. En
+        # caso contrario la accion elegida se asigna como hasta ahora.
+        if intencion.accion == Accion.CONSTRUIR:
+            mantiene = _compromiso_construir_mantiene(
+                gestor, id_entidad, necesidades, elegida, umbral_crisis_interrupcion
+            )
+        else:
+            mantiene = _compromiso_mantiene(
+                intencion.accion,
+                necesidades,
+                elegida,
+                umbral_crisis_interrupcion,
+                techos_de(identidad.especie.value),
+            )
+        if not mantiene:
             intencion.accion = elegida

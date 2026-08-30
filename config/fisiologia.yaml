@@ -76,6 +76,18 @@ decision:
   # observar el motor conviene que alguna otra especie también quede
   # exenta o incluida, este umbral es el primer sitio a ajustar.
   umbral_consciencia_agencia: 0.3
+  # utilidad_construir_base (2026-08-30, refugio construido -- ver
+  # componentes/construccion.py, nucleo/construccion.py y
+  # sistemas/sistema_decision.py): utilidad FIJA de Accion.CONSTRUIR
+  # cuando su compuerta se abre (consciente, sin refugio propio terminado,
+  # con algo de material apto en el Inventario) -- mismo criterio que
+  # utilidad_deambular_base, un valor constante para un comportamiento de
+  # fondo en vez de una magnitud derivada de una Necesidades que no existe
+  # para esto. Por encima de deambular (para que construir gane cuando hay
+  # material a mano) pero por debajo de cualquier necesidad física en
+  # crisis real -- un gnomo no debería morirse de hambre por seguir
+  # construyendo. PROVISIONAL, sin calibrar contra el motor en marcha.
+  utilidad_construir_base: 0.3
 
 capacidad_fisica:
   tasa_perdida_resistencia_por_esfuerzo: 0.05

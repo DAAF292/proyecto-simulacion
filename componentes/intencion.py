@@ -26,6 +26,18 @@ class Accion(Enum):
     # diferencia del sesgo gregario de DEAMBULAR, que se detiene a
     # distancia 1) -- ver sistema_movimiento.py.
     BUSCAR_PAREJA = "buscar_pareja"
+    # CONSTRUIR (2026-08-30, refugio construido -- ver
+    # componentes/construccion.py y nucleo/construccion.py): exclusiva de
+    # quien supera decision.umbral_consciencia_agencia (gnomo hoy), mismo
+    # umbral que ya exime del sesgo de territorio y gatea el uso real de
+    # Inventario -- construir es agencia consciente, no instinto animal
+    # (conversación de diseño: "el hecho de poder construir te lo da tu
+    # consciencia"). Se resuelve en dos sistemas, mismo patrón que
+    # COMER/BEBER: sistema_movimiento.py decide hacia dónde ir (crea la
+    # construcción propia si no existe, navega hacia ella),
+    # sistema_recursos.py transfiere materiales del Inventario una vez
+    # allí.
+    CONSTRUIR = "construir"
     # Bloque F3 (crisis mental, discutida y confirmada con Diego): anulan
     # la Utility AI normal mientras PoolMental.estabilidad este en crisis
     # -- ver sistema_decision.py para el disparador y sistema_movimiento.py

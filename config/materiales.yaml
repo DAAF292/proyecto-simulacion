@@ -299,3 +299,10 @@ generacion_vetas:
 construccion:
   masa_minima_refugio: 15.0
   masa_minima_almacen: 60.0
+  # Cuánta masa apta transfiere Accion.CONSTRUIR del Inventario a la
+  # Construccion por tick, estando en su misma celda -- PROVISIONAL, sin
+  # calibrar contra el motor en marcha. Con esto y masa_minima_refugio,
+  # un gnomo con el inventario lleno tarda en torno a 15-20 ticks en
+  # completar su propio refugio, más si tiene que volver a recolectar
+  # entre medias -- orden de magnitud razonado, no medido.
+  tasa_aporte_construccion_kg_tick: 1.0

@@ -13,17 +13,25 @@ import random
 from typing import Any
 
 from componentes.capacidad_mental import CapacidadMental
+from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
+from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.posicion import Posicion
 from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
 from nucleo.celda import Celda
+from nucleo.construccion import (
+    construccion_propia,
+    masa_minima_para,
+    progreso_construccion,
+    transferir_a_construccion,
+)
 from nucleo.entidad import GestorEntidades
-from nucleo.eventos import BusEventos
+from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -68,6 +76,11 @@ class SistemaRecursos:
             self.cfg_charco.get("tasa_drenaje_humedad_subsuelo_por_tick", 0.001)
         )
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
+        # Refugio construido -- Pieza 2 (2026-08-30, ver nucleo/construccion.py).
+        self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
+        self.tasa_aporte_construccion: float = float(
+            self.config_construccion.get("tasa_aporte_construccion_kg_tick", 1.0)
+        )
 
         cfg_dep = self.config.get("depredacion", {})
         self.eficiencia_biomasa_saciedad: float = float(
@@ -132,6 +145,11 @@ class SistemaRecursos:
                 self._resolver_beber(nec, mem, cap_mental, celda, pos.x, pos.y)
             elif intencion.accion == Accion.ALIVIARSE:
                 self._resolver_aliviarse(nec, celda)
+            elif intencion.accion == Accion.CONSTRUIR:
+                inv = gestor.obtener_componente(eid, Inventario)
+                self._resolver_construir(
+                    gestor, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual, bus_eventos
+                )
 
     def _actualizar_charcos(self, zona: Any) -> None:
         """Genera/evapora charco y llena/drena humedad de subsuelo según el
@@ -231,6 +249,72 @@ class SistemaRecursos:
             return
         capacidad = capacidad_memoria(cap_mental, self.config)
         registrar_recuerdo(mem, tipo, pos_x, pos_y, capacidad)
+
+    def _resolver_construir(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
+        inv: Inventario | None,
+        pos_x: int,
+        pos_y: int,
+        tick_actual: int,
+        bus_eventos: BusEventos,
+    ) -> None:
+        """
+        REFUGIO CONSTRUIDO -- Pieza 2 de interacción física (2026-08-30,
+        ver componentes/construccion.py, nucleo/construccion.py y la
+        conversación de diseño con Diego). sistema_movimiento.py ya llevó
+        a la entidad hasta su Construccion propia (creándola si hacía
+        falta); aquí, estando en la misma celda, se transfieren
+        materiales aptos del Inventario y se actualiza progreso.
+
+        Al cruzar 1.0 por primera vez se registra la posición como
+        recuerdo "refugio" -- MISMA maquinaria que el refugio instintivo
+        (nucleo/memoria.py, sin cambios ni caso especial): la memoria
+        apunta al SITIO, no a la entidad Construccion (conversación de
+        diseño: "para su memoria eso es un sitio seguro y cómodo, sea una
+        construcción, una cueva o lo que sea"), así que
+        _calcular_dormir/objetivo_recordado ya saben volver aquí sin
+        ningún cambio en sistema_movimiento.py. Se emite un Evento
+        NOTABLE solo en la transición (mismo criterio que CrisisMental),
+        no en cada tick que sigue terminado.
+        """
+        if inv is None:
+            return
+        cid = construccion_propia(gestor, entidad_id, "refugio")
+        if cid is None:
+            return
+        con_pos = gestor.obtener_componente(cid, Posicion)
+        if con_pos is None or con_pos.x != pos_x or con_pos.y != pos_y:
+            return
+        construccion = gestor.obtener_componente(cid, Construccion)
+        if construccion is None or construccion.progreso >= 1.0:
+            return
+
+        transferir_a_construccion(
+            inv.contenidos,
+            construccion.materiales,
+            self.catalogo_materiales,
+            self.tasa_aporte_construccion,
+        )
+        masa_minima = masa_minima_para(construccion.tipo, self.config_construccion)
+        construccion.progreso = progreso_construccion(
+            construccion.materiales, self.catalogo_materiales, masa_minima
+        )
+
+        if construccion.progreso >= 1.0:
+            self._registrar_recuerdo_si_procede(mem, cap_mental, "refugio", pos_x, pos_y)
+            bus_eventos.emitir(
+                Evento(
+                    tipo="RefugioConstruido",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=entidad_id,
+                    datos={"x": pos_x, "y": pos_y},
+                )
+            )
 
     def _resolver_comer(
         self,
