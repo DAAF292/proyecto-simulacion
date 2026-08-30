@@ -88,6 +88,16 @@ decision:
   # crisis real -- un gnomo no debería morirse de hambre por seguir
   # construyendo. PROVISIONAL, sin calibrar contra el motor en marcha.
   utilidad_construir_base: 0.3
+  # utilidad_recolectar_base (2026-08-30, Círculo C -- ver
+  # nucleo/construccion.py:material_suficiente_para_refugio): por encima
+  # de utilidad_construir_base a propósito -- mientras falte material,
+  # recolectar gana sobre construir aunque ya se lleve algo encima (mejor
+  # completar la carga antes del viaje que ir y volver por poco). En
+  # cuanto material_suficiente_para_refugio se cumple (o el inventario se
+  # llena), la utilidad de recolectar cae a 0.0 y construir toma el
+  # relevo con lo que se lleve. PROVISIONAL, sin calibrar contra el motor
+  # en marcha.
+  utilidad_recolectar_base: 0.35
 
 capacidad_fisica:
   tasa_perdida_resistencia_por_esfuerzo: 0.05

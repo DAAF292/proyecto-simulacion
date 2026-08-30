@@ -62,6 +62,31 @@ def progreso_construccion(
     return min(1.0, masa_apta_construccion(materiales, catalogo) / masa_minima)
 
 
+def material_suficiente_para_refugio(
+    gestor: Any,
+    id_entidad: int,
+    contenidos_inventario: dict[str, float],
+    catalogo: dict[str, Any],
+    config_construccion: dict[str, Any],
+) -> bool:
+    """True si la masa apta ya invertida en el refugio propio (si existe)
+    más la que se lleva ahora mismo en el Inventario basta para terminar
+    -- Círculo C (2026-08-30, RECOLECTAR): punto único que decide cuándo
+    un gnomo deja de recolectar y pasa a construir, usado por
+    sistema_decision.py para ambas utilidades a la vez (recolectar se
+    apaga, construir sigue activo con lo que ya lleve)."""
+    from componentes.construccion import Construccion
+
+    cid = construccion_propia(gestor, id_entidad, "refugio")
+    ya_invertido = 0.0
+    if cid is not None:
+        construccion = gestor.obtener_componente(cid, Construccion)
+        if construccion is not None:
+            ya_invertido = masa_apta_construccion(construccion.materiales, catalogo)
+    masa_total = ya_invertido + masa_apta_construccion(contenidos_inventario, catalogo)
+    return masa_total >= masa_minima_para("refugio", config_construccion)
+
+
 def transferir_a_construccion(
     contenidos_inventario: dict[str, float],
     materiales_construccion: dict[str, float],

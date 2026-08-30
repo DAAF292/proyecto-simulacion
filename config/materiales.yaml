@@ -306,3 +306,14 @@ construccion:
   # completar su propio refugio, más si tiene que volver a recolectar
   # entre medias -- orden de magnitud razonado, no medido.
   tasa_aporte_construccion_kg_tick: 1.0
+  # Círculo C (2026-08-30, Accion.RECOLECTAR -- ver nucleo/construccion.py
+  # y sistema_recursos.py:_resolver_recolectar): cuánto tipo_sustrato de
+  # la celda actual (piedra/arcilla/tierra, siempre presente, no
+  # depletable) se convierte en material de Inventario por tick, topado
+  # por la capacidad de carga propia. Solo sustrato -- madera/fibra/
+  # hierba_seca (depósitos generados por flora) quedan fuera: no existe
+  # todavía ningún sistema que tale un árbol o siegue hierba y deposite
+  # el material real en el mundo, recolectarlos no es posible hoy sin
+  # inventar ese consumo (hueco honesto, no resuelto en esta pieza).
+  # PROVISIONAL, sin calibrar contra el motor en marcha.
+  tasa_recoleccion_kg_tick: 1.0

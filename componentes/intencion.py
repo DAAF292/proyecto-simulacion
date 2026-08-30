@@ -38,6 +38,13 @@ class Accion(Enum):
     # sistema_recursos.py transfiere materiales del Inventario una vez
     # allí.
     CONSTRUIR = "construir"
+    # RECOLECTAR (2026-08-30, Círculo C -- ver nucleo/construccion.py):
+    # convierte tipo_sustrato de la celda actual (piedra/arcilla/tierra,
+    # siempre presente, no depletable) en material de Inventario. Misma
+    # compuerta de consciencia que CONSTRUIR. Sin desplazamiento propio
+    # (se resuelve donde ya se está, como ALIVIARSE) -- el sustrato está
+    # bajo los pies de cualquiera, no hay que buscarlo.
+    RECOLECTAR = "recolectar"
     # Bloque F3 (crisis mental, discutida y confirmada con Diego): anulan
     # la Utility AI normal mientras PoolMental.estabilidad este en crisis
     # -- ver sistema_decision.py para el disparador y sistema_movimiento.py

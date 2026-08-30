@@ -32,6 +32,7 @@ from nucleo.construccion import (
 )
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.inventario import espacio_disponible_kg
 from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -80,6 +81,13 @@ class SistemaRecursos:
         self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
         self.tasa_aporte_construccion: float = float(
             self.config_construccion.get("tasa_aporte_construccion_kg_tick", 1.0)
+        )
+        # Círculo C -- RECOLECTAR (2026-08-30, ver nucleo/construccion.py).
+        self.tasa_recoleccion: float = float(
+            self.config_construccion.get("tasa_recoleccion_kg_tick", 1.0)
+        )
+        self.fraccion_carga_maxima: float = float(
+            self.config.get("inventario", {}).get("fraccion_carga_maxima", 0.25)
         )
 
         cfg_dep = self.config.get("depredacion", {})
@@ -150,6 +158,10 @@ class SistemaRecursos:
                 self._resolver_construir(
                     gestor, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual, bus_eventos
                 )
+            elif intencion.accion == Accion.RECOLECTAR:
+                inv = gestor.obtener_componente(eid, Inventario)
+                dims = gestor.obtener_componente(eid, DimensionesFisicas)
+                self._resolver_recolectar(inv, dims, celda)
 
     def _actualizar_charcos(self, zona: Any) -> None:
         """Genera/evapora charco y llena/drena humedad de subsuelo según el
@@ -315,6 +327,43 @@ class SistemaRecursos:
                     datos={"x": pos_x, "y": pos_y},
                 )
             )
+
+    def _resolver_recolectar(
+        self,
+        inv: Inventario | None,
+        dims: DimensionesFisicas | None,
+        celda: Celda,
+    ) -> None:
+        """
+        RECOLECTAR -- Círculo C de interacción física (2026-08-30, ver
+        componentes/intencion.py y nucleo/construccion.py). Convierte
+        tipo_sustrato de la celda actual (piedra/arcilla/tierra --
+        propiedad estática de la celda, siempre presente, no depletable,
+        ver nucleo/celda.py) en material del Inventario propio, topado
+        por la capacidad de carga (nucleo/inventario.py:
+        espacio_disponible_kg). Sin desplazamiento: se resuelve donde ya
+        se está, el sustrato está bajo los pies de cualquiera.
+
+        Deliberadamente LIMITADO a sustrato: madera/fibra/hierba_seca son
+        depósitos que debería generar un sistema de tala/siega de flora
+        que no existe todavía -- recolectarlos hoy exigiría inventar ese
+        consumo de camino, fuera del alcance de esta pieza. Hueco
+        honesto, señalado, no resuelto aquí (ver conversación de diseño
+        con Diego, ejemplo de "techo de paja").
+        """
+        if inv is None or dims is None:
+            return
+        material = celda.tipo_sustrato
+        if not material:
+            return
+        info = self.catalogo_materiales.get(material, {})
+        if not info.get("apto_construccion", False):
+            return
+        espacio = espacio_disponible_kg(inv.contenidos, dims.peso, self.fraccion_carga_maxima)
+        if espacio <= 0.0:
+            return
+        cantidad = min(self.tasa_recoleccion, espacio)
+        inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
 
     def _resolver_comer(
         self,

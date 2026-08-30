@@ -250,6 +250,7 @@ fisicas sanas su utilidad funciona como siempre.
 """
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
+from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.gestacion import Gestacion
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
@@ -260,8 +261,13 @@ from componentes.pool_mental import PoolMental
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.ciclo_vital import edad_ticks, es_adulto
-from nucleo.construccion import construccion_propia, masa_apta_construccion
+from nucleo.construccion import (
+    construccion_propia,
+    masa_apta_construccion,
+    material_suficiente_para_refugio,
+)
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.inventario import espacio_disponible_kg
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
 
@@ -327,18 +333,33 @@ def _compromiso_construir_mantiene(
     necesidades: Necesidades,
     elegida: Accion,
     umbral_crisis_interrupcion: float,
+    inventario: Inventario,
+    catalogo_materiales: dict,
 ) -> bool:
     """Análogo a _compromiso_mantiene (2026-08-30, refugio construido)
     pero CONSTRUIR no resuelve un campo de Necesidades -- se mantiene
     mientras la construcción propia siga sin terminar, no haya amenaza
-    real (HUIR gana) y ninguna necesidad física esté en crisis real
-    (mismo umbral y universo que el resto del compromiso, un gnomo no
-    debería morir de hambre por seguir construyendo)."""
+    real (HUIR gana), ninguna necesidad física esté en crisis real (mismo
+    umbral y universo que el resto del compromiso) Y siga quedando algo
+    de material apto en el Inventario para aportar.
+
+    CORRECCIÓN (2026-08-30, hallazgo del arnés de verificación de
+    RECOLECTAR/CONSTRUIR encadenados, no detectado al escribir esta
+    función la primera vez): sin el último chequeo, un gnomo que vacía su
+    Inventario aportando a la construcción se queda con Intencion.accion
+    = CONSTRUIR para siempre (progreso < 1.0 sigue siendo cierto), sin
+    aportar nada más ni volver nunca a RECOLECTAR -- el compromiso nunca
+    se libera de vuelta al argmax normal. Mismo principio que el techo
+    efectivo del compromiso de satisfacción (_compromiso_mantiene): se
+    libera en cuanto ya no hay nada más que hacer con la acción actual,
+    no solo cuando el objetivo final se cumple."""
     if elegida == Accion.HUIR:
         return False
     for nombre in _NECESIDADES_FISICAS:
         if getattr(necesidades, nombre) < umbral_crisis_interrupcion:
             return False
+    if masa_apta_construccion(inventario.contenidos, catalogo_materiales) <= 0.0:
+        return False
     cid = construccion_propia(gestor, id_entidad, "refugio")
     if cid is None:
         return False
@@ -395,7 +416,10 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
     # sesgo de territorio -- construir es agencia consciente, no instinto.
     umbral_consciencia_agencia = float(config["decision"].get("umbral_consciencia_agencia", 0.3))
     utilidad_construir_base = float(config["decision"].get("utilidad_construir_base", 0.3))
+    utilidad_recolectar_base = float(config["decision"].get("utilidad_recolectar_base", 0.35))
     catalogo_materiales = config.get("materiales", {})
+    config_construccion = config.get("construccion", {})
+    fraccion_carga_maxima = float(config.get("inventario", {}).get("fraccion_carga_maxima", 0.25))
     rangos_raciales = config["rangos_raciales"]
 
     # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
@@ -418,7 +442,7 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
 
     for id_entidad in gestor.entidades_con(
         Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento, Reproduccion,
-        CapacidadMental, Inventario,
+        CapacidadMental, Inventario, DimensionesFisicas,
     ):
         necesidades = gestor.obtener_componente(id_entidad, Necesidades)
         intencion = gestor.obtener_componente(id_entidad, Intencion)
@@ -428,6 +452,7 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         temperamento = gestor.obtener_componente(id_entidad, Temperamento)
         cap_mental = gestor.obtener_componente(id_entidad, CapacidadMental)
         inventario = gestor.obtener_componente(id_entidad, Inventario)
+        dims = gestor.obtener_componente(id_entidad, DimensionesFisicas)
         agotado = pool.resistencia <= 0.0
 
         if pool_mental.estabilidad <= umbral_crisis:
@@ -484,14 +509,19 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
             else (1.0 - necesidades.impulso_reproductivo)
         )
 
-        # CONSTRUIR (2026-08-30, ver docstring del modulo y
-        # nucleo/construccion.py): gateada a 0.0 salvo consciente, sin
-        # refugio propio ya TERMINADO, y con algo de masa apta en el
-        # Inventario para aportar este tick (sin recoleccion todavia --
-        # ver conversacion de diseno -- esta compuerta no se abre en el
-        # motor real hasta que exista una accion que llene Inventario;
-        # verificado hoy solo con un inventario sembrado a mano).
+        # CONSTRUIR / RECOLECTAR (2026-08-30, ver docstring del modulo y
+        # nucleo/construccion.py): ambas gateadas a consciente y sin
+        # refugio propio ya TERMINADO. Mientras la masa apta ya invertida
+        # + la que se lleva encima no baste para terminar (y quede
+        # espacio en el Inventario), RECOLECTAR gana sobre CONSTRUIR
+        # (utilidad mayor a proposito, ver config/fisiologia.yaml) --
+        # mejor completar la carga que ir y volver por poco. En cuanto
+        # basta, o el inventario se llena, RECOLECTAR cae a 0.0 y
+        # CONSTRUIR toma el relevo con lo que ya se lleve. Sin
+        # RECOLECTAR, CONSTRUIR no se abre nunca en el motor real (nada
+        # más llena Inventario todavía).
         utilidad_construir = 0.0
+        utilidad_recolectar = 0.0
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             cid_refugio = construccion_propia(gestor, id_entidad, "refugio")
             refugio_terminado = False
@@ -500,11 +530,19 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
                 refugio_terminado = (
                     construccion_actual is not None and construccion_actual.progreso >= 1.0
                 )
-            tiene_material_apto = (
-                masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0
-            )
-            if not refugio_terminado and tiene_material_apto:
-                utilidad_construir = utilidad_construir_base
+            if not refugio_terminado:
+                suficiente = material_suficiente_para_refugio(
+                    gestor, id_entidad, inventario.contenidos, catalogo_materiales, config_construccion
+                )
+                if not suficiente and espacio_disponible_kg(
+                    inventario.contenidos, dims.peso, fraccion_carga_maxima
+                ) > 0.0:
+                    utilidad_recolectar = utilidad_recolectar_base
+                tiene_material_apto = (
+                    masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0
+                )
+                if tiene_material_apto:
+                    utilidad_construir = utilidad_construir_base
 
         candidatas = (
             (utilidad_huir, Accion.HUIR),
@@ -513,6 +551,7 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
             (1.0 - necesidades.energia, Accion.DORMIR),
             (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
             (utilidad_buscar_pareja, Accion.BUSCAR_PAREJA),
+            (utilidad_recolectar, Accion.RECOLECTAR),
             (utilidad_construir, Accion.CONSTRUIR),
             (base_deambular, Accion.DEAMBULAR),
         )
@@ -529,7 +568,13 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         # caso contrario la accion elegida se asigna como hasta ahora.
         if intencion.accion == Accion.CONSTRUIR:
             mantiene = _compromiso_construir_mantiene(
-                gestor, id_entidad, necesidades, elegida, umbral_crisis_interrupcion
+                gestor,
+                id_entidad,
+                necesidades,
+                elegida,
+                umbral_crisis_interrupcion,
+                inventario,
+                catalogo_materiales,
             )
         else:
             mantiene = _compromiso_mantiene(
