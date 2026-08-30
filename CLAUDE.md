@@ -1189,3 +1189,163 @@ contando como miembro en el recálculo siguiente.
   `excedente_base_para_aportar` y sus modificadores — ninguno calibrado
   contra el harness completo (15 semillas × 12000 ticks), solo contra
   arneses dirigidos y partidas de 2000-4000 ticks sin intervención.
+
+## Profundidad geológica — Círculo 1 (mecanismo multi-zona), 2026-08-30
+
+Arranca de un informe externo que Diego trajo para valorar ("Propuesta
+Técnica: Expansión de Profundidad y Reforma del Sistema de Visualización"),
+diagnosticando que el mapa es "solo una cuadrícula sin opción de
+profundidad". Analizado contrastando cada afirmación contra el código real
+(no contra la lectura del propio informe) antes de opinar — encontró varios
+problemas serios que se le señalaron explícitamente a Diego antes de tocar
+nada:
+
+- **La pregunta de fondo ya se había planteado y respondido ESE MISMO DÍA**:
+  `nucleo/celda.py:deposito_mineral` (círculo de materiales físicos, más
+  arriba en este documento) documenta textualmente la pregunta de Diego
+  ("cuál es la profundidad del suelo? ahora es una celda, pero hacia dónde
+  va eso?") y la decisión tomada entonces — mantener la abstracción plana
+  deliberadamente, aparcando el eje de profundidad como "decisión de
+  arquitectura aparte, no resuelta ni asumida aquí". El informe presentaba
+  como hallazgo nuevo algo ya detectado y aparcado con el mismo diagnóstico.
+- **Afirmaciones factuales desactualizadas o inventadas contra el HEAD
+  real**: citaba un umbral de zoom "1.6" cambiado a 1.0 dos días antes
+  (`vista_web.py`, comentario propio del código: "(2026-08-28) 1.6 -> 1.0");
+  describía "Modo Códice vs Modo Inmersivo" cuando el visor real tiene TRES
+  modos (códice/relieve/hidro) más un pivote de estilo tinta/color
+  ortogonal a esos modos; describía el y-sort de criaturas como "efecto
+  pegatina" y "disonancia estética insalvable" cuando el propio test se
+  autodescribe como "oclusión real" (`criaturas_ysort.test.mjs`); proponía
+  usar `CapacidadMental.consciencia` como radio de niebla de guerra cuando
+  su propio docstring dice explícitamente "sin ninguna lógica de gating
+  implementada todavía... nada la consume" y su propósito real y
+  documentado es gating de facultades mentales superiores, no percepción
+  espacial — reutilizar el nombre de un campo real con una semántica que no
+  es la suya.
+- **Violaba el principio 2 de fondo**: proponía en un único documento
+  refactor de ECS (`Posicion`+`percepcion`+`disposicion`) + generación de
+  portales + reforma completa de renderizado (LOD, niebla de guerra, panel
+  de rayos X) + migración de esquema SQLite, todo junto, sin secuenciar.
+- **Colisión de vocabulario evitable**: `zona_id` para "nivel subterráneo"
+  cuando "Zona de bioma" ya significa algo distinto y establecido en la
+  jerarquía Mundo → Territorio → Zona de bioma → Celda.
+
+Con esa crítica por delante, Diego confirmó que la necesidad de fondo es
+real: "hace falta minería vertical, es parte de la riqueza de nuestro
+mundo, animales fantásticos que habitan el subsuelo, grandes ciudades
+enanas subterráneas, cuevas con monstruos, minas" — no un simple almacén de
+recursos, un marco nuevo de verdad para el mundo.
+
+**Reencuadre importante, en conversación**: frente a las dos opciones ya
+sobre la mesa (nodo único tipo Necromasa, o réplica completa del grid
+mundial como en el informe original), Diego pidió tratar el subsuelo como
+**zona de bioma real** — geografía, físicas, flora y fauna propias.
+Verificado contra el código que esto encaja MEJOR con "reutiliza antes de
+inventar" que cualquiera de las otras dos: `nucleo/territorio.py` ya
+declaraba `self.zonas` como lista desde el 23-08, explícitamente "el día
+que un territorio contenga varias zonas, este mismo atributo crece". El
+subsuelo es, literalmente, `zonas[1]` — el punto de extensión ya estaba
+sembrado, once días antes de que hiciera falta.
+
+Dos decisiones cerradas con Diego (pregunta directa) antes de escribir
+código:
+1. **Modelo espacial: bolsas dispersas**, no réplica completa del grid — el
+   subsuelo nace donde hay algo que simular (anclado a celdas de montaña
+   con depósito mineral), no como un segundo plano continuo del tamaño del
+   mundo. Evita duplicar la carga de un motor que ya arrastra sobrepoblación
+   sin techo investigado en superficie (límite conocido, migración 24-08).
+2. **"Ciudades enanas" = el gnomo ya existente**, no una raza nueva —
+   reutiliza el sistema de asentamiento/construcción de hoy mismo (ver
+   arriba) en vez de diseñar una raza desde cero antes de poder empezar.
+
+### Círculo 1 — implementado y verificado (commit `f79274e`)
+
+Objetivo único, deliberadamente acotado: demostrar que el mecanismo
+multi-zona funciona de punta a punta (movimiento, persistencia, aislamiento
+de percepción), sin contenido nuevo todavía — ni geometría interior real de
+cueva, ni minería, ni fauna/flora subterránea, ni ciudades enanas.
+
+- `componentes/posicion.py`: `Posicion` gana `zona_idx: int = 0` — índice en
+  `Territorio.zonas`, reutiliza el contenedor ya existente en vez de
+  inventar un término que colisione con "Zona de bioma". Toda entidad
+  existente queda en superficie sin tocar nada.
+- `nucleo/territorio.py`: genera una segunda zona de PRUEBA (`zonas[1]`,
+  12×12, mismo `generar_zona_bioma` que la superficie — sin bioma/flora/
+  fauna propios todavía, eso es círculo posterior) anclada bajo
+  `acceso_subterraneo`, la celda de montaña con `deposito_mineral` no vacío
+  más determinista disponible (sin agua ni fuego — las dos salvaguardas del
+  informe original que sí eran correctas por sí mismas). `entrada_cueva` es
+  el centro de esa zona.
+- **Mecanismo de portal, no una Accion nueva de la Utility AI**
+  (`sistema_movimiento.py:_aplicar_movimiento`): pisar la celda de acceso
+  cruza de zona, igual que una escalera de Dwarf Fortress — un rasgo físico
+  del terreno, no una decisión consciente que ninguna especie necesite
+  "elegir" (leyes neutras, principio 5). Evita inventar una curva de
+  utilidad nueva sin calibrar solo para esto.
+- **Aislamiento**: se auditaron y corrigieron todos los puntos del motor
+  que comparaban entidades por `(x,y)` sin noción de zona —
+  `nucleo/disposicion.py` (las tres funciones de búsqueda por disposición),
+  `nucleo/amenaza.py`, varias búsquedas internas de `sistema_movimiento.py`
+  (huida, caza, pareja, conspecífico más cercano, carroñeo),
+  `sistema_depredacion.py` (la clave de agrupación por celda),
+  `sistema_reproduccion.py` (contacto para concepción), y — encontrado
+  durante la verificación, no antes de escribir código —
+  `sistema_capacidad_mental.py` ("presenciar una muerte" comparaba
+  posiciones de fallecimiento sin zona, así que una muerte en la cueva
+  podía traumatizar a un vecino de superficie con el mismo `(x,y)`
+  numérico). Las cuatro emisiones de evento `"Muerte"`
+  (`sistema_necesidades.py`, `sistema_ciclo_vital.py`,
+  `sistema_depredacion.py`, y la de `sistema_desastres.py` que YA carecía
+  de `x,y` desde antes — gap preexistente, no corregido aquí, fuera de
+  alcance) ahora llevan `zona_idx` en `datos`.
+- **Sistemas de ciclo diario multi-zona**: `sistema_clima.py`,
+  `sistema_desastres.py` (ignición y propagación) y `sistema_flora.py`
+  procesan ahora todas las zonas del territorio, no solo `zonas[0]`.
+  `sistema_descomposicion.py` calcula el factor de humedad por zona (cada
+  `ZonaBioma` tiene su propio `clima_actual`) y lo aplica según la zona real
+  de cada Necromasa.
+- **Persistencia**: `celdas_estado`, `componentes_estado`, `plantas_estado`,
+  `necromasa_estado` y `construccion_estado` guardan `zona_idx` (esquema
+  `0.27-fase0`, DROP-and-recreate según el criterio ya establecido — sin
+  migración de datos, fase sin campañas reales que conservar).
+
+**Verificado contra el motor real, no solo contra la lectura del código**:
+los 22 tests existentes siguen en verde; arnés dirigido (portal en ambos
+sentidos, aislamiento de percepción/disposición con coordenadas
+numéricamente coincidentes entre zonas, roundtrip completo de guardado/
+carga con entidades y celdas en ambas zonas); **3000 ticks completos de
+`BOSQUE_AUTO_TICKS` sin ninguna excepción**, más 300 ticks del pipeline
+completo (los nueve sistemas: decisión → movimiento → desastres →
+depredación → recursos → necesidades → capacidad física → capacidad mental
+→ reproducción) con un gnomo y un lobo viviendo de verdad dentro de
+`zona_idx=1`, no solo cruzando el portal una vez.
+
+**Hueco encontrado y señalado, deliberadamente NO corregido en este
+círculo** (mismo criterio de honestidad que el resto del proyecto):
+`nucleo/asentamiento.py:almacen_cercano`/`agrupar_por_proximidad`
+(clustering de asentamiento) siguen sin filtrar por `zona_idx` — un almacén
+en la cueva y otro en superficie con coordenadas numéricamente cercanas
+podrían confundirse. Inofensivo hoy porque ningún gnomo construye bajo
+tierra todavía (nadie llega a recorrer ese camino); es lo primero a
+corregir cuando se aborde el Círculo 4 (ciudades enanas), no antes.
+
+### Qué sigue — círculos siguientes, ninguno arrancado todavía
+
+1. **Geometría interior real de la cueva** + acción de extracción minera
+   real (`deposito_mineral`/`tipo_sustrato` desde dentro) — hoy la zona de
+   prueba es un placeholder sin relación con "cueva" salvo el mecanismo de
+   acceso.
+2. **Fauna subterránea** ("animales fantásticos", monstruos) como catálogo
+   nuevo de especies, reutilizando rango racial + sorteo individual — nada
+   de mecanismo nuevo que inventar.
+3. **"Ciudad enana"**: extender `SistemaAsentamiento`/`Construccion` (ya
+   existen, ya hacen clustering + liderazgo + almacén) para que funcionen
+   dentro de una cueva — primer paso real: corregir el hueco de
+   `almacen_cercano` señalado arriba.
+4. **Presentación** (`presentacion/vista_web.py`) — deliberadamente sin
+   tocar todavía, ni un selector de nivel ni ninguna estética de cueva.
+   Motor primero.
+
+Ninguna decisión sobre "físicas distintas" (¿sin clima?, ¿modelo de luz/
+oscuridad?, ¿temperatura desacoplada?) está tomada — explícitamente abierta
+para cuando se llegue al círculo correspondiente, no asumida aquí.
