@@ -84,7 +84,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.25-fase0"
+VERSION_ESQUEMA = "0.26-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -271,7 +271,8 @@ class Persistencia:
                     tipo TEXT NOT NULL,
                     materiales TEXT NOT NULL,
                     propietario_id INTEGER,
-                    progreso REAL NOT NULL
+                    progreso REAL NOT NULL,
+                    completado_alguna_vez BOOLEAN NOT NULL
                 )
                 """
             )
@@ -522,10 +523,11 @@ class Persistencia:
                             json.dumps(con_comp.materiales),
                             con_comp.propietario_id,
                             con_comp.progreso,
+                            con_comp.completado_alguna_vez,
                         )
                     )
             cur.executemany(
-                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?)", filas_construccion
+                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
             )
 
             # D. Celdas dinámicas
@@ -763,9 +765,10 @@ class Persistencia:
 
             # 4b. Cargar Construcciones
             cur.execute(
-                "SELECT entidad_id, x, y, tipo, materiales, propietario_id, progreso FROM construccion_estado"
+                "SELECT entidad_id, x, y, tipo, materiales, propietario_id, progreso, "
+                "completado_alguna_vez FROM construccion_estado"
             )
-            for coid, cx, cy, tipo, mats_json, propietario_id, progreso in cur.fetchall():
+            for coid, cx, cy, tipo, mats_json, propietario_id, progreso, completado in cur.fetchall():
                 gestor.anadir_componente(coid, Posicion(x=cx, y=cy))
                 gestor.anadir_componente(
                     coid,
@@ -774,6 +777,7 @@ class Persistencia:
                         materiales=json.loads(mats_json),
                         propietario_id=propietario_id,
                         progreso=float(progreso),
+                        completado_alguna_vez=bool(completado),
                     ),
                 )
 

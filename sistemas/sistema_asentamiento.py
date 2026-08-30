@@ -59,13 +59,19 @@ class SistemaAsentamiento:
         reloj: Reloj,
         bus_eventos: BusEventos,
     ) -> None:
-        # 1. Refugios TERMINADOS por propietario -- solo un sitio ya
-        # habitable cuenta como "germen" real, uno a medio construir
-        # todavía no es un lugar donde vivir.
+        # 1. Refugios que llegaron a estar TERMINADOS alguna vez, por
+        # propietario -- pertenencia usa completado_alguna_vez, no
+        # progreso (2026-08-30, corrección de Diego: "no debería salir
+        # del asentamiento a la mínima degradación, una casa dañada
+        # sigue perteneciendo a un pueblo"). Uno a medio construir por
+        # PRIMERA vez (completado_alguna_vez=False) todavía no es un
+        # lugar donde vivir y no cuenta; uno ya habitado que decayó un
+        # poco sigue contando -- necesita reparación, no deja de ser
+        # parte del pueblo mientras tanto.
         refugios: dict[int, tuple[int, int]] = {}
         for cid in gestor.entidades_con(Construccion, Posicion):
             construccion = gestor.obtener_componente(cid, Construccion)
-            if construccion.tipo != "refugio" or construccion.progreso < 1.0:
+            if construccion.tipo != "refugio" or not construccion.completado_alguna_vez:
                 continue
             if construccion.propietario_id is None:
                 continue

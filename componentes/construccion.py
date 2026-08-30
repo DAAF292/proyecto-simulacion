@@ -44,16 +44,37 @@ class Construccion:
             mismo principio que tick_nacimiento vive en Identidad y no se
             duplica en otro sitio.
         progreso: fracción [0.0, 1.0] de la masa mínima de materiales
-            aptos ya aportada. 1.0 = construcción terminada y habitable/
-            usable; por debajo, sigue en obra. Derivado en la práctica de
-            materiales (suma de masa apta / umbral del tipo), pero se
-            guarda explícito en vez de recalcularse cada lectura -- mismo
+            aptos ya aportada AHORA MISMO. 1.0 = totalmente aprovisionada
+            en este instante; por debajo, sigue habiendo trabajo
+            pendiente (construcción inicial O reparación tras deterioro
+            -- objetivo_construccion_actual no distingue una de otra, es
+            el mismo camino). Derivado en la práctica de materiales
+            (suma de masa apta / umbral del tipo), pero se guarda
+            explícito en vez de recalcularse cada lectura -- mismo
             criterio que otros campos de progreso acumulado del motor
             (Planta.etapa), más barato de leer que de recomputar en cada
-            consumidor.
+            consumidor. FLUCTÚA: el deterioro (sistema_descomposicion.py,
+            sistema_desastres.py) puede hacerlo caer de nuevo por debajo
+            de 1.0 tras haberlo alcanzado.
+        completado_alguna_vez: True desde la primera vez que progreso
+            alcanzó 1.0, y se queda True aunque progreso decaiga después
+            -- NUNCA se pone a False salvo que la propia entidad colapse
+            y se elimine (una construcción nueva, si se reconstruye desde
+            cero, empieza en False otra vez). Corrección de diseño
+            (2026-08-30, Diego, tras ver que SistemaAsentamiento filtraba
+            por progreso>=1.0 exacto: "no debería salir del asentamiento
+            a la mínima degradación, una casa dañada sigue perteneciendo
+            a un pueblo"): pertenencia social (¿esto llegó a ser una casa
+            de verdad?) y estado de mantenimiento (¿hace falta trabajo
+            aquí ahora?) son preguntas DISTINTAS que antes compartían el
+            mismo campo (progreso) sin necesidad -- SistemaAsentamiento
+            usa completado_alguna_vez para pertenencia,
+            objetivo_construccion_actual sigue usando progreso para
+            decidir si hay que aportar más material.
     """
 
     tipo: str
     materiales: dict[str, float] = field(default_factory=dict)
     propietario_id: int | None = None
     progreso: float = 0.0
+    completado_alguna_vez: bool = False

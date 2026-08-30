@@ -331,6 +331,7 @@ class SistemaRecursos:
         )
 
         if construccion.progreso >= 1.0:
+            construccion.completado_alguna_vez = True
             if construccion.tipo == "refugio":
                 self._registrar_recuerdo_si_procede(mem, cap_mental, "refugio", pos_x, pos_y)
                 evento_tipo, severidad = "RefugioConstruido", Severidad.NOTABLE
