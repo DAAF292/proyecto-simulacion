@@ -57,14 +57,22 @@ en nucleo/persistencia.py: se recalcula cada tick a partir de la
 profundidad de la celda actual, no es un dato que sobreviva por si solo
 entre cargas de partida.
 
-confort_termico (Bloque D3, declarada sin mecanica): excepcion a la
-convencion del resto -- 0.5 es el ideal, la crisis esta en CUALQUIERA de
-los dos extremos (demasiado frio o demasiado calor), no en un unico
-extremo como las demas. criatura.docx (3.1) tambien la deja
-explicitamente sin mecanica: "depende del futuro sistema de clima y
-estaciones", que no existe todavia (Reloj ya deriva estacion, pero
-ningun sistema la consume). Tampoco se persiste, mismo motivo que
-oxigenacion.
+confort_termico (Bloque D3): excepcion a la convencion del resto -- 0.5
+es el ideal, la crisis esta en CUALQUIERA de los dos extremos (demasiado
+frio o demasiado calor), no en un unico extremo como las demas.
+criatura.docx (3.1) la dejaba explicitamente sin mecanica: "depende del
+futuro sistema de clima y estaciones". Ese sistema ya existe
+(nucleo/clima.py, sistemas/sistema_clima.py) y sistema_necesidades.py
+deriva el objetivo hacia el que confort_termico se mueve por tick
+(estacion + clima del dia, CORREGIDO 2026-08-29 -- antes solo leia la
+estacion, ignorando el clima pese a que la funcion que combina ambos ya
+existia). SI se persiste (nucleo/persistencia.py, columna
+confort_termico de componentes_estado) -- corregido este comentario, que
+decia lo contrario por error. Sigue sin regla de muerte propia ni
+consumidor en la Utility AI (mismo estatus que seguridad al
+introducirse, ver nucleo/clima.py): se mueve de verdad, pero ninguna
+consecuencia (mortalidad, utilidad, drenaje de otro pool) depende
+todavia de su valor -- extension futura, no decidida.
 
 impulso_reproductivo (2026-08-20, diseno conjunto tras la investigacion
 de por que la reproduccion casi nunca ocurria -- ver sistema_

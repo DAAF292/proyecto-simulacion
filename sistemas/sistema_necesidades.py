@@ -79,7 +79,7 @@ from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from nucleo.agua import profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
-from nucleo.clima import estacion_actual
+from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
@@ -270,17 +270,27 @@ class SistemaNecesidades:
             else:
                 nec.oxigenacion = min(1.0, nec.oxigenacion + self.tasa_recup_oxigeno)
 
-            # 4. Deriva de Confort Térmico estacional
+            # 4. Deriva de Confort Térmico estacional + clima del día
             # (2026-08-23) Reloj.estacion es un int CRECIENTE, no cíclico
             # (informe de diseño en nucleo/reloj.py: "dia/estacion/anio son
             # unidades derivadas") -- hay que reducirlo al ciclo de 4 y
             # convertirlo al Enum Estacion vía nucleo.clima.estacion_actual()
             # antes de poder leer .value; este código le pedía .value
             # directamente a un int.
-            obj_termico = float(
-                self.config.get("estaciones", {})
-                .get(estacion_actual(reloj.estacion).value, {})
-                .get("objetivo_confort_termico", 0.5)
+            # (2026-08-29, fix de auditoria) nucleo.clima.objetivo_confort_termico()
+            # ya combina estación (base) + clima del día (ajuste_confort) --
+            # decisión de diseño ya documentada en su propio docstring
+            # ("confort_termico sigue MISMO estatus que seguridad al
+            # introducirse"), nunca conectada: este código solo leía la
+            # base estacional, ignorando el clima por completo pese a que
+            # config ya trae ajuste_confort para los tres climas. Mismo
+            # patrón defensivo que sistema_recursos.py/sistema_flora.py
+            # para leer zona.clima_actual (puede no existir en un mundo
+            # recién creado antes del primer sorteo de clima).
+            clima_actual = getattr(zona, "clima_actual", None) or Clima.DESPEJADO
+            obj_termico = objetivo_confort_termico(
+                estacion_actual(reloj.estacion), clima_actual,
+                self.config.get("estaciones", {}), self.config.get("clima", {}),
             )
             if nec.confort_termico < obj_termico:
                 nec.confort_termico = min(

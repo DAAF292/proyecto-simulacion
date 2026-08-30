@@ -12,7 +12,7 @@ from typing import Any
 
 from nucleo.agua import hay_agua_potable
 from nucleo.celda import Celda
-from nucleo.clima import Clima, Estacion
+from nucleo.clima import Clima, Estacion, modificador_regeneracion
 
 
 def factor_produccion(
@@ -60,23 +60,19 @@ def factor_produccion(
         )
         f_temp = max(0.1, 1.0 - (dist * 2.0))
 
-    # 3. Modificador de estación
-    mod_estacion = float(
-        config.get("estaciones", {})
-        .get(estacion.value, {})
-        .get("modificador_regeneracion", 1.0)
+    # 3-4. Modificador de estacion x modificador de clima diario.
+    # (2026-08-29, fix de auditoria) Llama a la funcion centralizada de
+    # nucleo/clima.py en vez de reimplementar el mismo doble lookup
+    # inline -- mismo resultado (base_estacion * ajuste_clima), sin
+    # duplicar la formula en dos sitios. clima=None (mundo recien creado,
+    # antes del primer sorteo de SistemaClima) se normaliza a DESPEJADO,
+    # igual que hacia la version inline.
+    mod_estacional_clima = modificador_regeneracion(
+        estacion, clima if clima is not None else Clima.DESPEJADO,
+        config.get("estaciones", {}), config.get("clima", {}),
     )
 
-    # 4. Modificador de clima diario
-    nombre_clima = clima.value if clima is not None else "despejado"
-    mod_clima = float(
-        config.get("clima", {})
-        .get("efectos", {})
-        .get(nombre_clima, {})
-        .get("modificador_regeneracion", 1.0)
-    )
-
-    return f_lluvia * f_temp * mod_estacion * mod_clima
+    return f_lluvia * f_temp * mod_estacional_clima
 
 
 def recursos_alimento(especie_cfg: dict[str, Any]) -> list:
