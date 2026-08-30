@@ -82,7 +82,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.22-fase0"
+VERSION_ESQUEMA = "0.23-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -234,14 +234,20 @@ class Persistencia:
                 """
             )
 
-            # 4. Snapshot de necromasa
+            # 4. Snapshot de necromasa. masas (2026-08-30, CÍRCULO 2 de
+            # materiales físicos): antes columna masa_organica REAL única;
+            # ahora JSON de {material: kg} -- mismo patrón que
+            # celdas_estado.recursos mas abajo (dict serializado, no una
+            # columna por material). VERSION_ESQUEMA subida para que un
+            # esquema anterior se purgue y recree en vez de fallar leyendo
+            # una columna que ya no existe.
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS necromasa_estado (
                     entidad_id INTEGER PRIMARY KEY,
                     x INTEGER NOT NULL,
                     y INTEGER NOT NULL,
-                    masa_organica REAL NOT NULL,
+                    masas TEXT NOT NULL,
                     agua_tisular REAL NOT NULL,
                     tasa_putrefaccion REAL NOT NULL,
                     origen_especie TEXT NOT NULL
@@ -469,7 +475,7 @@ class Persistencia:
                             nid,
                             pos_n.x,
                             pos_n.y,
-                            nec_comp.masa_organica,
+                            json.dumps(nec_comp.masas),
                             nec_comp.agua_tisular,
                             nec_comp.tasa_putrefaccion,
                             nec_comp.origen_especie,
@@ -695,13 +701,13 @@ class Persistencia:
                 gestor.anadir_componente(pid, Planta(especie=esp, etapa=float(etapa)))
 
             # 4. Cargar Necromasa
-            cur.execute("SELECT entidad_id, x, y, masa_organica, agua_tisular, tasa_putrefaccion, origen_especie FROM necromasa_estado")
-            for nid, nx, ny, masa, agua, tasa, orig in cur.fetchall():
+            cur.execute("SELECT entidad_id, x, y, masas, agua_tisular, tasa_putrefaccion, origen_especie FROM necromasa_estado")
+            for nid, nx, ny, masas_json, agua, tasa, orig in cur.fetchall():
                 gestor.anadir_componente(nid, Posicion(x=nx, y=ny))
                 gestor.anadir_componente(
                     nid,
                     Necromasa(
-                        masa_organica=float(masa),
+                        masas=json.loads(masas_json),
                         agua_tisular=float(agua),
                         tasa_putrefaccion=float(tasa),
                         origen_especie=str(orig),

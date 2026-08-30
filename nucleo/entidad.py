@@ -117,11 +117,40 @@ def _sortear_edad_inicial_ticks(
     return int(rng.uniform(0.0, techo_fraccion * longevidad_ticks))
 
 
+def componer_necromasa(
+    peso: float,
+    fraccion_masa_seca: float,
+    fraccion_hueso: float,
+    fraccion_agua_tisular: float,
+) -> tuple[dict[str, float], float]:
+    """
+    Reparte el peso de un cadáver en masa seca (tejido_blando + hueso) y
+    agua tisular -- CÍRCULO 2 de materiales físicos (2026-08-30, ver
+    componentes/necromasa.py:Necromasa.masas y config/flora.yaml sección
+    descomposicion para el diseño completo).
+
+    Consolida lo que antes eran CUATRO copias del mismo cálculo
+    "peso * 0.35 / peso * 0.65" repetidas sin config detrás en
+    sistema_necesidades.py, sistema_ciclo_vital.py, sistema_depredacion.py
+    y (con sus propias fracciones) sistema_desastres.py -- encontrado al
+    tocar los cuatro sitios para añadir el reparto tejido_blando/hueso, no
+    lo que motivó este círculo por sí solo.
+    """
+    masa_seca_total = peso * fraccion_masa_seca
+    masa_hueso = masa_seca_total * fraccion_hueso
+    masas = {
+        "tejido_blando": masa_seca_total - masa_hueso,
+        "hueso": masa_hueso,
+    }
+    agua_tisular = peso * fraccion_agua_tisular
+    return masas, agua_tisular
+
+
 def crear_necromasa(
     gestor: GestorEntidades,
     pos_x: int,
     pos_y: int,
-    masa_organica: float,
+    masas: dict[str, float],
     agua_tisular: float,
     origen_especie: str,
     tasa_putrefaccion: float = 0.05,
@@ -134,7 +163,7 @@ def crear_necromasa(
     gestor.anadir_componente(
         nec_id,
         Necromasa(
-            masa_organica=max(0.0, masa_organica),
+            masas={k: max(0.0, v) for k, v in masas.items()},
             agua_tisular=max(0.0, agua_tisular),
             tasa_putrefaccion=tasa_putrefaccion,
             origen_especie=origen_especie,

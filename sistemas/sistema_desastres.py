@@ -18,7 +18,7 @@ from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
-from nucleo.entidad import GestorEntidades, crear_necromasa
+from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -60,6 +60,15 @@ class SistemaDesastres:
         )
         self.tasa_putrefaccion_calcinada: float = float(
             cfg_des.get("tasa_putrefaccion_calcinada", 0.15)
+        )
+        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
+        # nucleo/entidad.py:componer_necromasa): mismo reparto
+        # tejido_blando/hueso que el resto de decesos, aplicado sobre la
+        # masa seca calcinada -- no se modela que el fuego destruya el
+        # tejido blando de forma preferencial (simplificación deliberada,
+        # ver config/flora.yaml seccion descomposicion).
+        self.fraccion_hueso: float = float(
+            self.config.get("descomposicion", {}).get("fraccion_hueso_de_masa_seca", 0.15)
         )
 
         cfg_clima = cfg_des.get("multiplicador_riesgo_por_clima", {})
@@ -191,15 +200,15 @@ class SistemaDesastres:
                 pool_c.vitalidad = max(0.0, pool_c.vitalidad - dano_neto)
 
                 if pool_c.vitalidad <= 0.0:
-                    masa_seca_quemada = dims_c.peso * self.fraccion_masa_seca_quemada
-                    agua_tisular_restante = (
-                        dims_c.peso * self.fraccion_agua_tisular_quemada
+                    masas, agua_tisular_restante = componer_necromasa(
+                        dims_c.peso, self.fraccion_masa_seca_quemada, self.fraccion_hueso,
+                        self.fraccion_agua_tisular_quemada,
                     )
                     crear_necromasa(
                         gestor=gestor,
                         pos_x=pos_c.x,
                         pos_y=pos_c.y,
-                        masa_organica=masa_seca_quemada,
+                        masas=masas,
                         agua_tisular=agua_tisular_restante,
                         origen_especie=ident_c.especie.value,
                         tasa_putrefaccion=self.tasa_putrefaccion_calcinada,

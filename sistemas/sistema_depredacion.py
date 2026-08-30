@@ -28,7 +28,7 @@ from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposi
 # nucleo/disposicion.py) y la función se renombró con él, sin que este
 # import se actualizara. Se alias en vez de reescribir las llamadas de
 # abajo porque no cambia ningún comportamiento, solo corrige el nombre.
-from nucleo.entidad import GestorEntidades, crear_necromasa
+from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 
 
@@ -71,6 +71,18 @@ class SistemaDepredacion:
             cfg_dep.get("eficiencia_biomasa_hidratacion", 0.5)
         )
         self.factor_dano_base: float = float(cfg_dep.get("factor_dano_base", 0.4))
+        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
+        # nucleo/entidad.py:componer_necromasa).
+        cfg_desc = self.config.get("descomposicion", {})
+        self.fraccion_masa_seca: float = float(
+            cfg_desc.get("fraccion_masa_seca_por_defecto", 0.35)
+        )
+        self.fraccion_agua_tisular: float = float(
+            cfg_desc.get("fraccion_agua_tisular_por_defecto", 0.65)
+        )
+        self.fraccion_hueso: float = float(
+            cfg_desc.get("fraccion_hueso_de_masa_seca", 0.15)
+        )
         # GREGARISMO -- Pieza 1, bono de caza en grupo (2026-08-30, ver
         # nucleo/disposicion.py:contar_conspecificos_cercanos y el
         # comentario de config/constantes.yaml seccion depredacion para
@@ -238,8 +250,10 @@ class SistemaDepredacion:
             return False
 
         # 4. Captura letal: Balance de masa y transferencia metabólica
-        masa_seca_total = dims_presa.peso * 0.35
-        agua_tisular_total = dims_presa.peso * 0.65
+        masas_totales, agua_tisular_total = componer_necromasa(
+            dims_presa.peso, self.fraccion_masa_seca, self.fraccion_hueso,
+            self.fraccion_agua_tisular,
+        )
 
         fraccion_consumida = 0.0
         if nec_cazador is not None:
@@ -257,16 +271,23 @@ class SistemaDepredacion:
             aporte_hidrico = ratio_biomasa * self.eficiencia_biomasa_hidratacion * fraccion_consumida
             nec_cazador.hidratacion = min(1.0, nec_cazador.hidratacion + aporte_hidrico)
 
-        # 5. Depósito de biomasa no consumida como Necromasa
-        masa_residual = masa_seca_total * (1.0 - fraccion_consumida)
+        # 5. Depósito de biomasa no consumida como Necromasa. CÍRCULO 2 de
+        # materiales físicos (2026-08-30): el cazador solo come tejido
+        # blando -- un depredador no roe el esqueleto entero de su presa
+        # -- así que fraccion_consumida reduce SOLO 'tejido_blando'; el
+        # hueso queda intacto con independencia de cuánta carne se comió.
+        masas_residuales = {
+            "tejido_blando": masas_totales["tejido_blando"] * (1.0 - fraccion_consumida),
+            "hueso": masas_totales["hueso"],
+        }
         agua_residual = agua_tisular_total * (1.0 - fraccion_consumida)
 
-        if masa_residual > 0.05:
+        if sum(masas_residuales.values()) > 0.05:
             crear_necromasa(
                 gestor=gestor,
                 pos_x=pos_x,
                 pos_y=pos_y,
-                masa_organica=masa_residual,
+                masas=masas_residuales,
                 agua_tisular=agua_residual,
                 origen_especie=ident_presa.especie.value,
                 tasa_putrefaccion=0.05,

@@ -22,7 +22,32 @@ abono:
   decaimiento_fertilidad_por_dia: 0.1
 
 descomposicion:
-  constante_degradacion_base: 0.08
+  # CÍRCULO 2 de materiales físicos (2026-08-30, ver componentes/necromasa.py
+  # y config/materiales.yaml): constante_degradacion_base RETIRADA -- cada
+  # material de Necromasa.masas ya trae su propia tasa_descomposicion_dia
+  # (materiales.tejido_blando/hueso), no una única tasa uniforme para todo
+  # el cadáver. tejido_blando.tasa_descomposicion_dia hereda el MISMO
+  # valor 0.08 que tenía esta constante -- ancla de continuidad, no una
+  # recalibración desde cero.
+  #
+  # fraccion_masa_seca_por_defecto/fraccion_agua_tisular_por_defecto: antes
+  # vivían como literales 0.35/0.65 duplicados sin config detrás en CUATRO
+  # sitios distintos (sistema_necesidades.py, sistema_ciclo_vital.py,
+  # sistema_depredacion.py, más las variantes propias de
+  # desastres.fraccion_masa_seca_quemada/fraccion_agua_tisular_quemada para
+  # cadáveres calcinados) -- consolidados aquí de paso al tocar los cuatro
+  # sitios para el reparto tejido_blando/hueso, un único origen para lo que
+  # antes eran cuatro copias del mismo número mágico.
+  fraccion_masa_seca_por_defecto: 0.35
+  fraccion_agua_tisular_por_defecto: 0.65
+  # fraccion_hueso_de_masa_seca: qué parte de la masa seca de un cadáver
+  # es hueso frente a tejido blando -- orden de magnitud real (el
+  # esqueleto es aproximadamente 12-20% de la masa corporal seca en
+  # vertebrados), no medido contra el motor. PROVISIONAL, valor de
+  # partida razonado. Misma fracción para muerte natural y calcinada --
+  # no se modela que el fuego destruya el tejido blando de forma
+  # preferencial (simplificación deliberada, señalada, no resuelta).
+  fraccion_hueso_de_masa_seca: 0.15
   masa_referencia_fertilidad: 10.0
   umbral_purga_masa: 0.05
   factor_humedad_lluvia: 1.3

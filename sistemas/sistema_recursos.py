@@ -259,9 +259,16 @@ class SistemaRecursos:
             nec_id = min(candidatos_necromasa)
             nec_comp = gestor.obtener_componente(nec_id, Necromasa)
 
-            if nec_comp is not None and nec_comp.masa_organica > 0.05:
-                delta_m = min(nec_comp.masa_organica, self.tasa_consumo_comer)
-                nec_comp.masa_organica = max(0.0, nec_comp.masa_organica - delta_m)
+            # CÍRCULO 2 de materiales físicos (2026-08-30): el carroñeo
+            # solo consume 'tejido_blando' -- un carroñero no roe el
+            # esqueleto entero. El hueso queda intacto y la entidad NUNCA
+            # se borra aquí mientras quede hueso (borrarla es
+            # responsabilidad exclusiva de sistema_descomposicion.py, que
+            # sí espera a que TODOS los materiales se mineralicen).
+            masa_blanda = nec_comp.masas.get("tejido_blando", 0.0) if nec_comp is not None else 0.0
+            if nec_comp is not None and masa_blanda > 0.05:
+                delta_m = min(masa_blanda, self.tasa_consumo_comer)
+                nec_comp.masas["tejido_blando"] = max(0.0, masa_blanda - delta_m)
                 nec_comp.agua_tisular = max(0.0, nec_comp.agua_tisular - (delta_m * 0.65))
 
                 # Transferencia nutricional
@@ -270,7 +277,7 @@ class SistemaRecursos:
 
                 self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
 
-                if nec_comp.masa_organica <= 0.05:
+                if all(m <= 0.05 for m in nec_comp.masas.values()):
                     gestor.eliminar_entidad(nec_id)
                 return
 

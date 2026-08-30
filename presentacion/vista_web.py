@@ -2634,7 +2634,12 @@ def construir_instantanea(
                     "tipo": "necromasa",
                     "x": pos_n.x,
                     "y": pos_n.y,
-                    "masa": round(nec.masa_organica, 2),
+                    # CÍRCULO 2 de materiales físicos (2026-08-30): "masa"
+                    # se queda como total (compatibilidad del DTO), "masas"
+                    # añade el desglose por material para el panel de
+                    # inspección (tejido_blando vs. hueso persistente).
+                    "masa": round(sum(nec.masas.values()), 2),
+                    "masas": {k: round(v, 2) for k, v in nec.masas.items()},
                     "origen": nec.origen_especie,
                 }
             )

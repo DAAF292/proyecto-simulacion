@@ -15,7 +15,7 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.posicion import Posicion
 from nucleo.ciclo_vital import probabilidad_muerte_vejez
-from nucleo.entidad import GestorEntidades, crear_necromasa
+from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.reloj import Reloj
 
@@ -34,6 +34,18 @@ class SistemaCicloVital:
         )
         self.exponente_curva_vejez: float = float(
             config.get("ciclo_vital", {}).get("exponente_curva_vejez", 8.0)
+        )
+        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
+        # nucleo/entidad.py:componer_necromasa).
+        cfg_desc = config.get("descomposicion", {})
+        self.fraccion_masa_seca: float = float(
+            cfg_desc.get("fraccion_masa_seca_por_defecto", 0.35)
+        )
+        self.fraccion_agua_tisular: float = float(
+            cfg_desc.get("fraccion_agua_tisular_por_defecto", 0.65)
+        )
+        self.fraccion_hueso: float = float(
+            cfg_desc.get("fraccion_hueso_de_masa_seca", 0.15)
         )
 
     def ejecutar(
@@ -67,13 +79,15 @@ class SistemaCicloVital:
             if prob_muerte > 0.0 and self.rng.random() < prob_muerte:
                 # 1. Depósito de biomasa inerte en el sustrato antes de eliminar el agente
                 if pos is not None:
-                    masa_seca = dims.peso * 0.35
-                    agua_tisular = dims.peso * 0.65
+                    masas, agua_tisular = componer_necromasa(
+                        dims.peso, self.fraccion_masa_seca, self.fraccion_hueso,
+                        self.fraccion_agua_tisular,
+                    )
                     crear_necromasa(
                         gestor=gestor,
                         pos_x=pos.x,
                         pos_y=pos.y,
-                        masa_organica=masa_seca,
+                        masas=masas,
                         agua_tisular=agua_tisular,
                         origen_especie=identidad.especie.value,
                         tasa_putrefaccion=0.05,

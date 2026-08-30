@@ -82,7 +82,7 @@ from nucleo.agua import profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.disposicion import contar_conspecificos_cercanos
-from nucleo.entidad import GestorEntidades, crear_necromasa
+from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_individual
@@ -154,6 +154,20 @@ class SistemaNecesidades:
         )
         self.bono_defensa_maximo: float = float(
             cfg_social.get("bono_defensa_maximo", 0.0)
+        )
+
+        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
+        # nucleo/entidad.py:componer_necromasa y config/flora.yaml sección
+        # descomposicion).
+        cfg_desc = self.config.get("descomposicion", {})
+        self.fraccion_masa_seca: float = float(
+            cfg_desc.get("fraccion_masa_seca_por_defecto", 0.35)
+        )
+        self.fraccion_agua_tisular: float = float(
+            cfg_desc.get("fraccion_agua_tisular_por_defecto", 0.65)
+        )
+        self.fraccion_hueso: float = float(
+            cfg_desc.get("fraccion_hueso_de_masa_seca", 0.15)
         )
 
         self.prob_muerte_inanicion: float = float(
@@ -411,14 +425,15 @@ class SistemaNecesidades:
         causa: str,
     ) -> None:
         """Instancia la necromasa, emite el evento Muerte con coordenadas y purga la entidad."""
-        masa_seca = dims.peso * 0.35
-        agua_tisular = dims.peso * 0.65
+        masas, agua_tisular = componer_necromasa(
+            dims.peso, self.fraccion_masa_seca, self.fraccion_hueso, self.fraccion_agua_tisular
+        )
 
         crear_necromasa(
             gestor=gestor,
             pos_x=pos_x,
             pos_y=pos_y,
-            masa_organica=masa_seca,
+            masas=masas,
             agua_tisular=agua_tisular,
             origen_especie=ident.especie.value,
             tasa_putrefaccion=0.05,

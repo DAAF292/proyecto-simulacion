@@ -436,7 +436,12 @@ class SistemaMovimiento:
         for nid in gestor.entidades_con(Necromasa, Posicion):
             pos_n = gestor.obtener_componente(nid, Posicion)
             nec_comp = gestor.obtener_componente(nid, Necromasa)
-            if pos_n and nec_comp and nec_comp.masa_organica > 0.05:
+            # CÍRCULO 2 de materiales físicos (2026-08-30): solo vale la
+            # pena viajar hasta aquí si queda tejido_blando comestible --
+            # un montón de hueso no es un objetivo de forrajeo (mismo
+            # criterio que sistema_recursos.py:_resolver_comer, que solo
+            # consume de 'tejido_blando').
+            if pos_n and nec_comp and nec_comp.masas.get("tejido_blando", 0.0) > 0.05:
                 dist = abs(pos_n.x - pos_x) + abs(pos_n.y - pos_y)
                 if dist <= radio:
                     candidatos.append((dist, pos_n.x, pos_n.y))

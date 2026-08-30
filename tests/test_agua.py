@@ -157,13 +157,13 @@ def test_ley_la_lisis_no_aporta_charco_sobre_agua_permanente():
     gestor.anadir_componente(eid_tierra, Posicion(x=0, y=0))
     gestor.anadir_componente(
         eid_tierra,
-        Necromasa(masa_organica=10.0, agua_tisular=1.0, tasa_putrefaccion=0.0, origen_especie="conejo"),
+        Necromasa(masas={"tejido_blando": 10.0}, agua_tisular=1.0, tasa_putrefaccion=0.0, origen_especie="conejo"),
     )
     eid_rio = gestor.crear_entidad()
     gestor.anadir_componente(eid_rio, Posicion(x=1, y=0))
     gestor.anadir_componente(
         eid_rio,
-        Necromasa(masa_organica=10.0, agua_tisular=1.0, tasa_putrefaccion=0.0, origen_especie="conejo"),
+        Necromasa(masas={"tejido_blando": 10.0}, agua_tisular=1.0, tasa_putrefaccion=0.0, origen_especie="conejo"),
     )
 
     from nucleo.eventos import BusEventos
