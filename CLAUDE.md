@@ -78,9 +78,15 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- Sin tests automatizados todavía (pytest está en requirements.txt pero no
-  hay ni un solo archivo de test) ni CI/linting configurados — estado
-  conocido, no un descuido a corregir por iniciativa propia.
+- **Tests automatizados (CORREGIDO 29-08-2026, esta frase estaba desactualizada)**:
+  `tests/` sí contiene tests reales — `test_agua.py`, `test_bioma.py`,
+  `test_orografia.py`, 22 en total, escritos como "ley física" con docstring
+  explicando el comportamiento que validan (mismo criterio declarativo que
+  pide este documento para las reglas del motor). Cobertura real pero
+  limitada a tres módulos del núcleo (agua, bioma, orografía) — nada de
+  sistemas de comportamiento, reproducción, persistencia ni el bucle
+  principal tiene test dedicado todavía. CI/linting sigue sin configurar —
+  en eso la frase anterior seguía siendo exacta.
 
 ## Cómo comportarte al ayudar en este proyecto
 
@@ -922,17 +928,23 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   sueltas sin que Diego tenga primero una referencia visual concreta y
   aprobada (como hizo en Tiled) de qué construcción concreta seguir.
 
-  **Pendiente — Pieza 3 (iconos de acción)**: sustituir `ICONOS_ACCION`
-  (glifos emoji sobre cada criatura para comer/beber/huir/cazar/
-  buscar_pareja/dormir) por iconos de `nuevosAssets/Icons (1)`. Cotejo
-  visual ya hecho (24-08): comer→`Foods/apple.png` y cazar→`Animals/
-  claw.png` son sustituciones limpias; beber→`Spells/water-05.png`,
-  buscar_pareja→`Jewelry/ring.png` y dormir→`Spells/status-02.png` son
-  aceptables pero con interpretación forzada (no hay icono de gota para
-  beber, corazón para pareja, ni "zzz" para dormir en el paquete); huir no
-  tiene ningún candidato que se lea con claridad — Diego eligió
-  `Spells/ground-01.png` (huella) sabiendo que es forzado, antes que dejarlo
-  sin resolver.
+  **OBSOLETA, no pendiente (CORREGIDO 29-08-2026)** — Pieza 3 (iconos de
+  acción): este párrafo describía sustituir `ICONOS_ACCION` (glifos emoji
+  de comer/beber/huir/cazar/buscar_pareja/dormir) por iconos de
+  `nuevosAssets/Icons (1)`, con el cotejo visual ya hecho (24-08) descrito
+  abajo. El pivote posterior al Códice Cartográfico (ver nota de cierre al
+  final de este documento) resolvió la comunicación de estado por OTRO
+  mecanismo — poses de sprite reales por estado del ECS
+  (`criaturas_poses/`) más el texto de acción en el panel de inspección —
+  y `ICONOS_ACCION` ya no existe en absoluto en el código actual
+  (verificado por grep, cero resultados). No es una pieza que siga
+  esperando iconos: quedó reemplazada de raíz, no completada. Cotejo
+  visual original conservado por historial, no por vigencia: comer→
+  `Foods/apple.png` y cazar→`Animals/claw.png` eran sustituciones
+  limpias; beber→`Spells/water-05.png`, buscar_pareja→`Jewelry/ring.png`
+  y dormir→`Spells/status-02.png` aceptables con interpretación forzada;
+  huir→`Spells/ground-01.png` (huella) sin ningún candidato que leyera con
+  claridad.
 
   **Licencia y atribución**: los paquetes de PyxelSpace ("Icons Pack 01",
   "Tilesets", "Animals", "Monster Pack 01") tienen licencia comercial clara
@@ -944,3 +956,44 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   cerrada esta pieza. "Miniature world" no incluye fichero de licencia en
   disco — Diego confirmó los términos directamente en la página del autor,
   no verificado por Claude a partir de ficheros locales.
+
+## Nota de cierre (29-08-2026): toda la narrativa de "Capa visual con arte
+## real" de arriba quedó supersedida por un pivote posterior sin documentar aquí
+
+Auditoría completa del código realizada el 29-08-2026 (informe
+`informes/informe_funcionalidades_actuales.docx`, tercera edición) encontró
+que **toda la sección "Capa visual con arte real" de este documento
+(PyxelSpace → Urizen → Mini Medieval → retirada del sistema de orillas,
+arriba) describe un estado del visor que ya no es el que corre**. En algún
+punto entre el 26-08 y el 28-08 el proyecto pivotó por completo a un
+sistema nuevo — el **"Códice Cartográfico"**: canvas de pergamino/acuarela,
+generación causal de terreno (cordilleras, escorrentía, clima orográfico —
+`nucleo/orografia.py`), sellos de imagen reales estampados por celda o por
+cluster de bioma (`presentacion/assets/`, biblioteca curada desde
+`nuevosAssetsDefinitivos/`), poses de criatura por estado del ECS
+(`criaturas_poses/`), tres modos de mapa (códice/relieve/hidro), cámara
+pan/zoom con frustum culling y panel de inspección ECS. Ninguna sesión
+documentó este pivote en este archivo ni en la bitácora de implementación
+en su momento — se reconstruyó por lectura directa del código
+(`presentacion/vista_web.py`, ~2900 líneas) para la auditoría del 29-08.
+
+**No se ha reescrito la narrativa histórica de arriba** (principio de
+honestidad: documenta con fidelidad qué se probó y qué se descartó en su
+momento, y sigue siendo la referencia correcta para no repetir intentos ya
+fallidos de arte plano por celda/orillas por pieza). Pero **para el estado
+ACTUAL de la capa de presentación, la fuente correcta es
+`informes/informe_funcionalidades_actuales.docx` (tercera edición,
+29-08-2026), sección 16**, no esta sección de CLAUDE.md. Esa misma
+auditoría también corrigió cuatro hallazgos críticos ya arreglados en
+código (commit `500267d`): la cadena `Necesidades.seguridad`/HUIR estaba
+completamente muerta (con un crash latente detrás si se activara), las
+formaciones macro de desierto/tundra del visor nunca se estampaban pese a
+un test en verde, y había un doble-dibujo visual de liquen/musgo. Quedan
+abiertos, como decisión de diseño pendiente de hablar con Diego antes de
+tocar código (no bugs mecánicos): recalibrar las proporciones de bioma y
+la pendiente transitable contra el generador causal actual (ambas
+quedaron desfasadas tras el círculo causal del 27-08, sin que nadie las
+revisara después), decidir si el clima diario debe afectar al confort
+térmico (el código lo declara pero no lo hace), y dar comportamiento
+propio a HUIDA_ERRATICA/CRISIS_VIOLENTA en movimiento (hoy indistinguibles
+de CATATONIA).

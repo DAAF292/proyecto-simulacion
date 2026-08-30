@@ -34,7 +34,7 @@ from nucleo.entidad import GestorEntidades
 from nucleo.memoria import objetivo_recordado
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
-from nucleo.relieve import pendiente_maxima_transitable
+from nucleo.relieve import costo_resistencia_por_pendiente, pendiente_maxima_transitable
 
 
 class SistemaMovimiento:
@@ -56,9 +56,15 @@ class SistemaMovimiento:
         cfg_rel = self.config.get("relieve", {})
         self.pend_min: float = float(cfg_rel.get("pendiente_minima_transitable", 0.05))
         self.pend_max: float = float(cfg_rel.get("pendiente_maxima_transitable", 0.22))
-        self.costo_pendiente: float = float(
-            cfg_rel.get("costo_resistencia_por_unidad_pendiente", 0.3)
-        )
+        # (2026-08-29, fix de auditoria) Retenido como dict, no como
+        # escalar suelto, para pasarlo tal cual a
+        # nucleo.relieve.costo_resistencia_por_pendiente() en
+        # _aplicar_movimiento -- antes ese calculo se reimplementaba
+        # inline con un escalar propio, duplicando la formula de una
+        # funcion centralizada que nadie llamaba (mismo riesgo de
+        # divergencia que el proyecto se advierte a si mismo en
+        # nucleo/percepcion.py y nucleo/disposicion.py).
+        self.cfg_relieve: dict[str, Any] = cfg_rel
 
         cfg_mov = self.config.get("movimiento", {})
         self.coste_sprint: float = float(cfg_mov.get("coste_resistencia_sprint", 0.08))
@@ -199,7 +205,15 @@ class SistemaMovimiento:
         if pf is not None:
             coste_total = 0.0
             if delta_elev > 0.0:
-                coste_total += (delta_elev * self.costo_pendiente) / max(0.1, dims.resistencia_maxima)
+                # (2026-08-29, fix de auditoria) Llama a la funcion
+                # centralizada de nucleo/relieve.py en vez de reimplementar
+                # la misma formula inline -- coste BRUTO devuelto por la
+                # funcion, dividido por resistencia_maxima aqui (mismo
+                # criterio que sistema_capacidad_fisica.py, documentado en
+                # el propio docstring de costo_resistencia_por_pendiente).
+                coste_total += costo_resistencia_por_pendiente(
+                    celda_orig.elevacion, celda_dest.elevacion, self.cfg_relieve
+                ) / max(0.1, dims.resistencia_maxima)
             if accion in (Accion.CAZAR, Accion.HUIR):
                 coste_total += self.coste_sprint / max(0.1, dims.resistencia_maxima)
 

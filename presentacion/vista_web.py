@@ -276,16 +276,6 @@ HTML_VISOR = """<!DOCTYPE html>
     const canvas = document.getElementById('canvas-mapa');
     const ctx = canvas.getContext('2d');
 
-    // Colores de lavado por bioma -- aplicados sobre la base de pergamino
-    // con alfa parcial (acuarela translucida), nunca opacos: el grano del
-    // pergamino debe seguir visible a traves de cualquier bioma.
-    const COLOR_BIOMA = {
-      'bosque':   [46, 74, 42],
-      'pradera':  [122, 138, 74],
-      'montana':  [110, 104, 96],
-      'desierto': [176, 150, 84],
-      'tundra':   [188, 184, 170],
-    };
     // Circulo 2 generalizado (feedback de Diego: "que sea generalizado
     // para anadir nuevos biomas sin romper lo anterior"): cada bioma con
     // sellos de FORMACION a zoom macro declara aqui su pool. Anadir un
@@ -1319,7 +1309,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // por debajo del borde real): "dilatacion" es un margen minimo
     // garantizado, la suma de ondas se anade encima sin poder bajar de
     // cero. Con esto la capa de respaldo deja de hacer falta -- ver
-    // dibujarBiomas() mas abajo, ya no la dibuja.
+    // dibujarLavadoContinuo() mas abajo, ya no la dibuja.
     function ondularContorno(puntos, amplitud, fase) {
       const dilatacion = amplitud * 1.4;
       let longitudAcum = 0;
@@ -1345,7 +1335,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // la CAPA DE LAVADO del terreno: sellos, criaturas, agua trazada,
     // charcos, fuego y anotaciones son identicos en los tres modos -- es un
     // filtro de lectura del mismo mundo, no otro mundo.
-    //   codice  -> lavado organico de biomas de siempre (dibujarBiomas)
+    //   codice  -> lavado organico de biomas de siempre (dibujarLavadoContinuo)
     //   relieve -> hipsometrico: tono sepia por elevacion (0 = claro, 1 = oscuro)
     //   hidro   -> tierra sin lavado (pergamino) y agua azul por profundidad
     let modoMapa = 'codice';
@@ -1389,7 +1379,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // Devuelve { relleno } para pintar la celda en los modos relieve/hidro,
     // o null si la celda no lleva lavado en el modo actual (en hidro, la
     // tierra deja ver el pergamino). En codice NUNCA se consulta: el lavado
-    // organico de dibujarBiomas manda y esa ruta queda intacta.
+    // organico de dibujarLavadoContinuo manda y esa ruta queda intacta.
     function lavadoDeCelda(celda) {
       if (modoMapa === 'relieve') {
         const [r, g, b] = colorHipsometrico(celda.elevacion || 0);
@@ -1447,30 +1437,15 @@ HTML_VISOR = """<!DOCTYPE html>
       }
     }
 
-    function dibujarBiomas(tam, data) {
-      for (const { bioma, cluster } of componentesPorBioma(data)) {
-        const base = COLOR_BIOMA[bioma] || [120, 110, 90];
-        // Modulacion "acuarela": la lluvia media del cluster oscurece el
-        // lavado -- mismo criterio que antes, ahora por region en vez de
-        // por celda individual (una region contigua tiene lluvia parecida
-        // de por si, al venir del mismo campo continuo).
-        const lluviaMedia = cluster.reduce((s, c) => s + c.c.lluvia, 0) / cluster.length;
-        const sombra = 1 - lluviaMedia * 0.22;
-        const color = `${Math.round(base[0]*sombra)}, ${Math.round(base[1]*sombra)}, ${Math.round(base[2]*sombra)}`;
-
-        // Sin capa de respaldo plana: ondularContorno() ya garantiza que
-        // la silueta nunca queda por dentro del borde real de celda (ver
-        // su comentario), asi que no hace falta una capa recta debajo
-        // para tapar huecos -- esa capa era, precisamente, la causa del
-        // "borde recto" que se veia en regiones grandes.
-        let contorno = suavizarChaikin(contornoDeCluster(cluster, tam), 2);
-        const fase = hash2(cluster[0].x, cluster[0].y, 211) * Math.PI * 2;
-        contorno = ondularContorno(contorno, tam * 0.3, fase);
-        trazarPoligono(contorno);
-        ctx.fillStyle = `rgba(${color}, 0.40)`;
-        ctx.fill();
-      }
-    }
+    // (2026-08-29, fix de auditoria) dibujarBiomas() -- v2 del lavado de
+    // bioma, manchas organicas por region con la tabla plana COLOR_BIOMA
+    // -- se eliminó de aqui junto con COLOR_BIOMA (huerfana sin su unico
+    // consumidor): ningun camino de ejecucion las llamaba desde que
+    // dibujarLavadoContinuo()/PALETA_LAVADO (campo continuo, v3, mas
+    // arriba) las sustituyo el 2026-08-27. Codigo muerto confirmado por
+    // grep antes de borrar (ninguna llamada real, solo comentarios que
+    // las mencionaban -- ya corregidos para apuntar a
+    // dibujarLavadoContinuo).
 
     // Componentes conexas (4-vecinos) de celdas con el mismo tipo_agua --
     // el motor (nucleo/agua.py) SI agrupa celdas en cuerpos de agua al
@@ -1542,28 +1517,6 @@ HTML_VISOR = """<!DOCTYPE html>
       }
       const ultimo = puntos[puntos.length - 1];
       ctx.lineTo(ultimo.x, ultimo.y);
-    }
-
-    function dibujarCuenca(tam, comp) {
-      // Lago/poza/rio de una sola celda: cuenca organica por solapamiento
-      // de circulos, sin borde poligonal exacto (aproximacion deliberada,
-      // suficiente para el nivel de detalle macro de este paso).
-      for (const celda of comp) {
-        const cx = celda.x * tam + tam / 2, cy = celda.y * tam + tam / 2;
-        const profundidad = Math.min(1, celda.profundidad / 2.5);
-        ctx.beginPath();
-        ctx.arc(cx, cy, tam * 0.66, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(48, 82, 112, ${(0.5 + profundidad * 0.3).toFixed(3)})`;
-        ctx.fill();
-      }
-      ctx.strokeStyle = 'rgba(28,40,51,0.5)';
-      ctx.lineWidth = 1.2;
-      for (const celda of comp) {
-        const cx = celda.x * tam + tam / 2, cy = celda.y * tam + tam / 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, tam * 0.66, 0, Math.PI * 2);
-        ctx.stroke();
-      }
     }
 
     // Estampa una imagen ajustada al recuadro real (en pixeles de mundo)
@@ -1764,37 +1717,13 @@ HTML_VISOR = """<!DOCTYPE html>
       return resultado;
     }
 
-    // Un rio es un CAMINO, no una mancha -- un sello prediseÃ±ado no puede
-    // calzar sus curvas exactas celda a celda (a diferencia de un lago o
-    // una montaÃ±a, que son razonablemente compactos). Aproximacion
-    // deliberada: se estampa UNA vez por curso de agua conectado, a su
-    // proporcion original (sin deformar), escalado por la longitud real
-    // del camino y con un giro de 90 grados si el curso es mas alto que
-    // ancho -- no es un trazado exacto, es la pieza mas experimental del
-    // sistema de sellos (ver presentacion/assets/README.md).
-    function dibujarRioConAssets(tam, comp, variantesRio) {
-      const camino = ordenarCaminoRio(comp);
-      const nombre = elegirVariante(variantesRio, camino[0].x, camino[0].y, 97);
-      const img = nombre ? imagenesCache['agua/' + nombre] : null;
-      if (!img) { dibujarRioVectorial(tam, comp); return; }
-
-      const minX = Math.min(...comp.map(c => c.x)), maxX = Math.max(...comp.map(c => c.x));
-      const minY = Math.min(...comp.map(c => c.y)), maxY = Math.max(...comp.map(c => c.y));
-      const cx = (minX + maxX + 1) / 2 * tam, cy = (minY + maxY + 1) / 2 * tam;
-      const vertical = (maxY - minY) > (maxX - minX);
-
-      const largo = tam * (comp.length * 0.62 + 1.5);
-      const relacion = img.naturalHeight / img.naturalWidth || 0.3;
-      let w = largo, h = largo * relacion;
-      if (vertical) { const t = w; w = h; h = t; }
-
-      ctx.save();
-      ctx.translate(cx, cy);
-      if (vertical) ctx.rotate(Math.PI / 2);
-      ctx.drawImage(img, -largo / 2, -(largo * relacion) / 2, largo, largo * relacion);
-      ctx.restore();
-    }
-
+    // (2026-08-29, fix de auditoria) dibujarRioConAssets() -- estampar un
+    // sello de imagen unico por curso de rio, la pieza "mas experimental
+    // del sistema de sellos" segun su propio comentario -- se eliminó de
+    // aqui: codigo muerto confirmado por grep (cero llamadas reales). Los
+    // rios son spline vectorial siempre desde el commit eea8104 (ver la
+    // nota de dibujarRioPiezas mas arriba, mismo hallazgo). Los PNG de
+    // agua.rio quedan en disco sin referenciar.
     function dibujarRioVectorial(tam, comp) {
       // (2026-08-28) El rio es un cuerpo de agua alargado y se pinta con
       // el MISMO pipeline que lagos y pozas (banda organica del contorno
@@ -1805,166 +1734,17 @@ HTML_VISOR = """<!DOCTYPE html>
       pintarCuerpoAgua(comp, tam, 213);
     }
 
-    // Kit de piezas de rio por celda (2026-08-27, sustituye al sello unico
-    // por curso de agua de dibujarRioConAssets para el escenario a color).
-    //
-    // Primer intento (retirado, ver historial de commits): agrupar por
-    // adyacencia cardinal estricta de componentesAgua() y elegir pieza por
-    // grado de vecinos N/E/S/O. Se rompio contra el motor real: el camino
-    // que traza nucleo/agua.py (_trazar_rio) SI puede avanzar en
-    // diagonal entre celdas consecutivas (confirmado inspeccionando
-    // estado.json -- p.ej. (21,13)->(20,14) es un paso diagonal, no
-    // cardinal), asi que la mayoria de celdas no tenian ningun vecino
-    // cardinal dentro de su propio componente conexo (que a su vez quedaba
-    // fragmentado en muchos trozos sueltos por la misma razon) y el visor
-    // real mostraba una cadena de "gancho" (pieza de un solo brazo)
-    // repetida sin sentido -- un fallo que solo se vio en el arnes visual
-    // contra el motor real, no en la logica de rotacion aislada (esa
-    // logica en si era correcta, la premisa de partida no).
-    //
-    // Solucion: en vez de mirar adyacencia real celda a celda, reusar el
-    // camino YA ordenado por ordenarCaminoRio() (el mismo que usa el
-    // trazado vectorial) y, para cada celda, redondear la direccion hacia
-    // su vecino anterior/siguiente en el camino al cardinal mas cercano
-    // (empate en diagonal exacta resuelto siempre hacia horizontal, regla
-    // fija y simetrica -- no depende de si el hash cae a un lado u otro).
-    // Con eso: extremo del camino (un solo vecino) -> gancho; direcciones
-    // opuestas -> recto; direcciones adyacentes -> curva. Una
-    // aproximacion deliberada (un paso diagonal se redondea a 2 tramos
-    // cardinales en vez de dibujarse literalmente en diagonal), no un
-    // trazado exacto -- coherente con como este mismo modulo ya describe
-    // el resto del sistema de sellos de rio. Las piezas cruce/te quedan
-    // en la biblioteca sin usar (confluencias reales son un caso raro
-    // segun el propio motor) -- ver README de assets.
-    function direccionCardinalMasCercana(dx, dy) {
-      if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 1 : 3;   // Este=1, Oeste=3
-      return dy >= 0 ? 2 : 0;                                     // Sur=2, Norte=0
-    }
-
-    function dibujarPiezaRotada(img, cx, cy, tam, rotClockwise) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(rotClockwise * Math.PI / 2);
-      const overscan = 1.18;
-      ctx.drawImage(img, -tam * overscan / 2, -tam * overscan / 2, tam * overscan, tam * overscan);
-      ctx.restore();
-    }
-
-    function dibujarRioPiezas(tam, comp, piezas, poolLago) {
-      // El autotile de piezas asume un camino de UN solo ancho de celda.
-      // El motor no lo garantiza -- un delta, confluencia o recodo ancho
-      // deja tramos de 2-3 celdas de grosor (confirmado contra
-      // estado.json), y forzar ahi la logica de tangente anterior/
-      // siguiente produce el mismo tipo de patron repetido sin sentido
-      // que el bug de adyacencia cardinal ya corregido arriba. Deteccion:
-      // si una celda tiene 3 o mas vecinos de rio en su entorno de 8
-      // direcciones (no solo los 2 del camino lineal), es una celda
-      // "ancha/interior".
-      //
-      // Primer intento de relleno para esas celdas (retirado): un circulo
-      // dibujarCuenca por celda suelta -- correcto uno a uno, pero varias
-      // decenas de circulos semitransparentes solapados entre si en el
-      // arnes visual se veian como una mancha de costuras circulares
-      // duras, no como una laguna limpia. Sustituido por lo mismo que ya
-      // usa un lago/poza real: agrupar las celdas anchas contiguas (cuatro
-      // vecinos) en sub-cuencas y estampar sobre su recuadro real con
-      // dibujarCuencaConAssets (mismo sello de agua.lago/lago_color que
-      // el resto del mapa, con su propio fallback de circulos si tampoco
-      // hay sello disponible) -- una ampliacion de rio simplemente se lee
-      // como una laguna pequeÃ±a, que es honesto a lo que es.
-      const clavesComp = new Set(comp.map(c => c.x + ',' + c.y));
-      const mapaCeldas = new Map(comp.map(c => [c.x + ',' + c.y, c]));
-      function gradoReal(c) {
-        let n = 0;
-        for (let dx = -1; dx <= 1; dx++) {
-          for (let dy = -1; dy <= 1; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            if (clavesComp.has((c.x + dx) + ',' + (c.y + dy))) n++;
-          }
-        }
-        return n;
-      }
-
-      const camino = ordenarCaminoRio(comp);
-      const dirHaciaDesde = (celda, otra) => direccionCardinalMasCercana(otra.x - celda.x, otra.y - celda.y);
-
-      // (2026-08-27, feedback de Diego con captura real: un fragmento
-      // corto en forma de "L" -- p.ej. (0,28)->(1,28)->(0,29), dos pasos
-      // diagonales consecutivos -- se veia como un gancho suelto sin
-      // conectar. Causa: direccionCardinalMasCercana() redondea CADA paso
-      // por separado, y dos pasos diagonales en la misma "L" pueden
-      // redondear los dos al MISMO cardinal (el desempate fijo hacia
-      // horizontal) aunque el camino real gire -- la celda del medio
-      // elegia "recto" con una orientacion que no encajaba con sus
-      // vecinos reales, geometricamente incoherente. Igual que con las
-      // celdas anchas: en vez de forzar una pieza que no le corresponde,
-      // esa celda cae al mismo sello de laguna pequeÃ±a.
-      const anchasSet = new Set();
-      for (const c of comp) if (gradoReal(c) >= 3) anchasSet.add(c.x + ',' + c.y);
-      for (let i = 1; i < camino.length - 1; i++) {
-        const celda = camino[i];
-        const dPrev = dirHaciaDesde(celda, camino[i - 1]);
-        const dSig = dirHaciaDesde(celda, camino[i + 1]);
-        if (dPrev === dSig) anchasSet.add(celda.x + ',' + celda.y);
-      }
-
-      const visitadoAncho = new Set();
-      for (const clave of anchasSet) {
-        if (visitadoAncho.has(clave)) continue;
-        const pila = [mapaCeldas.get(clave)];
-        visitadoAncho.add(clave);
-        const sub = [];
-        while (pila.length) {
-          const actual = pila.pop();
-          sub.push(actual);
-          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-            const k = (actual.x + dx) + ',' + (actual.y + dy);
-            if (anchasSet.has(k) && !visitadoAncho.has(k)) {
-              visitadoAncho.add(k);
-              pila.push(mapaCeldas.get(k));
-            }
-          }
-        }
-        dibujarCuencaConAssets(tam, sub, poolLago);
-      }
-
-      for (let i = 0; i < camino.length; i++) {
-        const celda = camino[i];
-        if (anchasSet.has(celda.x + ',' + celda.y)) continue;
-        const anterior = camino[i - 1];
-        const siguiente = camino[i + 1];
-        const cx = celda.x * tam + tam / 2, cy = celda.y * tam + tam / 2;
-        const dirHacia = (otra) => dirHaciaDesde(celda, otra);
-
-        let img, rot;
-        if (anterior && siguiente) {
-          const dPrev = dirHacia(anterior), dSig = dirHacia(siguiente);
-          // dPrev === dSig ya no puede llegar aqui (se filtro arriba a
-          // anchasSet); solo quedan opuesto (recto) o adyacente (curva).
-          if (dPrev === (dSig + 2) % 4) {
-            img = piezas.recto;
-            rot = (dPrev === 0 || dPrev === 2) ? 1 : 0;
-          } else {
-            img = piezas.curva;
-            rot = 0;
-            for (let k = 0; k < 4; k++) {
-              const par = [k, (k + 3) % 4].sort((a, b) => a - b);
-              const objetivo = [dPrev, dSig].sort((a, b) => a - b);
-              if (par[0] === objetivo[0] && par[1] === objetivo[1]) { rot = k; break; }
-            }
-          }
-        } else if (anterior || siguiente) {
-          img = piezas.gancho;
-          const dir = dirHacia(anterior || siguiente);
-          rot = ((dir - 3) % 4 + 4) % 4;
-        } else {
-          dibujarCuenca(tam, [celda]);
-          continue;
-        }
-
-        dibujarPiezaRotada(img, cx, cy, tam, rot);
-      }
-    }
+    // (2026-08-29, fix de auditoria) Kit de piezas de rio por celda
+    // (direccionCardinalMasCercana, dibujarPiezaRotada, dibujarRioPiezas,
+    // y dibujarCuenca -- su unico otro llamador) se eliminó de aqui:
+    // codigo muerto confirmado por grep (cero llamadas reales) desde que
+    // el autotile de piezas se retiro del camino de ejecucion en favor
+    // del spline vectorial siempre (dibujarRioVectorial, arriba --
+    // reconfirmado por el commit eea8104, que abandona el autotile "en
+    // pruebas posteriores contra mas formas reales del motor"). Los PNG
+    // de agua/rio_piezas/ siguen en disco sin referenciar, mismo criterio
+    // de "no borrar assets" que el resto del proyecto -- ver
+    // presentacion/assets/README.md.
 
     function dibujarHidrografia(tam, data, rioFino = false) {
       // (2026-08-27, feedback de Diego: "me parece horrible como quedan
@@ -2892,14 +2672,11 @@ def construir_instantanea(
         "semilla": mundo.config.get("semilla_por_defecto"),
         # Circulo 3: umbrales del clasificador para el lavado continuo del
         # visor -- una sola fuente de verdad (config bioma).
-        "bioma_umbrales": {
-            "umbral_elevacion_montana": mundo.config.get("bioma", {}).get("umbral_elevacion_montana", 0.47),
-            "umbral_temperatura_tundra": mundo.config.get("bioma", {}).get("umbral_temperatura_tundra", 0.25),
-            "umbral_lluvia_desierto": mundo.config.get("bioma", {}).get("umbral_lluvia_desierto", 0.24),
-            "umbral_lluvia_bosque": mundo.config.get("bioma", {}).get("umbral_lluvia_bosque", 0.62),
-        },
-        # Circulo 3: umbrales del clasificador para el lavado continuo del
-        # visor -- una sola fuente de verdad (config bioma).
+        # (2026-08-29, fix de auditoria) Esta clave estaba literalmente
+        # duplicada dos veces seguidas, idéntica -- un dict-literal de
+        # Python descarta en silencio la primera aparición, así que no
+        # rompía nada, pero era codigo sobrante (probablemente de un
+        # merge o una edicion repetida) sin ningun proposito.
         "bioma_umbrales": {
             "umbral_elevacion_montana": mundo.config.get("bioma", {}).get("umbral_elevacion_montana", 0.47),
             "umbral_temperatura_tundra": mundo.config.get("bioma", {}).get("umbral_temperatura_tundra", 0.25),

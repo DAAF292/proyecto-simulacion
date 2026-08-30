@@ -75,5 +75,5 @@ test('en modo hidro la tierra no lleva lavado y el agua azul oscurece con la pro
 test('en modo codice el lavado por celda no interviene (el lavado organico de siempre manda)', () => {
   visor.setModoMapa('codice');
   assert.equal(visor.lavadoDeCelda({ bioma: 'bosque', elevacion: 0.4, tiene_agua: false }), null,
-    'codice no pasa por el lavado por celda: dibujarBiomas organico queda intacto');
+    'codice no pasa por el lavado por celda: dibujarLavadoContinuo organico queda intacto');
 });
