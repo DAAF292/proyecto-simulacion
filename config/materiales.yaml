@@ -1,14 +1,191 @@
 # ==============================================================================
 # config/materiales.yaml
-# Catálogo de materiales físicos (reservado, sin contenido todavía)
+# Catálogo de materiales físicos
 #
 # Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
 # en un único config/constantes.yaml (dividido en ficheros por categoría el
-# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
-# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
-# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# 2026-08-30) -- todos los ficheros de config/*.yaml se cargan y fusionan en un
+# solo diccionario (main.py:cargar_configuracion).
 # ==============================================================================
 
-# Reservado para el catálogo de materiales físicos (sustrato, madera,
-# hueso, hierba seca, minerales...) -- diseño en curso, todavía sin
-# contenido. Ver conversación de diseño 2026-08-30 y CLAUDE.md.
+# BORRADOR (2026-08-30, primera pasada -- diseño en curso con Diego, NO
+# confirmado todavía, no tiene ningún consumidor mecánico en el motor
+# hasta hoy). Ver conversación de diseño 2026-08-30 y CLAUDE.md para el
+# contexto completo: Diego pidió una capa de materiales real ("variedad
+# suficiente... poder crear estructuras de distintos materiales, un
+# sistema de minería complejo, recursos naturales para elaborar
+# herramientas... la madera, la hierba seca como combustible, los huesos
+# de los cadáveres, las semillas"), no una propiedad auxiliar pensada solo
+# para calibrar charcos.
+#
+# ESQUEMA (mismo patrón que flora.especies/rangos_raciales: diccionario de
+# entradas, cada propiedad leída con .get(clave, default) por su
+# consumidor -- añadir un material nuevo o una propiedad nueva más
+# adelante no exige tocar nada existente):
+#
+#   categoria: mineral | organico_vegetal | organico_animal
+#   forma_en_mundo: sustrato | deposito
+#     sustrato = capa de la propia Celda (como el bioma), estático,
+#       encontrado allí donde el terreno lo generó -- piedra/arcilla/
+#       arena/suelo_helado (círculo 1) e hierro/cobre (vetas, futuro).
+#     deposito = cantidad de material en una posición, con estado propio
+#       que decae -- generado por un evento del ciclo de vida (un árbol
+#       destruido deposita madera, un cadáver descompuesto deposita
+#       hueso). Mismo patrón que ya usa Necromasa hoy; ver conversación
+#       de diseño para la propuesta de generalizarla.
+#   densidad_kg_m3: densidad real aproximada -- unidad física real, mismo
+#     criterio que profundidad_agua/peso (metros/kg reales en vez de
+#     escala normalizada), para que un material se pueda comparar con
+#     otro con un número que significa algo fuera del motor.
+#   dureza [0,1]: resistencia a ser trabajado, extraído o roto. Sin
+#     consumidor todavía -- declarado con intención para cuando exista
+#     minería/construcción/herramientas, mismo criterio que tipo_agua
+#     (rio/lago/poza) cuando se introdujo sin consumidor.
+#   tasa_infiltracion [0,1]: qué tan rápido penetra el agua de lluvia en
+#     el material. CONSUMIDOR INMEDIATO (círculo 1, el motivo que abrió
+#     esta conversación): con tasa_infiltracion baja, el agua no penetra
+#     lo bastante rápido y se acumula en superficie como charco visible
+#     enseguida; con tasa_infiltracion alta, el agua se filtra hacia
+#     dentro tan rápido como cae y prácticamente no encharca nunca.
+#   capacidad_retencion [0,1]: cuánta agua puede alojar el material como
+#     humedad de subsuelo UNA VEZ que penetra (la "memoria hídrica
+#     profunda" que pedía Diego). Consumidor inmediato junto con
+#     tasa_infiltracion.
+#   combustibilidad [0,1]: facilidad de arder. Sin consumidor todavía --
+#     sustituirá el hardcode actual de sistema_desastres.py ("único bioma
+#     inflamable es Bosque") cuando se construya ese círculo.
+#   tasa_descomposicion_dia [0,1] o ausente: fracción del material que se
+#     degrada por día de exposición a la intemperie. Ausente en
+#     materiales minerales/sustrato (geológicamente estables a la escala
+#     de tiempo del motor, no hay mecánica de erosión). Presente en
+#     materiales orgánicos -- sin consumidor todavía salvo donde ya se
+#     indica lo contrario.
+#
+# CORRECCIÓN FÍSICA IMPORTANTE (2026-08-30, encontrada al calcular estos
+# valores, no antes): en la conversación de diseño previa a este fichero
+# describí la arcilla como la que "absorbe mucho antes de que aparezca
+# charco" -- es EXACTAMENTE AL REVÉS. La propiedad relevante para que
+# aparezca un charco en SUPERFICIE es la velocidad de infiltración, no la
+# capacidad de retención total: la arcilla real tiene infiltración BAJA
+# (el agua no penetra rápido) y por eso encharca en superficie tras
+# lluvia sostenida (un charco de barro es literalmente esto), pese a que
+# retiene mucha agua una vez que sí penetra. La arena real tiene
+# infiltración ALTA -- el agua se filtra tan rápido como cae -- y por eso
+# prácticamente nunca encharca en superficie, aunque retenga poca agua a
+# largo plazo. Separar tasa_infiltracion de capacidad_retencion (en vez
+# de una única "permeabilidad" como se planteó de palabra) es la
+# corrección directa de ese error -- mismo patrón que este proyecto ya ha
+# encontrado varias veces ("esto parecía correcto sobre el papel"): vejez,
+# purga de memoria, sobrepoblación. Ninguna de las dos propiedades está
+# todavía conectada a sistema_recursos.py -- el círculo 1 sigue sin
+# implementar, esto es solo el catálogo.
+#
+# "semilla" QUEDA FUERA de este catálogo (confirmado con Diego,
+# 2026-08-30): no es un material físico con dureza/combustibilidad/
+# densidad relevantes para construcción o minería, es un objeto
+# reproductivo de flora. Aparcado explícitamente para cuando se plantee
+# agricultura (Diego: "a futuro será un recurso necesario cuando
+# planteemos la agricultura") -- merecerá su propio esquema ligado a
+# sistema_flora.py, no una entrada forzada aquí.
+
+materiales:
+  # --- Sustrato de terreno (círculo 1: agua) -----------------------------
+  piedra:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 2700
+    dureza: 0.9
+    tasa_infiltracion: 0.05
+    capacidad_retencion: 0.05
+    combustibilidad: 0.0
+  arcilla:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 1800
+    dureza: 0.2
+    tasa_infiltracion: 0.15
+    capacidad_retencion: 0.8
+    combustibilidad: 0.0
+  arena:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 1600
+    dureza: 0.05
+    tasa_infiltracion: 0.85
+    capacidad_retencion: 0.15
+    combustibilidad: 0.0
+  tierra:
+    # CORREGIDO (2026-08-30, Diego: "suelo helado que es? eso no es nada
+    # real"): la primera versión de esta entrada era "suelo_helado" --
+    # confundía la COMPOSICIÓN del sustrato con un ESTADO climático (si
+    # está congelado o no, algo que Celda.temperatura ya comunica por sí
+    # sola, es literalmente lo que hace a una celda tundra en primer
+    # lugar). Sustrato de tundra: tierra genérica, suelo pobre y suelto --
+    # mucha menos capacidad de retención y dureza que la arcilla fértil de
+    # bosque/pradera, sin ninguna referencia a temperatura en el material.
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 1300
+    dureza: 0.15
+    tasa_infiltracion: 0.4
+    capacidad_retencion: 0.35
+    combustibilidad: 0.0
+
+  # --- Depósitos orgánicos (círculos posteriores) ------------------------
+  # madera y fibra REUTILIZAN los nombres ya declarados en config/flora.yaml
+  # (manzano.recursos / cactus.recursos, categoria: material, sin
+  # consumidor mecánico desde que se escribieron) -- mismo material, no un
+  # concepto paralelo.
+  madera:
+    categoria: organico_vegetal
+    forma_en_mundo: deposito
+    densidad_kg_m3: 700
+    dureza: 0.45
+    combustibilidad: 0.55
+    tasa_descomposicion_dia: 0.01
+  fibra:
+    categoria: organico_vegetal
+    forma_en_mundo: deposito
+    densidad_kg_m3: 150
+    dureza: 0.1
+    combustibilidad: 0.5
+    tasa_descomposicion_dia: 0.015
+  hierba_seca:
+    categoria: organico_vegetal
+    forma_en_mundo: deposito
+    densidad_kg_m3: 100
+    dureza: 0.05
+    # El material más inflamable del catálogo a propósito -- yesca real.
+    combustibilidad: 0.85
+    tasa_descomposicion_dia: 0.03
+  hueso:
+    categoria: organico_animal
+    forma_en_mundo: deposito
+    densidad_kg_m3: 1900
+    dureza: 0.55
+    combustibilidad: 0.1
+    # Un orden de magnitud más lento que descomposicion.constante_degradacion_base
+    # (0.08/día, tejido blando) -- es precisamente lo que permite que el
+    # hueso persista como resto tangible tras la muerte en vez de
+    # mineralizarse por completo como hoy. Ver círculo 2 propuesto
+    # (generalizar Necromasa a depósito multi-material).
+    tasa_descomposicion_dia: 0.002
+
+  # --- Minerales (círculo de minería, muy posterior) ----------------------
+  # abundancia [0,1]: sin consumidor todavía -- declarado con intención
+  # para cuando exista generación de vetas (más común el hierro que el
+  # cobre, orden de magnitud real, no una cifra medida).
+  hierro:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 5000
+    dureza: 0.85
+    combustibilidad: 0.0
+    abundancia: 0.6
+  cobre:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 4000
+    dureza: 0.75
+    combustibilidad: 0.0
+    abundancia: 0.35
