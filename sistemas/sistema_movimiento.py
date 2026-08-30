@@ -164,6 +164,15 @@ class SistemaMovimiento:
                 dx, dy = self._calcular_deambular(
                     gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
                 )
+            elif accion == Accion.HUIDA_ERRATICA:
+                dx, dy = self._calcular_huida_erratica(gestor, eid, pos.x, pos.y, radio)
+            elif accion == Accion.CRISIS_VIOLENTA:
+                dx, dy = self._calcular_crisis_violenta(gestor, eid, pos.x, pos.y, radio)
+            # Accion.CATATONIA: sin rama a proposito, mismo criterio que
+            # Accion.ALIVIARSE (arriba, tampoco tiene rama) -- dx=dy=0 por
+            # defecto es literalmente la definicion de catatonia ("se
+            # queda quieto, sin actuar", componentes/intencion.py), no un
+            # descuido.
 
             if dx != 0 or dy != 0:
                 self._aplicar_movimiento(gestor, zona, eid, pos, dims, pf, dx, dy, accion)
@@ -214,7 +223,13 @@ class SistemaMovimiento:
                 coste_total += costo_resistencia_por_pendiente(
                     celda_orig.elevacion, celda_dest.elevacion, self.cfg_relieve
                 ) / max(0.1, dims.resistencia_maxima)
-            if accion in (Accion.CAZAR, Accion.HUIR):
+            # (2026-08-29) HUIDA_ERRATICA/CRISIS_VIOLENTA anadidas al mismo
+            # coste de esfuerzo sostenido que CAZAR/HUIR: son fisicamente
+            # el mismo tipo de movimiento urgente (correr en panico o
+            # embestir con agresividad), no caminar tranquilo -- dejarlas
+            # fuera habria sido una inconsistencia nueva, no una que ya
+            # existiera antes de conectar su movimiento.
+            if accion in (Accion.CAZAR, Accion.HUIR, Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA):
                 coste_total += self.coste_sprint / max(0.1, dims.resistencia_maxima)
 
             pf.resistencia = max(0.0, pf.resistencia - coste_total)
@@ -245,6 +260,83 @@ class SistemaMovimiento:
         dx = 0 if ax == pos_x else (1 if pos_x > ax else -1)
         dy = 0 if ay == pos_y else (1 if pos_y > ay else -1)
         return dx, dy
+
+    # (2026-08-29, fix de auditoria) HUIDA_ERRATICA y CRISIS_VIOLENTA
+    # (crisis mental, sistema_decision.py) no tenian ninguna rama en el
+    # if/elif de ejecutar(): caian a dx=dy=0 por defecto, indistinguibles
+    # de CATATONIA en sus efectos reales pese a que componentes/
+    # intencion.py ya describe un comportamiento propio para cada una
+    # ("huye de cualquiera cercano, sin amenaza real" / "se acerca a
+    # cualquiera cercano -- sin mecanica de dano todavia, deliberado").
+    # Ambas reaccionan a CUALQUIER entidad cercana, no a una amenaza
+    # calculada por disposicion (a diferencia de HUIR arriba) -- de ahi
+    # que necesiten su propia busqueda en vez de reutilizar
+    # posicion_amenaza_mas_cercana.
+    def _entidad_cercana_cualquiera(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+    ) -> tuple[int, int] | None:
+        """Posicion de la entidad con Posicion mas cercana dentro del
+        radio, de CUALQUIER tipo (cualquier especie, criatura o
+        necromasa), sin filtro de amenaza ni de disposicion por tamano
+        -- una crisis mental no razona sobre quien es peligroso o presa,
+        reacciona a la presencia en si."""
+        mejor: tuple[int, int] | None = None
+        mejor_dist = radio + 1
+        for otro_id in gestor.entidades_con(Posicion):
+            if otro_id == entidad_id:
+                continue
+            pos_o = gestor.obtener_componente(otro_id, Posicion)
+            if pos_o is None:
+                continue
+            dist = abs(pos_o.x - pos_x) + abs(pos_o.y - pos_y)
+            if dist <= radio and dist < mejor_dist:
+                mejor = (pos_o.x, pos_o.y)
+                mejor_dist = dist
+        return mejor
+
+    def _calcular_huida_erratica(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+    ) -> tuple[int, int]:
+        """HUIDA_ERRATICA: huye de cualquiera cercano, sin evaluar si es
+        una amenaza real (valentia baja ante la crisis, no ante un
+        peligro concreto) -- mismo patron de direccion que
+        _calcular_huida, sobre un objetivo encontrado por
+        _entidad_cercana_cualquiera en vez de posicion_amenaza_mas_cercana."""
+        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio)
+        if objetivo is None:
+            return self._paso_aleatorio()
+        ox, oy = objetivo
+        dx = 0 if ox == pos_x else (1 if pos_x > ox else -1)
+        dy = 0 if oy == pos_y else (1 if pos_y > oy else -1)
+        return dx, dy
+
+    def _calcular_crisis_violenta(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+    ) -> tuple[int, int]:
+        """CRISIS_VIOLENTA: se acerca a cualquiera cercano -- sin
+        mecanica de dano todavia, deliberado (componentes/intencion.py):
+        es un gesto de movimiento, no una resolucion de ataque. Captura
+        real sigue exigiendo Intencion.CAZAR en sistema_depredacion.py,
+        sin cambios aqui."""
+        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio)
+        if objetivo is None:
+            return self._paso_aleatorio()
+        return self._acercarse_a(pos_x, pos_y, *objetivo)
 
     def _calcular_caza(
         self,
