@@ -88,3 +88,30 @@ memoria:
   # resto de esta seccion, pendiente de mas semillas si hiciera falta mas
   # confianza.
   prob_purgar_recuerdo_agotado: 0.15
+
+# --- Asentamiento (2026-08-30, "el germen de un asentamiento") -----------
+# Detección de clúster de refugios individuales y cálculo de liderazgo --
+# ver nucleo/asentamiento.py y sistemas/sistema_asentamiento.py.
+# PROVISIONAL en su totalidad, sin calibrar contra el motor en marcha.
+asentamiento:
+  # Cuántos refugios TERMINADOS distintos, agrupados por proximidad,
+  # hacen falta para que el clúster cuente como asentamiento -- por
+  # debajo de esto, un par de refugios cercanos siguen siendo solo eso,
+  # un par de refugios cercanos, no un asentamiento.
+  poblacion_minima_asentamiento: 3
+  # Radio Manhattan (en celdas) dentro del cual dos refugios se
+  # consideran parte del mismo clúster -- más amplio que
+  # social.radio_apoyo_grupal (3, percepción táctica inmediata) porque
+  # aquí se agrupa geografía persistente, no proximidad instantánea.
+  radio_cluster_celdas: 6
+  # Liderazgo (nucleo/asentamiento.py:calcular_liderazgo): candidatos =
+  # miembros cuya dominancia está a menos de este margen del máximo del
+  # grupo.
+  margen_dominancia_elite: 0.1
+  # Consejo vs. líder único: se forma consejo cuando
+  # (cohesión_social - agresividad_media) de los candidatos supera este
+  # umbral, ajustado a la baja por población (más miembros, más fácil
+  # sostener un consejo sin que cada uno tenga que dominar personalmente
+  # a todos).
+  umbral_cohesion_consejo: 0.5
+  reduccion_umbral_consejo_por_miembro: 0.01

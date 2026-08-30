@@ -33,6 +33,7 @@ from nucleo.persistencia import Persistencia
 from nucleo.reloj import Reloj
 from presentacion.narrador import narrar
 from presentacion.vista_web import ServidorWeb, construir_instantanea
+from sistemas.sistema_asentamiento import SistemaAsentamiento
 from sistemas.sistema_capacidad_fisica import SistemaCapacidadFisica
 from sistemas.sistema_capacidad_mental import SistemaCapacidadMental
 from sistemas.sistema_ciclo_vital import SistemaCicloVital
@@ -109,6 +110,7 @@ def instanciar_sistemas(
         "descomposicion": SistemaDescomposicion(config, rng_juego),
         "flora": SistemaFlora(config, rng_juego),
         "ciclo_vital": SistemaCicloVital(config, rng_juego),
+        "asentamiento": SistemaAsentamiento(config, rng_juego),
     }
 
 
@@ -346,6 +348,7 @@ def ejecutar_tick(
         sistemas["flora"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["ciclo_vital"].ejecutar(gestor, reloj, bus_eventos)
         sistemas["desastres"].ejecutar(gestor, mundo, reloj, bus_eventos)
+        sistemas["asentamiento"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
 
 def main() -> None:
