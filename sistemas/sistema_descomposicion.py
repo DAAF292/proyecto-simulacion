@@ -25,8 +25,10 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.construccion import Construccion
 from componentes.necromasa import Necromasa
 from componentes.posicion import Posicion
+from nucleo.construccion import masa_minima_para, progreso_construccion
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
@@ -79,6 +81,16 @@ class SistemaDescomposicion:
         # el catálogo no está disponible.
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
         self.tasa_descomposicion_por_defecto: float = 0.08
+        # Deterioro de construcciones (2026-08-30, "nada dura para
+        # siempre" -- ver conversación de diseño con Diego). A diferencia
+        # de Necromasa, SIN fallback de 0.08: piedra/arcilla/tierra/
+        # hierro/cobre no declaran tasa_descomposicion_dia en el catálogo
+        # (geológicamente estables) y deben quedarse así -- una
+        # construcción de piedra no debe decaer solo porque el material
+        # no tiene una tasa explícita, al contrario que un cadáver (100%
+        # orgánico, ahí sí tiene sentido que "sin tasa" signifique "tasa
+        # genérica de materia orgánica").
+        self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
 
     def ejecutar(
         self,
@@ -88,9 +100,12 @@ class SistemaDescomposicion:
         bus_eventos: BusEventos,
     ) -> None:
         """
-        Ejecuta la degradación sobre todas las entidades Necromasa en el mundo.
+        Ejecuta la degradación sobre todas las entidades Necromasa en el mundo,
+        y el deterioro pasivo de las Construccion existentes.
         Invocado a cadencia de día (Fase de cierre de ciclo).
         """
+        self._descomponer_construcciones(gestor, mundo, reloj, bus_eventos)
+
         zona = mundo.territorio.zonas[0]
         clima_actual = getattr(zona, "clima_actual", None)
         nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
@@ -184,3 +199,76 @@ class SistemaDescomposicion:
                     )
                 )
                 gestor.eliminar_entidad(nec_id)
+
+    def _descomponer_construcciones(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        bus_eventos: BusEventos,
+    ) -> None:
+        """
+        Deterioro pasivo de Construccion.materiales -- "nada dura para
+        siempre" (2026-08-30, ver conversación de diseño con Diego).
+        MISMA ley que la descomposición de Necromasa (arriba): cada
+        material a SU PROPIA tasa_descomposicion_dia del catálogo, sin el
+        fallback genérico de Necromasa (ver _cachear_configuracion) --
+        piedra/arcilla/tierra/hierro/cobre no decaen por esta vía,
+        madera/fibra/hierba_seca sí, honestamente, sin forzar
+        uniformidad donde la física real no la tiene.
+
+        Sin transferencia a fertilidad ni agua_tisular -- una
+        construcción no es un cadáver, no hay pool que alimentar.
+        `progreso` se RECALCULA tras el deterioro (no solo los
+        materiales): si una construcción YA terminada decae lo bastante,
+        vuelve a caer por debajo de 1.0 -- consecuencia deliberada, no un
+        efecto colateral: hace que objetivo_construccion_actual la trate
+        de nuevo como necesitada de reparación (un refugio decae fuera
+        del clúster de asentamiento en SistemaAsentamiento, que filtra
+        por progreso>=1.0, hasta que alguien la repare), sin escribir
+        ninguna lógica de "reparación" nueva -- reutiliza el mismo camino
+        que ya construye desde cero.
+
+        Al degradarse por completo (todos los materiales por debajo del
+        umbral), la construcción colapsa: se elimina la entidad. La
+        memoria "refugio"/"asentamiento" de quien la recordaba NO se
+        purga aquí -- sigue apuntando a un sitio ya vacío, hueco
+        conocido y señalado, no resuelto en esta pieza.
+        """
+        masa_minima_cache: dict[str, float] = {}
+
+        for cid in sorted(gestor.entidades_con(Construccion, Posicion)):
+            construccion = gestor.obtener_componente(cid, Construccion)
+            pos = gestor.obtener_componente(cid, Posicion)
+            if construccion is None or pos is None or not construccion.materiales:
+                continue
+
+            for material, masa in list(construccion.materiales.items()):
+                if masa <= 0.0:
+                    continue
+                tasa = float(
+                    self.catalogo_materiales.get(material, {}).get("tasa_descomposicion_dia", 0.0)
+                )
+                if tasa <= 0.0:
+                    continue
+                construccion.materiales[material] = max(0.0, masa - masa * tasa)
+
+            if construccion.tipo not in masa_minima_cache:
+                masa_minima_cache[construccion.tipo] = masa_minima_para(
+                    construccion.tipo, self.config_construccion
+                )
+            construccion.progreso = progreso_construccion(
+                construccion.materiales, self.catalogo_materiales, masa_minima_cache[construccion.tipo]
+            )
+
+            if all(masa <= self.umbral_purga_masa for masa in construccion.materiales.values()):
+                bus_eventos.emitir(
+                    Evento(
+                        tipo="ConstruccionColapsada",
+                        severidad=Severidad.NOTABLE if construccion.tipo == "refugio" else Severidad.HISTORICO,
+                        tick=reloj.tick_actual,
+                        entidad_id=cid,
+                        datos={"x": pos.x, "y": pos.y, "tipo": construccion.tipo, "causa": "deterioro"},
+                    )
+                )
+                gestor.eliminar_entidad(cid)

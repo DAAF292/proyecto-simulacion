@@ -12,12 +12,14 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
+from nucleo.construccion import masa_minima_para, progreso_construccion
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
@@ -81,6 +83,23 @@ class SistemaDesastres:
         self.techo_fertilidad: float = float(
             self.config.get("abono", {}).get("techo_fertilidad", 1.0)
         )
+        # Fuego sobre construcciones (2026-08-30, "las inclemencias del
+        # clima, el fuego si es combustible... deberían degradar los
+        # materiales" -- Diego). Reutiliza dano_por_tick_en_llamas (ya
+        # calibrado como ritmo de daño por fuego) escalado por la
+        # combustibilidad de CADA material -- piedra/arcilla/tierra/
+        # hierro/cobre tienen combustibilidad 0.0, no arden nunca; madera/
+        # fibra/hierba_seca sí, más rápido cuanto más inflamable. NO es
+        # el mismo consumidor que el comentario ya existente en
+        # config/materiales.yaml sobre combustibilidad ("sustituirá el
+        # hardcode... único bioma inflamable es Bosque") -- ese sigue
+        # pendiente, es sobre qué bioma/terreno puede arrancar a arder,
+        # no sobre qué le pasa a una construcción ya en llamas.
+        self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
+        self.umbral_purga_masa: float = float(
+            self.config.get("descomposicion", {}).get("umbral_purga_masa", 0.05)
+        )
+        self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
 
     def ejecutar(
         self,
@@ -241,3 +260,51 @@ class SistemaDesastres:
                             },
                         )
                     )
+
+        # 3. Construcciones en llamas -> consumo de materiales por
+        # combustibilidad (2026-08-30, ver _cachear_configuracion).
+        masa_minima_cache: dict[str, float] = {}
+        for con_id in sorted(gestor.entidades_con(Construccion, Posicion)):
+            pos_co = gestor.obtener_componente(con_id, Posicion)
+            construccion = gestor.obtener_componente(con_id, Construccion)
+            if pos_co is None or construccion is None or not construccion.materiales:
+                continue
+            celda_co = zona.obtener_celda(pos_co.x, pos_co.y)
+            if not celda_co.en_llamas:
+                continue
+
+            ardio_algo = False
+            for material, masa in list(construccion.materiales.items()):
+                if masa <= 0.0:
+                    continue
+                combustibilidad = float(
+                    self.catalogo_materiales.get(material, {}).get("combustibilidad", 0.0)
+                )
+                if combustibilidad <= 0.0:
+                    continue
+                delta = masa * combustibilidad * self.dano_por_tick_en_llamas
+                construccion.materiales[material] = max(0.0, masa - delta)
+                ardio_algo = True
+
+            if not ardio_algo:
+                continue  # sin ningún material combustible -- piedra no arde
+
+            if construccion.tipo not in masa_minima_cache:
+                masa_minima_cache[construccion.tipo] = masa_minima_para(
+                    construccion.tipo, self.config_construccion
+                )
+            construccion.progreso = progreso_construccion(
+                construccion.materiales, self.catalogo_materiales, masa_minima_cache[construccion.tipo]
+            )
+
+            if all(m <= self.umbral_purga_masa for m in construccion.materiales.values()):
+                bus_eventos.emitir(
+                    Evento(
+                        tipo="ConstruccionColapsada",
+                        severidad=Severidad.NOTABLE if construccion.tipo == "refugio" else Severidad.HISTORICO,
+                        tick=reloj.tick_actual,
+                        entidad_id=con_id,
+                        datos={"x": pos_co.x, "y": pos_co.y, "tipo": construccion.tipo, "causa": "incendio"},
+                    )
+                )
+                gestor.eliminar_entidad(con_id)
