@@ -106,6 +106,7 @@ materiales:
     tasa_infiltracion: 0.05
     capacidad_retencion: 0.05
     combustibilidad: 0.0
+    apto_construccion: true
   arcilla:
     categoria: mineral
     forma_en_mundo: sustrato
@@ -114,6 +115,7 @@ materiales:
     tasa_infiltracion: 0.15
     capacidad_retencion: 0.8
     combustibilidad: 0.0
+    apto_construccion: true
   arena:
     categoria: mineral
     forma_en_mundo: sustrato
@@ -122,6 +124,7 @@ materiales:
     tasa_infiltracion: 0.85
     capacidad_retencion: 0.15
     combustibilidad: 0.0
+    apto_construccion: false
   tierra:
     # CORREGIDO (2026-08-30, Diego: "suelo helado que es? eso no es nada
     # real"): la primera versión de esta entrada era "suelo_helado" --
@@ -138,6 +141,7 @@ materiales:
     tasa_infiltracion: 0.4
     capacidad_retencion: 0.35
     combustibilidad: 0.0
+    apto_construccion: true
 
   # --- Depósitos orgánicos (círculos posteriores) ------------------------
   # madera y fibra REUTILIZAN los nombres ya declarados en config/flora.yaml
@@ -151,6 +155,7 @@ materiales:
     dureza: 0.45
     combustibilidad: 0.55
     tasa_descomposicion_dia: 0.01
+    apto_construccion: true
   fibra:
     categoria: organico_vegetal
     forma_en_mundo: deposito
@@ -158,6 +163,7 @@ materiales:
     dureza: 0.1
     combustibilidad: 0.5
     tasa_descomposicion_dia: 0.015
+    apto_construccion: true
   hierba_seca:
     categoria: organico_vegetal
     forma_en_mundo: deposito
@@ -166,6 +172,10 @@ materiales:
     # El material más inflamable del catálogo a propósito -- yesca real.
     combustibilidad: 0.85
     tasa_descomposicion_dia: 0.03
+    # apto_construccion (2026-08-30, refugio construido): techo de paja,
+    # el propio ejemplo de Diego para un refugio primitivo -- "algo como
+    # un habitáculo de madera con un techo de paja".
+    apto_construccion: true
   hueso:
     categoria: organico_animal
     forma_en_mundo: deposito
@@ -181,6 +191,7 @@ materiales:
     # masa homogénea, se reparte entre tejido_blando y hueso, cada uno con
     # su propia tasa de descomposición.
     tasa_descomposicion_dia: 0.002
+    apto_construccion: false
   tejido_blando:
     # CÍRCULO 2 (2026-08-30): la otra mitad de un cadáver -- la parte que
     # SÍ se descompone rápido y realimenta la fertilidad del suelo, mismo
@@ -193,6 +204,7 @@ materiales:
     dureza: 0.05
     combustibilidad: 0.1
     tasa_descomposicion_dia: 0.08
+    apto_construccion: false
 
   # --- Minerales (círculo de minería, muy posterior) ----------------------
   # abundancia [0,1]: sin consumidor todavía -- declarado con intención
@@ -205,6 +217,7 @@ materiales:
     dureza: 0.85
     combustibilidad: 0.0
     abundancia: 0.6
+    apto_construccion: true
   cobre:
     categoria: mineral
     forma_en_mundo: sustrato
@@ -212,6 +225,7 @@ materiales:
     dureza: 0.75
     combustibilidad: 0.0
     abundancia: 0.35
+    apto_construccion: true
 
 # --- Sustrato por bioma (círculo 1) ---------------------------------------
 # Qué material de la lista de arriba ocupa cada bioma -- consumido en
@@ -264,3 +278,24 @@ generacion_vetas:
   # aceptada: el mundo puede terminar algo por debajo de la fracción de
   # piedra que sugiere escala_abundancia_a_fraccion_piedra.
   celdas_minimas_por_veta: 2
+
+# --- Construcción (2026-08-30, refugio/almacén físicos) -------------------
+# Qué materiales sirven para construir (apto_construccion, arriba en cada
+# entrada del catálogo -- piedra/arcilla/tierra/madera/fibra/hierba_seca/
+# hierro/cobre sí, arena/hueso/tejido_blando no) y cuánta masa total de
+# esos materiales exige cada tipo de Construccion para llegar a
+# progreso=1.0 (componentes/construccion.py). Sin receta fija por tipo de
+# material -- cualquier combinación de materiales aptos que sume el
+# umbral sirve, emergente de qué recolectó cada gnomo, no un guion
+# ("3 madera + 2 fibra").
+#
+# PROVISIONAL en su totalidad, sin calibrar contra el motor en marcha:
+# masa_minima_refugio pensada para exigir varios viajes de recolección de
+# un solo gnomo (capacidad de carga ~0.25 * peso propio, gnomo 8-15kg ->
+# 2-3.75kg por viaje, ver config/fisiologia.yaml sección inventario) sin
+# ser trivial ni imposible. masa_minima_almacen, una construcción
+# comunal más grande, pensada para requerir el aporte de varios miembros
+# del asentamiento en vez de uno solo.
+construccion:
+  masa_minima_refugio: 15.0
+  masa_minima_almacen: 60.0

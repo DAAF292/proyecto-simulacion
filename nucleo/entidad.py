@@ -11,6 +11,7 @@ import random
 from typing import Any, Type, TypeVar
 
 from componentes.capacidad_mental import CapacidadMental
+from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
@@ -171,6 +172,30 @@ def crear_necromasa(
         ),
     )
     return nec_id
+
+
+def crear_construccion(
+    gestor: GestorEntidades,
+    pos_x: int,
+    pos_y: int,
+    tipo: str,
+    propietario_id: int | None = None,
+) -> int:
+    """
+    Fábrica ECS: Instancia una construcción física vacía (progreso 0.0,
+    sin materiales todavía) en el grid -- refugio individual o almacén de
+    asentamiento. Mismo molde que crear_necromasa: entidad inerte de solo
+    dos componentes, sin Identidad ni Intencion propias. Accion.CONSTRUIR
+    es quien va llenando materiales/progreso tras la creación, no esta
+    fábrica.
+    """
+    con_id = gestor.crear_entidad()
+    gestor.anadir_componente(con_id, Posicion(x=pos_x, y=pos_y))
+    gestor.anadir_componente(
+        con_id,
+        Construccion(tipo=tipo, propietario_id=propietario_id),
+    )
+    return con_id
 
 
 def crear_criatura(

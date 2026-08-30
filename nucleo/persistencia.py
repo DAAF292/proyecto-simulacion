@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from componentes.capacidad_mental import CapacidadMental
+from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
@@ -83,13 +84,14 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.24-fase0"
+VERSION_ESQUEMA = "0.25-fase0"
 
 _TABLAS_APP = (
     "entidades",
     "componentes_estado",
     "plantas_estado",
     "necromasa_estado",
+    "construccion_estado",
     "celdas_estado",
     "cronica_eventos",
     "configuracion_ejecucion",
@@ -253,6 +255,23 @@ class Persistencia:
                     agua_tisular REAL NOT NULL,
                     tasa_putrefaccion REAL NOT NULL,
                     origen_especie TEXT NOT NULL
+                )
+                """
+            )
+
+            # 4b. Snapshot de construcciones (refugio/almacén -- ver
+            # componentes/construccion.py). Mismo molde que necromasa_estado:
+            # entidad física sin fila en `entidades` (no tiene Identidad).
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS construccion_estado (
+                    entidad_id INTEGER PRIMARY KEY,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    tipo TEXT NOT NULL,
+                    materiales TEXT NOT NULL,
+                    propietario_id INTEGER,
+                    progreso REAL NOT NULL
                 )
                 """
             )
@@ -487,6 +506,28 @@ class Persistencia:
                     )
             cur.executemany("INSERT INTO necromasa_estado VALUES (?, ?, ?, ?, ?, ?, ?)", filas_necromasa)
 
+            # C2. Construcciones
+            cur.execute("DELETE FROM construccion_estado")
+            filas_construccion = []
+            for cid in sorted(gestor.entidades_con(Construccion, Posicion)):
+                con_comp = gestor.obtener_componente(cid, Construccion)
+                pos_c = gestor.obtener_componente(cid, Posicion)
+                if con_comp and pos_c:
+                    filas_construccion.append(
+                        (
+                            cid,
+                            pos_c.x,
+                            pos_c.y,
+                            con_comp.tipo,
+                            json.dumps(con_comp.materiales),
+                            con_comp.propietario_id,
+                            con_comp.progreso,
+                        )
+                    )
+            cur.executemany(
+                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?)", filas_construccion
+            )
+
             # D. Celdas dinámicas
             cur.execute("DELETE FROM celdas_estado")
             filas_celdas = []
@@ -720,6 +761,22 @@ class Persistencia:
                     ),
                 )
 
+            # 4b. Cargar Construcciones
+            cur.execute(
+                "SELECT entidad_id, x, y, tipo, materiales, propietario_id, progreso FROM construccion_estado"
+            )
+            for coid, cx, cy, tipo, mats_json, propietario_id, progreso in cur.fetchall():
+                gestor.anadir_componente(coid, Posicion(x=cx, y=cy))
+                gestor.anadir_componente(
+                    coid,
+                    Construccion(
+                        tipo=str(tipo),
+                        materiales=json.loads(mats_json),
+                        propietario_id=propietario_id,
+                        progreso=float(progreso),
+                    ),
+                )
+
             # Ajustar siguiente id autoincremental
             cur.execute("SELECT MAX(id) FROM entidades")
             max_id_ent = cur.fetchone()[0] or 0
@@ -727,6 +784,8 @@ class Persistencia:
             max_id_plant = cur.fetchone()[0] or 0
             cur.execute("SELECT MAX(entidad_id) FROM necromasa_estado")
             max_id_nec = cur.fetchone()[0] or 0
+            cur.execute("SELECT MAX(entidad_id) FROM construccion_estado")
+            max_id_con = cur.fetchone()[0] or 0
 
-            gestor._siguiente_id = max(max_id_ent, max_id_plant, max_id_nec) + 1
+            gestor._siguiente_id = max(max_id_ent, max_id_plant, max_id_nec, max_id_con) + 1
             return True
