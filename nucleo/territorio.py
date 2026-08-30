@@ -44,6 +44,8 @@ class Territorio:
             config["bioma"],
             config["flora"],
             config["agua"],
+            config["materiales"],
+            config["sustrato_por_bioma"],
             ancho,
             alto,
         )

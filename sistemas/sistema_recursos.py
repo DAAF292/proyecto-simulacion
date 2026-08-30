@@ -20,7 +20,7 @@ from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.posicion import Posicion
-from nucleo.agua import hay_agua_potable
+from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
 from nucleo.celda import Celda
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos
@@ -52,13 +52,22 @@ class SistemaRecursos:
         )
         self.techo_fertilidad: float = float(cfg_abono.get("techo_fertilidad", 1.0))
 
-        cfg_charco = self.config.get("charcos", {})
+        self.cfg_charco = self.config.get("charcos", {})
         self.tasa_evaporacion_charco: float = float(
-            cfg_charco.get("tasa_evaporacion_charco_por_tick", 0.0006)
+            self.cfg_charco.get("tasa_evaporacion_charco_por_tick", 0.0006)
         )
         self.tasa_agotamiento_charco: float = float(
-            cfg_charco.get("tasa_agotamiento_charco_al_beber", 0.01)
+            self.cfg_charco.get("tasa_agotamiento_charco_al_beber", 0.01)
         )
+        # CÍRCULO 1 de materiales físicos (2026-08-30, ver
+        # config/materiales.yaml y nucleo/celda.py:tipo_sustrato/
+        # humedad_subsuelo): drenaje de la reserva de humedad de subsuelo,
+        # mucho mas lento que la evaporacion de un charco a proposito --
+        # ver comentario de config/hidrologia.yaml seccion charcos.
+        self.tasa_drenaje_subsuelo: float = float(
+            self.cfg_charco.get("tasa_drenaje_humedad_subsuelo_por_tick", 0.001)
+        )
+        self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
 
         cfg_dep = self.config.get("depredacion", {})
         self.eficiencia_biomasa_saciedad: float = float(
@@ -125,7 +134,25 @@ class SistemaRecursos:
                 self._resolver_aliviarse(nec, celda)
 
     def _actualizar_charcos(self, zona: Any) -> None:
-        """Modula la evaporación o generación de charcos según la meteorología activa."""
+        """Genera/evapora charco y llena/drena humedad de subsuelo según el
+        material y la pendiente local de cada celda -- CÍRCULO 1 de
+        materiales físicos (2026-08-30, ver config/materiales.yaml y el
+        docstring de Celda.tipo_sustrato/humedad_subsuelo).
+
+        ANTES (hasta 2026-08-29): toda celda sin agua permanente encharcaba
+        y evaporaba con la MISMA tasa uniforme, sin relación con el
+        material del terreno ni con su pendiente -- "decreto climático"
+        señalado por Diego. Ahora la lluvia que no logra infiltrarse en el
+        sustrato (tasa_infiltracion del material, amortiguada según cuánto
+        hueco le queda a humedad_subsuelo -- terreno ya saturado encharca
+        más, no menos) ni escurre por la pendiente
+        (nucleo/agua.py:fraccion_escurrida_por_pendiente) se queda en
+        superficie como charco; la que sí se infiltra alimenta
+        humedad_subsuelo, topada por la capacidad_retencion del material y
+        con su propio drenaje mucho más lento que la evaporación de un
+        charco (la memoria hídrica profunda que faltaba desde el
+        principio).
+        """
         clima_actual = getattr(zona, "clima_actual", None)
         nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
 
@@ -135,7 +162,7 @@ class SistemaRecursos:
             .get(nombre_clima, {})
             .get("tasa_generacion_charco_por_tick", 0.0)
         )
-        techo_charco = float(self.config.get("charcos", {}).get("techo_profundidad_charco", 0.03))
+        techo_charco = float(self.cfg_charco.get("techo_profundidad_charco", 0.03))
 
         for y in range(zona.alto):
             for x in range(zona.ancho):
@@ -143,13 +170,44 @@ class SistemaRecursos:
                 # (2026-08-29) El charco es agua EFIMERA sobre tierra firme:
                 # sobre una celda de agua permanente el campo no significa
                 # nada (hay_agua_potable/profundidad_agua_potable ya miran
-                # ambas capas) y solo ensuciaria el estado persistido.
+                # ambas capas) y solo ensuciaria el estado persistido. Lo
+                # mismo aplica a humedad_subsuelo -- fijada en generacion
+                # al tope de su material (nucleo/zona_bioma.py), nunca
+                # simulada tick a tick para estas celdas.
                 if celda.tiene_agua:
                     continue
+
+                material = self.catalogo_materiales.get(celda.tipo_sustrato, {})
+                tasa_infiltracion = float(material.get("tasa_infiltracion", 0.0))
+                capacidad_retencion = float(material.get("capacidad_retencion", 0.0))
+
                 if tasa_gen > 0.0:
-                    celda.profundidad_charco = min(techo_charco, celda.profundidad_charco + tasa_gen)
-                elif celda.profundidad_charco > 0.0:
-                    celda.profundidad_charco = max(0.0, celda.profundidad_charco - self.tasa_evaporacion_charco)
+                    if capacidad_retencion > 0.0:
+                        hueco_restante = max(0.0, capacidad_retencion - celda.humedad_subsuelo)
+                        infiltracion_efectiva = tasa_infiltracion * (hueco_restante / capacidad_retencion)
+                    else:
+                        infiltracion_efectiva = 0.0
+
+                    pendiente = pendiente_local(zona, x, y)
+                    escurrida = fraccion_escurrida_por_pendiente(pendiente, self.cfg_charco)
+                    fraccion_encharca = max(0.0, 1.0 - infiltracion_efectiva - escurrida)
+
+                    celda.humedad_subsuelo = min(
+                        capacidad_retencion,
+                        celda.humedad_subsuelo + tasa_gen * infiltracion_efectiva,
+                    )
+                    celda.profundidad_charco = min(
+                        techo_charco, celda.profundidad_charco + tasa_gen * fraccion_encharca
+                    )
+                else:
+                    if celda.profundidad_charco > 0.0:
+                        celda.profundidad_charco = max(
+                            0.0, celda.profundidad_charco - self.tasa_evaporacion_charco
+                        )
+                    if celda.humedad_subsuelo > 0.0:
+                        celda.humedad_subsuelo = max(
+                            0.0, celda.humedad_subsuelo - self.tasa_drenaje_subsuelo
+                        )
 
     def _registrar_recuerdo_si_procede(
         self,

@@ -76,9 +76,17 @@
 # de una única "permeabilidad" como se planteó de palabra) es la
 # corrección directa de ese error -- mismo patrón que este proyecto ya ha
 # encontrado varias veces ("esto parecía correcto sobre el papel"): vejez,
-# purga de memoria, sobrepoblación. Ninguna de las dos propiedades está
-# todavía conectada a sistema_recursos.py -- el círculo 1 sigue sin
-# implementar, esto es solo el catálogo.
+# purga de memoria, sobrepoblación.
+#
+# CÍRCULO 1 IMPLEMENTADO (2026-08-30): tasa_infiltracion/capacidad_retencion
+# ya alimentan sistema_recursos.py:_actualizar_charcos (charco de superficie
+# vs. Celda.humedad_subsuelo) y nucleo/flora.py:factor_humedad_subsuelo
+# (bono de producción vegetal, sustituye al antiguo factor_ribera). La
+# generación de charco también depende de la pendiente local del terreno
+# (nucleo/agua.py:pendiente_local/fraccion_escurrida_por_pendiente,
+# umbrales en config/hidrologia.yaml sección charcos) -- un material
+# impermeable en terreno muy inclinado tampoco encharca, el agua escurre
+# antes de acumularse.
 #
 # "semilla" QUEDA FUERA de este catálogo (confirmado con Diego,
 # 2026-08-30): no es un material físico con dureza/combustibilidad/
@@ -189,3 +197,18 @@ materiales:
     dureza: 0.75
     combustibilidad: 0.0
     abundancia: 0.35
+
+# --- Sustrato por bioma (círculo 1) ---------------------------------------
+# Qué material de la lista de arriba ocupa cada bioma -- consumido en
+# generación (nucleo/zona_bioma.py) para fijar Celda.tipo_sustrato. Bosque
+# y pradera comparten arcilla a propósito (vega fértil, mismo criterio que
+# ya comparten textura de terreno en el visor histórico) -- montaña,
+# desierto y tundra tienen cada una la suya. Hierro/cobre NO aparecen aquí
+# todavía: son sustrato de VETA localizada (círculo de minería, muy
+# posterior), no el material base de ningún bioma entero.
+sustrato_por_bioma:
+  montana: piedra
+  bosque: arcilla
+  pradera: arcilla
+  desierto: arena
+  tundra: tierra

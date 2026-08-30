@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from nucleo.agua import hay_agua_potable
 from nucleo.celda import Celda
 from nucleo.clima import Clima, Estacion, modificador_regeneracion
 
@@ -91,21 +90,31 @@ def recursos_alimento(especie_cfg: dict[str, Any]) -> list:
     return [r for r in especie_cfg["recursos"] if r["categoria"] == "alimento"]
 
 
-def factor_ribera(celda: Celda, bono_ribera: float = 0.2) -> float:
+def factor_humedad_subsuelo(
+    celda: Celda, capacidad_retencion: float, bono_maximo: float = 0.2
+) -> float:
     """
-    Retorna un multiplicador adicional si la celda cuenta con agua superficial.
+    Multiplicador de producción por humedad de subsuelo -- CÍRCULO 1 de
+    materiales físicos (2026-08-30). Sustituye a factor_ribera (retirado):
+    Diego señaló que, si el subsuelo ya modela retención de agua de forma
+    general, el antiguo bono "hay agua en esta celda -> +20% fijo" deja de
+    ser una ley aparte y pasa a ser un CASO PARTICULAR de una ley más
+    general -- una celda con agua permanente tiene, por definición física,
+    Celda.humedad_subsuelo fijado al tope de su capacidad_retencion en
+    generación (nucleo/zona_bioma.py, está literalmente empapada), así que
+    el mismo bono de siempre sale sin necesidad de un caso especial
+    hardcodeado. Además mejora el modelo: continuo según cuánta humedad
+    hay, no binario "hay agua / no hay agua" como antes.
 
-    (2026-08-29) El criterio de "agua superficial" lo aporta el combinador
-    unico nucleo/agua.py:hay_agua_potable, en vez de repetir aqui a mano el
-    mismo `or` -- exactamente lo que el docstring de ese combinador pide no
-    hacer ("sin que cada consumidor tenga que repetir el mismo or/max por
-    su cuenta"). Sin cambio de comportamiento: la condicion era identica.
+    capacidad_retencion <= 0.0 (material sin capacidad de retención
+    conocida, o tipo_sustrato vacío): sin bono, 1.0 -- no se puede saturar
+    lo que no tiene capacidad de retener nada.
     """
-    if hay_agua_potable(celda):
-        return 1.0 + bono_ribera
-    return 1.0
+    if capacidad_retencion <= 0.0:
+        return 1.0
+    saturacion = min(1.0, celda.humedad_subsuelo / capacidad_retencion)
+    return 1.0 + bono_maximo * saturacion
 
 
 # Alias para preservar compatibilidad con código histórico
 calcular_factor_produccion = factor_produccion
-calcular_factor_ribera = factor_ribera

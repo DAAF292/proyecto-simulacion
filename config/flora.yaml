@@ -29,7 +29,16 @@ descomposicion:
   factor_humedad_seco: 0.8
 
 flora:
-  bono_produccion_ribera: 0.2
+  # CÍRCULO 1 de materiales físicos (2026-08-30, Diego: "no estaría ya
+  # obsoleto el bono ribera? si implementamos capilaridad el bono de
+  # humedad subsuelo funcionaria igual"). Retira bono_produccion_ribera y
+  # el antiguo factor_ribera -- una celda con agua permanente sigue dando
+  # el mismo bono de siempre (Celda.humedad_subsuelo se fija a saturación
+  # en generación para esas celdas), ahora como consecuencia de una ley
+  # general de humedad en vez de un caso especial hardcodeado. Mismo valor
+  # numérico que el bono retirado -- ancla de continuidad, no una
+  # recalibración desde cero (ver nucleo/flora.py:factor_humedad_subsuelo).
+  bono_produccion_humedad_subsuelo: 0.2
   tasa_retorno_mantillo: 0.05
   # SOBREFORRAJEO (2026-08-29, investigacion de sobrepoblacion, confirmado
   # con Diego -- "un sobreforrajeo deberia afectar de algun modo a los

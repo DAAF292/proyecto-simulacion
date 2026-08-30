@@ -31,3 +31,35 @@ charcos:
   techo_profundidad_charco: 0.03
   tasa_evaporacion_charco_por_tick: 0.0006
   tasa_agotamiento_charco_al_beber: 0.01
+  # CÍRCULO 1 de materiales físicos (2026-08-30, ver config/materiales.yaml
+  # y sistema_recursos.py:_actualizar_charcos): la lluvia que no se
+  # infiltra en el sustrato (materiales.<tipo>.tasa_infiltracion) tampoco
+  # encharca entera si el terreno está inclinado -- una parte escurre.
+  # pendiente_minima/maxima_escurrida son umbrales PROPIOS de hidrología,
+  # deliberadamente NO los mismos que mundo.yaml:relieve.pendiente_minima/
+  # maxima_transitable -- que un lobo pueda subir una cuesta no dice nada
+  # sobre si el agua resbala por ella, son dos fenómenos físicos distintos
+  # que antes de esta nota habrían compartido nombre de variable por pura
+  # casualidad si se hubieran reutilizado sin pensarlo.
+  #
+  # MEDIDO CONTRA EL TERRENO REAL (2026-08-30, 15 semillas, mapa 40x40,
+  # generador causal actual -- misma disciplina que la calibración de
+  # relieve): pendiente_local (media de |Δelevación| a las 4 celdas
+  # vecinas, nucleo/agua.py:pendiente_local) tiene mediana 0.0125, p75
+  # 0.025, p90 0.062, p99 0.106, máximo 0.145 sobre 24000 celdas muestreadas.
+  # pendiente_minima_escurrida por debajo de la mediana (terreno
+  # razonablemente llano no escurre nada); pendiente_maxima_escurrida en
+  # p90 (terreno del 10% más inclinado del mapa escurre toda el agua que
+  # no se infiltra, sea cual sea el material). PROVISIONAL: percentiles de
+  # relieve, no el efecto observado sobre la profundidad de charco real en
+  # el motor en marcha -- pendiente de revisar contra eso.
+  pendiente_minima_escurrida: 0.005
+  pendiente_maxima_escurrida: 0.06
+  # Drenaje de Celda.humedad_subsuelo (memoria hídrica profunda) -- un
+  # orden de magnitud más lento que tasa_evaporacion_charco_por_tick a
+  # propósito: un charco se seca en horas, la humedad de subsuelo debe
+  # persistir semanas para tener sentido como "memoria". PROVISIONAL,
+  # valor de partida razonado (arcilla, capacidad_retencion=0.8, drena por
+  # completo en ~800 ticks / ~33 días sin lluvia), sin contrastar contra
+  # el motor en marcha.
+  tasa_drenaje_humedad_subsuelo_por_tick: 0.001

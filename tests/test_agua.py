@@ -17,7 +17,7 @@ from nucleo.agua import (
     generar_cuerpos_agua,
 )
 from nucleo.celda import Celda, TipoTerreno
-from nucleo.flora import factor_ribera
+from nucleo.flora import factor_humedad_subsuelo
 from sistemas.sistema_recursos import SistemaRecursos
 
 
@@ -92,14 +92,28 @@ def test_ley_sin_ninguna_vecina_vadeable_nace_donde_esta():
     assert celda_nacimiento_segura(zona, 0, 0, 0.5) == (0, 0)
 
 
-# --- Ley: el bono ribereno usa el criterio unico de potabilidad
-# (nucleo/agua.py:hay_agua_potable), no una copia propia.
-def test_ley_bono_ribera_respeta_el_criterio_unico_de_potabilidad():
-    assert factor_ribera(_celda_tierra()) == 1.0
-    assert factor_ribera(Celda(TipoTerreno.PRADERA, profundidad_charco=0.01)) == pytest.approx(1.2)
-    assert factor_ribera(
-        Celda(TipoTerreno.PRADERA, tiene_agua=True, tipo_agua="lago", profundidad_agua=2.0)
-    ) == pytest.approx(1.2)
+# --- Ley (CIRCULO 1 de materiales fisicos, 2026-08-30): el bono de
+# produccion por humedad de subsuelo escala CONTINUAMENTE con cuanta
+# humedad hay respecto a la capacidad de retencion del material -- no es
+# binario "hay agua / no hay agua" como el antiguo factor_ribera que
+# sustituye. Sin capacidad de retencion (material desconocido), sin bono.
+def test_ley_bono_humedad_subsuelo_escala_con_la_saturacion():
+    seca = Celda(TipoTerreno.PRADERA, tipo_sustrato="arcilla", humedad_subsuelo=0.0)
+    assert factor_humedad_subsuelo(seca, capacidad_retencion=0.8, bono_maximo=0.2) == 1.0
+
+    a_medias = Celda(TipoTerreno.PRADERA, tipo_sustrato="arcilla", humedad_subsuelo=0.4)
+    assert factor_humedad_subsuelo(a_medias, capacidad_retencion=0.8, bono_maximo=0.2) == pytest.approx(1.1)
+
+    # Saturada -- p.ej. una celda con agua permanente, fijada a su tope en
+    # generacion (nucleo/zona_bioma.py) -- da el bono maximo completo,
+    # el mismo que antes daba el factor_ribera binario.
+    saturada = Celda(TipoTerreno.PRADERA, tipo_sustrato="arcilla", humedad_subsuelo=0.8)
+    assert factor_humedad_subsuelo(saturada, capacidad_retencion=0.8, bono_maximo=0.2) == pytest.approx(1.2)
+
+    # Sin capacidad de retencion conocida (tipo_sustrato vacio o material
+    # sin la propiedad): no se puede saturar lo que no retiene nada.
+    sin_sustrato = Celda(TipoTerreno.PRADERA)
+    assert factor_humedad_subsuelo(sin_sustrato, capacidad_retencion=0.0, bono_maximo=0.2) == 1.0
 
 
 # --- Ley: el charco efimero solo existe sobre tierra firme; sobre agua

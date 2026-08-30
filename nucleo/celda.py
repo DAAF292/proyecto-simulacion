@@ -108,7 +108,8 @@ class Celda:
     """Si esta celda tiene agua potable -- capa geografica independiente
     de la vegetacion (ver docstring del modulo). No produce recurso
     alimenticio propio directamente, pero SI modula la produccion de
-    flora (bono ribereno, ver nucleo/flora.py:factor_ribera) y habilita
+    flora (bono de humedad de subsuelo, ver nucleo/flora.py:
+    factor_humedad_subsuelo) y habilita
     Accion.BEBER. Derivado de tipo_agua (tipo_agua != ""), mismo patron
     que tiene_recurso/tipo_recurso. NO se persiste: determinista a partir
     del campo de elevacion y la semilla del mundo (nucleo/agua.py), igual
@@ -173,6 +174,32 @@ class Celda:
     haga falta tratar "cualquier agua bebible ahora mismo" sin importar
     el origen, usar nucleo/agua.py:hay_agua_potable/profundidad_efectiva
     en vez de comparar este campo solo."""
+    tipo_sustrato: str = ""
+    """CÍRCULO 1 de materiales físicos (2026-08-30, ver config/materiales.yaml
+    y conversación de diseño con Diego): clave del catálogo de materiales
+    (piedra/arcilla/arena/tierra hoy), derivada del bioma en generación
+    (materiales.sustrato_por_bioma) -- determinista, NO se persiste, mismo
+    criterio que elevacion/lluvia/temperatura. Reemplaza el "decreto
+    climático" anterior de _actualizar_charcos (sistema_recursos.py): la
+    velocidad de infiltración y la capacidad de retención de agua de esta
+    celda salen de las propiedades físicas de ESTE material, no de una
+    tasa uniforme igual para cualquier terreno."""
+    humedad_subsuelo: float = 0.0
+    """CÍRCULO 1 de materiales físicos (2026-08-30): reserva de agua de
+    subsuelo -- la "memoria hídrica profunda" que Diego señaló como
+    ausente. Se llena con la fracción de lluvia que el material logra
+    infiltrar (sistema_recursos.py:_actualizar_charcos), topada por
+    materiales.<tipo_sustrato>.capacidad_retencion, y drena mucho más
+    despacio que un charco (charcos.tasa_drenaje_humedad_subsuelo_por_tick).
+    Para una celda con agua permanente (tiene_agua=True) se fija en
+    generación al tope de capacidad_retencion de su sustrato -- está
+    literalmente empapada por definición, sin necesidad de simularlo tick
+    a tick (nucleo/zona_bioma.py). SÍ se persiste -- estado mutado por la
+    partida real, mismo motivo que fertilidad/profundidad_charco. Único
+    consumidor mecánico hoy: nucleo/flora.py:factor_humedad_subsuelo (bono
+    de producción vegetal, sustituye al antiguo factor_ribera -- una celda
+    con agua permanente da el mismo bono de siempre, pero como consecuencia
+    de la ley general de humedad, no como caso especial hardcodeado)."""
     profundidad_charco: float = 0.0
     """Charco efimero (pieza 3 de la revision del sistema de agua pedida
     por Diego, 2026-08-21 -- "quizas la tormenta y lluvia podrian generar

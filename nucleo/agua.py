@@ -38,8 +38,9 @@ casilla. Un mundo con pocas cumbres marcadas tiene pocos rios; uno muy
 accidentado, mas -- ningun numero se decide aqui a mano.
 
 tipo_agua declarado con intencion, sin consumidor mecanico real todavia
-(salvo el bono de produccion de flora, ver nucleo/flora.py:factor_ribera,
-que SI distingue "hay agua" pero no todavia DE QUE TIPO): Diego anticipa
+(salvo el bono de produccion de flora, ver nucleo/flora.py:
+factor_humedad_subsuelo, que SI distingue "hay agua" pero no todavia DE
+QUE TIPO): Diego anticipa
 fauna futura que dependa del tipo concreto (anfibios en poza, fauna
 acuatica en rio/lago) -- mismo criterio que los recursos de categoria
 material en flora.py, se declara la distincion antes de tener quien la
@@ -461,6 +462,53 @@ def generar_cuerpos_agua(campo_elevacion: list, rng: random.Random, config_agua:
 # mismo `or`/`max` por su cuenta -- mismo motivo de existir que
 # radio_individual en nucleo/percepcion.py: una formula pequena, pero un
 # unico sitio si algun dia cambia.
+def pendiente_local(zona, x: int, y: int) -> float:
+    """Magnitud de relieve local de una celda: media de |Δelevacion| con
+    sus vecinas cardinales existentes (borde del grid: solo las que hay).
+
+    CÍRCULO 1 de materiales físicos (2026-08-30, sistema_recursos.py:
+    _actualizar_charcos): consumidor real -- terreno inclinado escurre
+    agua en vez de encharcarla, con independencia de lo permeable que sea
+    el material (ver fraccion_escurrida_por_pendiente).
+
+    Deliberadamente NO es un campo de Celda (Diego, 2026-08-30: "pendiente
+    local no es necesario? ese dato no es ya determinista?") -- se calcula
+    al vuelo cada vez que hace falta a partir de Celda.elevacion, que ya
+    es determinista y ya está almacenada; cachearla en un campo nuevo
+    sería estado redundante sin necesidad real. Mismo criterio que
+    nucleo/relieve.py:costo_resistencia_por_pendiente, que tampoco cachea
+    la pendiente entre dos celdas. Si el perfilado real mostrara que
+    recalcularla cada tick pesa, se cachea entonces -- no antes (orden de
+    CLAUDE.md: perfilar primero, optimizar despues).
+    """
+    propia = zona.obtener_celda(x, y).elevacion
+    diferencias = []
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        nx, ny = x + dx, y + dy
+        if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
+            diferencias.append(abs(zona.obtener_celda(nx, ny).elevacion - propia))
+    if not diferencias:
+        return 0.0
+    return sum(diferencias) / len(diferencias)
+
+
+def fraccion_escurrida_por_pendiente(pendiente: float, config_charcos: dict) -> float:
+    """Fraccion [0,1] de la lluvia que escurre por la pendiente en vez de
+    infiltrarse o encharcar -- mapeo lineal entre config_charcos
+    ['pendiente_minima_escurrida'] (no escurre nada por debajo) y
+    ['pendiente_maxima_escurrida'] (escurre toda, sea cual sea el
+    material). Umbrales PROPIOS de hidrologia -- ver comentario de
+    config/hidrologia.yaml seccion charcos, deliberadamente distintos de
+    mundo.yaml:relieve.pendiente_minima/maxima_transitable (movimiento):
+    que un lobo pueda subir una cuesta no dice nada sobre si el agua
+    resbala por ella."""
+    minima = float(config_charcos.get("pendiente_minima_escurrida", 0.0))
+    maxima = float(config_charcos.get("pendiente_maxima_escurrida", 1.0))
+    if maxima <= minima:
+        return 0.0
+    return max(0.0, min(1.0, (pendiente - minima) / (maxima - minima)))
+
+
 def hay_agua_potable(celda) -> bool:
     return celda.tiene_agua or celda.profundidad_charco > 0.0
 

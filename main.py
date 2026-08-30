@@ -278,8 +278,11 @@ def sembrar_flora_inicial(
         # una capa independiente del bioma (la celda conserva bosque Y
         # tipo_agua 'lago'), y sin este guard la siembra inicial ponia
         # plantas en celdas de rio/lago/poza que el visor estampaba sobre
-        # el agua. El bono de ribera (nucleo/flora.py:factor_ribera) mira
-        # celdas VECINAS con agua, no sumergidas: no cambia con esto.
+        # el agua. El bono de humedad de subsuelo (nucleo/flora.py:
+        # factor_humedad_subsuelo, hasta 2026-08-30 factor_ribera) mira si
+        # la PROPIA celda tiene agua/humedad, no las vecinas pese a lo que
+        # decía este comentario hasta ahora (inexactitud encontrada de
+        # paso, no lo que motivó este cambio): no afecta a este guard.
         if celda.tiene_recurso and not celda.tiene_agua:
             celdas_por_especie.setdefault(celda.tipo_recurso, []).append((x, y))
 

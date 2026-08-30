@@ -154,6 +154,8 @@ def generar_zona_bioma(
     config_bioma: dict,
     config_flora: dict,
     config_agua: dict,
+    config_materiales: dict,
+    config_sustrato_por_bioma: dict,
     ancho: int,
     alto: int,
 ) -> ZonaBioma:
@@ -272,6 +274,12 @@ def generar_zona_bioma(
                 especie_por_celda[p] = especie_key
             celdas_ya_asignadas |= mancha
 
+    # CÍRCULO 1 de materiales físicos (2026-08-30, ver config/materiales.yaml
+    # y nucleo/celda.py:tipo_sustrato/humedad_subsuelo): mapeo bioma->material
+    # fijo, mismo criterio de lookup determinista que biomas[(x,y)] arriba.
+    sustrato_por_bioma = config_sustrato_por_bioma
+    catalogo_materiales = config_materiales
+
     grid = [[None] * alto for _ in range(ancho)]
     for x in range(ancho):
         for y in range(alto):
@@ -280,6 +288,17 @@ def generar_zona_bioma(
             tipo_agua = info_agua.tipo if info_agua else ""
             profundidad_agua = info_agua.profundidad_metros if info_agua else 0.0
             tiene_agua = tipo_agua != ""
+
+            tipo_sustrato = sustrato_por_bioma.get(tipo.value, "")
+            capacidad_retencion = float(
+                catalogo_materiales.get(tipo_sustrato, {}).get("capacidad_retencion", 0.0)
+            )
+            # Una celda con agua permanente esta, por definicion fisica,
+            # empapada -- se fija al tope de su sustrato en generacion en
+            # vez de simular la infiltracion tick a tick (ver docstring de
+            # Celda.humedad_subsuelo). El mismo bono que antes daba el
+            # extinto factor_ribera sale de esto sin caso especial.
+            humedad_subsuelo = capacidad_retencion if tiene_agua else 0.0
 
             especie_key = especie_por_celda.get((x, y), "")
             tiene_recurso = especie_key != ""
@@ -292,7 +311,8 @@ def generar_zona_bioma(
                 lluvia=campo_lluvia[x][y], temperatura=campo_temperatura[x][y],
                 recursos=recursos_iniciales, tiene_recurso=tiene_recurso,
                 tipo_recurso=especie_key, tiene_agua=tiene_agua, tipo_agua=tipo_agua,
-                profundidad_agua=profundidad_agua,
+                profundidad_agua=profundidad_agua, tipo_sustrato=tipo_sustrato,
+                humedad_subsuelo=humedad_subsuelo,
             )
 
     return ZonaBioma(ancho=ancho, alto=alto, grid=grid)

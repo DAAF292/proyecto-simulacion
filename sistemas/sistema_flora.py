@@ -18,7 +18,7 @@ from nucleo.bioma import TipoTerreno
 from nucleo.clima import estacion_actual as _estacion_actual_desde_indice
 from nucleo.entidad import GestorEntidades, crear_planta
 from nucleo.eventos import BusEventos
-from nucleo.flora import factor_produccion, factor_ribera
+from nucleo.flora import factor_humedad_subsuelo, factor_produccion
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 
@@ -37,9 +37,16 @@ class SistemaFlora:
         """Extrae el catálogo de especies de flora y coeficientes de abono y mantillo."""
         self.cfg_flora = self.config.get("flora", {})
         self.especies_cfg: dict[str, Any] = self.cfg_flora.get("especies", {})
-        self.bono_ribera: float = float(
-            self.cfg_flora.get("bono_produccion_ribera", 0.2)
+        # CÍRCULO 1 de materiales físicos (2026-08-30): sustituye al
+        # antiguo bono_produccion_ribera / factor_ribera (retirado) -- ver
+        # nucleo/flora.py:factor_humedad_subsuelo para el razonamiento
+        # completo de por qué una celda con agua permanente sigue dando el
+        # mismo bono de siempre, ahora como consecuencia de una ley
+        # general en vez de un caso especial hardcodeado.
+        self.bono_humedad_subsuelo: float = float(
+            self.cfg_flora.get("bono_produccion_humedad_subsuelo", 0.2)
         )
+        self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
         self.tasa_retorno_mantillo: float = float(
             self.cfg_flora.get("tasa_retorno_mantillo", 0.05)
         )
@@ -144,8 +151,15 @@ class SistemaFlora:
                 clima=clima_actual,
                 config=self.config,
             )
-            f_rib = factor_ribera(celda, self.bono_ribera)
-            eficiencia_total = f_prod * f_rib * (1.0 + celda.fertilidad)
+            capacidad_retencion_celda = float(
+                self.catalogo_materiales.get(celda.tipo_sustrato, {}).get(
+                    "capacidad_retencion", 0.0
+                )
+            )
+            f_humedad = factor_humedad_subsuelo(
+                celda, capacidad_retencion_celda, self.bono_humedad_subsuelo
+            )
+            eficiencia_total = f_prod * f_humedad * (1.0 + celda.fertilidad)
 
             # SOBREFORRAJEO (2026-08-29, ver config/constantes.yaml seccion
             # flora): agotada_hoy marca si CUALQUIER recurso de alimento de
