@@ -997,3 +997,195 @@ revisara después), decidir si el clima diario debe afectar al confort
 térmico (el código lo declara pero no lo hace), y dar comportamiento
 propio a HUIDA_ERRATICA/CRISIS_VIOLENTA en movimiento (hoy indistinguibles
 de CATATONIA).
+
+## Interacción física y social: refugio construido, recolección,
+## asentamiento (2026-08-30)
+
+Arco de diseño y ejecución completo en una sola sesión, arrancado tras
+cerrar el refugio instintivo (memoria individual + sesgo gregario
+reutilizado, ver commit `8bc3411`, sin cambios). Diego conectó en un solo
+mensaje refugio construido, recolección para mitigar el hambre, el
+"problema de la sed" y dónde se ubica un asentamiento — se separó en
+conversación antes de tocar código (principio 2: una fuente de
+complejidad por incremento), y cada pieza se implementó como su propio
+círculo, verificada contra el motor real (no solo arnés dirigido: en
+varios casos con `BOSQUE_AUTO_TICKS` sin ninguna intervención manual)
+antes de sumar la siguiente. Commits en orden: `97c7945` (Construccion),
+`ed145f6` (CONSTRUIR), `ad44a68` (RECOLECTAR), `67c8ed5` (detección de
+asentamiento), `d1cfd19` (almacén + aporte), `db3cfcc` (deterioro),
+`6e1d49b` (corrección de pertenencia).
+
+**La sed — resuelta solo a medias, decisión explícita de Diego**: entre
+portar agua sin recipiente (ficción peor que llevar una manzana a mano,
+descartada) y no tocar el transporte de agua todavía, Diego confirmó la
+segunda ("b si"). Un gnomo sigue bebiendo in situ como siempre; el acceso
+a agua se resuelve por dónde se ubica el asentamiento (cerca de una
+fuente), no por inventario. **Sigue sin resolver de verdad**: portar agua
+en un recipiente exige fabricar objetos, que no existe — candidato
+natural para cuando exista un sistema de fabricación real (mismo
+mecanismo base que refugio/almacén, ver más abajo).
+
+**Refugio y almacén como entidades físicas reales** (antes: "refugio" era
+solo una coordenada en memoria, sin nada en el mundo). `Construccion`
+(`componentes/construccion.py`): `tipo` (string abierto, "refugio" |
+"almacen"), `materiales` (dict material→kg, mismo patrón que
+Necromasa.masas/Inventario.contenidos/Celda.recursos), `propietario_id`
+(entidad_id del gnomo para refugio, `None` para almacén — un almacén es
+del asentamiento, no de un individuo), `progreso` ([0,1], fluctúa),
+`completado_alguna_vez` (permanente, ver corrección más abajo). Mismo
+molde ECS que Necromasa: `Posicion` + un componente de datos, sin
+Identidad ni Intencion propias, sin fila en `entidades` (persistida en su
+propia tabla `construccion_estado`, igual que `necromasa_estado`).
+`config/materiales.yaml` gana `apto_construccion` por material (piedra,
+arcilla, tierra, madera, fibra, hierba_seca, hierro, cobre sí; arena,
+hueso, tejido_blando no) y una sección `construccion:` con
+`masa_minima_refugio` (15.0 kg) / `masa_minima_almacen` (60.0 kg) — sin
+receta fija por material, cualquier combinación de materiales aptos que
+sume el umbral sirve (emergente de qué recolectó cada gnomo, no un
+guion).
+
+**Accion.CONSTRUIR / Accion.RECOLECTAR**, exclusivas de quien supera
+`decision.umbral_consciencia_agencia` (gnomo hoy, mismo umbral que ya
+exime del sesgo de territorio — construir es agencia consciente, no
+instinto). RECOLECTAR convierte `Celda.tipo_sustrato` de la celda actual
+(piedra/arcilla/tierra — propiedad estática, siempre presente, NO
+depletable) en material de `Inventario`, topado por la capacidad de carga
+(`nucleo/inventario.py`, ligada al peso propio). **Deliberadamente
+limitado a sustrato**: madera/fibra/hierba_seca son depósitos que
+exigirían un sistema de tala/siega de flora que no existe — hueco
+honesto, el propio ejemplo de Diego ("techo de paja") queda fuera hasta
+que se construya esa pieza. CONSTRUIR transfiere del `Inventario` a la
+`Construccion` objetivo (`sistema_recursos.py:_resolver_construir`) al
+llegar a su celda; al cruzar `progreso=1.0` registra memoria "refugio"
+(reutiliza `nucleo/memoria.py` sin cambios, la memoria apunta al SITIO no
+a la entidad — confirmado explícitamente por Diego) y emite un Evento
+(NOTABLE para refugio, HISTÓRICO para almacén).
+
+Utilidades gateadas (`sistema_decision.py`): RECOLECTAR con prioridad
+mayor que CONSTRUIR mientras falte material y quede espacio en
+Inventario (mejor completar la carga que ir y volver por poco); en
+cuanto basta o se llena, cae a 0 y CONSTRUIR toma el relevo. El refugio
+propio SIEMPRE tiene prioridad sobre el almacén comunal mientras no esté
+terminado (necesidad individual antes que comunal, mismo Maslow que rige
+el resto del motor) — `nucleo/construccion.py:objetivo_construccion_actual`
+es el punto único que decide el objetivo vigente, usado igual por
+decisión, movimiento y recursos.
+
+Dos bugs reales encontrados por el propio arnés de verificación, no al
+escribir el código (mismo patrón que el resto del proyecto: "esto parecía
+correcto sobre el papel"):
+1. El compromiso de CONSTRUIR no comprobaba si quedaba material en
+   Inventario — un gnomo que lo vaciaba se quedaba encallado en CONSTRUIR
+   para siempre sin volver a RECOLECTAR. Corregido: se libera en cuanto
+   no hay nada más que aportar.
+2. (Ver más abajo, almacén) el compromiso tampoco re-verificaba
+   disposición a aportar en cada tick, solo al elegir la acción.
+
+**Verificado con el motor real sin intervención** (`BOSQUE_AUTO_TICKS`,
+sin sembrar ningún inventario a mano): 2000 ticks → 18 refugios
+iniciados espontáneamente por la Utility AI, 13 terminados.
+
+**Asentamiento — "el germen de un asentamiento"** (`nucleo/asentamiento.py`,
+`sistemas/sistema_asentamiento.py`, cadencia diaria). NO es una entidad
+nueva de propiedad compartida — cada refugio sigue siendo del gnomo que
+lo construyó; el asentamiento es el CLÚSTER que emerge cuando el sesgo
+gregario ya existente agrupa varios refugios cerca (resolución explícita
+de Diego: "cada gnomo construye su propio refugio primitivo, el instinto
+gregario les lleva a construir unos cerca de otros. ese conjunto de
+refugios es el germen de un asentamiento"). `mundo.asentamientos`:
+recalculado ÍNTEGRO cada día a partir de Construccion+Temperamento, sin
+identidad persistida entre días, NO guardado en SQLite (100% derivable,
+mismo criterio que `pendiente_local`). Agrupación por proximidad Manhattan
+(`agrupar_por_proximidad`, BFS por distancia — NO el mismo algoritmo que
+`_componentes_conexas` de vetas minerales, que es flood-fill de grid
+contiguo; aquí los puntos pueden estar varias celdas separados).
+
+**Liderazgo, "no creamos leyes absolutas" (Diego)**: `Temperamento.dominancia`
+decide quién es candidato (el propio componente ya documentaba desde hace
+tiempo que esperaba justo este cálculo — cero atributo nuevo). Agresividad
+y cohesión social (empatía+lealtad) de esos candidatos, moduladas por el
+tamaño del grupo, deciden si se impone un líder único o se reparte el
+poder en consejo — individuos dominantes y agresivos no ceden autoridad,
+individuos con más cohesión social sí. Verificado en el motor real (4000
+ticks): 3 asentamientos fundados espontáneamente, uno con líder único,
+otro con consejo de 2 sobre 5 miembros.
+
+**Almacén comunal y aporte por carácter**: `Construccion` tipo "almacen"
+(propietario_id=None), creada en el CENTRO del asentamiento (hay que
+llegar hasta ahí, no donde a cada gnomo le pille). Aportar exige
+disposición propia — excedente de saciedad/hidratación por encima de un
+umbral de carácter (`nucleo/asentamiento.py:disposicion_a_aportar`):
+empatía+lealtad lo bajan, agresividad lo sube. **Dominancia queda fuera a
+propósito** — conversación con Diego: "¿un ser dominante y agresivo
+aportaría lo mismo que uno que no lo sea?... creo que es la agresividad,
+porque puedes ser un líder dominante y empático que aporte". Bug 2 de
+arriba: sin re-verificar disposición cada tick, un individuo
+fundamentalmente egoísta podía "engancharse" tras un pico momentáneo de
+saciedad y terminar el almacén él solo — corregido y verificado con dos
+casos de control (población prosocial con excedente real completa el
+almacén; población egoísta con excedente clavado por debajo del umbral,
+simulando metabolismo real, no completa nada). Motor real (4000 ticks): 2
+de 3 asentamientos con su almacén ya terminado.
+
+**Deterioro — dos capas, la tercera aplazada a propósito**. "Nada dura
+para siempre" (Diego). Capa 1, decomposición pasiva
+(`sistema_descomposicion.py:_descomponer_construcciones`, cadencia
+diaria): cada material a su propia `tasa_descomposicion_dia` del
+catálogo, SIN el fallback de 0.08 que usa Necromasa — piedra/arcilla/
+tierra/hierro/cobre no decaen (geológicamente estables, correcto),
+madera/fibra/hierba_seca sí. Capa 2, fuego (`sistema_desastres.py`,
+extensión de `procesar_fuego_tick`): consumo proporcional a
+`combustibilidad` del material, mismo ritmo que ya usa el daño a
+criaturas. Capa 3 (clima normal, uso continuado) deliberadamente fuera —
+señalada, no resuelta, para no acumular tres fuentes de degradación sin
+poder aislar el efecto de ninguna. Verificado: refugio de madera colapsa
+en ~568 días de partida, piedra intacta tras 900; hierba_seca ardiendo
+colapsa en ~59 ticks, piedra en la misma llama intacta. Motor real (4000
+ticks): 0 colapsos — correcto, la partida real solo ha recolectado
+arcilla hasta ahora.
+
+**Corrección de diseño, Diego (30-08, tras ver el hallazgo de
+calibración del deterioro)**: "no debería salir del asentamiento a la
+mínima degradación, una casa dañada sigue perteneciendo a un pueblo. y
+por otro lado la degradación inmediata no tiene mucho sentido". El
+diagnóstico correcto no era la velocidad de la degradación (1%/día es
+lenta) sino que `SistemaAsentamiento` filtraba pertenencia por
+`progreso>=1.0` EXACTO — un umbral que la propia degradación rompía al
+segundo día. Pertenencia social ("¿llegó a ser una casa de verdad?") y
+estado de mantenimiento ("¿hace falta trabajo aquí ahora?") eran la misma
+pregunta sin necesidad. Separadas con `completado_alguna_vez` (permanente
+desde la primera vez que `progreso` toca 1.0, solo vuelve a `False` si la
+entidad colapsa del todo): `SistemaAsentamiento` usa
+`completado_alguna_vez` para pertenencia, `objetivo_construccion_actual`
+sigue usando `progreso` (fluctuante) para decidir si hace falta aportar
+más. Verificado: un refugio que decae de 1.0 a 0.99 tras un día sigue
+contando como miembro en el recálculo siguiente.
+
+**Pendiente, señalado explícitamente, ninguno implementado todavía**:
+- **Conflicto por refugio ocupado / resolutor genérico de disputas**
+  (`nucleo/conflicto.py`, no creado). Diseñado en conversación completa
+  con Diego pero sin una sola línea de código: `indice_asertividad_social`
+  (dominancia+agresividad+valentía+urgencia) comparado bilateralmente
+  entre dos individuos — CEDE/COMPARTE/ENFRENTAMIENTO según pertenezcan o
+  no al mismo asentamiento. Explícitamente generalizado más allá del
+  refugio ("esto debe ser reutilizable a futuro... que un individuo robe
+  a otro, un agravio del tipo que sea") — el refugio ocupado sería solo su
+  primer consumidor, robo/agravio quedan como consumidores futuros del
+  mismo resolutor sin lógica nueva. Memoria de agravios entre individuos
+  con nombre propio (rencor persistente) explícitamente fuera de esto —
+  conecta con lo que `Temperamento.empatia`/`lealtad` ya señalan como
+  pendiente ("esperan vínculos personales con nombre propio").
+- **Recolección de madera/fibra/hierba_seca** — bloqueada por la
+  ausencia de un sistema de tala/siega de flora que deposite el material
+  real en el mundo. Sin esto, ningún refugio puede tener de verdad "un
+  techo de paja" (el ejemplo original de Diego).
+- **Transporte de agua** — sigue sin resolver, esperando un sistema de
+  fabricación de objetos (ver "la sed" arriba).
+- **Calibración numérica, todo provisional**: `masa_minima_refugio/
+  almacen`, `tasa_aporte_construccion_kg_tick`, `tasa_recoleccion_kg_tick`,
+  `utilidad_construir_base`/`utilidad_recolectar_base`,
+  `poblacion_minima_asentamiento`, `radio_cluster_celdas`,
+  `margen_dominancia_elite`, `umbral_cohesion_consejo`,
+  `excedente_base_para_aportar` y sus modificadores — ninguno calibrado
+  contra el harness completo (15 semillas × 12000 ticks), solo contra
+  arneses dirigidos y partidas de 2000-4000 ticks sin intervención.
