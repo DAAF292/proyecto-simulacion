@@ -134,8 +134,12 @@ class SistemaRecursos:
         Punto de entrada tick a tick de la Fase 3.
         Actualiza charcos ambientales y resuelve las intenciones COMER, BEBER y ALIVIARSE.
         """
-        zona = mundo.territorio.zonas[0]
-        self._actualizar_charcos(zona)
+        # (2026-08-30, Circulo 1 de profundidad) charcos/humedad de
+        # subsuelo son estado POR ZONA (cada ZonaBioma es autonoma, con su
+        # propio clima_actual) -- se actualizan todas las zonas del
+        # territorio, no solo la superficie.
+        for zona_i in mundo.territorio.zonas:
+            self._actualizar_charcos(zona_i)
 
         entidades = sorted(gestor.entidades_con(Intencion, Posicion, Necesidades, Identidad))
 
@@ -150,10 +154,13 @@ class SistemaRecursos:
             if intencion is None or pos is None or nec is None or ident is None:
                 continue
 
+            zona = mundo.territorio.zonas[pos.zona_idx]
             celda = zona.obtener_celda(pos.x, pos.y)
 
             if intencion.accion == Accion.COMER:
-                self._resolver_comer(gestor, eid, ident, nec, mem, cap_mental, celda, pos.x, pos.y)
+                self._resolver_comer(
+                    gestor, eid, ident, nec, mem, cap_mental, celda, pos.x, pos.y, pos.zona_idx
+                )
             elif intencion.accion == Accion.BEBER:
                 self._resolver_beber(nec, mem, cap_mental, celda, pos.x, pos.y)
             elif intencion.accion == Accion.ALIVIARSE:
@@ -395,17 +402,20 @@ class SistemaRecursos:
         celda: Celda,
         pos_x: int,
         pos_y: int,
+        zona_idx: int = 0,
     ) -> None:
         """
         Resuelve la ingesta de biomasa: evalúa primero necromasa presente (carroñeo)
         y posteriormente forraje vegetal compatible con la dieta de la especie.
         """
-        # 1. Evaluación de Carroñeo (Necromasa en la celda)
-        candidatos_necromasa = [
-            nid for nid in gestor.entidades_con(Necromasa, Posicion)
-            if gestor.obtener_componente(nid, Posicion).x == pos_x  # type: ignore
-            and gestor.obtener_componente(nid, Posicion).y == pos_y  # type: ignore
-        ]
+        # 1. Evaluación de Carroñeo (Necromasa en la celda). zona_idx
+        # (2026-08-30, Circulo 1 de profundidad): "en la celda" exige
+        # tambien estar en la misma zona -- ver componentes/posicion.py.
+        candidatos_necromasa = []
+        for nid in gestor.entidades_con(Necromasa, Posicion):
+            pos_n = gestor.obtener_componente(nid, Posicion)
+            if pos_n.x == pos_x and pos_n.y == pos_y and pos_n.zona_idx == zona_idx:
+                candidatos_necromasa.append(nid)
 
         if candidatos_necromasa:
             nec_id = min(candidatos_necromasa)

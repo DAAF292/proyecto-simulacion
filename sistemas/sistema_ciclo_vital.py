@@ -91,6 +91,7 @@ class SistemaCicloVital:
                         agua_tisular=agua_tisular,
                         origen_especie=identidad.especie.value,
                         tasa_putrefaccion=0.05,
+                        zona_idx=pos.zona_idx,
                     )
 
                 # 2. Emisión de evento histórico de defunción
@@ -106,6 +107,7 @@ class SistemaCicloVital:
                             "nombre": identidad.nombre,
                             "x": pos.x if pos else 0,
                             "y": pos.y if pos else 0,
+                            "zona_idx": pos.zona_idx if pos else 0,
                         },
                     )
                 )

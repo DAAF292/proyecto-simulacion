@@ -77,20 +77,28 @@ def _candidato_valido(peso_propio: float, peso_candidato: float,
 
 def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
                                           radio: int, peso_propio: float,
-                                          umbral: float, buscar_mayor: bool):
+                                          umbral: float, buscar_mayor: bool,
+                                          zona_idx: int = 0):
     """Posicion (x, y) del individuo mas cercano, dentro del radio de
     percepcion, cuya magnitud_disposicion_por_peso frente al propio
     supera el umbral -- mas grande si buscar_mayor, mas pequeno si no.
-    None si no percibe ninguno."""
+    None si no percibe ninguno.
+
+    zona_idx (2026-08-30, Circulo 1 de profundidad): un candidato en otra
+    zona nunca cuenta, con independencia de que (x, y) coincida --
+    distancia Manhattan infinita entre zonas distintas (ver docstring de
+    componentes/posicion.py)."""
     mejor = None
     mejor_dist = None
     for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
         if id_candidato == id_propio:
             continue
+        pos_candidato = gestor.obtener_componente(id_candidato, Posicion)
+        if pos_candidato.zona_idx != zona_idx:
+            continue
         dimensiones = gestor.obtener_componente(id_candidato, DimensionesFisicas)
         if not _candidato_valido(peso_propio, dimensiones.peso, buscar_mayor, umbral):
             continue
-        pos_candidato = gestor.obtener_componente(id_candidato, Posicion)
         dist = abs(pos_candidato.x - x) + abs(pos_candidato.y - y)
         if dist > radio:
             continue
@@ -101,7 +109,8 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
 
 
 def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: int,
-                                   radio: int, solo_cazando: bool = False) -> int:
+                                   radio: int, solo_cazando: bool = False,
+                                   zona_idx: int = 0) -> int:
     """Cuenta individuos de la MISMA especie (Identidad.especie) dentro del
     radio Manhattan indicado, excluyendo al propio individuo.
 
@@ -146,7 +155,7 @@ def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: in
             if intencion_c is None or intencion_c.accion != Accion.CAZAR:
                 continue
         pos_c = gestor.obtener_componente(id_c, Posicion)
-        if pos_c is None:
+        if pos_c is None or pos_c.zona_idx != zona_idx:
             continue
         if abs(pos_c.x - x) + abs(pos_c.y - y) <= radio:
             total += 1
@@ -155,17 +164,21 @@ def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: in
 
 def id_en_contacto_por_disposicion(gestor, id_propio: int, x: int, y: int,
                                     peso_propio: float, umbral: float,
-                                    buscar_mayor: bool):
+                                    buscar_mayor: bool, zona_idx: int = 0):
     """Id del individuo que comparte celda (x, y) con el propio y cumple
     el mismo criterio que posicion_mas_cercana_por_disposicion. None si
     no hay ninguno. Con varios candidatos validos en la misma celda, se
     queda con el primero que entidades_con() devuelve (orden ascendente
-    de id -- mismo criterio de determinismo del resto del motor)."""
+    de id -- mismo criterio de determinismo del resto del motor).
+
+    zona_idx (2026-08-30, Circulo 1 de profundidad): "compartir celda"
+    exige tambien compartir zona -- dos zonas distintas pueden coincidir
+    en (x, y) sin estar en el mismo sitio (ver componentes/posicion.py)."""
     for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
         if id_candidato == id_propio:
             continue
         pos_candidato = gestor.obtener_componente(id_candidato, Posicion)
-        if pos_candidato.x != x or pos_candidato.y != y:
+        if pos_candidato.x != x or pos_candidato.y != y or pos_candidato.zona_idx != zona_idx:
             continue
         dimensiones = gestor.obtener_componente(id_candidato, DimensionesFisicas)
         if _candidato_valido(peso_propio, dimensiones.peso, buscar_mayor, umbral):

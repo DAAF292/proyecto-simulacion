@@ -231,7 +231,6 @@ class SistemaNecesidades:
         bus_eventos: BusEventos,
     ) -> None:
         """Procesa el decaimiento metabólico y resuelve la mortalidad fisiológica."""
-        zona = mundo.territorio.zonas[0]
         entidades = sorted(
             gestor.entidades_con(Necesidades, Posicion, DimensionesFisicas, Identidad)
         )
@@ -249,6 +248,9 @@ class SistemaNecesidades:
             if nec is None or pos is None or dims is None or ident is None:
                 continue
 
+            # (2026-08-30, Circulo 1 de profundidad) zona resuelta POR
+            # ENTIDAD -- ver mismo cambio en sistema_movimiento.py.
+            zona = mundo.territorio.zonas[pos.zona_idx]
             celda = zona.obtener_celda(pos.x, pos.y)
             cfg_esp = self.cfg_nec.get(ident.especie.value, self.defecto)
 
@@ -343,7 +345,7 @@ class SistemaNecesidades:
             radio_amenaza = radio_individual(dims.agudeza_sensorial, self.radio_min, self.radio_max)
             amenaza_pos = posicion_amenaza_mas_cercana(
                 gestor, zona, eid, pos.x, pos.y, radio_amenaza,
-                dims.peso, self.umbral_disposicion_amenaza,
+                dims.peso, self.umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
             )
             if amenaza_pos is not None:
                 # GREGARISMO -- Pieza 1, bono de defensa en grupo
@@ -361,7 +363,7 @@ class SistemaNecesidades:
                 if sociabilidad_propia > 0.0 and self.bono_defensa_por_aliado > 0.0:
                     aliados_cercanos = contar_conspecificos_cercanos(
                         gestor, eid, ident.especie, pos.x, pos.y,
-                        self.radio_apoyo_grupal, solo_cazando=False,
+                        self.radio_apoyo_grupal, solo_cazando=False, zona_idx=pos.zona_idx,
                     )
                     reduccion = min(
                         self.bono_defensa_maximo,
@@ -425,6 +427,7 @@ class SistemaNecesidades:
                     dims=dims,
                     ident=ident,
                     causa=causa_muerte,
+                    zona_idx=pos.zona_idx,
                 )
 
         # Purga de timers de plenitud de entidades que ya no existen
@@ -451,6 +454,7 @@ class SistemaNecesidades:
         dims: DimensionesFisicas,
         ident: Identidad,
         causa: str,
+        zona_idx: int = 0,
     ) -> None:
         """Instancia la necromasa, emite el evento Muerte con coordenadas y purga la entidad."""
         masas, agua_tisular = componer_necromasa(
@@ -465,6 +469,7 @@ class SistemaNecesidades:
             agua_tisular=agua_tisular,
             origen_especie=ident.especie.value,
             tasa_putrefaccion=0.05,
+            zona_idx=zona_idx,
         )
 
         bus_eventos.emitir(
@@ -479,6 +484,7 @@ class SistemaNecesidades:
                     "nombre": ident.nombre,
                     "x": pos_x,
                     "y": pos_y,
+                    "zona_idx": zona_idx,
                 },
             )
         )

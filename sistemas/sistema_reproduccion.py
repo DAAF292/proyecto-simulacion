@@ -167,7 +167,11 @@ def _macho_elegible_en_contacto(
         if rep_macho.sexo != Sexo.MACHO:
             continue
         posicion_macho = gestor.obtener_componente(id_macho, Posicion)
-        if posicion_macho.x != posicion_hembra.x or posicion_macho.y != posicion_hembra.y:
+        if (
+            posicion_macho.x != posicion_hembra.x
+            or posicion_macho.y != posicion_hembra.y
+            or posicion_macho.zona_idx != posicion_hembra.zona_idx
+        ):
             continue
         edad_macho = edad_ticks(identidad_macho.tick_nacimiento, tick_actual)
         if not es_adulto(edad_macho, identidad_macho.especie.value, rangos_raciales, fraccion_madurez):
@@ -176,7 +180,7 @@ def _macho_elegible_en_contacto(
     return None
 
 
-def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, zona) -> None:
+def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mundo) -> None:
     rangos_raciales = config["rangos_raciales"]
     mutacion_fraccion = config["reproduccion"]["mutacion_fraccion"]
 
@@ -189,6 +193,9 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
 
         identidad_madre = gestor.obtener_componente(id_madre, Identidad)
         posicion_madre = gestor.obtener_componente(id_madre, Posicion)
+        # (2026-08-30, Circulo 1 de profundidad) la zona del parto es la
+        # de la madre, no siempre zonas[0] -- ver componentes/posicion.py.
+        zona_madre = mundo.territorio.zonas[posicion_madre.zona_idx]
         # tamano_camada (2026-08-21, ver componentes/gestacion.py): una
         # llamada a nacer_criatura por hijo, cada una con su propio sorteo
         # de herencia -- los hermanos de camada no son clones.
@@ -196,6 +203,7 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
             id_hijo = nacer_criatura(
                 gestor, rng, posicion_madre.x, posicion_madre.y, identidad_madre.especie,
                 rangos_raciales, tick_actual, id_madre, gestacion, mutacion_fraccion,
+                zona_idx=posicion_madre.zona_idx,
             )
             # (2026-08-29) El parto no coloca a la criatura en agua mas
             # honda que su propia altura (ver nucleo/agua.py:
@@ -207,7 +215,7 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
             pos_hijo = gestor.obtener_componente(id_hijo, Posicion)
             dims_hijo = gestor.obtener_componente(id_hijo, DimensionesFisicas)
             pos_hijo.x, pos_hijo.y = celda_nacimiento_segura(
-                zona, posicion_madre.x, posicion_madre.y, dims_hijo.altura
+                zona_madre, posicion_madre.x, posicion_madre.y, dims_hijo.altura
             )
             # nombre/tick_nacimiento (2026-08-23): se leen de la Identidad
             # que nacer_criatura acaba de construir en vez de recomponerlos
@@ -252,18 +260,19 @@ class SistemaReproduccion:
         self.rng = rng
 
     def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos) -> None:
-        # (2026-08-29) zona pasa a ser necesaria: el nacimiento consulta la
-        # profundidad de agua de la celda del parto (celda_nacimiento_segura).
-        # Mismo patron de acceso que ya usan clima/descomposicion/flora.
-        zona = mundo.territorio.zonas[0]
-        actualizar(gestor, self.config, self.rng, bus_eventos, reloj.tick_actual, zona)
+        # (2026-08-29) mundo pasa a ser necesario: el nacimiento consulta
+        # la profundidad de agua de la celda del parto (celda_nacimiento_
+        # segura). (2026-08-30, Circulo 1 de profundidad) se pasa `mundo`
+        # entero en vez de una unica `zona` fija: cada madre puede estar en
+        # una zona distinta (ver _resolver_nacimientos).
+        actualizar(gestor, self.config, self.rng, bus_eventos, reloj.tick_actual, mundo)
 
 
-def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, zona) -> None:
+def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mundo) -> None:
     # Correccion 2026-08-20 (ver docstring del modulo, seccion "Cadencia"):
     # ya NO hay gate de "una vez al dia" -- tanto nacimientos como
     # concepcion se evaluan cada tick.
-    _resolver_nacimientos(gestor, config, rng, bus, tick_actual, zona)
+    _resolver_nacimientos(gestor, config, rng, bus, tick_actual, mundo)
 
     rangos_raciales = config["rangos_raciales"]
 

@@ -123,7 +123,6 @@ class SistemaMovimiento:
         """
         Ejecuta el paso de movimiento para todas las criaturas con Intencion y Posicion.
         """
-        zona = mundo.territorio.zonas[0]
         entidades = sorted(
             gestor.entidades_con(Intencion, Posicion, DimensionesFisicas, Identidad)
         )
@@ -141,6 +140,12 @@ class SistemaMovimiento:
             if intencion is None or pos is None or dims is None or ident is None:
                 continue
 
+            # (2026-08-30, Circulo 1 de profundidad) zona resuelta POR
+            # ENTIDAD, ya no una unica variable fija a zonas[0] -- dos
+            # entidades en la misma llamada a ejecutar() pueden estar en
+            # zonas distintas (ver componentes/posicion.py:zona_idx).
+            zona = mundo.territorio.zonas[pos.zona_idx]
+
             # Bloqueo temporal por extenuación muscular extrema
             if pf is not None and pf.resistencia <= self.umbral_agotamiento:
                 continue
@@ -152,32 +157,44 @@ class SistemaMovimiento:
 
             if accion == Accion.DORMIR:
                 dx, dy = self._calcular_dormir(
-                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
+                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
+                    temperamento, pos.zona_idx,
                 )
             elif accion == Accion.HUIR:
-                dx, dy = self._calcular_huida(gestor, zona, eid, pos.x, pos.y, dims.peso, radio)
+                dx, dy = self._calcular_huida(
+                    gestor, zona, eid, pos.x, pos.y, dims.peso, radio, pos.zona_idx
+                )
             elif accion == Accion.CAZAR:
-                dx, dy = self._calcular_caza(gestor, eid, pos.x, pos.y, dims.peso, radio)
+                dx, dy = self._calcular_caza(
+                    gestor, eid, pos.x, pos.y, dims.peso, radio, pos.zona_idx
+                )
             elif accion == Accion.COMER:
                 dx, dy = self._calcular_forrajeo(
-                    gestor, zona, ident.especie, pos.x, pos.y, radio, mem, cap_mental
+                    gestor, zona, ident.especie, pos.x, pos.y, radio, mem, cap_mental, pos.zona_idx
                 )
             elif accion == Accion.BEBER:
                 dx, dy = self._calcular_hidratacion(
                     zona, pos.x, pos.y, dims.altura, radio, mem, cap_mental
                 )
             elif accion == Accion.BUSCAR_PAREJA:
-                dx, dy = self._calcular_pareja(gestor, eid, ident.especie, pos.x, pos.y, radio)
+                dx, dy = self._calcular_pareja(
+                    gestor, eid, ident.especie, pos.x, pos.y, radio, pos.zona_idx
+                )
             elif accion == Accion.CONSTRUIR:
-                dx, dy = self._calcular_construir(gestor, mundo, eid, pos.x, pos.y)
+                dx, dy = self._calcular_construir(gestor, mundo, eid, pos.x, pos.y, pos.zona_idx)
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
-                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
+                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
+                    temperamento, pos.zona_idx,
                 )
             elif accion == Accion.HUIDA_ERRATICA:
-                dx, dy = self._calcular_huida_erratica(gestor, eid, pos.x, pos.y, radio)
+                dx, dy = self._calcular_huida_erratica(
+                    gestor, eid, pos.x, pos.y, radio, pos.zona_idx
+                )
             elif accion == Accion.CRISIS_VIOLENTA:
-                dx, dy = self._calcular_crisis_violenta(gestor, eid, pos.x, pos.y, radio)
+                dx, dy = self._calcular_crisis_violenta(
+                    gestor, eid, pos.x, pos.y, radio, pos.zona_idx
+                )
             # Accion.CATATONIA: sin rama a proposito, mismo criterio que
             # Accion.ALIVIARSE (arriba, tampoco tiene rama) -- dx=dy=0 por
             # defecto es literalmente la definicion de catatonia ("se
@@ -185,11 +202,12 @@ class SistemaMovimiento:
             # descuido.
 
             if dx != 0 or dy != 0:
-                self._aplicar_movimiento(gestor, zona, eid, pos, dims, pf, dx, dy, accion)
+                self._aplicar_movimiento(gestor, mundo, zona, eid, pos, dims, pf, dx, dy, accion)
 
     def _aplicar_movimiento(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
         zona: Any,
         entidad_id: int,
         pos: Posicion,
@@ -203,6 +221,33 @@ class SistemaMovimiento:
         nx, ny = pos.x + dx, pos.y + dy
 
         if not (0 <= nx < zona.ancho and 0 <= ny < zona.alto):
+            return
+
+        # (2026-08-30, Circulo 1 de profundidad) TRANSICION DE ZONA --
+        # mecanismo de "portal", no una decision de la Utility AI: pisar
+        # la celda de acceso es en si mismo el cruce, igual que una
+        # escalera de Dwarf Fortress -- ninguna especie necesita "elegir"
+        # bajar, es un rasgo fisico del terreno (leyes neutras, nunca
+        # teleologicas -- principio 5). Se comprueba ANTES de las
+        # restricciones de agua/relieve de mas abajo porque son
+        # restricciones DE LA CELDA DE ORIGEN de esta misma zona, no
+        # tienen sentido aplicadas al destino en otra zona.
+        territorio = mundo.territorio
+        if (
+            pos.zona_idx == 0
+            and territorio.acceso_subterraneo is not None
+            and (nx, ny) == territorio.acceso_subterraneo
+        ):
+            pos.zona_idx = 1
+            pos.x, pos.y = territorio.entrada_cueva
+            return
+        if (
+            pos.zona_idx == 1
+            and territorio.entrada_cueva is not None
+            and (nx, ny) == territorio.entrada_cueva
+        ):
+            pos.zona_idx = 0
+            pos.x, pos.y = territorio.acceso_subterraneo
             return
 
         celda_orig = zona.obtener_celda(pos.x, pos.y)
@@ -257,11 +302,12 @@ class SistemaMovimiento:
         pos_y: int,
         peso_propio: float,
         radio: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """Calcula el vector opuesto a la amenaza más cercana percibida."""
         amenaza_pos = posicion_amenaza_mas_cercana(
             gestor, zona, entidad_id, pos_x, pos_y, radio,
-            peso_propio, self.umbral_disposicion_amenaza,
+            peso_propio, self.umbral_disposicion_amenaza, zona_idx=zona_idx,
         )
         if amenaza_pos is None:
             return self._paso_aleatorio()
@@ -289,6 +335,7 @@ class SistemaMovimiento:
         pos_x: int,
         pos_y: int,
         radio: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int] | None:
         """Posicion de la entidad con Posicion mas cercana dentro del
         radio, de CUALQUIER tipo (cualquier especie, criatura o
@@ -301,7 +348,7 @@ class SistemaMovimiento:
             if otro_id == entidad_id:
                 continue
             pos_o = gestor.obtener_componente(otro_id, Posicion)
-            if pos_o is None:
+            if pos_o is None or pos_o.zona_idx != zona_idx:
                 continue
             dist = abs(pos_o.x - pos_x) + abs(pos_o.y - pos_y)
             if dist <= radio and dist < mejor_dist:
@@ -316,13 +363,14 @@ class SistemaMovimiento:
         pos_x: int,
         pos_y: int,
         radio: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """HUIDA_ERRATICA: huye de cualquiera cercano, sin evaluar si es
         una amenaza real (valentia baja ante la crisis, no ante un
         peligro concreto) -- mismo patron de direccion que
         _calcular_huida, sobre un objetivo encontrado por
         _entidad_cercana_cualquiera en vez de posicion_amenaza_mas_cercana."""
-        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio)
+        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio, zona_idx)
         if objetivo is None:
             return self._paso_aleatorio()
         ox, oy = objetivo
@@ -337,13 +385,14 @@ class SistemaMovimiento:
         pos_x: int,
         pos_y: int,
         radio: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """CRISIS_VIOLENTA: se acerca a cualquiera cercano -- sin
         mecanica de dano todavia, deliberado (componentes/intencion.py):
         es un gesto de movimiento, no una resolucion de ataque. Captura
         real sigue exigiendo Intencion.CAZAR en sistema_depredacion.py,
         sin cambios aqui."""
-        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio)
+        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio, zona_idx)
         if objetivo is None:
             return self._paso_aleatorio()
         return self._acercarse_a(pos_x, pos_y, *objetivo)
@@ -356,6 +405,7 @@ class SistemaMovimiento:
         pos_y: int,
         peso_cazador: float,
         radio: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """
         Avanza hacia la presa válida más cercana dentro del radio sensorial.
@@ -406,7 +456,7 @@ class SistemaMovimiento:
                 continue
             pos_p = gestor.obtener_componente(eid, Posicion)
             dims_p = gestor.obtener_componente(eid, DimensionesFisicas)
-            if not (pos_p and dims_p):
+            if not (pos_p and dims_p) or pos_p.zona_idx != zona_idx:
                 continue
             if dims_p.peso >= peso_cazador or dims_p.peso < peso_minimo_viable:
                 continue
@@ -434,6 +484,7 @@ class SistemaMovimiento:
         radio: int,
         mem: MemoriaEspacial | None,
         cap_mental: CapacidadMental | None,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """Busca comida: evalúa necromasa y flora en radio sensorial y memoria."""
         cfg_esp = self.config.get("rangos_raciales", {}).get(especie.value, {})
@@ -451,7 +502,10 @@ class SistemaMovimiento:
             # un montón de hueso no es un objetivo de forrajeo (mismo
             # criterio que sistema_recursos.py:_resolver_comer, que solo
             # consume de 'tejido_blando').
-            if pos_n and nec_comp and nec_comp.masas.get("tejido_blando", 0.0) > 0.05:
+            if (
+                pos_n and nec_comp and pos_n.zona_idx == zona_idx
+                and nec_comp.masas.get("tejido_blando", 0.0) > 0.05
+            ):
                 dist = abs(pos_n.x - pos_x) + abs(pos_n.y - pos_y)
                 if dist <= radio:
                     candidatos.append((dist, pos_n.x, pos_n.y))
@@ -534,6 +588,7 @@ class SistemaMovimiento:
         pos_x: int,
         pos_y: int,
         radio: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """Avanza hacia una pareja reproductora compatible acotada al radio sensorial."""
         rep_propia = gestor.obtener_componente(entidad_id, Reproduccion)
@@ -545,7 +600,7 @@ class SistemaMovimiento:
             if eid == entidad_id:
                 continue
             pos_c = gestor.obtener_componente(eid, Posicion)
-            if pos_c is None:
+            if pos_c is None or pos_c.zona_idx != zona_idx:
                 continue
 
             dist = abs(pos_c.x - pos_x) + abs(pos_c.y - pos_y)
@@ -580,6 +635,7 @@ class SistemaMovimiento:
         pos_x: int,
         pos_y: int,
         radio: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int] | None:
         """
         Posición del individuo de la MISMA especie más cercano dentro del
@@ -599,7 +655,7 @@ class SistemaMovimiento:
             if ident_c is None or ident_c.especie != especie:
                 continue
             pos_c = gestor.obtener_componente(eid, Posicion)
-            if pos_c is None:
+            if pos_c is None or pos_c.zona_idx != zona_idx:
                 continue
             dist = abs(pos_c.x - pos_x) + abs(pos_c.y - pos_y)
             if dist <= radio:
@@ -622,6 +678,7 @@ class SistemaMovimiento:
         mem: MemoriaEspacial | None,
         cap_mental: CapacidadMental | None,
         temperamento: Temperamento | None,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """
         Cascada de sesgos sobre el paso de dispersión, evaluados en este
@@ -722,7 +779,7 @@ class SistemaMovimiento:
 
         if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
             objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
-                gestor, entidad_id, especie, pos_x, pos_y, radio
+                gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
             )
             if objetivo_conspecifico is not None:
                 dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
@@ -742,6 +799,7 @@ class SistemaMovimiento:
         mem: MemoriaEspacial | None,
         cap_mental: CapacidadMental | None,
         temperamento: Temperamento | None,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """
         REFUGIO INSTINTIVO -- Pieza 1 de interacción física (2026-08-30,
@@ -793,7 +851,7 @@ class SistemaMovimiento:
 
         if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
             objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
-                gestor, entidad_id, especie, pos_x, pos_y, radio
+                gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
             )
             if objetivo_conspecifico is not None:
                 dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
@@ -809,6 +867,7 @@ class SistemaMovimiento:
         entidad_id: int,
         pos_x: int,
         pos_y: int,
+        zona_idx: int = 0,
     ) -> tuple[int, int]:
         """
         REFUGIO/ALMACÉN CONSTRUIDO -- Pieza 2 de interacción física
@@ -845,7 +904,9 @@ class SistemaMovimiento:
             return self._acercarse_a(pos_x, pos_y, con_pos.x, con_pos.y)
 
         if tipo == "refugio":
-            crear_construccion(gestor, pos_x, pos_y, "refugio", propietario_id=entidad_id)
+            crear_construccion(
+                gestor, pos_x, pos_y, "refugio", propietario_id=entidad_id, zona_idx=zona_idx
+            )
             return (0, 0)
 
         # almacén, todavía no existe: hay que llegar al centro del
@@ -853,7 +914,7 @@ class SistemaMovimiento:
         cx, cy = pos_creacion
         if (cx, cy) != (pos_x, pos_y):
             return self._acercarse_a(pos_x, pos_y, cx, cy)
-        crear_construccion(gestor, pos_x, pos_y, "almacen", propietario_id=None)
+        crear_construccion(gestor, pos_x, pos_y, "almacen", propietario_id=None, zona_idx=zona_idx)
         return (0, 0)
 
     def _acercarse_a(self, ox: int, oy: int, tx: int, ty: int) -> tuple[int, int]:

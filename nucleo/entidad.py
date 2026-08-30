@@ -156,12 +156,18 @@ def crear_necromasa(
     agua_tisular: float,
     origen_especie: str,
     tasa_putrefaccion: float = 0.05,
+    zona_idx: int = 0,
 ) -> int:
     """
     Fábrica ECS: Instancia una entidad física inerte de restos orgánicos en el grid.
+
+    zona_idx (2026-08-30, Círculo 1 de profundidad): por defecto 0
+    (superficie) -- todo consumidor que cree necromasa donde ya murió
+    alguien pasa el zona_idx de esa víctima, para que el resto no aparezca
+    en una zona distinta a la del cadáver que lo originó.
     """
     nec_id = gestor.crear_entidad()
-    gestor.anadir_componente(nec_id, Posicion(x=pos_x, y=pos_y))
+    gestor.anadir_componente(nec_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
     gestor.anadir_componente(
         nec_id,
         Necromasa(
@@ -180,6 +186,7 @@ def crear_construccion(
     pos_y: int,
     tipo: str,
     propietario_id: int | None = None,
+    zona_idx: int = 0,
 ) -> int:
     """
     Fábrica ECS: Instancia una construcción física vacía (progreso 0.0,
@@ -188,9 +195,12 @@ def crear_construccion(
     dos componentes, sin Identidad ni Intencion propias. Accion.CONSTRUIR
     es quien va llenando materiales/progreso tras la creación, no esta
     fábrica.
+
+    zona_idx (2026-08-30, Círculo 1 de profundidad): quien construye pasa
+    su propio zona_idx -- un refugio se crea donde el constructor ya está.
     """
     con_id = gestor.crear_entidad()
-    gestor.anadir_componente(con_id, Posicion(x=pos_x, y=pos_y))
+    gestor.anadir_componente(con_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
     gestor.anadir_componente(
         con_id,
         Construccion(tipo=tipo, propietario_id=propietario_id),
@@ -208,9 +218,14 @@ def crear_criatura(
     tick_actual: int = 0,
     nombre: str | None = None,
     techo_fraccion_edad_inicial: float = 0.0,
+    zona_idx: int = 0,
 ) -> int:
     """
     Fábrica ECS: Instancia un organismo vivo completo con sus 12 componentes de datos.
+
+    zona_idx (2026-08-30, Círculo 1 de profundidad): por defecto 0
+    (superficie) -- la siembra de población fundadora (main.py) nunca lo
+    pasa a propósito, nace siempre en superficie.
 
     techo_fraccion_edad_inicial (2026-08-21, ver _sortear_edad_inicial_ticks
     arriba): únicamente relevante para la siembra de la población fundadora
@@ -253,7 +268,7 @@ def crear_criatura(
             tick_nacimiento=tick_nacimiento,
         ),
     )
-    gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y))
+    gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
 
     # 3. Temperamento
     temp = Temperamento(
@@ -318,10 +333,11 @@ def crear_planta(
     pos_x: int,
     pos_y: int,
     etapa: float = 1.0,
+    zona_idx: int = 0,
 ) -> int:
     """Fábrica ECS: Instancia una entidad vegetal en el grid."""
     planta_id = gestor.crear_entidad()
-    gestor.anadir_componente(planta_id, Posicion(x=pos_x, y=pos_y))
+    gestor.anadir_componente(planta_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
     gestor.anadir_componente(
         planta_id,
         Planta(especie=especie, etapa=max(0.0, min(1.0, etapa))),
@@ -369,6 +385,7 @@ def nacer_criatura(
     id_madre: int,
     gestacion: Gestacion,
     mutacion_fraccion: float,
+    zona_idx: int = 0,
 ) -> int:
     """
     Fábrica ECS de nacimiento por reproducción (6.3, última pieza --
@@ -394,7 +411,10 @@ def nacer_criatura(
     componentes/gestacion.py sobre por qué el padre necesita instantánea
     y la madre no). pos_x/pos_y: la posición de la madre en el instante
     del parto, la resuelve quien llama (_resolver_nacimientos), no esta
-    función -- misma para todos los hijos de una misma camada.
+    función -- misma para todos los hijos de una misma camada. zona_idx
+    (2026-08-30, Círculo 1 de profundidad): el de la madre en el instante
+    del parto -- un hijo nace en la misma zona que ella, nunca cruza de
+    superficie a cueva ni al revés por el mero hecho de nacer.
 
     Todo atributo heredable pasa por _heredar_valor (promedio de
     progenitores + mutación, acotado al rango racial) salvo el sexo, que
@@ -448,7 +468,7 @@ def nacer_criatura(
             id_padre=gestacion.id_padre,
         ),
     )
-    gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y))
+    gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
 
     temp_padre = gestacion.temperamento_padre
     temp = Temperamento(

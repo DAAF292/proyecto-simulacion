@@ -51,8 +51,11 @@ class SistemaClima:
         self.rng = rng
 
     def ejecutar(self, gestor, mundo, reloj: Reloj, bus_eventos: BusEventos) -> None:
-        zona = mundo.territorio.zonas[0]
-        actualizar(zona, reloj, self.config, self.rng, bus_eventos, reloj.tick_actual)
+        # (2026-08-30, Circulo 1 de profundidad) cada ZonaBioma sortea su
+        # propio clima -- se actualizan todas las zonas del territorio,
+        # no solo zonas[0].
+        for zona in mundo.territorio.zonas:
+            actualizar(zona, reloj, self.config, self.rng, bus_eventos, reloj.tick_actual)
 
 
 def actualizar(zona, reloj: Reloj, config: dict, rng: random.Random, bus: BusEventos, tick_actual: int) -> None:
