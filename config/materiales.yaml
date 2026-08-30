@@ -255,3 +255,12 @@ generacion_vetas:
   prob_filon_vs_mancha: 0.5
   longitud_filon_celdas: [2, 5]
   anchura_filon_celdas: [0.6, 1.1]
+  # CORREGIDO (2026-08-30, hallazgo honesto del primer intento: en la
+  # semilla 42, un objetivo de 2 vetas de hierro terminó en 5 fragmentos,
+  # varios de una sola celda -- ruido, no una formación reconocible).
+  # Cualquier intento de mancha/filón por debajo de este tamaño se
+  # descarta entero en vez de aceptarse truncado -- forma reconocible por
+  # encima de exactitud numérica en la cobertura total. Consecuencia
+  # aceptada: el mundo puede terminar algo por debajo de la fracción de
+  # piedra que sugiere escala_abundancia_a_fraccion_piedra.
+  celdas_minimas_por_veta: 2

@@ -82,6 +82,39 @@ def _celdas_filon(
     return celdas
 
 
+def _componentes_conexas(celdas: set) -> list[set]:
+    """Agrupa un conjunto de celdas en sus componentes conexas (4-vecindad).
+
+    Necesario porque _generar_manchas con num_manchas=1 puede devolver un
+    resultado que en realidad son VARIOS fragmentos desconectados: si la
+    primera semilla queda boxed-in (su frontera se vacía antes de llegar
+    al tamaño objetivo, ver docstring de esa función), el bucle externo
+    prueba otra semilla y une ambos parches en un único set de retorno --
+    encontrado al re-verificar el primer intento de este círculo, que
+    filtraba por tamaño total del resultado agregado en vez de por
+    fragmento real y dejaba pasar celdas sueltas de 1x1 escondidas dentro
+    de un total que sí superaba el mínimo."""
+    restantes = set(celdas)
+    componentes = []
+    while restantes:
+        inicio = next(iter(restantes))
+        comp = set()
+        frontera = [inicio]
+        while frontera:
+            actual = frontera.pop()
+            if actual in comp:
+                continue
+            comp.add(actual)
+            cx, cy = actual
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                vecino = (cx + dx, cy + dy)
+                if vecino in restantes and vecino not in comp:
+                    frontera.append(vecino)
+        restantes -= comp
+        componentes.append(comp)
+    return componentes
+
+
 def generar_vetas_minerales(
     rng: random.Random,
     catalogo_materiales: dict,
@@ -125,6 +158,9 @@ def generar_vetas_minerales(
     prob_filon: float = float(config_generacion_vetas.get("prob_filon_vs_mancha", 0.5))
     longitud_filon = config_generacion_vetas.get("longitud_filon_celdas", [2, 5])
     anchura_filon = config_generacion_vetas.get("anchura_filon_celdas", [0.6, 1.1])
+    # FORMA POR ENCIMA DE EXACTITUD NUMÉRICA (2026-08-30, ver docstring de
+    # más abajo para el razonamiento completo).
+    celdas_minimas_por_veta: int = int(config_generacion_vetas.get("celdas_minimas_por_veta", 2))
 
     minerales_con_veta = [
         (nombre, props) for nombre, props in catalogo_materiales.items() if "abundancia" in props
@@ -149,7 +185,6 @@ def generar_vetas_minerales(
         max_intentos = num_vetas * 8
         while len(asignadas_este_material) < objetivo and intentos < max_intentos:
             intentos += 1
-            restante = objetivo - len(asignadas_este_material)
             if not disponibles:
                 break
 
@@ -163,20 +198,33 @@ def generar_vetas_minerales(
                     ancho, alto, disponibles,
                 )
             else:
-                tamano_mancha = max(1, min(restante, round(celdas_por_veta_objetivo)))
                 celdas_veta = _generar_manchas(
                     ancho, alto, rng,
                     celdas_candidatas=disponibles,
                     num_manchas=1,
-                    objetivo_absoluto=tamano_mancha,
+                    objetivo_absoluto=round(celdas_por_veta_objetivo),
                     prob_expansion=0.5,
                 )
 
-            if len(celdas_veta) > restante:
-                celdas_veta = set(list(celdas_veta)[:restante])
-
-            asignadas_este_material |= celdas_veta
-            disponibles -= celdas_veta
+            # FORMA POR ENCIMA DE EXACTITUD NUMÉRICA (2026-08-30, Diego:
+            # "esas no leen como veta de ninguna forma... es precisamente
+            # lo contrario de lo que buscabas"). Filtrado por COMPONENTE
+            # CONEXA real, no por tamaño total del resultado agregado --
+            # un primer intento de este filtro medía solo el total y
+            # dejaba pasar celdas sueltas de 1x1 escondidas dentro de un
+            # resultado de _generar_manchas que ya sumaba lo suficiente en
+            # conjunto (num_manchas=1 puede unir varias semillas
+            # desconectadas si la primera queda boxed-in, ver
+            # _componentes_conexas). Cada fragmento se evalúa por
+            # separado: los que no llegan al mínimo se descartan, los que
+            # sí llegan se aceptan enteros sin truncar -- mejor pasarse un
+            # poco del objetivo total que dejar un resto de una sola
+            # celda.
+            for fragmento in _componentes_conexas(celdas_veta):
+                if len(fragmento) < celdas_minimas_por_veta:
+                    continue
+                asignadas_este_material |= fragmento
+                disponibles -= fragmento
 
         for celda in asignadas_este_material:
             resultado[celda] = nombre_material
