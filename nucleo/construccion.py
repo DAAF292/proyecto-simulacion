@@ -62,29 +62,65 @@ def progreso_construccion(
     return min(1.0, masa_apta_construccion(materiales, catalogo) / masa_minima)
 
 
-def material_suficiente_para_refugio(
+def material_suficiente_para(
     gestor: Any,
-    id_entidad: int,
+    cid_construccion: int | None,
+    tipo: str,
     contenidos_inventario: dict[str, float],
     catalogo: dict[str, Any],
     config_construccion: dict[str, Any],
 ) -> bool:
-    """True si la masa apta ya invertida en el refugio propio (si existe)
-    más la que se lleva ahora mismo en el Inventario basta para terminar
-    -- Círculo C (2026-08-30, RECOLECTAR): punto único que decide cuándo
-    un gnomo deja de recolectar y pasa a construir, usado por
-    sistema_decision.py para ambas utilidades a la vez (recolectar se
-    apaga, construir sigue activo con lo que ya lleve)."""
+    """True si la masa apta ya invertida en la construcción objetivo (si
+    existe) más la que se lleva ahora mismo en el Inventario basta para
+    terminar -- Círculo C (2026-08-30, RECOLECTAR), generalizado en el
+    Círculo E (2026-08-30, almacén) de "el refugio propio" a "cualquier
+    Construccion objetivo, id explícito" para servir igual a refugio
+    (propietario_id=id_entidad) que a almacén (propietario_id=None,
+    compartido). Punto único que decide cuándo un gnomo deja de
+    recolectar y pasa a construir/aportar."""
     from componentes.construccion import Construccion
 
-    cid = construccion_propia(gestor, id_entidad, "refugio")
     ya_invertido = 0.0
-    if cid is not None:
-        construccion = gestor.obtener_componente(cid, Construccion)
+    if cid_construccion is not None:
+        construccion = gestor.obtener_componente(cid_construccion, Construccion)
         if construccion is not None:
             ya_invertido = masa_apta_construccion(construccion.materiales, catalogo)
     masa_total = ya_invertido + masa_apta_construccion(contenidos_inventario, catalogo)
-    return masa_total >= masa_minima_para("refugio", config_construccion)
+    return masa_total >= masa_minima_para(tipo, config_construccion)
+
+
+def objetivo_construccion_actual(
+    gestor: Any, mundo: Any, id_entidad: int, radio_cluster: int
+):
+    """(tipo, cid_existente_o_None, posicion_de_creacion_o_None) del
+    objetivo de CONSTRUIR/RECOLECTAR de este individuo ahora mismo, o
+    None si no hay ninguno -- Círculo E (2026-08-30, almacén de
+    asentamiento). El refugio propio SIEMPRE tiene prioridad mientras no
+    esté terminado (necesidad individual antes que comunal, mismo orden
+    Maslow que el resto del motor); solo una vez resuelto se mira si es
+    miembro de un asentamiento y su almacén sigue sin terminar.
+    posicion_de_creacion es None para refugio (se crea donde ya se está,
+    ver sistema_movimiento.py) y el centro del asentamiento para almacén
+    (hay que llegar hasta ahí, no se crea donde a cada gnomo le pille)."""
+    from componentes.construccion import Construccion
+    from nucleo.asentamiento import almacen_cercano, asentamiento_de
+
+    cid_refugio = construccion_propia(gestor, id_entidad, "refugio")
+    if cid_refugio is None:
+        return ("refugio", None, None)
+    refugio = gestor.obtener_componente(cid_refugio, Construccion)
+    if refugio is None or refugio.progreso < 1.0:
+        return ("refugio", cid_refugio, None)
+
+    asen = asentamiento_de(mundo, id_entidad)
+    if asen is None:
+        return None
+    cid_almacen = almacen_cercano(gestor, asen.centro, radio_cluster)
+    if cid_almacen is not None:
+        almacen = gestor.obtener_componente(cid_almacen, Construccion)
+        if almacen is not None and almacen.progreso >= 1.0:
+            return None
+    return ("almacen", cid_almacen, asen.centro)
 
 
 def transferir_a_construccion(

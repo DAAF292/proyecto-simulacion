@@ -128,3 +128,57 @@ def calcular_liderazgo(gestor: Any, miembros: set[int], config_asentamiento: dic
     # valentía (quién sostiene la asertividad hasta el final).
     ganador = max(candidatos, key=lambda mid: (temperamentos[mid].dominancia, temperamentos[mid].valentia))
     return {ganador}
+
+
+def asentamiento_de(mundo: Any, id_entidad: int) -> Asentamiento | None:
+    """El Asentamiento del que id_entidad es miembro hoy, o None."""
+    for asen in mundo.asentamientos.values():
+        if id_entidad in asen.miembros:
+            return asen
+    return None
+
+
+def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int):
+    """Id de la Construccion tipo 'almacen' más cercana a `centro` dentro
+    de `radio`, o None -- búsqueda EN VIVO (no el almacen_id cacheado a
+    diario en Asentamiento) para no perder una construcción arrancada por
+    otro miembro este mismo día, antes del próximo recálculo diario."""
+    from componentes.construccion import Construccion
+    from componentes.posicion import Posicion
+
+    mejor = None
+    mejor_dist = None
+    for cid in gestor.entidades_con(Construccion, Posicion):
+        construccion = gestor.obtener_componente(cid, Construccion)
+        if construccion.tipo != "almacen":
+            continue
+        pos = gestor.obtener_componente(cid, Posicion)
+        dist = abs(pos.x - centro[0]) + abs(pos.y - centro[1])
+        if dist <= radio and (mejor_dist is None or dist < mejor_dist):
+            mejor = cid
+            mejor_dist = dist
+    return mejor
+
+
+def disposicion_a_aportar(temperamento: Any, config_asentamiento: dict[str, Any]) -> float:
+    """Umbral [0,1] de excedente propio (por encima del mínimo de
+    saciedad/hidratación) que este individuo necesita antes de estar
+    dispuesto a aportar al almacén común -- NO es la decisión en sí
+    (quien la consuma compara el excedente real contra este umbral), es
+    cuánto le hace falta tener de sobra según su carácter.
+
+    Reutiliza el mismo eje de fondo que ya decide la estructura de
+    gobierno (nucleo/asentamiento.py:calcular_liderazgo): empatía y
+    lealtad son prosociales y BAJAN el umbral (comparten con menos
+    excedente); agresividad es autoafirmación y lo SUBE (antepone lo
+    propio). Dominancia queda deliberadamente fuera -- conversación de
+    diseño con Diego: "un ser dominante y agresivo aportaría lo mismo
+    que uno que no lo sea?... creo que es la agresividad, porque puedes
+    ser un líder dominante y empático que aporte" -- dominancia decide
+    quién lidera (calcular_liderazgo), no si acapara o comparte.
+    PROVISIONAL, sin calibrar contra el motor en marcha."""
+    base = float(config_asentamiento.get("excedente_base_para_aportar", 0.3))
+    reduccion = float(config_asentamiento.get("reduccion_umbral_por_empatia_lealtad", 0.15))
+    aumento = float(config_asentamiento.get("aumento_umbral_por_agresividad", 0.2))
+    ajuste = (temperamento.empatia + temperamento.lealtad) * reduccion - temperamento.agresividad * aumento
+    return max(0.0, min(1.0, base - ajuste))

@@ -260,11 +260,12 @@ from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
+from nucleo.asentamiento import disposicion_a_aportar
 from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.construccion import (
-    construccion_propia,
     masa_apta_construccion,
-    material_suficiente_para_refugio,
+    material_suficiente_para,
+    objetivo_construccion_actual,
 )
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.inventario import espacio_disponible_kg
@@ -329,30 +330,54 @@ def _compromiso_mantiene(
 
 def _compromiso_construir_mantiene(
     gestor,
-    id_entidad: int,
+    cid_objetivo: int | None,
     necesidades: Necesidades,
     elegida: Accion,
     umbral_crisis_interrupcion: float,
     inventario: Inventario,
     catalogo_materiales: dict,
+    temperamento: Temperamento,
+    config_asentamiento: dict,
 ) -> bool:
     """Análogo a _compromiso_mantiene (2026-08-30, refugio construido)
     pero CONSTRUIR no resuelve un campo de Necesidades -- se mantiene
-    mientras la construcción propia siga sin terminar, no haya amenaza
-    real (HUIR gana), ninguna necesidad física esté en crisis real (mismo
-    umbral y universo que el resto del compromiso) Y siga quedando algo
-    de material apto en el Inventario para aportar.
+    mientras la construcción OBJETIVO (cid_objetivo, ya sea refugio
+    propio o almacén de asentamiento -- ver
+    nucleo/construccion.py:objetivo_construccion_actual, Círculo E)
+    siga sin terminar, no haya amenaza real (HUIR gana), ninguna
+    necesidad física esté en crisis real (mismo umbral y universo que el
+    resto del compromiso) Y siga quedando algo de material apto en el
+    Inventario para aportar.
 
-    CORRECCIÓN (2026-08-30, hallazgo del arnés de verificación de
+    CORRECCIÓN 1 (2026-08-30, hallazgo del arnés de verificación de
     RECOLECTAR/CONSTRUIR encadenados, no detectado al escribir esta
-    función la primera vez): sin el último chequeo, un gnomo que vacía su
-    Inventario aportando a la construcción se queda con Intencion.accion
-    = CONSTRUIR para siempre (progreso < 1.0 sigue siendo cierto), sin
-    aportar nada más ni volver nunca a RECOLECTAR -- el compromiso nunca
-    se libera de vuelta al argmax normal. Mismo principio que el techo
-    efectivo del compromiso de satisfacción (_compromiso_mantiene): se
-    libera en cuanto ya no hay nada más que hacer con la acción actual,
-    no solo cuando el objetivo final se cumple."""
+    función la primera vez): sin el chequeo de material, un gnomo que
+    vacía su Inventario aportando a la construcción se queda con
+    Intencion.accion = CONSTRUIR para siempre (progreso < 1.0 sigue
+    siendo cierto), sin aportar nada más ni volver nunca a RECOLECTAR --
+    el compromiso nunca se libera de vuelta al argmax normal.
+
+    CORRECCIÓN 2 (2026-08-30, hallazgo del arnés de verificación del
+    Círculo E -- almacén, tampoco detectado al escribir la función):
+    para ALMACÉN, el compromiso también debe re-verificar la disposición
+    a aportar (nucleo/asentamiento.py:disposicion_a_aportar) en cada
+    tick, no solo en el instante en que se eligió la acción. Sin esto, un
+    individuo fundamentalmente egoísta (agresividad alta, empatía/lealtad
+    bajas, necesidades sin excedente real) podía terminar de construir
+    TODO un almacén él solo: bastaba un pico momentáneo de saciedad justo
+    tras comer para cruzar el umbral una vez, elegir RECOLECTAR/CONSTRUIR,
+    y el compromiso lo sostenía indefinidamente aunque el excedente
+    volviera a caer por debajo del umbral en el tick siguiente -- el
+    mismo tipo de "se queda encallado" que la Corrección 1, pero sobre la
+    voluntad de ayudar en vez de sobre el material disponible. El refugio
+    propio NO exige esta re-verificación (nunca exigió disposición para
+    empezar, tampoco debe exigirla para continuar).
+
+    Mismo principio en ambas correcciones que el techo efectivo del
+    compromiso de satisfacción (_compromiso_mantiene): se libera en
+    cuanto ya no hay nada más que hacer -- o nada más que se QUIERA
+    hacer -- con la acción actual, no solo cuando el objetivo final se
+    cumple."""
     if elegida == Accion.HUIR:
         return False
     for nombre in _NECESIDADES_FISICAS:
@@ -360,11 +385,16 @@ def _compromiso_construir_mantiene(
             return False
     if masa_apta_construccion(inventario.contenidos, catalogo_materiales) <= 0.0:
         return False
-    cid = construccion_propia(gestor, id_entidad, "refugio")
-    if cid is None:
+    if cid_objetivo is None:
         return False
-    construccion = gestor.obtener_componente(cid, Construccion)
-    return construccion is not None and construccion.progreso < 1.0
+    construccion = gestor.obtener_componente(cid_objetivo, Construccion)
+    if construccion is None or construccion.progreso >= 1.0:
+        return False
+    if construccion.tipo == "almacen":
+        excedente = min(necesidades.saciedad, necesidades.hidratacion)
+        if excedente < disposicion_a_aportar(temperamento, config_asentamiento):
+            return False
+    return True
 
 
 def _tipo_crisis(temperamento: Temperamento, config_crisis: dict) -> Accion:
@@ -385,10 +415,15 @@ class SistemaDecision:
     A diferencia del envoltorio de capacidad física (puramente mecánico),
     aquí main.py llamaba a `sistemas["decision"].ejecutar(gestor, mundo)`
     -- ni bus_eventos ni tick_actual, que `actualizar()` sí necesita de
-    verdad (para emitir el Evento "CrisisMental" con su tick). `mundo` no
-    lo usa esta lógica (la decisión no consulta el terreno, solo pools y
-    necesidades). Se corrige aquí Y en la llamada de main.py, para que la
-    emisión de eventos de crisis mental deje de perderse silenciosamente.
+    verdad (para emitir el Evento "CrisisMental" con su tick). Se corrige
+    aquí Y en la llamada de main.py, para que la emisión de eventos de
+    crisis mental deje de perderse silenciosamente.
+
+    `mundo` SÍ tiene consumidor ahora (2026-08-30, Círculo E -- almacén
+    de asentamiento): objetivo_construccion_actual necesita consultar
+    mundo.asentamientos para saber si un gnomo es miembro de alguno y
+    dónde está su almacén -- antes de esta pieza la decisión en efecto
+    no consultaba el terreno/mundo, ya no es el caso.
     """
 
     def __init__(self, config: dict, rng) -> None:
@@ -396,11 +431,11 @@ class SistemaDecision:
         self.rng = rng  # sin consumidor en actualizar() hoy -- se conserva
         # por si una futura decisión estocástica (p.ej. desempate) lo necesita.
 
-    def ejecutar(self, gestor, reloj, bus_eventos: BusEventos) -> None:
-        actualizar(gestor, self.config, bus_eventos, reloj.tick_actual)
+    def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos) -> None:
+        actualizar(gestor, mundo, self.config, bus_eventos, reloj.tick_actual)
 
 
-def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
+def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -> None:
     base_deambular = config["decision"]["utilidad_deambular_base"]
     config_crisis = config["crisis_mental"]
     umbral_crisis = config_crisis["umbral_estabilidad_crisis"]
@@ -420,6 +455,10 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
     catalogo_materiales = config.get("materiales", {})
     config_construccion = config.get("construccion", {})
     fraccion_carga_maxima = float(config.get("inventario", {}).get("fraccion_carga_maxima", 0.25))
+    # Almacén de asentamiento (2026-08-30, Círculo E -- ver
+    # nucleo/asentamiento.py y nucleo/construccion.py:objetivo_construccion_actual).
+    config_asentamiento = config.get("asentamiento", {})
+    radio_cluster_asentamiento = int(config_asentamiento.get("radio_cluster_celdas", 6))
     rangos_raciales = config["rangos_raciales"]
 
     # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
@@ -509,40 +548,52 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
             else (1.0 - necesidades.impulso_reproductivo)
         )
 
-        # CONSTRUIR / RECOLECTAR (2026-08-30, ver docstring del modulo y
-        # nucleo/construccion.py): ambas gateadas a consciente y sin
-        # refugio propio ya TERMINADO. Mientras la masa apta ya invertida
-        # + la que se lleva encima no baste para terminar (y quede
-        # espacio en el Inventario), RECOLECTAR gana sobre CONSTRUIR
-        # (utilidad mayor a proposito, ver config/fisiologia.yaml) --
-        # mejor completar la carga que ir y volver por poco. En cuanto
-        # basta, o el inventario se llena, RECOLECTAR cae a 0.0 y
-        # CONSTRUIR toma el relevo con lo que ya se lleve. Sin
-        # RECOLECTAR, CONSTRUIR no se abre nunca en el motor real (nada
-        # más llena Inventario todavía).
+        # CONSTRUIR / RECOLECTAR (2026-08-30, ver docstring del modulo,
+        # nucleo/construccion.py y nucleo/asentamiento.py): ambas gateadas
+        # a consciente y a que exista un objetivo de construcción actual
+        # -- el refugio propio SIEMPRE tiene prioridad mientras no esté
+        # terminado (necesidad individual antes que comunal); solo una
+        # vez resuelto se mira el almacén del asentamiento del que sea
+        # miembro (Círculo E, 2026-08-30). Mientras la masa apta ya
+        # invertida en el objetivo + la que se lleva encima no baste para
+        # terminarlo (y quede espacio en el Inventario), RECOLECTAR gana
+        # sobre CONSTRUIR (utilidad mayor a propósito, ver
+        # config/fisiologia.yaml) -- mejor completar la carga que ir y
+        # volver por poco. Aportar al ALMACÉN exige además disposición
+        # propia (excedente de saciedad/hidratación por encima de un
+        # umbral de carácter, nucleo/asentamiento.py:disposicion_a_aportar
+        # -- "no creamos leyes absolutas", Diego): el refugio propio no
+        # exige excedente, una necesidad de seguridad individual no
+        # espera a que sobre nada.
         utilidad_construir = 0.0
         utilidad_recolectar = 0.0
+        cid_objetivo = None
         if cap_mental.consciencia >= umbral_consciencia_agencia:
-            cid_refugio = construccion_propia(gestor, id_entidad, "refugio")
-            refugio_terminado = False
-            if cid_refugio is not None:
-                construccion_actual = gestor.obtener_componente(cid_refugio, Construccion)
-                refugio_terminado = (
-                    construccion_actual is not None and construccion_actual.progreso >= 1.0
-                )
-            if not refugio_terminado:
-                suficiente = material_suficiente_para_refugio(
-                    gestor, id_entidad, inventario.contenidos, catalogo_materiales, config_construccion
-                )
-                if not suficiente and espacio_disponible_kg(
-                    inventario.contenidos, dims.peso, fraccion_carga_maxima
-                ) > 0.0:
-                    utilidad_recolectar = utilidad_recolectar_base
-                tiene_material_apto = (
-                    masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0
-                )
-                if tiene_material_apto:
-                    utilidad_construir = utilidad_construir_base
+            objetivo = objetivo_construccion_actual(
+                gestor, mundo, id_entidad, radio_cluster_asentamiento
+            )
+            if objetivo is not None:
+                tipo_objetivo, cid_objetivo, _ = objetivo
+                dispuesto = True
+                if tipo_objetivo == "almacen":
+                    excedente = min(necesidades.saciedad, necesidades.hidratacion)
+                    umbral_individual = disposicion_a_aportar(temperamento, config_asentamiento)
+                    dispuesto = excedente >= umbral_individual
+                if dispuesto:
+                    suficiente = material_suficiente_para(
+                        gestor,
+                        cid_objetivo,
+                        tipo_objetivo,
+                        inventario.contenidos,
+                        catalogo_materiales,
+                        config_construccion,
+                    )
+                    if not suficiente and espacio_disponible_kg(
+                        inventario.contenidos, dims.peso, fraccion_carga_maxima
+                    ) > 0.0:
+                        utilidad_recolectar = utilidad_recolectar_base
+                    if masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0:
+                        utilidad_construir = utilidad_construir_base
 
         candidatas = (
             (utilidad_huir, Accion.HUIR),
@@ -569,12 +620,14 @@ def actualizar(gestor, config: dict, bus: BusEventos, tick_actual: int) -> None:
         if intencion.accion == Accion.CONSTRUIR:
             mantiene = _compromiso_construir_mantiene(
                 gestor,
-                id_entidad,
+                cid_objetivo,
                 necesidades,
                 elegida,
                 umbral_crisis_interrupcion,
                 inventario,
                 catalogo_materiales,
+                temperamento,
+                config_asentamiento,
             )
         else:
             mantiene = _compromiso_mantiene(

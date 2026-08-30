@@ -311,7 +311,7 @@ def ejecutar_tick(
     # ---------------------------------------------------------
     # FASE 1: PERCEPCIÓN Y TOMA DE DECISIONES
     # ---------------------------------------------------------
-    sistemas["decision"].ejecutar(gestor, reloj, bus_eventos)
+    sistemas["decision"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
     # ---------------------------------------------------------
     # FASE 2: ACCIÓN, CINEMÁTICA Y CONTACTO FÍSICO

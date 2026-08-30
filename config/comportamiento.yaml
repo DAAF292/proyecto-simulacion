@@ -115,3 +115,13 @@ asentamiento:
   # a todos).
   umbral_cohesion_consejo: 0.5
   reduccion_umbral_consejo_por_miembro: 0.01
+  # Aporte al almacén (Círculo E, 2026-08-30 -- ver
+  # nucleo/asentamiento.py:disposicion_a_aportar): umbral de excedente
+  # propio (por encima del mínimo de saciedad/hidratación) que hace
+  # falta antes de estar dispuesto a aportar, modulado por carácter --
+  # empatía+lealtad lo bajan, agresividad lo sube. Deliberadamente NO
+  # una ley absoluta ("solo aporta con las necesidades completamente
+  # resueltas"), a petición explícita de Diego.
+  excedente_base_para_aportar: 0.3
+  reduccion_umbral_por_empatia_lealtad: 0.15
+  aumento_umbral_por_agresividad: 0.2

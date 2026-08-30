@@ -25,8 +25,8 @@ from componentes.posicion import Posicion
 from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
 from nucleo.celda import Celda
 from nucleo.construccion import (
-    construccion_propia,
     masa_minima_para,
+    objetivo_construccion_actual,
     progreso_construccion,
     transferir_a_construccion,
 )
@@ -88,6 +88,11 @@ class SistemaRecursos:
         )
         self.fraccion_carga_maxima: float = float(
             self.config.get("inventario", {}).get("fraccion_carga_maxima", 0.25)
+        )
+        # Almacén de asentamiento (2026-08-30, Círculo E -- ver
+        # nucleo/asentamiento.py y nucleo/construccion.py:objetivo_construccion_actual).
+        self.radio_cluster_asentamiento: int = int(
+            self.config.get("asentamiento", {}).get("radio_cluster_celdas", 6)
         )
 
         cfg_dep = self.config.get("depredacion", {})
@@ -156,7 +161,7 @@ class SistemaRecursos:
             elif intencion.accion == Accion.CONSTRUIR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 self._resolver_construir(
-                    gestor, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual, bus_eventos
+                    gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual, bus_eventos
                 )
             elif intencion.accion == Accion.RECOLECTAR:
                 inv = gestor.obtener_componente(eid, Inventario)
@@ -265,6 +270,7 @@ class SistemaRecursos:
     def _resolver_construir(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
         entidad_id: int,
         mem: MemoriaEspacial | None,
         cap_mental: CapacidadMental | None,
@@ -275,27 +281,35 @@ class SistemaRecursos:
         bus_eventos: BusEventos,
     ) -> None:
         """
-        REFUGIO CONSTRUIDO -- Pieza 2 de interacción física (2026-08-30,
-        ver componentes/construccion.py, nucleo/construccion.py y la
-        conversación de diseño con Diego). sistema_movimiento.py ya llevó
-        a la entidad hasta su Construccion propia (creándola si hacía
+        REFUGIO/ALMACÉN CONSTRUIDO -- Pieza 2 de interacción física
+        (2026-08-30, ver componentes/construccion.py, nucleo/construccion.py,
+        nucleo/asentamiento.py y la conversación de diseño con Diego).
+        sistema_movimiento.py ya llevó a la entidad hasta su objetivo de
+        construcción actual (refugio propio o, una vez resuelto, el
+        almacén del asentamiento del que sea miembro -- Círculo E,
+        2026-08-30, objetivo_construccion_actual -- creándolo si hacía
         falta); aquí, estando en la misma celda, se transfieren
         materiales aptos del Inventario y se actualiza progreso.
 
-        Al cruzar 1.0 por primera vez se registra la posición como
-        recuerdo "refugio" -- MISMA maquinaria que el refugio instintivo
-        (nucleo/memoria.py, sin cambios ni caso especial): la memoria
-        apunta al SITIO, no a la entidad Construccion (conversación de
-        diseño: "para su memoria eso es un sitio seguro y cómodo, sea una
-        construcción, una cueva o lo que sea"), así que
-        _calcular_dormir/objetivo_recordado ya saben volver aquí sin
-        ningún cambio en sistema_movimiento.py. Se emite un Evento
-        NOTABLE solo en la transición (mismo criterio que CrisisMental),
-        no en cada tick que sigue terminado.
+        Al cruzar 1.0 por primera vez: para refugio, se registra la
+        posición como recuerdo "refugio" -- MISMA maquinaria que el
+        refugio instintivo (nucleo/memoria.py, sin cambios ni caso
+        especial), la memoria apunta al SITIO, no a la entidad
+        Construccion. Para almacén no hay recuerdo individual que
+        registrar (SistemaAsentamiento ya registra la memoria comunitaria
+        "asentamiento" a diario para todos los miembros). Se emite un
+        Evento en la transición (mismo criterio que CrisisMental, no en
+        cada tick que sigue terminado): NOTABLE para refugio (logro
+        individual), HISTÓRICO para almacén (hito de la comunidad entera).
         """
         if inv is None:
             return
-        cid = construccion_propia(gestor, entidad_id, "refugio")
+        objetivo = objetivo_construccion_actual(
+            gestor, mundo, entidad_id, self.radio_cluster_asentamiento
+        )
+        if objetivo is None:
+            return
+        _tipo_objetivo, cid, _ = objetivo
         if cid is None:
             return
         con_pos = gestor.obtener_componente(cid, Posicion)
@@ -317,14 +331,18 @@ class SistemaRecursos:
         )
 
         if construccion.progreso >= 1.0:
-            self._registrar_recuerdo_si_procede(mem, cap_mental, "refugio", pos_x, pos_y)
+            if construccion.tipo == "refugio":
+                self._registrar_recuerdo_si_procede(mem, cap_mental, "refugio", pos_x, pos_y)
+                evento_tipo, severidad = "RefugioConstruido", Severidad.NOTABLE
+            else:
+                evento_tipo, severidad = "AlmacenConstruido", Severidad.HISTORICO
             bus_eventos.emitir(
                 Evento(
-                    tipo="RefugioConstruido",
-                    severidad=Severidad.NOTABLE,
+                    tipo=evento_tipo,
+                    severidad=severidad,
                     tick=tick_actual,
                     entidad_id=entidad_id,
-                    datos={"x": pos_x, "y": pos_y},
+                    datos={"x": pos_x, "y": pos_y, "tipo": construccion.tipo},
                 )
             )
 

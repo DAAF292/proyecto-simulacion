@@ -27,7 +27,13 @@ from componentes.construccion import Construccion
 from componentes.identidad import Identidad
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.posicion import Posicion
-from nucleo.asentamiento import Asentamiento, agrupar_por_proximidad, calcular_centro, calcular_liderazgo
+from nucleo.asentamiento import (
+    Asentamiento,
+    agrupar_por_proximidad,
+    almacen_cercano,
+    calcular_centro,
+    calcular_liderazgo,
+)
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
@@ -90,6 +96,7 @@ class SistemaAsentamiento:
                 centro=centro,
                 miembros=clave,
                 lideres=frozenset(lideres),
+                almacen_id=almacen_cercano(gestor, centro, self.radio_cluster),
             )
             nuevos[siguiente_id] = asentamiento
             siguiente_id += 1

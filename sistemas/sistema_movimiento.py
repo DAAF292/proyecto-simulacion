@@ -30,7 +30,7 @@ from componentes.gestacion import Gestacion
 from componentes.reproduccion import Reproduccion
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
-from nucleo.construccion import construccion_propia
+from nucleo.construccion import objetivo_construccion_actual
 from nucleo.entidad import GestorEntidades, crear_construccion
 from nucleo.memoria import objetivo_recordado
 from nucleo.mundo import Mundo
@@ -86,6 +86,11 @@ class SistemaMovimiento:
         )
         self.umbral_consciencia_agencia: float = float(
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
+        # Almacén de asentamiento (2026-08-30, Círculo E -- ver
+        # nucleo/asentamiento.py y nucleo/construccion.py:objetivo_construccion_actual).
+        self.radio_cluster_asentamiento: int = int(
+            self.config.get("asentamiento", {}).get("radio_cluster_celdas", 6)
         )
 
         # Coste de forrajeo vs. beneficio (2026-08-23, pregunta de Diego:
@@ -164,7 +169,7 @@ class SistemaMovimiento:
             elif accion == Accion.BUSCAR_PAREJA:
                 dx, dy = self._calcular_pareja(gestor, eid, ident.especie, pos.x, pos.y, radio)
             elif accion == Accion.CONSTRUIR:
-                dx, dy = self._calcular_construir(gestor, eid, pos.x, pos.y)
+                dx, dy = self._calcular_construir(gestor, mundo, eid, pos.x, pos.y)
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
                     gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
@@ -800,20 +805,24 @@ class SistemaMovimiento:
     def _calcular_construir(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
         entidad_id: int,
         pos_x: int,
         pos_y: int,
     ) -> tuple[int, int]:
         """
-        REFUGIO CONSTRUIDO -- Pieza 2 de interacción física (2026-08-30,
-        ver componentes/construccion.py, nucleo/construccion.py y la
-        conversación de diseño con Diego). Localiza la Construccion tipo
-        "refugio" propia de esta entidad; si no existe todavía (primera
-        vez que Accion.CONSTRUIR se elige), la crea en la posición ACTUAL
-        de quien construye -- sin lógica de selección de sitio, esa
-        pregunta ("dónde establecería un asentamiento una criatura
-        consciente") sigue abierta y no se resuelve aquí de forma
-        implícita. Una vez existe, camina hacia ella igual que
+        REFUGIO/ALMACÉN CONSTRUIDO -- Pieza 2 de interacción física
+        (2026-08-30, ver componentes/construccion.py, nucleo/construccion.py,
+        nucleo/asentamiento.py y la conversación de diseño con Diego).
+        Localiza el objetivo de construcción actual de esta entidad
+        (objetivo_construccion_actual: refugio propio mientras no esté
+        terminado, si no el almacén del asentamiento del que sea miembro
+        -- Círculo E, 2026-08-30). Si no existe todavía, lo crea: el
+        refugio en la posición ACTUAL de quien construye (sin lógica de
+        selección de sitio, esa pregunta sigue abierta y no se resuelve
+        aquí de forma implícita); el almacén en el CENTRO del asentamiento
+        -- hay que llegar hasta ahí primero, no se crea donde a cada
+        gnomo le pille. Una vez existe, camina hacia él igual que
         _calcular_dormir camina hacia el refugio recordado.
 
         La transferencia real de materiales (Inventario ->
@@ -822,15 +831,30 @@ class SistemaMovimiento:
         de responsabilidades que COMER/BEBER (este sistema decide hacia
         dónde ir, sistema_recursos.py decide qué pasa al llegar).
         """
-        cid = construccion_propia(gestor, entidad_id, "refugio")
-        if cid is None:
+        objetivo = objetivo_construccion_actual(
+            gestor, mundo, entidad_id, self.radio_cluster_asentamiento
+        )
+        if objetivo is None:
+            return (0, 0)
+        tipo, cid, pos_creacion = objetivo
+
+        if cid is not None:
+            con_pos = gestor.obtener_componente(cid, Posicion)
+            if con_pos is None or (con_pos.x == pos_x and con_pos.y == pos_y):
+                return (0, 0)
+            return self._acercarse_a(pos_x, pos_y, con_pos.x, con_pos.y)
+
+        if tipo == "refugio":
             crear_construccion(gestor, pos_x, pos_y, "refugio", propietario_id=entidad_id)
             return (0, 0)
 
-        con_pos = gestor.obtener_componente(cid, Posicion)
-        if con_pos is None or (con_pos.x == pos_x and con_pos.y == pos_y):
-            return (0, 0)
-        return self._acercarse_a(pos_x, pos_y, con_pos.x, con_pos.y)
+        # almacén, todavía no existe: hay que llegar al centro del
+        # asentamiento antes de poder crearlo.
+        cx, cy = pos_creacion
+        if (cx, cy) != (pos_x, pos_y):
+            return self._acercarse_a(pos_x, pos_y, cx, cy)
+        crear_construccion(gestor, pos_x, pos_y, "almacen", propietario_id=None)
+        return (0, 0)
 
     def _acercarse_a(self, ox: int, oy: int, tx: int, ty: int) -> tuple[int, int]:
         """Calcula el paso unitario Manhattan más directo hacia el objetivo."""
