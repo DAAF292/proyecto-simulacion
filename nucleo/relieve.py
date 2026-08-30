@@ -38,12 +38,30 @@ sentidos de la palabra), confirmadas juntas con Diego:
 
 provisional en su totalidad: los bordes de pendiente_minima/maxima_
 transitable se calibraron observando la distribucion real de diferencias
-de elevacion entre celdas vecinas en 10 semillas (mediana ~0.032, p90
-~0.10, p99 ~0.16, maximo observado ~0.21) para que un individuo de fuerza
-minima (gnomo, ~0.2) quede bloqueado solo ocasionalmente (~p85-90) y uno
-de fuerza maxima (lobo, ~0.9) casi nunca (~p99) -- no una cifra elegida a
+de elevacion entre celdas vecinas, para que un individuo de fuerza minima
+(gnomo, ~0.2) quede bloqueado solo ocasionalmente (~p85-90) y uno de
+fuerza maxima (lobo, ~0.9) casi nunca (~p99) -- no una cifra elegida a
 ciegas, pero tampoco calibrada contra el motor en marcha (efecto real
 sobre movimiento/mortalidad, pendiente de observar).
+
+RECALIBRADO (2026-08-29, auditoria de funcionalidades, tercera edicion):
+la medicion original (mediana ~0.032, p90 ~0.10, p99 ~0.16, maximo ~0.21,
+10 semillas) es anterior al circulo de generacion causal -- cordilleras,
+escorrentia, clima orografico (nucleo/orografia.py, 2026-08-27) -- que
+sustituyo el terreno de ruido puro por uno estructurado. El relieve que
+se genera hoy es mas suave de lo que esa medicion asumia: verificado que
+con la calibracion antigua un lobo (fuerza maxima) NUNCA se bloqueaba por
+pendiente (0% de los pasos cuesta arriba), muy por debajo del ~p99
+pretendido. Remedido contra 15 semillas con el generador causal actual
+(mapa 40x40, 23177 subidas positivas muestreadas): mediana 0.0111, p87
+0.0517, p99 0.1426, maximo 0.2084 -- aproximadamente un tercio de la
+mediana anterior. pendiente_minima/maxima_transitable recalibradas en
+config/constantes.yaml con el MISMO criterio de anclaje (no un criterio
+nuevo): resolviendo el sistema lineal de pendiente_maxima_transitable()
+para que fuerza=0.2 caiga en p87 y fuerza=0.9 en p99 de la distribucion
+real de hoy. Sigue sin validarse contra el harness completo (15 semillas
+x 12000 ticks con efecto real sobre movimiento/mortalidad) -- el mismo
+hueco de antes, ahora sobre numeros frescos en vez de desfasados.
 
 Sin pathfinding alrededor de una pendiente bloqueada -- deuda declarada a
 proposito, coherente con "sin pathfinding real" que ya documenta

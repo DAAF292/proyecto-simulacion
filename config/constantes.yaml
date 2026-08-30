@@ -65,16 +65,42 @@ generacion_mapa:
     # cuatro rumbos cardinales (nucleo/orografia.py:sortear_viento_dominante).
 
 bioma:
-  # Umbrales recalibrados (2026-08-27) contra mundos reales con la ley
-  # orografica (arnes de calibracion: 6 semillas, 48x48): crestas de
-  # cordillera en 0.78-0.95, fondo 0.05-0.35. Objetivo de proporciones
-  # (aprox): pradera ~50%, bosque ~25%, montana ~10% (crestas+laderas),
-  # desierto ~5% (sotaventos), tundra ~3% (cumbres frias). Objetivo
-  # propuesto, a revalidar tras jugar con estos mundos.
-  umbral_elevacion_montana: 0.47
-  umbral_temperatura_tundra: 0.25
-  umbral_lluvia_desierto: 0.24
-  umbral_lluvia_bosque: 0.62
+  # RECALIBRADO (2026-08-29, auditoria de funcionalidades, tercera
+  # edicion, confirmado con Diego). La calibracion anterior (2026-08-27,
+  # umbrales 0.47/0.25/0.24/0.62) nunca llego a revalidarse "tras jugar
+  # con estos mundos" como decia su propio comentario: medida despues
+  # contra el generador causal real, producia desierto practicamente
+  # inexistente (0.35-0.44% de las celdas, objetivo ~5%) y tundra muy por
+  # encima del objetivo (13-14%, objetivo ~3%) -- confirmado en 40
+  # semillas fuera de muestra, no una unica medicion.
+  #
+  # Metodo de esta recalibracion: emparejamiento de cuantiles SECUENCIAL,
+  # replicando el propio orden de evaluacion del arbol de decision de
+  # nucleo/bioma.py (tundra por temperatura primero, luego montana por
+  # elevacion sobre lo que queda, luego desierto/bosque por lluvia sobre
+  # lo que queda de eso) -- no cuantiles marginales independientes, que
+  # habrian ignorado que temperatura/elevacion/lluvia estan correlacionadas
+  # entre si (todas derivan del mismo proceso causal orografico). Cada
+  # umbral se fija en el percentil empirico exacto, dentro del subconjunto
+  # de celdas que le llega, que produce la proporcion objetivo:
+  # umbral_temperatura_tundra al percentil 3 de temperatura (todas las
+  # celdas); umbral_elevacion_montana al percentil que deja 10/(1-0.03)
+  # de las celdas no-tundra por encima; umbral_lluvia_desierto/bosque
+  # analogos sobre las celdas que van quedando. Calibrado con 40 semillas
+  # (mapa 40x40, 64000 celdas) y VALIDADO contra 40 semillas disjuntas,
+  # nunca vistas en la calibracion (proporciones resultantes: pradera
+  # 54.9%, bosque 26.0%, montana 11.8%, desierto 4.7%, tundra 2.6% --
+  # frente al objetivo pradera~57/bosque~25/montana~10/desierto~5/
+  # tundra~3, todas las cifras dentro de ~2 puntos porcentuales).
+  #
+  # PROVISIONAL igual que antes: valida la PROPORCION de biomas contra
+  # el generador de terreno, no el efecto sobre poblacion/supervivencia
+  # con el harness completo (15 semillas x 12000 ticks) -- ese efecto
+  # sigue sin observarse.
+  umbral_elevacion_montana: 0.6665
+  umbral_temperatura_tundra: 0.1346
+  umbral_lluvia_desierto: 0.3909
+  umbral_lluvia_bosque: 0.6041
 
 # ------------------------------------------------------------------------------
 # 2. HidrologÃ­a y DinÃ¡mica de Superficie
@@ -310,8 +336,23 @@ percepcion:
   radio_maximo_celdas: 4
 
 relieve:
-  pendiente_minima_transitable: 0.05
-  pendiente_maxima_transitable: 0.22
+  # (2026-08-29, RECALIBRADO tras auditoria) La calibracion anterior
+  # (0.05/0.22) se midio contra el terreno de ruido puro, previo al
+  # circulo de generacion causal (cordilleras, 27-08) -- el relieve real
+  # de hoy es mas suave de lo que esos valores asumian (un lobo nunca se
+  # bloqueaba por pendiente, 0% de los pasos). Recalibrado con el MISMO
+  # criterio de diseño original (nucleo/relieve.py, ver su docstring):
+  # fuerza minima representativa (gnomo, extremo bajo de su rango
+  # racial, ~0.2) bloqueada ~p87 de las subidas reales; fuerza maxima
+  # representativa (lobo, extremo alto, ~0.9) bloqueada ~p99. Medido
+  # contra 15 semillas (mapa 40x40, generador causal actual): mediana
+  # 0.0111, p87 0.0517, p99 0.1426, maximo 0.2084 (23177 subidas
+  # positivas muestreadas). PROVISIONAL: quince semillas de percentiles,
+  # no el harness completo de 15 semillas x 12000 ticks con efecto real
+  # sobre movimiento/mortalidad observado -- mismo estatus que la
+  # calibracion que sustituye.
+  pendiente_minima_transitable: 0.0257
+  pendiente_maxima_transitable: 0.1556
   costo_resistencia_por_unidad_pendiente: 0.3
 
 movimiento:

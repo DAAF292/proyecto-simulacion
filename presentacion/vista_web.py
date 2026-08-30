@@ -287,11 +287,17 @@ HTML_VISOR = """<!DOCTYPE html>
     // duplicarian; bosque -> flora: los arboles dentro de la masa
     // duplicarian; desierto/tundra suprimen NADA -- sus saguaros y pinos
     // son individuos que pisan sobre la region, como pide el objetivo).
+    // (2026-08-29) Valores de respaldo puramente defensivos -- el DTO
+    // real siempre trae bioma_umbrales (una sola fuente de verdad con
+    // config/constantes.yaml), asi que esto solo se usa si el fetch aun
+    // no ha llegado o en el arnes mock-DOM. Actualizados junto con la
+    // recalibracion de config/constantes.yaml para no quedar
+    // desactualizados frente al valor real.
     const UMBRALES_LAVADO_DEFECTO = {
-      umbral_elevacion_montana: 0.47,
-      umbral_temperatura_tundra: 0.25,
-      umbral_lluvia_desierto: 0.24,
-      umbral_lluvia_bosque: 0.62,
+      umbral_elevacion_montana: 0.6665,
+      umbral_temperatura_tundra: 0.1346,
+      umbral_lluvia_desierto: 0.3909,
+      umbral_lluvia_bosque: 0.6041,
     };
     let umbralesLavado = null;   // se actualiza con el DTO cuando llega
 
@@ -2678,10 +2684,10 @@ def construir_instantanea(
         # rompía nada, pero era codigo sobrante (probablemente de un
         # merge o una edicion repetida) sin ningun proposito.
         "bioma_umbrales": {
-            "umbral_elevacion_montana": mundo.config.get("bioma", {}).get("umbral_elevacion_montana", 0.47),
-            "umbral_temperatura_tundra": mundo.config.get("bioma", {}).get("umbral_temperatura_tundra", 0.25),
-            "umbral_lluvia_desierto": mundo.config.get("bioma", {}).get("umbral_lluvia_desierto", 0.24),
-            "umbral_lluvia_bosque": mundo.config.get("bioma", {}).get("umbral_lluvia_bosque", 0.62),
+            "umbral_elevacion_montana": mundo.config.get("bioma", {}).get("umbral_elevacion_montana", 0.6665),
+            "umbral_temperatura_tundra": mundo.config.get("bioma", {}).get("umbral_temperatura_tundra", 0.1346),
+            "umbral_lluvia_desierto": mundo.config.get("bioma", {}).get("umbral_lluvia_desierto", 0.3909),
+            "umbral_lluvia_bosque": mundo.config.get("bioma", {}).get("umbral_lluvia_bosque", 0.6041),
         },
         "ancho": zona.ancho,
         "alto": zona.alto,
