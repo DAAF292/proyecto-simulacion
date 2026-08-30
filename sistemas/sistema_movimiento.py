@@ -145,7 +145,9 @@ class SistemaMovimiento:
             dx, dy = 0, 0
 
             if accion == Accion.DORMIR:
-                continue
+                dx, dy = self._calcular_dormir(
+                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
+                )
             elif accion == Accion.HUIR:
                 dx, dy = self._calcular_huida(gestor, zona, eid, pos.x, pos.y, dims.peso, radio)
             elif accion == Accion.CAZAR:
@@ -720,6 +722,77 @@ class SistemaMovimiento:
                     return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
 
         return self._paso_aleatorio()
+
+    def _calcular_dormir(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        especie: Especie,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+        mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
+        temperamento: Temperamento | None,
+    ) -> tuple[int, int]:
+        """
+        REFUGIO INSTINTIVO -- Pieza 1 de interacción física (2026-08-30,
+        confirmado con Diego: "el impulso es el mismo, buscar comodidad,
+        seguridad, un entorno en el que estar seguro con los tuyos... el
+        hecho de poder construir te lo da tu consciencia"). Hasta hoy,
+        Accion.DORMIR no hacía NADA en este sistema (`continue` directo):
+        la criatura se quedaba dormida donde le pillara el sueño, sin
+        buscar refugio ni compañía.
+
+        Dos capas, en este orden, NINGUNA inventa memoria compartida
+        (Diego señaló el problema real: "no tenemos una memoria común y
+        no sé cómo plantearlo" -- la respuesta es que no hace falta):
+
+        1. REFUGIO RECORDADO (individual): tipo de recuerdo nuevo
+           "refugio" en MemoriaEspacial, misma maquinaria genérica que ya
+           usan "comida"/"agua" (nucleo/memoria.py, sin cambios) -- se
+           registra en sistema_necesidades.py cuando la criatura duerme
+           sin amenaza cerca. Si hay uno conocido y no se está ya cerca,
+           se camina hacia él.
+        2. SIN refugio conocido todavía (individuos jóvenes, por
+           ejemplo): se reutiliza el MISMO sesgo gregario que ya usa
+           _calcular_deambular -- buscar al conspecífico más cercano con
+           probabilidad = sociabilidad directa, sin escalar. No es
+           "recordar el refugio de la manada", es "si no sé dónde dormir
+           seguro, no duermo solo" -- el resultado práctico (una manada
+           tiende a dormir agrupada porque ya se mueve junta por el mismo
+           sesgo) emerge sin memoria compartida.
+
+        Sin refugio conocido y sin conspecífico cerca (o sin sociabilidad
+        que dispare el sesgo): se queda quieta, exactamente el
+        comportamiento de siempre.
+
+        Sin bono numérico añadido a propósito: el beneficio de dormir en
+        refugio es puramente conductual -- una celda se recuerda como
+        refugio precisamente porque no hubo amenaza la vez anterior, así
+        que volver ahí ya reduce la exposición por definición, sin
+        inventar un multiplicador nuevo sobre Necesidades.seguridad.
+        """
+        if mem is not None and cap_mental is not None:
+            objetivo_refugio = objetivo_recordado(
+                mem, "refugio", pos_x, pos_y, cap_mental, self.rng, self.config
+            )
+            if objetivo_refugio is not None:
+                dist = abs(objetivo_refugio[0] - pos_x) + abs(objetivo_refugio[1] - pos_y)
+                if dist > self.dist_deseada_territorio:
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_refugio)
+                return (0, 0)
+
+        if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
+            objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
+                gestor, entidad_id, especie, pos_x, pos_y, radio
+            )
+            if objetivo_conspecifico is not None:
+                dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
+                if dist > self.dist_deseada_conspecifico:
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
+
+        return (0, 0)
 
     def _acercarse_a(self, ox: int, oy: int, tx: int, ty: int) -> tuple[int, int]:
         """Calcula el paso unitario Manhattan más directo hacia el objetivo."""

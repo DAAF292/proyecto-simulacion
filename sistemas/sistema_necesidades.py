@@ -72,9 +72,11 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
+from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
@@ -84,6 +86,7 @@ from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.memoria import capacidad_memoria, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_individual
 from nucleo.reloj import Reloj
@@ -240,6 +243,8 @@ class SistemaNecesidades:
             ident = gestor.obtener_componente(eid, Identidad)
             intencion = gestor.obtener_componente(eid, Intencion)
             temperamento = gestor.obtener_componente(eid, Temperamento)
+            mem = gestor.obtener_componente(eid, MemoriaEspacial)
+            cap_mental = gestor.obtener_componente(eid, CapacidadMental)
 
             if nec is None or pos is None or dims is None or ident is None:
                 continue
@@ -366,6 +371,29 @@ class SistemaNecesidades:
                 nec.seguridad = max(0.0, nec.seguridad - drenaje_efectivo)
             elif nec.seguridad < 1.0:
                 nec.seguridad = min(1.0, nec.seguridad + self.tasa_recup_seguridad)
+
+            # REFUGIO INSTINTIVO -- Pieza 1 de interacción física
+            # (2026-08-30, ver docstring de
+            # sistema_movimiento.py:_calcular_dormir para el diseño
+            # completo). Se registra la posición como "refugio" cada tick
+            # que la criatura duerme SIN amenaza cerca -- amenaza_pos ya
+            # se acaba de calcular arriba mismo para el drenaje de
+            # seguridad, se reutiliza aquí en vez de recalcularla. Sin
+            # bono numérico nuevo: el beneficio es puramente conductual
+            # (volver a un sitio que ya demostró ser seguro).
+            # registrar_recuerdo ya deduplica -- dormir varias noches
+            # seguidas en el mismo sitio no lo repite, solo lo mantiene
+            # como el más reciente de la cola FIFO.
+            if (
+                intencion is not None
+                and intencion.accion == Accion.DORMIR
+                and amenaza_pos is None
+                and mem is not None
+                and cap_mental is not None
+            ):
+                registrar_recuerdo(
+                    mem, "refugio", pos.x, pos.y, capacidad_memoria(cap_mental, self.config)
+                )
 
             # 6. Decaimiento de impulso reproductivo
             tasa_rep = float(
