@@ -185,6 +185,13 @@ desastres:
 abono:
   incremento_fertilidad_por_aliviarse: 0.2
   techo_fertilidad: 1.0
+  # (2026-08-29, fix de auditoria) Esta clave estaba declarada -- y el
+  # propio docstring de Celda.fertilidad decia literalmente "decae con el
+  # tiempo (cadencia de dia)" -- pero ningun archivo Python la leia
+  # (confirmado por grep, cero resultados): fertilidad solo podia subir,
+  # nunca bajaba. Mismo patron que tasa_perdida_seguridad_por_amenaza
+  # antes de hoy. Ahora sistema_flora.py la aplica de verdad, una vez al
+  # dia, sobre la celda de cada planta procesada.
   decaimiento_fertilidad_por_dia: 0.1
 
 descomposicion:
@@ -197,6 +204,33 @@ descomposicion:
 flora:
   bono_produccion_ribera: 0.2
   tasa_retorno_mantillo: 0.05
+  # SOBREFORRAJEO (2026-08-29, investigacion de sobrepoblacion, confirmado
+  # con Diego -- "un sobreforrajeo deberia afectar de algun modo a los
+  # recursos, pero ahora la flora sigue eternamente produciendo sin mas").
+  # Diagnostico: el recurso de una celda SI se agota de verdad al comer
+  # (sistema_recursos.py resta cada bocado), pero la produccion diaria
+  # (mas abajo en este mismo modulo) rellenaba cada planta madura con el
+  # mismo incremento fijo cada dia sin importar cuanta presion de consumo
+  # hubiera sufrido -- y la propagacion seguia colonizando celdas nuevas
+  # sin limite, asi que la CAPACIDAD AGREGADA del mapa solo podia crecer,
+  # nunca encogerse: verificado que hierba y raices (compartidas por
+  # gnomo/conejo/ardilla) CRECIAN durante toda una corrida de 6000 ticks
+  # pese a que la poblacion de conejo pasaba de 30 a 1349 individuos.
+  #
+  # Contramedida: si una planta madura amanece con su recurso de alimento
+  # en 0.0 (agotado por completo desde el ultimo corte de dia, sin haber
+  # llegado a regenerar nada) durante dias_agotada_para_regresion dias
+  # SEGUIDOS, se considera sobreforrajeo sostenido (no un bache de un
+  # solo dia) y la planta RETROCEDE a etapa_tras_sobreforrajeo -- el mismo
+  # valor de "brote recien colonizado" que ya usa la propagacion -- en vez
+  # de seguir madura: dejara de producir hasta volver a crecer con su
+  # propia tasa_crecimiento_por_dia, el mismo mecanismo que ya rige a
+  # cualquier planta inmadura. Reutiliza la maquinaria de crecimiento
+  # existente en vez de inventar un sistema de "salud de planta" nuevo.
+  # PROVISIONAL: umbral y valor de regresion son una hipotesis de partida
+  # razonada, sin calibrar contra el harness completo.
+  dias_agotada_para_regresion: 2
+  etapa_tras_sobreforrajeo: 0.1
   # fraccion_siembra_inicial (PROVISIONAL, calibraciÃ³n numÃ©rica -- ver
   # diagnÃ³stico de inaniciÃ³n 2026-08-23, nucleo/entidad.py:sembrar_flora_inicial
   # y main.py): fracciÃ³n de las celdas tiene_recurso=True de cada especie
@@ -405,11 +439,38 @@ memoria:
 # ------------------------------------------------------------------------------
 depredacion:
   umbral_disposicion_caza: 0.5
-  captura_prob_min: 0.05
-  captura_prob_max: 0.5
+  # RECALIBRADO (2026-08-29, investigacion de sobrepoblacion, confirmado
+  # con Diego -- "recalibrar la caza del lobo... hacer que esto sea
+  # funcional"). Diagnostico previo contra el motor real (semilla 42,
+  # 1200 ticks, instrumentado con un wrapper sobre _resolver_ataque):
+  # solo 264 contactos cazador-presa en 1200 ticks, 39 capturas letales
+  # (14.8% de exito por contacto), rendimiento energetico por captura de
+  # apenas +0.045 saciedad tipico (conejo/lobo ~0.03 de ratio de masa x
+  # eficiencia 1.5) frente a una perdida de 0.003/tick -- equilibrio
+  # exigia 1 captura cada ~15 ticks por lobo, la tasa real daba 1 cada
+  # ~104. Con la manada fundadora (6 lobos) extinta siempre antes del
+  # tick 1200 en las 3 semillas probadas (42, 7, 99).
+  #
+  # Calibrado subiendo DOS palancas a la vez (una sola no alcanza: incluso
+  # con probabilidad de captura al 100%, la frecuencia de contacto actual
+  # apenas empataba el equilibrio, sin margen). Validado en 3 semillas x
+  # 3000 ticks: mejora real y medible (antes extincion segura <1200,
+  # ahora una semilla sobrevive completa a 3000 con recuperacion de
+  # poblacion real, las otras dos se extinguen mas tarde, ~1200-2000) --
+  # NO es una solucion completa, sigue habiendo extincion en la mayoria
+  # de semillas probadas. Aumentar ademas la poblacion fundadora de lobo
+  # se probo y se descarto: en una semilla la caza mejorada + mas lobos
+  # extinguio a conejo Y ardilla por completo, matando de hambre a los
+  # propios lobos despues -- sobrecalibrar tiene su propio riesgo de
+  # colapso. PROVISIONAL, sin validar contra el harness completo (15
+  # semillas x 12000 ticks); estabilidad robusta en todas las semillas
+  # probablemente exige un cambio estructural (mapa mas grande, caza en
+  # manada), no solo estos dos parametros -- pendiente de decidir aparte.
+  captura_prob_min: 0.15
+  captura_prob_max: 0.85
   factor_agresividad_resistencia: 0.2
   factor_dano_base: 0.4
-  eficiencia_biomasa_saciedad: 1.5
+  eficiencia_biomasa_saciedad: 12.0
   eficiencia_biomasa_hidratacion: 0.5
   # Coste de forrajeo vs. beneficio (2026-08-23, ver sistema_movimiento.py:
   # _calcular_caza para el diagnÃ³stico completo). Ambos valores elegidos

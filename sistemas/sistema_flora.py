@@ -46,6 +46,20 @@ class SistemaFlora:
 
         cfg_abono = self.config.get("abono", {})
         self.techo_fertilidad: float = float(cfg_abono.get("techo_fertilidad", 1.0))
+        # (2026-08-29, fix de auditoria) Declarada desde siempre, nunca
+        # leida hasta hoy -- ver comentario en config/constantes.yaml.
+        self.decaimiento_fertilidad: float = float(
+            cfg_abono.get("decaimiento_fertilidad_por_dia", 0.1)
+        )
+
+        # SOBREFORRAJEO (2026-08-29, ver config/constantes.yaml seccion
+        # flora para el diagnostico completo).
+        self.dias_agotada_para_regresion: int = int(
+            self.cfg_flora.get("dias_agotada_para_regresion", 2)
+        )
+        self.etapa_tras_sobreforrajeo: float = float(
+            self.cfg_flora.get("etapa_tras_sobreforrajeo", 0.1)
+        )
 
     def ejecutar(
         self,
@@ -114,6 +128,13 @@ class SistemaFlora:
                 planta.etapa = min(1.0, planta.etapa + tasa_crec)
                 continue
 
+            # (2026-08-29, fix de auditoria) Decaimiento de fertilidad --
+            # declarado desde siempre, nunca aplicado hasta hoy. Se aplica
+            # aqui, una vez por dia por cada celda con una planta madura
+            # que se procesa, ANTES de calcular la produccion de hoy (asi
+            # que la produccion de hoy ya refleja la fertilidad decaida).
+            celda.fertilidad = max(0.0, celda.fertilidad - self.decaimiento_fertilidad)
+
             # 2. Producción de biomasa (Planta Madura)
             f_prod = factor_produccion(
                 especie_cfg=cfg_esp,
@@ -126,6 +147,12 @@ class SistemaFlora:
             f_rib = factor_ribera(celda, self.bono_ribera)
             eficiencia_total = f_prod * f_rib * (1.0 + celda.fertilidad)
 
+            # SOBREFORRAJEO (2026-08-29, ver config/constantes.yaml seccion
+            # flora): agotada_hoy marca si CUALQUIER recurso de alimento de
+            # esta planta amanecio en 0.0 -- consumido por completo desde
+            # el corte de dia anterior, antes de que este bloque pudiera
+            # regenerar nada.
+            agotada_hoy = False
             recursos_catalogo = cfg_esp.get("recursos", [])
             for rec in recursos_catalogo:
                 if rec.get("categoria") != "alimento":
@@ -136,6 +163,8 @@ class SistemaFlora:
                 tasa_reg = float(rec.get("tasa_regeneracion", 0.5))
 
                 cant_actual = celda.recursos.get(nombre_rec, 0.0)
+                if cant_actual <= 0.0:
+                    agotada_hoy = True
                 incremento = tasa_reg * eficiencia_total
 
                 if cant_actual >= cap_max:
@@ -147,12 +176,30 @@ class SistemaFlora:
                     nueva_cant = min(cap_max, cant_actual + incremento)
                     celda.recursos[nombre_rec] = nueva_cant
 
-            # 3. Propagación espacial a celdas vecinas
-            prob_prop = float(cfg_esp.get("prob_propagacion_por_dia", 0.02))
-            if self.rng.random() < prob_prop:
-                self._intentar_propagacion(
-                    gestor, zona, pos.x, pos.y, planta.especie, cfg_esp, posiciones_planta
-                )
+            # Sostenido durante dias_agotada_para_regresion dias SEGUIDOS
+            # (no un bache de un solo dia) -> la planta retrocede a brote,
+            # dejando de producir hasta que vuelva a madurar por su cuenta
+            # (rama de crecimiento ontogenico, arriba). Un solo dia de
+            # agotamiento no dispara nada -- es la presion sostenida la
+            # que cuenta como sobreforrajeo, no la escasez puntual.
+            if agotada_hoy:
+                planta.dias_agotada_consecutivos += 1
+                if planta.dias_agotada_consecutivos >= self.dias_agotada_para_regresion:
+                    planta.etapa = self.etapa_tras_sobreforrajeo
+                    planta.dias_agotada_consecutivos = 0
+            else:
+                planta.dias_agotada_consecutivos = 0
+
+            # 3. Propagación espacial a celdas vecinas -- solo si la planta
+            # sigue madura (el sobreforrajeo de arriba pudo acabar de
+            # regresarla a brote este mismo dia: un brote recien golpeado
+            # no deberia propagarse a la vez que se le pide recuperarse).
+            if planta.etapa >= 1.0:
+                prob_prop = float(cfg_esp.get("prob_propagacion_por_dia", 0.02))
+                if self.rng.random() < prob_prop:
+                    self._intentar_propagacion(
+                        gestor, zona, pos.x, pos.y, planta.especie, cfg_esp, posiciones_planta
+                    )
 
     def _intentar_propagacion(
         self,

@@ -41,3 +41,13 @@ class Planta:
     tarda mas en madurar que la hierba silvestre). Solo una planta con
     etapa=1.0 produce recurso o se propaga; una inmadura solo crece. Las
     plantas sembradas al generar el mundo nacen YA maduras (etapa=1.0)."""
+    dias_agotada_consecutivos: int = 0
+    """SOBREFORRAJEO (2026-08-29, ver config/constantes.yaml seccion
+    flora): cuenta dias SEGUIDOS en que esta planta amanecio con su
+    recurso de alimento en 0.0 (agotado por consumo antes de que
+    sistema_flora.py pudiera regenerarlo). Al alcanzar
+    flora.dias_agotada_para_regresion, la planta retrocede a
+    flora.etapa_tras_sobreforrajeo y el contador se reinicia. Transitorio,
+    NO se persiste (mismo motivo que los timers de plenitud de
+    sistema_necesidades.py: tras cargar una partida se recalcula desde
+    cero contra el estado vivo, un dia de margen es inofensivo)."""
