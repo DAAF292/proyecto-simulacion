@@ -25,6 +25,7 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
+from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
@@ -82,7 +83,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.23-fase0"
+VERSION_ESQUEMA = "0.24-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -216,7 +217,8 @@ class Persistencia:
                     tick_inicio_gestacion INTEGER,
                     gestacion_padre_id INTEGER,
                     gestacion_padre_snapshot TEXT,
-                    recuerdos TEXT
+                    recuerdos TEXT,
+                    inventario TEXT
                 )
                 """
             )
@@ -390,6 +392,7 @@ class Persistencia:
                 rep = gestor.obtener_componente(eid, Reproduccion)
                 gest = gestor.obtener_componente(eid, Gestacion)
                 mem = gestor.obtener_componente(eid, MemoriaEspacial)
+                inv = gestor.obtener_componente(eid, Inventario)
 
                 if pos and nec and dims and pf and temp and cm and pm and rep:
                     filas_criaturas.append(
@@ -440,6 +443,7 @@ class Persistencia:
                             gest.id_padre if gest else None,
                             json.dumps(_serializar_snapshot_padre(gest)) if gest else None,
                             json.dumps(mem.recuerdos) if mem else None,
+                            json.dumps(inv.contenidos) if inv else None,
                         )
                     )
             cur.executemany(
@@ -447,7 +451,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -682,15 +686,17 @@ class Persistencia:
 
                 recuerdos_dict = json.loads(fila[45]) if fila[45] else {}
                 gestor.anadir_componente(eid, MemoriaEspacial(recuerdos=recuerdos_dict))
+                inventario_dict = json.loads(fila[46]) if fila[46] else {}
+                gestor.anadir_componente(eid, Inventario(contenidos=inventario_dict))
                 gestor.anadir_componente(eid, Intencion(accion=Accion.DEAMBULAR))
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[46]),
-                        nombre=fila[47],
-                        tick_nacimiento=fila[48],
-                        id_madre=fila[49],
-                        id_padre=fila[50],
+                        especie=Especie(fila[47]),
+                        nombre=fila[48],
+                        tick_nacimiento=fila[49],
+                        id_madre=fila[50],
+                        id_padre=fila[51],
                     ),
                 )
 

@@ -15,6 +15,7 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
+from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
@@ -184,7 +185,7 @@ def crear_criatura(
     techo_fraccion_edad_inicial: float = 0.0,
 ) -> int:
     """
-    Fábrica ECS: Instancia un organismo vivo completo con sus 11 componentes de datos.
+    Fábrica ECS: Instancia un organismo vivo completo con sus 12 componentes de datos.
 
     techo_fraccion_edad_inicial (2026-08-21, ver _sortear_edad_inicial_ticks
     arriba): únicamente relevante para la siembra de la población fundadora
@@ -270,6 +271,11 @@ def crear_criatura(
     # 6. Intención, Memoria y Reproducción
     gestor.anadir_componente(entidad_id, Intencion(accion=Accion.DEAMBULAR))
     gestor.anadir_componente(entidad_id, MemoriaEspacial())
+
+    # 7. Inventario (2026-08-30, ver componentes/inventario.py) -- se
+    # añade a toda criatura por igual, vacío; que se use de verdad depende
+    # de consciencia, no de la especie (ver docstring del componente).
+    gestor.anadir_componente(entidad_id, Inventario())
     
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gest = _sortear_valor(rng, cfg_esp.get("duracion_gestacion_dias", [30.0, 60.0]))
@@ -459,6 +465,10 @@ def nacer_criatura(
 
     gestor.anadir_componente(entidad_id, Intencion(accion=Accion.DEAMBULAR))
     gestor.anadir_componente(entidad_id, MemoriaEspacial())
+    # Inventario (2026-08-30, ver componentes/inventario.py) -- mismo
+    # criterio que crear_criatura: se añade vacío a todo nacimiento por
+    # igual, un recién nacido no hereda lo que cargaban sus progenitores.
+    gestor.anadir_componente(entidad_id, Inventario())
 
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gestacion = heredar(

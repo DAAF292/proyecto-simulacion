@@ -80,6 +80,17 @@ decision:
 capacidad_fisica:
   tasa_perdida_resistencia_por_esfuerzo: 0.05
 
+# Inventario -- FUNDAMENTO de la fase de interacción física (2026-08-30,
+# ver componentes/inventario.py y nucleo/inventario.py). Capacidad ligada
+# al propio peso (Diego: "depende de tu capacidad física de portarlos"),
+# sin límite de variedad de materiales, solo de peso total.
+inventario:
+  # PROVISIONAL: orden de magnitud real de carga sostenible (una persona
+  # puede cargar de forma sostenida en torno al 20-30% de su propio
+  # peso), no medido contra el motor en marcha -- sin ninguna acción que
+  # llene un Inventario todavía, no hay nada que observar aún.
+  fraccion_carga_maxima: 0.25
+
 capacidad_mental:
   tasa_perdida_estabilidad_por_amenaza: 0.02
   penalizacion_estabilidad_presenciar_muerte: 0.15
