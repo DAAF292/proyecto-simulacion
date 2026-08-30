@@ -19,6 +19,7 @@ from componentes.necesidades import Necesidades
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
+from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposicion_por_tamano
 # NOTA (2026-08-23): la función real en nucleo/disposicion.py se llama
 # magnitud_disposicion_por_peso -- este archivo la importaba con un
@@ -70,6 +71,17 @@ class SistemaDepredacion:
             cfg_dep.get("eficiencia_biomasa_hidratacion", 0.5)
         )
         self.factor_dano_base: float = float(cfg_dep.get("factor_dano_base", 0.4))
+        # GREGARISMO -- Pieza 1, bono de caza en grupo (2026-08-30, ver
+        # nucleo/disposicion.py:contar_conspecificos_cercanos y el
+        # comentario de config/constantes.yaml seccion depredacion para
+        # el diagnostico y la motivacion completos).
+        self.radio_apoyo_grupal: int = int(
+            self.config.get("social", {}).get("radio_apoyo_grupal", 3)
+        )
+        self.bono_caza_por_aliado: float = float(
+            cfg_dep.get("bono_caza_por_aliado", 0.0)
+        )
+        self.bono_caza_maximo: float = float(cfg_dep.get("bono_caza_maximo", 0.0))
 
     def ejecutar(self, gestor: GestorEntidades, bus_eventos: BusEventos) -> None:
         """
@@ -180,6 +192,25 @@ class SistemaDepredacion:
         val = temp_presa.valentia if temp_presa else 0.5
 
         prob_exito = disp + (agr - val) * self.factor_agresividad_resistencia
+
+        # GREGARISMO -- Pieza 1, bono de caza en grupo (2026-08-30, ver
+        # docstring de config/constantes.yaml seccion depredacion). Cuenta
+        # conespecificos del propio cazador, cazando activamente, dentro
+        # del radio de apoyo grupal -- escalado por la sociabilidad DIRECTA
+        # del propio cazador, igual que el resto de bonos gregarios de este
+        # incremento.
+        sociabilidad_cazador = temp_cazador.sociabilidad if temp_cazador else 0.0
+        if sociabilidad_cazador > 0.0 and self.bono_caza_por_aliado > 0.0:
+            aliados_cazando = contar_conspecificos_cercanos(
+                gestor, cazador_id, ident_cazador.especie, pos_x, pos_y,
+                self.radio_apoyo_grupal, solo_cazando=True,
+            )
+            bono_grupo = min(
+                self.bono_caza_maximo,
+                aliados_cazando * self.bono_caza_por_aliado * sociabilidad_cazador,
+            )
+            prob_exito += bono_grupo
+
         prob_exito = max(self.captura_prob_min, min(self.captura_prob_max, prob_exito))
 
         if self.rng.random() >= prob_exito:

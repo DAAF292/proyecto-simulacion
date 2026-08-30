@@ -43,6 +43,8 @@ propio como presa), False busca presas (alguien mas pequeno).
 import math
 
 from componentes.dimensiones_fisicas import DimensionesFisicas
+from componentes.identidad import Identidad
+from componentes.intencion import Accion, Intencion
 from componentes.posicion import Posicion
 
 
@@ -96,6 +98,59 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
             mejor_dist = dist
             mejor = (pos_candidato.x, pos_candidato.y)
     return mejor
+
+
+def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: int,
+                                   radio: int, solo_cazando: bool = False) -> int:
+    """Cuenta individuos de la MISMA especie (Identidad.especie) dentro del
+    radio Manhattan indicado, excluyendo al propio individuo.
+
+    GREGARISMO -- Pieza 1 (2026-08-30, confirmado por Diego: "me parece
+    bien si", tras plantear la preocupacion de que el lobo necesitaba
+    comportamiento de manada real). Version minima explicitamente acotada:
+    un bono emergente sobre mecanicas YA existentes (probabilidad de caza,
+    drenaje de seguridad), sin crear ningun objeto Manada/Grupo, sin capa
+    fisica de recursos, inventario ni materiales -- todo eso queda aparte,
+    fuera de esta pieza (informe tecnico, seccion 20, "manada/asentamiento
+    como concepto generico" sigue parada). Deliberadamente GENERICA por
+    especie, no especifica de lobo: Diego fue explicito en que cualquier
+    especie con sociabilidad suficiente deberia beneficiarse igual --
+    lobo no es siquiera la especie mas sociable (rango racial lobo
+    0.3-0.7, conejo 0.5-0.9) asi que restringir esto a lobo habria sido
+    autoria de guion, no ley (principio 1 y 5 de CLAUDE.md).
+
+    solo_cazando=True filtra ademas por Intencion.accion == Accion.CAZAR --
+    usado por el bono de caza en grupo (sistema_depredacion.py): lo que
+    cuenta ahi es cuantos conespecificos estan cazando activamente cerca
+    (senal de cooperacion real), no cuantos hay sin mas (que incluiria
+    crias o parejas sin relacion con el ataque en curso). Con
+    solo_cazando=False (por defecto) cuenta cualquier conespecifico
+    perceptible -- usado por el bono de defensa en grupo
+    (sistema_necesidades.py): seguridad en numeros no exige que los
+    demas esten haciendo nada en concreto, solo estar cerca.
+
+    Reutiliza el mismo patron de busqueda lineal O(N) que el resto de este
+    modulo y de _buscar_conspecifico_mas_cercano
+    (sistema_movimiento.py) -- mismo limite de escalabilidad conocido y
+    aceptado, no una regresion nueva.
+    """
+    total = 0
+    for id_c in gestor.entidades_con(Identidad, Posicion):
+        if id_c == id_propio:
+            continue
+        ident_c = gestor.obtener_componente(id_c, Identidad)
+        if ident_c is None or ident_c.especie != especie:
+            continue
+        if solo_cazando:
+            intencion_c = gestor.obtener_componente(id_c, Intencion)
+            if intencion_c is None or intencion_c.accion != Accion.CAZAR:
+                continue
+        pos_c = gestor.obtener_componente(id_c, Posicion)
+        if pos_c is None:
+            continue
+        if abs(pos_c.x - x) + abs(pos_c.y - y) <= radio:
+            total += 1
+    return total
 
 
 def id_en_contacto_por_disposicion(gestor, id_propio: int, x: int, y: int,

@@ -77,9 +77,11 @@ from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
+from componentes.temperamento import Temperamento
 from nucleo.agua import profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
+from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
@@ -139,6 +141,19 @@ class SistemaNecesidades:
         # peso), aplicada en sentido contrario.
         self.umbral_disposicion_amenaza: float = float(
             self.config.get("depredacion", {}).get("umbral_disposicion_caza", 0.5)
+        )
+
+        # GREGARISMO -- Pieza 1, bono de defensa en grupo (2026-08-30, ver
+        # nucleo/disposicion.py:contar_conspecificos_cercanos y el
+        # comentario de config/constantes.yaml seccion social para el
+        # diseno completo). Generico para las 4 especies, no solo lobo.
+        cfg_social = self.config.get("social", {})
+        self.radio_apoyo_grupal: int = int(cfg_social.get("radio_apoyo_grupal", 3))
+        self.bono_defensa_por_aliado: float = float(
+            cfg_social.get("bono_defensa_por_aliado", 0.0)
+        )
+        self.bono_defensa_maximo: float = float(
+            cfg_social.get("bono_defensa_maximo", 0.0)
         )
 
         self.prob_muerte_inanicion: float = float(
@@ -210,6 +225,7 @@ class SistemaNecesidades:
             dims = gestor.obtener_componente(eid, DimensionesFisicas)
             ident = gestor.obtener_componente(eid, Identidad)
             intencion = gestor.obtener_componente(eid, Intencion)
+            temperamento = gestor.obtener_componente(eid, Temperamento)
 
             if nec is None or pos is None or dims is None or ident is None:
                 continue
@@ -311,7 +327,29 @@ class SistemaNecesidades:
                 dims.peso, self.umbral_disposicion_amenaza,
             )
             if amenaza_pos is not None:
-                nec.seguridad = max(0.0, nec.seguridad - self.tasa_drenaje_seguridad)
+                # GREGARISMO -- Pieza 1, bono de defensa en grupo
+                # (2026-08-30, ver docstring del modulo y comentario de
+                # config/constantes.yaml seccion social): seguridad en
+                # numeros -- conespecificos cercanos (cualquiera, no solo
+                # cazando) reducen el drenaje, escalados por la
+                # sociabilidad DIRECTA del propio individuo amenazado.
+                # Nunca anula el drenaje por completo (bono_defensa_maximo
+                # topa la reduccion): seguir habiendo una amenaza real es
+                # una amenaza real, con independencia de cuantos aliados
+                # haya alrededor.
+                sociabilidad_propia = temperamento.sociabilidad if temperamento else 0.0
+                drenaje_efectivo = self.tasa_drenaje_seguridad
+                if sociabilidad_propia > 0.0 and self.bono_defensa_por_aliado > 0.0:
+                    aliados_cercanos = contar_conspecificos_cercanos(
+                        gestor, eid, ident.especie, pos.x, pos.y,
+                        self.radio_apoyo_grupal, solo_cazando=False,
+                    )
+                    reduccion = min(
+                        self.bono_defensa_maximo,
+                        aliados_cercanos * self.bono_defensa_por_aliado * sociabilidad_propia,
+                    )
+                    drenaje_efectivo = self.tasa_drenaje_seguridad * (1.0 - reduccion)
+                nec.seguridad = max(0.0, nec.seguridad - drenaje_efectivo)
             elif nec.seguridad < 1.0:
                 nec.seguridad = min(1.0, nec.seguridad + self.tasa_recup_seguridad)
 

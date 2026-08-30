@@ -397,6 +397,37 @@ movimiento:
 social:
   distancia_deseada_conspecifico: 1
   distancia_deseada_territorio: 1
+  # GREGARISMO -- Pieza 1 (2026-08-30, ver nucleo/disposicion.py:
+  # contar_conspecificos_cercanos para el diseno completo). Radio
+  # compartido por el bono de caza en grupo (sistema_depredacion.py) y el
+  # bono de defensa en grupo (sistema_necesidades.py) -- un unico radio
+  # "de apoyo grupal" en vez de dos radios separados por consumidor
+  # (reutiliza antes de inventar). Mas amplio que
+  # distancia_deseada_conspecifico (1, la distancia a la que ya se
+  # considera "junto a" alguien) porque aqui se trata de percibir aliados
+  # cercanos, no de haber llegado a su lado -- del mismo orden que
+  # percepcion.radio_maximo_celdas (4). PROVISIONAL, valor de partida
+  # razonado, no calibrado contra el motor en marcha todavia.
+  radio_apoyo_grupal: 3
+  # Bono de defensa en grupo: cada conespecifico percibido dentro de
+  # radio_apoyo_grupal reduce el drenaje de seguridad por amenaza
+  # (necesidades.defecto.tasa_perdida_seguridad_por_amenaza) en esta
+  # fraccion, escalado por Temperamento.sociabilidad DIRECTA del propio
+  # individuo (mismo criterio sin escalar que el sesgo gregario de
+  # deambular, sistema_movimiento.py) -- un individuo mas sociable saca
+  # mas partido de estar rodeado. bono_defensa_maximo topa la reduccion
+  # total (nunca anula el drenaje por completo: seguir habiendo una
+  # amenaza real sigue siendo una amenaza real, por muchos aliados que
+  # haya alrededor). PROVISIONAL, sin validar contra el harness completo.
+  # HONESTIDAD (2026-08-30): la verificacion de 3 semillas x 3000 ticks de
+  # esta pieza (ver depredacion.bono_caza_por_aliado mas abajo) midio
+  # poblacion final, que refleja el efecto COMBINADO de ambos bonos (caza
+  # y defensa) a la vez -- no se aislo el bono de defensa por separado. No
+  # hay motivo para sospechar el mismo riesgo de sobreexplotacion (reduce
+  # una perdida, no aumenta una captura), pero tampoco esta confirmado de
+  # forma aislada -- pendiente si hiciera falta mas confianza especifica.
+  bono_defensa_por_aliado: 0.15
+  bono_defensa_maximo: 0.6
 
 memoria:
   # CORRECCION 2026-08-23 (encontrado de paso, no lo que se pedia):
@@ -472,6 +503,56 @@ depredacion:
   factor_dano_base: 0.4
   eficiencia_biomasa_saciedad: 12.0
   eficiencia_biomasa_hidratacion: 0.5
+  # GREGARISMO -- Pieza 1, bono de caza en grupo (2026-08-30, ver
+  # nucleo/disposicion.py:contar_conspecificos_cercanos). Motivacion
+  # directa: la recalibracion de arriba (14.8% de exito por contacto)
+  # mejoro la caza del lobo pero se documento explicitamente como
+  # incompleta -- "estabilidad robusta probablemente exige un cambio
+  # estructural... caza en manada". Este es ese cambio estructural, en su
+  # version minima: cada conespecifico percibido DENTRO de
+  # social.radio_apoyo_grupal Y activamente cazando (Accion.CAZAR) en el
+  # mismo instante suma un bono a prob_exito, escalado por
+  # Temperamento.sociabilidad DIRECTA del propio cazador (mismo criterio
+  # sin escalar que el sesgo gregario de deambular). Generico por diseno:
+  # cualquier especie que cace y tenga sociabilidad se beneficia igual,
+  # no es una regla especial de lobo. bono_caza_maximo topa el bono total
+  # antes de que la clamp de captura_prob_min/max se aplique.
+  # PROVISIONAL, valor de partida razonado (no derivado con precision),
+  # sin validar contra el harness completo (15 semillas x 12000 ticks).
+  #
+  # VERIFICADO CONTRA EL MOTOR REAL (2026-08-30, 3 semillas x 3000 ticks,
+  # mismo protocolo que la recalibracion de arriba -- comparando la MISMA
+  # semilla con el bono activo vs. desactivado, resto del motor identico):
+  #   semilla 42 -- SIN bono: lobo final=5 (se hunde a 1 hacia el tick
+  #     1800-2000, RECUPERA a 6-7 despues). CON bono: lobo final=2
+  #     (estabiliza en 2 desde el tick 1800, sin extinguirse pero sin
+  #     recuperar el nivel fundador tampoco). Caso mixto: el bono evita el
+  #     colapso a 1 pero en esta semilla concreta la trayectoria SIN bono
+  #     termina con mas lobos -- ruido de un sistema caotico con muestra
+  #     de 3 semillas, no una regresion clara del mecanismo.
+  #   semilla 7 -- SIN bono: lobo EXTINTO (0 desde ~tick 2000). CON bono:
+  #     lobo final=7, recupera con fuerza tras un minimo de 2. Mejora neta
+  #     clara: extincion evitada.
+  #   semilla 99 -- SIN bono: lobo EXTINTO (0 desde ~tick 2200). CON bono:
+  #     lobo final=1 (sobrevive, pero el conejo de esa misma semilla
+  #     termina EXTINTO -- 0 -- y la trayectoria de lobo, tras un pico de
+  #     7 hacia el tick 1800, cae a 1 en los ultimos 400 ticks, consistente
+  #     con inanicion tras agotar a su presa). Extincion de lobo evitada,
+  #     pero a cambio de un colapso de conejo que el motor SIN bono en esa
+  #     misma semilla no producia.
+  #
+  # Balance honesto: extincion TOTAL de lobo en 3/3 semillas SIN bono baja
+  # a 0/3 CON bono -- mejora real en el objetivo que motivo esta pieza. Pero
+  # aparece un riesgo nuevo, no solo el ya conocido de subir la poblacion
+  # fundadora (ver comentario de arriba): la propia eficacia de caza en
+  # grupo puede sobreexplotar a la presa local hasta su extincion (semilla
+  # 99), el mismo patron de colapso por sobrecalibrar, alcanzable ahora
+  # tambien por esta via y no solo por mas lobos fundadores. NO se ha
+  # ajustado nada en respuesta a este hallazgo -- reportado a Diego para
+  # decidir si amortiguar el bono, acotarlo por disponibilidad de presa, o
+  # aceptarlo como esta y revisarlo si se repite en el harness completo.
+  bono_caza_por_aliado: 0.2
+  bono_caza_maximo: 0.35
   # Coste de forrajeo vs. beneficio (2026-08-23, ver sistema_movimiento.py:
   # _calcular_caza para el diagnÃ³stico completo). Ambos valores elegidos
   # a propÃ³sito por debajo de la especie mÃ¡s pequeÃ±a actual (ardilla,
