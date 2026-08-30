@@ -1,0 +1,14 @@
+# ==============================================================================
+# config/materiales.yaml
+# Catálogo de materiales físicos (reservado, sin contenido todavía)
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+# Reservado para el catálogo de materiales físicos (sustrato, madera,
+# hueso, hierba seca, minerales...) -- diseño en curso, todavía sin
+# contenido. Ver conversación de diseño 2026-08-30 y CLAUDE.md.

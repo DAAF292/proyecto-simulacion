@@ -1,0 +1,15 @@
+# ==============================================================================
+# config/visual.yaml
+# Presentación y monitoreo web
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+visual:
+  puerto: 8765
+  segundos_por_tick: 0.4
+  max_lineas_cronica: 200

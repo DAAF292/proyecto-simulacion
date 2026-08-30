@@ -1,0 +1,105 @@
+# ==============================================================================
+# config/combate.yaml
+# Depredación y dinámica trófica
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+depredacion:
+  umbral_disposicion_caza: 0.5
+  # RECALIBRADO (2026-08-29, investigacion de sobrepoblacion, confirmado
+  # con Diego -- "recalibrar la caza del lobo... hacer que esto sea
+  # funcional"). Diagnostico previo contra el motor real (semilla 42,
+  # 1200 ticks, instrumentado con un wrapper sobre _resolver_ataque):
+  # solo 264 contactos cazador-presa en 1200 ticks, 39 capturas letales
+  # (14.8% de exito por contacto), rendimiento energetico por captura de
+  # apenas +0.045 saciedad tipico (conejo/lobo ~0.03 de ratio de masa x
+  # eficiencia 1.5) frente a una perdida de 0.003/tick -- equilibrio
+  # exigia 1 captura cada ~15 ticks por lobo, la tasa real daba 1 cada
+  # ~104. Con la manada fundadora (6 lobos) extinta siempre antes del
+  # tick 1200 en las 3 semillas probadas (42, 7, 99).
+  #
+  # Calibrado subiendo DOS palancas a la vez (una sola no alcanza: incluso
+  # con probabilidad de captura al 100%, la frecuencia de contacto actual
+  # apenas empataba el equilibrio, sin margen). Validado en 3 semillas x
+  # 3000 ticks: mejora real y medible (antes extincion segura <1200,
+  # ahora una semilla sobrevive completa a 3000 con recuperacion de
+  # poblacion real, las otras dos se extinguen mas tarde, ~1200-2000) --
+  # NO es una solucion completa, sigue habiendo extincion en la mayoria
+  # de semillas probadas. Aumentar ademas la poblacion fundadora de lobo
+  # se probo y se descarto: en una semilla la caza mejorada + mas lobos
+  # extinguio a conejo Y ardilla por completo, matando de hambre a los
+  # propios lobos despues -- sobrecalibrar tiene su propio riesgo de
+  # colapso. PROVISIONAL, sin validar contra el harness completo (15
+  # semillas x 12000 ticks); estabilidad robusta en todas las semillas
+  # probablemente exige un cambio estructural (mapa mas grande, caza en
+  # manada), no solo estos dos parametros -- pendiente de decidir aparte.
+  captura_prob_min: 0.15
+  captura_prob_max: 0.85
+  factor_agresividad_resistencia: 0.2
+  factor_dano_base: 0.4
+  eficiencia_biomasa_saciedad: 12.0
+  eficiencia_biomasa_hidratacion: 0.5
+  # GREGARISMO -- Pieza 1, bono de caza en grupo (2026-08-30, ver
+  # nucleo/disposicion.py:contar_conspecificos_cercanos). Motivacion
+  # directa: la recalibracion de arriba (14.8% de exito por contacto)
+  # mejoro la caza del lobo pero se documento explicitamente como
+  # incompleta -- "estabilidad robusta probablemente exige un cambio
+  # estructural... caza en manada". Este es ese cambio estructural, en su
+  # version minima: cada conespecifico percibido DENTRO de
+  # social.radio_apoyo_grupal Y activamente cazando (Accion.CAZAR) en el
+  # mismo instante suma un bono a prob_exito, escalado por
+  # Temperamento.sociabilidad DIRECTA del propio cazador (mismo criterio
+  # sin escalar que el sesgo gregario de deambular). Generico por diseno:
+  # cualquier especie que cace y tenga sociabilidad se beneficia igual,
+  # no es una regla especial de lobo. bono_caza_maximo topa el bono total
+  # antes de que la clamp de captura_prob_min/max se aplique.
+  # PROVISIONAL, valor de partida razonado (no derivado con precision),
+  # sin validar contra el harness completo (15 semillas x 12000 ticks).
+  #
+  # VERIFICADO CONTRA EL MOTOR REAL (2026-08-30, 3 semillas x 3000 ticks,
+  # mismo protocolo que la recalibracion de arriba -- comparando la MISMA
+  # semilla con el bono activo vs. desactivado, resto del motor identico):
+  #   semilla 42 -- SIN bono: lobo final=5 (se hunde a 1 hacia el tick
+  #     1800-2000, RECUPERA a 6-7 despues). CON bono: lobo final=2
+  #     (estabiliza en 2 desde el tick 1800, sin extinguirse pero sin
+  #     recuperar el nivel fundador tampoco). Caso mixto: el bono evita el
+  #     colapso a 1 pero en esta semilla concreta la trayectoria SIN bono
+  #     termina con mas lobos -- ruido de un sistema caotico con muestra
+  #     de 3 semillas, no una regresion clara del mecanismo.
+  #   semilla 7 -- SIN bono: lobo EXTINTO (0 desde ~tick 2000). CON bono:
+  #     lobo final=7, recupera con fuerza tras un minimo de 2. Mejora neta
+  #     clara: extincion evitada.
+  #   semilla 99 -- SIN bono: lobo EXTINTO (0 desde ~tick 2200). CON bono:
+  #     lobo final=1 (sobrevive, pero el conejo de esa misma semilla
+  #     termina EXTINTO -- 0 -- y la trayectoria de lobo, tras un pico de
+  #     7 hacia el tick 1800, cae a 1 en los ultimos 400 ticks, consistente
+  #     con inanicion tras agotar a su presa). Extincion de lobo evitada,
+  #     pero a cambio de un colapso de conejo que el motor SIN bono en esa
+  #     misma semilla no producia.
+  #
+  # Balance honesto: extincion TOTAL de lobo en 3/3 semillas SIN bono baja
+  # a 0/3 CON bono -- mejora real en el objetivo que motivo esta pieza. Pero
+  # aparece un riesgo nuevo, no solo el ya conocido de subir la poblacion
+  # fundadora (ver comentario de arriba): la propia eficacia de caza en
+  # grupo puede sobreexplotar a la presa local hasta su extincion (semilla
+  # 99), el mismo patron de colapso por sobrecalibrar, alcanzable ahora
+  # tambien por esta via y no solo por mas lobos fundadores. NO se ha
+  # ajustado nada en respuesta a este hallazgo -- reportado a Diego para
+  # decidir si amortiguar el bono, acotarlo por disponibilidad de presa, o
+  # aceptarlo como esta y revisarlo si se repite en el harness completo.
+  bono_caza_por_aliado: 0.2
+  bono_caza_maximo: 0.35
+  # Coste de forrajeo vs. beneficio (2026-08-23, ver sistema_movimiento.py:
+  # _calcular_caza para el diagnóstico completo). Ambos valores elegidos
+  # a propósito por debajo de la especie más pequeña actual (ardilla,
+  # 0.3-0.6kg) para no afectar a las cuatro especies de hoy -- son
+  # salvaguarda para fauna futura mucho más pequeña, no una recalibración
+  # de la caza actual. PROVISIONAL, verificado solo con un barrido de
+  # calibración ligera comprobando que NO cambian la dinámica de hoy.
+  fraccion_minima_peso_presa: 0.001
+  peso_referencia_deteccion_plena: 0.1

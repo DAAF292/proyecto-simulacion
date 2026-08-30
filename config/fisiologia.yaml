@@ -1,0 +1,105 @@
+# ==============================================================================
+# config/fisiologia.yaml
+# Metabolismo, necesidades, decisión (Utility AI), capacidades y ciclo vital
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+necesidades:
+  defecto:
+    tasa_perdida_saciedad_por_tick: 0.012
+    tasa_perdida_energia_por_tick: 0.01
+    tasa_perdida_hidratacion_por_tick: 0.004
+    tasa_perdida_aliviado_por_tick: 0.01
+    tasa_alivio_al_aliviarse: 0.5
+    tasa_recuperacion_energia_al_dormir: 0.05
+    tasa_perdida_seguridad_por_amenaza: 0.3
+    tasa_recuperacion_seguridad: 0.05
+    tasa_perdida_oxigenacion_por_inmersion: 0.5
+    tasa_recuperacion_oxigenacion: 1.0
+    tasa_deriva_confort_termico: 0.03
+    tasa_perdida_impulso_reproductivo_por_tick: 0.005
+    probabilidad_muerte_saciedad_critica: 0.005
+    probabilidad_muerte_deshidratacion: 0.005
+    probabilidad_muerte_ahogamiento: 0.5
+    # ticks_plenitud (2026-08-29, incremento 2 del diseño de microsueños --
+    # ver sistemas/sistema_necesidades.py): PERIODO DE PLENITUD posaciedad.
+    # Una necesidad que alcanza 1.0 no decae durante este numero de ticks;
+    # despues decae con su tasa lineal. 0 lo desactiva. PROVISIONAL: 12
+    # ticks (~medio dia de juego) es la hipotesis de partida razonada del
+    # diseño con Diego, sin calibrar contra el harness completo (15 semillas
+    # x 12000 ticks) -- solo contra el arnes de diagnostico (semilla 42,
+    # 3000 ticks).
+    ticks_plenitud: 12
+  lobo:
+    tasa_perdida_saciedad_por_tick: 0.003
+
+consumo:
+  tasa_consumo_al_comer: 0.5
+  tasa_consumo_al_beber: 0.2
+
+decision:
+  utilidad_deambular_base: 0.1
+  # umbral_crisis_interrupcion (2026-08-29, ley B de compromiso de
+  # satisfaccion -- ver sistemas/sistema_decision.py): por debajo de este
+  # valor en CUALQUIER necesidad fisica distinta de la que la accion
+  # comprometida esta resolviendo, el compromiso se levanta y decide el
+  # argmax normal (el hambre real despierta a quien duerme, la incomodidad
+  # leve no). PROVISIONAL: 0.2 es la hipotesis de partida razonada del
+  # diseno con Diego, sin calibrar contra el harness completo (15 semillas
+  # x 12000 ticks) -- solo contra el arnes de diagnostico de microsuenos
+  # (semilla 42, 3000 ticks).
+  umbral_crisis_interrupcion: 0.2
+  # umbral_atencion_pareja (2026-08-29, tercer gate de BUSCAR_PAREJA --
+  # ver sistemas/sistema_decision.py): ninguna busqueda de pareja con
+  # CUALQUIER necesidad fisica con accion de satisfaccion (saciedad/
+  # energia/hidratacion/aliviado) por debajo de este valor -- la utilidad
+  # de pareja se fuerza a 0.0. Corrige la inconsistencia entre la intencion
+  # documentada ("buscar pareja no compite por delante de las fisicas") y
+  # la implementacion, visible tras la ley B: criaturas en crisis total
+  # buscando pareja mientras morian de inanicion (impulso decaido a 0.0 da
+  # utilidad 1.0, maxima). PROVISIONAL: 0.5 es la hipotesis de partida
+  # razonada del diseno con Diego, sin calibrar contra el harness completo.
+  umbral_atencion_pareja: 0.5
+  # Umbral de CapacidadMental.consciencia por debajo del cual una criatura
+  # queda sujeta al sesgo de territorio (sistemas/sistema_movimiento.py):
+  # tiende a permanecer cerca de comida/agua recordadas en vez de
+  # deambular erráticamente sin objetivo (2026-08-22, propuesta de Diego).
+  # PROVISIONAL: 0.3 es una hipótesis de partida razonada, no calibrada
+  # contra el motor en marcha -- separa con margen a lobo/conejo/ardilla
+  # (rango racial de consciencia 0.0-0.2 o 0.0-0.1) de gnomo (0.6-0.9),
+  # de modo que hoy solo gnomo queda EXENTO del sesgo de territorio. Si al
+  # observar el motor conviene que alguna otra especie también quede
+  # exenta o incluida, este umbral es el primer sitio a ajustar.
+  umbral_consciencia_agencia: 0.3
+
+capacidad_fisica:
+  tasa_perdida_resistencia_por_esfuerzo: 0.05
+
+capacidad_mental:
+  tasa_perdida_estabilidad_por_amenaza: 0.02
+  penalizacion_estabilidad_presenciar_muerte: 0.15
+
+crisis_mental:
+  umbral_estabilidad_crisis: 0.0
+  umbral_valentia_huida_erratica: 0.3
+  umbral_agresividad_violenta: 0.6
+
+ciclo_vital:
+  # RECALIBRADO 2026-08-23: el valor original (0.3, exponente fijo 2)
+  # convertía la vejez en la causa dominante de muerte (55-76% del
+  # total en un barrido de calibración ligera), extinguiendo la
+  # población en 1000-2000 ticks -- ver nucleo/ciclo_vital.py,
+  # docstring de probabilidad_muerte_vejez, para el diagnóstico
+  # completo. PROVISIONAL, ajustado contra un barrido ligero (5
+  # semillas x 6000 ticks), no el harness completo de 15x12000 que
+  # usó el proyecto para el sistema de agua.
+  techo_probabilidad_muerte_vejez: 0.05
+  exponente_curva_vejez: 8.0
+
+reproduccion:
+  mutacion_fraccion: 0.1

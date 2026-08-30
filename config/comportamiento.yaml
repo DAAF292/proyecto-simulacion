@@ -1,0 +1,90 @@
+# ==============================================================================
+# config/comportamiento.yaml
+# Percepción, movimiento, gregarismo/territorio y memoria espacial
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+percepcion:
+  radio_minimo_celdas: 0
+  radio_maximo_celdas: 4
+
+movimiento:
+  coste_resistencia_pendiente: 0.05
+  coste_resistencia_sprint: 0.08
+  umbral_resistencia_agotamiento: 0.05
+
+social:
+  distancia_deseada_conspecifico: 1
+  distancia_deseada_territorio: 1
+  # GREGARISMO -- Pieza 1 (2026-08-30, ver nucleo/disposicion.py:
+  # contar_conspecificos_cercanos para el diseno completo). Radio
+  # compartido por el bono de caza en grupo (sistema_depredacion.py) y el
+  # bono de defensa en grupo (sistema_necesidades.py) -- un unico radio
+  # "de apoyo grupal" en vez de dos radios separados por consumidor
+  # (reutiliza antes de inventar). Mas amplio que
+  # distancia_deseada_conspecifico (1, la distancia a la que ya se
+  # considera "junto a" alguien) porque aqui se trata de percibir aliados
+  # cercanos, no de haber llegado a su lado -- del mismo orden que
+  # percepcion.radio_maximo_celdas (4). PROVISIONAL, valor de partida
+  # razonado, no calibrado contra el motor en marcha todavia.
+  radio_apoyo_grupal: 3
+  # Bono de defensa en grupo: cada conespecifico percibido dentro de
+  # radio_apoyo_grupal reduce el drenaje de seguridad por amenaza
+  # (necesidades.defecto.tasa_perdida_seguridad_por_amenaza) en esta
+  # fraccion, escalado por Temperamento.sociabilidad DIRECTA del propio
+  # individuo (mismo criterio sin escalar que el sesgo gregario de
+  # deambular, sistema_movimiento.py) -- un individuo mas sociable saca
+  # mas partido de estar rodeado. bono_defensa_maximo topa la reduccion
+  # total (nunca anula el drenaje por completo: seguir habiendo una
+  # amenaza real sigue siendo una amenaza real, por muchos aliados que
+  # haya alrededor). PROVISIONAL, sin validar contra el harness completo.
+  # HONESTIDAD (2026-08-30): la verificacion de 3 semillas x 3000 ticks de
+  # esta pieza (ver depredacion.bono_caza_por_aliado mas abajo) midio
+  # poblacion final, que refleja el efecto COMBINADO de ambos bonos (caza
+  # y defensa) a la vez -- no se aislo el bono de defensa por separado. No
+  # hay motivo para sospechar el mismo riesgo de sobreexplotacion (reduce
+  # una perdida, no aumenta una captura), pero tampoco esta confirmado de
+  # forma aislada -- pendiente si hiciera falta mas confianza especifica.
+  bono_defensa_por_aliado: 0.15
+  bono_defensa_maximo: 0.6
+
+memoria:
+  # CORRECCION 2026-08-23 (encontrado de paso, no lo que se pedia):
+  # estas tres claves se llamaban capacidad_minima/capacidad_maxima/
+  # factor_error_por_distancia -- ninguna coincidia con lo que lee
+  # nucleo/memoria.py (min_recuerdos_por_categoria/
+  # max_recuerdos_por_categoria/factor_imprecision_distancia), asi que el
+  # codigo caia siempre en sus valores por defecto (1, 5, 0.2). Coincidia
+  # por casualidad en capacidad (1 y 5); factor_imprecision_distancia
+  # llevaba desde siempre usando 0.2 en vez del 0.3 aqui configurado, sin
+  # que nada lo advirtiera. Renombradas para que el yaml controle de
+  # verdad lo que dice controlar.
+  min_recuerdos_por_categoria: 1
+  max_recuerdos_por_categoria: 5
+  factor_imprecision_distancia: 0.3
+  # prob_purgar_recuerdo_agotado (2026-08-23, PROVISIONAL -- ver
+  # sistema_recursos.py:_resolver_comer/_resolver_beber y el diagnostico
+  # de extincion local semilla 1): probabilidad, en CADA visita fallida a
+  # una coordenada recordada de comida/agua ya agotada, de descartar ese
+  # recuerdo -- en vez de purgarlo al primer fallo (lo que se probo
+  # primero y funcionaba muy bien en 4 de 5 semillas de referencia, pero
+  # extinguia una quinta: descartaba de golpe un recuerdo que, dado
+  # margen, habria vuelto a dar fruto tras la regeneracion diaria de
+  # sistema_flora.py). Con esta probabilidad baja, un individuo detenido
+  # en un punto muerto reintenta varias veces antes de rendirse -- da
+  # margen real a la regeneracion (que corre una vez por dia,
+  # Reloj.TICKS_POR_DIA=24 ticks) sin conservar el recuerdo para siempre.
+  # Valor de partida razonado, no derivado con precision -- contrastado
+  # contra el harness de calibracion (5 semillas x 6000 ticks): 0.05
+  # (espera esperada de ~20 ticks) NO bastaba para salvar la semilla 3 de
+  # referencia (seguia extinguiendose); 0.15 y 0.30 si, en ambos casos con
+  # crecimiento poblacional fuerte. Se deja en 0.15 (espera esperada de
+  # ~6-7 intentos) como punto medio -- mismo estatus provisional que el
+  # resto de esta seccion, pendiente de mas semillas si hiciera falta mas
+  # confianza.
+  prob_purgar_recuerdo_agotado: 0.15

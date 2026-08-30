@@ -1,0 +1,33 @@
+# ==============================================================================
+# config/hidrologia.yaml
+# Hidrología: agua permanente (ríos/lagos/pozas) y charcos efímeros de clima
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+agua:
+  umbral_elevacion_nacimiento: 0.70
+  banda_elevacion_lago: 0.03
+  tope_tamano_lago: 8
+  umbral_elevacion_poza: 0.20
+  banda_elevacion_poza: 0.008
+  tope_tamano_poza: 4
+  escala_metros_por_unidad_elevacion: 100.0
+  # (2026-08-28, PROVISIONAL) Inercia del cauce en _trazar_rio: penaliza
+  # el cambio de direccion del descenso. Calibrado contra el motor con la
+  # semilla por defecto: 0.0 -> 11 giros (codorniz), 0.002 -> 6, 0.004 ->
+  # 4 (curvas suaves, elegido), >= 0.006 -> 3 (demasiado recto para el
+  # gusto de Diego); sin cambio en lagos/pozas en todo el rango.
+  coste_giro_rio: 0.004
+  tope_tamano_orilla_rio: 3
+  piso_banda_rio: 0.001
+  techo_banda_rio: 0.03
+
+charcos:
+  techo_profundidad_charco: 0.03
+  tasa_evaporacion_charco_por_tick: 0.0006
+  tasa_agotamiento_charco_al_beber: 0.01

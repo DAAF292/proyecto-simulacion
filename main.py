@@ -50,10 +50,44 @@ from sistemas.sistema_reproduccion import SistemaReproduccion
 CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion", "deshidratacion", "ahogamiento", "vejez", "incendio"}
 
 
-def cargar_configuracion(ruta: Path) -> dict[str, Any]:
-    """Carga y parsea el archivo de configuración YAML central."""
-    with open(ruta, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def cargar_configuracion(ruta_config: Path) -> dict[str, Any]:
+    """Carga y fusiona todos los ficheros config/*.yaml en un único diccionario.
+
+    DIVISIÓN EN MULTIPLES FICHEROS (2026-08-30, a petición de Diego --
+    "no sé si será mejor enfocar eso en un conjunto múltiple de yamls
+    separados por categorías que no una mega construcción"): hasta hoy
+    existía un único config/constantes.yaml de 814 líneas con 27
+    secciones. Se dividió por categoría (config/mundo.yaml,
+    config/hidrologia.yaml, config/materiales.yaml, etc. -- ver cada
+    fichero para su alcance) porque el coste de dividir era prácticamente
+    cero: TODO consumidor del motor (27+ sitios en sistemas/ y nucleo/)
+    lee su sección como config["seccion"] o config.get("seccion", ...)
+    contra el diccionario YA FUSIONADO, sin saber ni importarle de qué
+    fichero salió -- confirmado por grep antes de dividir. Cero cambios
+    en sistemas/*.py ni nucleo/*.py.
+
+    Cada fichero .yaml de ruta_config aporta un subconjunto DISJUNTO de
+    claves de nivel superior (por diseño: cada sección vive en un único
+    fichero) -- se comprueba explícitamente que ninguna clave se repita
+    entre ficheros, para que un error de organización futuro falle alto
+    en la carga en vez de que un fichero pise en silencio las claves de
+    otro. encoding="utf-8-sig" en vez de "utf-8": los ficheros llevan BOM
+    (herencia del constantes.yaml original) -- utf-8 a secas deja el
+    carácter BOM (U+FEFF) pegado al primer token del fichero.
+    """
+    config: dict[str, Any] = {}
+    for ruta in sorted(ruta_config.glob("*.yaml")):
+        with open(ruta, "r", encoding="utf-8-sig") as f:
+            seccion = yaml.safe_load(f) or {}
+        claves_repetidas = set(seccion) & set(config)
+        if claves_repetidas:
+            raise ValueError(
+                f"{ruta} redefine clave(s) ya cargada(s) de otro fichero: "
+                f"{claves_repetidas} -- cada sección de nivel superior debe "
+                f"vivir en un único fichero *.yaml dentro de {ruta_config}."
+            )
+        config.update(seccion)
+    return config
 
 
 def instanciar_sistemas(
@@ -230,7 +264,7 @@ def sembrar_flora_inicial(
     varios frentes simultáneos por mancha en vez de uno solo que tendría
     que cubrir cientos de celdas por su cuenta.
 
-    fraccion_siembra_inicial (PROVISIONAL, ver config/constantes.yaml
+    fraccion_siembra_inicial (PROVISIONAL, ver config/flora.yaml
     sección flora): calibración numérica sin contrastar aún contra el
     harness -- hipótesis de partida, no cifra cerrada.
     """
@@ -314,7 +348,7 @@ def ejecutar_tick(
 def main() -> None:
     """Punto de entrada principal del simulador."""
     ruta_base = Path(__file__).parent
-    config = cargar_configuracion(ruta_base / "config" / "constantes.yaml")
+    config = cargar_configuracion(ruta_base / "config")
 
     semilla = config.get("semilla_por_defecto", 42)
     rng_mapa = random.Random(semilla)

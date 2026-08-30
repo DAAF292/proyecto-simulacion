@@ -1,0 +1,180 @@
+# ==============================================================================
+# config/flora.yaml
+# Botánica, fertilidad edáfica y descomposición
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+abono:
+  incremento_fertilidad_por_aliviarse: 0.2
+  techo_fertilidad: 1.0
+  # (2026-08-29, fix de auditoria) Esta clave estaba declarada -- y el
+  # propio docstring de Celda.fertilidad decia literalmente "decae con el
+  # tiempo (cadencia de dia)" -- pero ningun archivo Python la leia
+  # (confirmado por grep, cero resultados): fertilidad solo podia subir,
+  # nunca bajaba. Mismo patron que tasa_perdida_seguridad_por_amenaza
+  # antes de hoy. Ahora sistema_flora.py la aplica de verdad, una vez al
+  # dia, sobre la celda de cada planta procesada.
+  decaimiento_fertilidad_por_dia: 0.1
+
+descomposicion:
+  constante_degradacion_base: 0.08
+  masa_referencia_fertilidad: 10.0
+  umbral_purga_masa: 0.05
+  factor_humedad_lluvia: 1.3
+  factor_humedad_seco: 0.8
+
+flora:
+  bono_produccion_ribera: 0.2
+  tasa_retorno_mantillo: 0.05
+  # SOBREFORRAJEO (2026-08-29, investigacion de sobrepoblacion, confirmado
+  # con Diego -- "un sobreforrajeo deberia afectar de algun modo a los
+  # recursos, pero ahora la flora sigue eternamente produciendo sin mas").
+  # Diagnostico: el recurso de una celda SI se agota de verdad al comer
+  # (sistema_recursos.py resta cada bocado), pero la produccion diaria
+  # (mas abajo en este mismo modulo) rellenaba cada planta madura con el
+  # mismo incremento fijo cada dia sin importar cuanta presion de consumo
+  # hubiera sufrido -- y la propagacion seguia colonizando celdas nuevas
+  # sin limite, asi que la CAPACIDAD AGREGADA del mapa solo podia crecer,
+  # nunca encogerse: verificado que hierba y raices (compartidas por
+  # gnomo/conejo/ardilla) CRECIAN durante toda una corrida de 6000 ticks
+  # pese a que la poblacion de conejo pasaba de 30 a 1349 individuos.
+  #
+  # Contramedida: si una planta madura amanece con su recurso de alimento
+  # en 0.0 (agotado por completo desde el ultimo corte de dia, sin haber
+  # llegado a regenerar nada) durante dias_agotada_para_regresion dias
+  # SEGUIDOS, se considera sobreforrajeo sostenido (no un bache de un
+  # solo dia) y la planta RETROCEDE a etapa_tras_sobreforrajeo -- el mismo
+  # valor de "brote recien colonizado" que ya usa la propagacion -- en vez
+  # de seguir madura: dejara de producir hasta volver a crecer con su
+  # propia tasa_crecimiento_por_dia, el mismo mecanismo que ya rige a
+  # cualquier planta inmadura. Reutiliza la maquinaria de crecimiento
+  # existente en vez de inventar un sistema de "salud de planta" nuevo.
+  # PROVISIONAL: umbral y valor de regresion son una hipotesis de partida
+  # razonada, sin calibrar contra el harness completo.
+  dias_agotada_para_regresion: 2
+  etapa_tras_sobreforrajeo: 0.1
+  # fraccion_siembra_inicial (PROVISIONAL, calibración numérica -- ver
+  # diagnóstico de inanición 2026-08-23, nucleo/entidad.py:sembrar_flora_inicial
+  # y main.py): fracción de las celdas tiene_recurso=True de cada especie
+  # que reciben una entidad Planta fundadora (etapa=1.0) al generar el
+  # mundo. Sin esto, sistema_flora.py nunca tiene ninguna Planta que
+  # procesar -- crear_planta solo se invoca desde la propagación, que
+  # necesita una Planta YA existente para disparerse, así que sin siembra
+  # inicial el conteo de Plantas es cero para siempre y toda la comida del
+  # mundo es un fondo fijo no renovable (celda.recursos se rellena a
+  # capacidad_maxima en la generación y sistema_recursos.py lo consume
+  # directamente, sin depender de ninguna entidad). Valor por defecto sin
+  # calibrar contra el motor en marcha todavía -- hipótesis de partida,
+  # pendiente de contrastar con el harness de calibración ligera.
+  fraccion_siembra_inicial: 0.08
+  especies:
+    hierba_silvestre:
+      biomas: [pradera, bosque]
+      # celdas_por_mancha_objetivo (2026-08-23, sustituye a num_manchas
+      # fijo): tamaño de mancha objetivo en celdas, del que se DERIVA el
+      # número de manchas (num_manchas_calculado = max(1, round(objetivo /
+      # celdas_por_mancha_objetivo)), ver nucleo/zona_bioma.py) en vez de
+      # al revés. Con num_manchas fijo, un mapa más grande no producía más
+      # manchas -- producía manchas más grandes (objetivo crece con el
+      # área, num_manchas no), degenerando en un único "supercontinente"
+      # dominante por especie (confirmado empíricamente: 500-975 de 1600
+      # celdas en una sola mancha de hierba en el mapa 40x40 actual). Con
+      # el tamaño de mancha como parámetro fijo en su lugar, es el NÚMERO
+      # de manchas el que crece con el área -- más parches de tamaño
+      # similar en un mapa más grande, no menos parches gigantescos.
+      # Valores calibrados para reproducir aproximadamente el num_manchas
+      # de hoy en el mapa 40x40 actual (script de 5 semillas, ver
+      # diagnóstico de inanición 2026-08-23) -- ancla de continuidad, no
+      # una cifra recalibrada desde cero.
+      celdas_por_mancha_objetivo:
+        pradera: 180
+        bosque: 12
+      proporcion:
+        pradera: 0.75
+        bosque: 0.2
+      tasa_crecimiento_por_dia: 0.25
+      prob_propagacion_por_dia: 0.06
+      preferencia_lluvia: [0.25, 0.85]
+      preferencia_temperatura: [0.25, 0.85]
+      recursos:
+        - nombre: raices
+          categoria: alimento
+          capacidad_maxima: 10.0
+          tasa_regeneracion: 0.5
+          valor_nutricional: 0.15
+          valor_hidratacion: 0.08
+        - nombre: hierba
+          categoria: alimento
+          capacidad_maxima: 8.0
+          tasa_regeneracion: 0.4
+          valor_nutricional: 0.12
+          valor_hidratacion: 0.12
+    manzano:
+      biomas: [bosque]
+      celdas_por_mancha_objetivo: 10
+      proporcion: 0.15
+      tasa_crecimiento_por_dia: 0.08
+      prob_propagacion_por_dia: 0.02
+      preferencia_lluvia: [0.55, 1.0]
+      preferencia_temperatura: [0.3, 0.75]
+      recursos:
+        - nombre: manzanas
+          categoria: alimento
+          capacidad_maxima: 5.0
+          tasa_regeneracion: 0.2
+          valor_nutricional: 0.4
+          valor_hidratacion: 0.15
+        - nombre: madera
+          categoria: material
+    cactus:
+      biomas: [desierto]
+      celdas_por_mancha_objetivo: 3
+      proporcion: 0.15
+      tasa_crecimiento_por_dia: 0.05
+      prob_propagacion_por_dia: 0.015
+      preferencia_lluvia: [0.0, 0.2]
+      preferencia_temperatura: [0.5, 1.0]
+      recursos:
+        - nombre: fruto_de_cactus
+          categoria: alimento
+          capacidad_maxima: 4.0
+          tasa_regeneracion: 0.15
+          valor_nutricional: 0.35
+          valor_hidratacion: 0.2
+        - nombre: fibra
+          categoria: material
+    liquen:
+      biomas: [montana]
+      celdas_por_mancha_objetivo: 12
+      proporcion: 0.1
+      tasa_crecimiento_por_dia: 0.03
+      prob_propagacion_por_dia: 0.01
+      preferencia_lluvia: [0.1, 0.5]
+      preferencia_temperatura: [0.0, 0.4]
+      recursos:
+        - nombre: liquen
+          categoria: alimento
+          capacidad_maxima: 3.0
+          tasa_regeneracion: 0.1
+          valor_nutricional: 0.2
+          valor_hidratacion: 0.03
+    musgo:
+      biomas: [tundra]
+      celdas_por_mancha_objetivo: 4
+      proporcion: 0.1
+      tasa_crecimiento_por_dia: 0.03
+      prob_propagacion_por_dia: 0.01
+      preferencia_lluvia: [0.2, 0.6]
+      preferencia_temperatura: [0.0, 0.15]
+      recursos:
+        - nombre: musgo
+          categoria: alimento
+          capacidad_maxima: 3.0
+          tasa_regeneracion: 0.1
+          valor_nutricional: 0.2
+          valor_hidratacion: 0.04

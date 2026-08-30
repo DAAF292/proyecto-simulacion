@@ -1,0 +1,96 @@
+# ==============================================================================
+# config/clima.yaml
+# Bioma, estaciones, clima diario y desastres naturales
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+bioma:
+  # RECALIBRADO (2026-08-29, auditoria de funcionalidades, tercera
+  # edicion, confirmado con Diego). La calibracion anterior (2026-08-27,
+  # umbrales 0.47/0.25/0.24/0.62) nunca llego a revalidarse "tras jugar
+  # con estos mundos" como decia su propio comentario: medida despues
+  # contra el generador causal real, producia desierto practicamente
+  # inexistente (0.35-0.44% de las celdas, objetivo ~5%) y tundra muy por
+  # encima del objetivo (13-14%, objetivo ~3%) -- confirmado en 40
+  # semillas fuera de muestra, no una unica medicion.
+  #
+  # Metodo de esta recalibracion: emparejamiento de cuantiles SECUENCIAL,
+  # replicando el propio orden de evaluacion del arbol de decision de
+  # nucleo/bioma.py (tundra por temperatura primero, luego montana por
+  # elevacion sobre lo que queda, luego desierto/bosque por lluvia sobre
+  # lo que queda de eso) -- no cuantiles marginales independientes, que
+  # habrian ignorado que temperatura/elevacion/lluvia estan correlacionadas
+  # entre si (todas derivan del mismo proceso causal orografico). Cada
+  # umbral se fija en el percentil empirico exacto, dentro del subconjunto
+  # de celdas que le llega, que produce la proporcion objetivo:
+  # umbral_temperatura_tundra al percentil 3 de temperatura (todas las
+  # celdas); umbral_elevacion_montana al percentil que deja 10/(1-0.03)
+  # de las celdas no-tundra por encima; umbral_lluvia_desierto/bosque
+  # analogos sobre las celdas que van quedando. Calibrado con 40 semillas
+  # (mapa 40x40, 64000 celdas) y VALIDADO contra 40 semillas disjuntas,
+  # nunca vistas en la calibracion (proporciones resultantes: pradera
+  # 54.9%, bosque 26.0%, montana 11.8%, desierto 4.7%, tundra 2.6% --
+  # frente al objetivo pradera~57/bosque~25/montana~10/desierto~5/
+  # tundra~3, todas las cifras dentro de ~2 puntos porcentuales).
+  #
+  # PROVISIONAL igual que antes: valida la PROPORCION de biomas contra
+  # el generador de terreno, no el efecto sobre poblacion/supervivencia
+  # con el harness completo (15 semillas x 12000 ticks) -- ese efecto
+  # sigue sin observarse.
+  umbral_elevacion_montana: 0.6665
+  umbral_temperatura_tundra: 0.1346
+  umbral_lluvia_desierto: 0.3909
+  umbral_lluvia_bosque: 0.6041
+
+estaciones:
+  primavera:
+    modificador_regeneracion: 1.0
+    objetivo_confort_termico: 0.55
+  verano:
+    modificador_regeneracion: 1.2
+    objetivo_confort_termico: 0.8
+  otono:
+    modificador_regeneracion: 0.9
+    objetivo_confort_termico: 0.45
+  invierno:
+    modificador_regeneracion: 0.5
+    objetivo_confort_termico: 0.15
+
+clima:
+  probabilidades_por_estacion:
+    primavera: {despejado: 0.5, lluvioso: 0.45, tormenta: 0.05}
+    verano: {despejado: 0.75, lluvioso: 0.2, tormenta: 0.05}
+    otono: {despejado: 0.4, lluvioso: 0.5, tormenta: 0.1}
+    invierno: {despejado: 0.55, lluvioso: 0.35, tormenta: 0.1}
+  efectos:
+    despejado:
+      ajuste_confort: 0.05
+      modificador_regeneracion: 1.0
+      tasa_generacion_charco_por_tick: 0.0
+    lluvioso:
+      ajuste_confort: -0.05
+      modificador_regeneracion: 1.15
+      tasa_generacion_charco_por_tick: 0.003
+    tormenta:
+      ajuste_confort: -0.1
+      modificador_regeneracion: 0.9
+      tasa_generacion_charco_por_tick: 0.01
+
+desastres:
+  prob_ignicion_base_bosque: 0.0015
+  multiplicador_riesgo_por_clima:
+    despejado: 1.5
+    lluvioso: 0.2
+    tormenta: 1.0
+  prob_propagacion_por_tick: 0.08
+  prob_extincion_por_tick: 0.35
+  dano_por_tick_en_llamas: 0.15
+  aporte_ceniza_planta: 0.15
+  fraccion_masa_seca_quemada: 0.20
+  fraccion_agua_tisular_quemada: 0.05
+  tasa_putrefaccion_calcinada: 0.15

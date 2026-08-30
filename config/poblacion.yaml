@@ -1,0 +1,153 @@
+# ==============================================================================
+# config/poblacion.yaml
+# Población inicial y arquetipos raciales
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo", antes unificado
+# en un único config/constantes.yaml (dividido en ficheros por categoría el
+# 2026-08-30, a petición de Diego) -- todos los ficheros de config/*.yaml se
+# cargan y fusionan en un solo diccionario (main.py:cargar_configuracion), así
+# que ninguna sección cambia de nombre ni de forma de acceso al dividirse.
+# ==============================================================================
+
+poblacion:
+  gnomos_iniciales: 18
+  lobos_iniciales: 6
+  conejos_iniciales: 30
+  ardillas_iniciales: 30
+  techo_fraccion_edad_inicial_longevidad: 0.7
+
+rangos_raciales:
+  gnomo:
+    medio_alimentacion: recolectar
+    dieta: [raices, hierba, manzanas, fruto_de_cactus, liquen, musgo]
+    peso: [8, 15]
+    altura: [0.9, 1.2]
+    longevidad: [45, 65]
+    duracion_gestacion_dias: [200, 260]
+    camada: [1, 1]
+    fraccion_madurez: 0.1
+    factor_base_concepcion: 0.0033
+    fuerza: [0.2, 0.5]
+    agilidad: [0.3, 0.7]
+    velocidad: [0.2, 0.5]
+    resistencia_enfermedad: [0.3, 0.6]
+    agudeza_sensorial: [0.3, 0.6]
+    vitalidad_maxima: [0.4, 0.7]
+    resistencia_maxima: [0.4, 0.7]
+    curacion: [0.005, 0.015]
+    recuperacion: [0.05, 0.10]
+    valentia: [0.2, 0.6]
+    sociabilidad: [0.4, 0.9]
+    agresividad: [0.1, 0.4]
+    dominancia: [0.2, 0.6]
+    empatia: [0.4, 0.8]
+    lealtad: [0.4, 0.8]
+    fe: [0.3, 0.7]
+    curiosidad: [0.4, 0.8]
+    inteligencia: [0.4, 0.8]
+    memoria: [0.4, 0.8]
+    voluntad: [0.3, 0.7]
+    resiliencia: [0.3, 0.7]
+    estabilidad_mental_maxima: [0.4, 0.7]
+    consciencia: [0.6, 0.9]
+
+  lobo:
+    medio_alimentacion: cazar
+    peso: [60, 90]
+    altura: [0.6, 0.9]
+    longevidad: [8, 14]
+    duracion_gestacion_dias: [60, 75]
+    camada: [4, 6]
+    fraccion_madurez: 0.2
+    factor_base_concepcion: 0.0033
+    fuerza: [0.5, 0.9]
+    agilidad: [0.5, 0.9]
+    velocidad: [0.5, 0.9]
+    resistencia_enfermedad: [0.4, 0.7]
+    agudeza_sensorial: [0.5, 0.8]
+    vitalidad_maxima: [0.6, 0.9]
+    resistencia_maxima: [0.6, 0.9]
+    curacion: [0.01, 0.02]
+    recuperacion: [0.08, 0.15]
+    valentia: [0.5, 0.9]
+    sociabilidad: [0.3, 0.7]
+    agresividad: [0.5, 0.9]
+    dominancia: [0.4, 0.8]
+    empatia: [0.2, 0.5]
+    lealtad: [0.5, 0.9]
+    fe: [0.0, 0.3]
+    curiosidad: [0.2, 0.5]
+    inteligencia: [0.2, 0.5]
+    memoria: [0.3, 0.6]
+    voluntad: [0.2, 0.5]
+    resiliencia: [0.4, 0.7]
+    estabilidad_mental_maxima: [0.5, 0.8]
+    consciencia: [0.0, 0.2]
+
+  conejo:
+    medio_alimentacion: recolectar
+    dieta: [hierba, raices]
+    peso: [1.5, 3.0]
+    altura: [0.2, 0.3]
+    longevidad: [1, 3]
+    duracion_gestacion_dias: [15, 25]
+    camada: [3, 7]
+    fraccion_madurez: 0.3
+    factor_base_concepcion: 0.015
+    fuerza: [0.1, 0.3]
+    agilidad: [0.6, 0.9]
+    velocidad: [0.5, 0.8]
+    resistencia_enfermedad: [0.2, 0.4]
+    agudeza_sensorial: [0.5, 0.8]
+    vitalidad_maxima: [0.2, 0.4]
+    resistencia_maxima: [0.3, 0.5]
+    curacion: [0.01, 0.02]
+    recuperacion: [0.08, 0.15]
+    valentia: [0.2, 0.45]
+    sociabilidad: [0.5, 0.9]
+    agresividad: [0.05, 0.2]
+    dominancia: [0.1, 0.3]
+    empatia: [0.3, 0.6]
+    lealtad: [0.3, 0.6]
+    fe: [0.0, 0.1]
+    curiosidad: [0.2, 0.5]
+    inteligencia: [0.1, 0.3]
+    memoria: [0.2, 0.5]
+    voluntad: [0.1, 0.3]
+    resiliencia: [0.3, 0.6]
+    estabilidad_mental_maxima: [0.4, 0.6]
+    consciencia: [0.0, 0.1]
+
+  ardilla:
+    medio_alimentacion: recolectar
+    dieta: [manzanas, raices]
+    peso: [0.3, 0.6]
+    altura: [0.15, 0.25]
+    longevidad: [2, 5]
+    duracion_gestacion_dias: [18, 28]
+    camada: [2, 4]
+    fraccion_madurez: 0.4
+    factor_base_concepcion: 0.0067
+    fuerza: [0.05, 0.2]
+    agilidad: [0.7, 0.95]
+    velocidad: [0.5, 0.85]
+    resistencia_enfermedad: [0.2, 0.4]
+    agudeza_sensorial: [0.5, 0.8]
+    vitalidad_maxima: [0.15, 0.3]
+    resistencia_maxima: [0.25, 0.45]
+    curacion: [0.01, 0.02]
+    recuperacion: [0.08, 0.15]
+    valentia: [0.2, 0.45]
+    sociabilidad: [0.3, 0.6]
+    agresividad: [0.05, 0.2]
+    dominancia: [0.1, 0.3]
+    empatia: [0.2, 0.5]
+    lealtad: [0.2, 0.5]
+    fe: [0.0, 0.1]
+    curiosidad: [0.4, 0.8]
+    inteligencia: [0.15, 0.35]
+    memoria: [0.25, 0.55]
+    voluntad: [0.1, 0.3]
+    resiliencia: [0.3, 0.6]
+    estabilidad_mental_maxima: [0.4, 0.6]
+    consciencia: [0.0, 0.1]
