@@ -86,6 +86,7 @@ from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.fuego import fogata_en, hay_refugio_en
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_individual
@@ -125,6 +126,11 @@ class SistemaNecesidades:
         self.tasa_deriva_termica: float = float(
             self.defecto.get("tasa_deriva_confort_termico", 0.03)
         )
+        # Refugio/Fogata como fuentes de calor (2026-08-31, ver
+        # nucleo/fuego.py y config/fisiologia.yaml -- suman al objetivo
+        # ambiental, no lo sustituyen).
+        self.bono_confort_refugio: float = float(self.defecto.get("bono_confort_refugio", 0.3))
+        self.bono_confort_fogata: float = float(self.defecto.get("bono_confort_fogata", 0.3))
         self.tasa_recup_seguridad: float = float(
             self.defecto.get("tasa_recuperacion_seguridad", 0.05)
         )
@@ -329,6 +335,17 @@ class SistemaNecesidades:
                 estacion_actual(reloj.estacion), clima_actual,
                 self.config.get("estaciones", {}), self.config.get("clima", {}),
             )
+            # Refugio/Fogata (2026-08-31, ver nucleo/fuego.py): SUMAN al
+            # objetivo ambiental, no lo sustituyen -- la severidad real
+            # del frío importa (conversación de diseño con Diego: "otoño
+            # 15 grados... invierno 3 grados, ¿es suficiente, o debo
+            # encender un fuego?"). Ambos pueden coincidir en la misma
+            # celda y se acumulan.
+            if hay_refugio_en(gestor, pos.x, pos.y, pos.zona_idx):
+                obj_termico += self.bono_confort_refugio
+            if fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+                obj_termico += self.bono_confort_fogata
+            obj_termico = max(0.0, min(1.0, obj_termico))
             if nec.confort_termico < obj_termico:
                 nec.confort_termico = min(
                     obj_termico, nec.confort_termico + self.tasa_deriva_termica

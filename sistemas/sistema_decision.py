@@ -248,6 +248,7 @@ por debajo de decision.umbral_atencion_pareja (PROVISIONAL 0.5). Buscar
 pareja queda asi reservado a individuos fisicamente resueltos; con las
 fisicas sanas su utilidad funciona como siempre.
 """
+from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -258,6 +259,7 @@ from componentes.inventario import Inventario
 from componentes.necesidades import Necesidades
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
+from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.asentamiento import disposicion_a_aportar
@@ -268,6 +270,7 @@ from nucleo.construccion import (
     objetivo_construccion_actual,
 )
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.inventario import espacio_disponible_kg
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
@@ -455,6 +458,9 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
     catalogo_materiales = config.get("materiales", {})
     config_construccion = config.get("construccion", {})
     fraccion_carga_maxima = float(config.get("inventario", {}).get("fraccion_carga_maxima", 0.25))
+    # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py, componentes/
+    # fogata.py y nucleo/fuego.py).
+    piedras_necesarias_fuego = int(config.get("fuego", {}).get("piedras_necesarias", 2))
     # Almacén de asentamiento (2026-08-30, Círculo E -- ver
     # nucleo/asentamiento.py y nucleo/construccion.py:objetivo_construccion_actual).
     config_asentamiento = config.get("asentamiento", {})
@@ -481,7 +487,7 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
 
     for id_entidad in gestor.entidades_con(
         Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento, Reproduccion,
-        CapacidadMental, Inventario, DimensionesFisicas,
+        CapacidadMental, Inventario, DimensionesFisicas, Posicion,
     ):
         necesidades = gestor.obtener_componente(id_entidad, Necesidades)
         intencion = gestor.obtener_componente(id_entidad, Intencion)
@@ -492,6 +498,7 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         cap_mental = gestor.obtener_componente(id_entidad, CapacidadMental)
         inventario = gestor.obtener_componente(id_entidad, Inventario)
         dims = gestor.obtener_componente(id_entidad, DimensionesFisicas)
+        pos = gestor.obtener_componente(id_entidad, Posicion)
         agotado = pool.resistencia <= 0.0
 
         if pool_mental.estabilidad <= umbral_crisis:
@@ -595,6 +602,28 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
                     if masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0:
                         utilidad_construir = utilidad_construir_base
 
+        # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py,
+        # componentes/fogata.py y nucleo/fuego.py -- "usar dos rocas para
+        # hacer un fuego"). Misma compuerta de consciencia que CONSTRUIR/
+        # RECOLECTAR. Utilidad = 1.0 - confort_termico (responde a una
+        # necesidad real, no a un objetivo administrativo como CONSTRUIR/
+        # RECOLECTAR) -- gateada a 0.0 si faltan piedras en Agarre, no hay
+        # combustible en la celda actual, o ya hay una Fogata ahí (nada
+        # que encender, beneficiarse de una ya existente no exige
+        # ninguna acción, sistema_necesidades.py la detecta pasivamente).
+        utilidad_encender_fuego = 0.0
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            agarre = gestor.obtener_componente(id_entidad, Agarre)
+            piedras = agarre.objetos.count("piedra") if agarre is not None else 0
+            if piedras >= piedras_necesarias_fuego:
+                zona_fuego = mundo.territorio.zonas[pos.zona_idx]
+                celda_fuego = zona_fuego.obtener_celda(pos.x, pos.y)
+                if (
+                    celda_tiene_combustible(celda_fuego, catalogo_materiales)
+                    and fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is None
+                ):
+                    utilidad_encender_fuego = 1.0 - necesidades.confort_termico
+
         candidatas = (
             (utilidad_huir, Accion.HUIR),
             (utilidad_alimentarse, accion_alimentarse),
@@ -604,6 +633,7 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             (utilidad_buscar_pareja, Accion.BUSCAR_PAREJA),
             (utilidad_recolectar, Accion.RECOLECTAR),
             (utilidad_construir, Accion.CONSTRUIR),
+            (utilidad_encender_fuego, Accion.ENCENDER_FUEGO),
             (base_deambular, Accion.DEAMBULAR),
         )
         # max() con esta lista respeta el orden de prioridad en empates

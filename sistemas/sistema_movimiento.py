@@ -219,7 +219,10 @@ class SistemaMovimiento:
             # Accion.ALIVIARSE (arriba, tampoco tiene rama) -- dx=dy=0 por
             # defecto es literalmente la definicion de catatonia ("se
             # queda quieto, sin actuar", componentes/intencion.py), no un
-            # descuido.
+            # descuido. Accion.RECOLECTAR y Accion.ENCENDER_FUEGO
+            # (2026-08-31) tampoco tienen rama, mismo motivo: se resuelven
+            # donde ya se está (sistemas/sistema_recursos.py), sin
+            # desplazamiento propio.
 
             if dx != 0 or dy != 0:
                 self._aplicar_movimiento(gestor, mundo, zona, eid, pos, dims, pf, dx, dy, accion)

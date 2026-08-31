@@ -13,6 +13,7 @@ from typing import Any, Type, TypeVar
 from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
+from componentes.fogata import Fogata
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
@@ -207,6 +208,25 @@ def crear_construccion(
         Construccion(tipo=tipo, propietario_id=propietario_id),
     )
     return con_id
+
+
+def crear_fogata(
+    gestor: GestorEntidades,
+    pos_x: int,
+    pos_y: int,
+    combustible_inicial: float,
+    zona_idx: int = 0,
+) -> int:
+    """
+    Fábrica ECS: instancia una Fogata -- fuego controlado, distinto del
+    incendio (Celda.en_llamas). Mismo molde que crear_construccion/
+    crear_necromasa: entidad inerte de solo dos componentes, sin
+    Identidad ni Intencion propias. Ver componentes/fogata.py.
+    """
+    fid = gestor.crear_entidad()
+    gestor.anadir_componente(fid, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
+    gestor.anadir_componente(fid, Fogata(combustible_restante=combustible_inicial))
+    return fid
 
 
 def crear_criatura(

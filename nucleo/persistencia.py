@@ -24,6 +24,7 @@ from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
+from componentes.fogata import Fogata
 from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
@@ -85,7 +86,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.29-fase0"
+VERSION_ESQUEMA = "0.30-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -93,6 +94,7 @@ _TABLAS_APP = (
     "plantas_estado",
     "necromasa_estado",
     "construccion_estado",
+    "fogata_estado",
     "celdas_estado",
     "cronica_eventos",
     "configuracion_ejecucion",
@@ -278,6 +280,21 @@ class Persistencia:
                     propietario_id INTEGER,
                     progreso REAL NOT NULL,
                     completado_alguna_vez BOOLEAN NOT NULL,
+                    zona_idx INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+
+            # 4c. Snapshot de fogatas (2026-08-31, ver componentes/fogata.py).
+            # Mismo molde que construccion_estado: entidad física sin fila
+            # en `entidades` (no tiene Identidad).
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS fogata_estado (
+                    entidad_id INTEGER PRIMARY KEY,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    combustible_restante REAL NOT NULL,
                     zona_idx INTEGER NOT NULL DEFAULT 0
                 )
                 """
@@ -543,6 +560,18 @@ class Persistencia:
             cur.executemany(
                 "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
             )
+
+            # C3. Fogatas (2026-08-31, ver componentes/fogata.py)
+            cur.execute("DELETE FROM fogata_estado")
+            filas_fogata = []
+            for fid in sorted(gestor.entidades_con(Fogata, Posicion)):
+                fogata_comp = gestor.obtener_componente(fid, Fogata)
+                pos_f = gestor.obtener_componente(fid, Posicion)
+                if fogata_comp and pos_f:
+                    filas_fogata.append(
+                        (fid, pos_f.x, pos_f.y, fogata_comp.combustible_restante, pos_f.zona_idx)
+                    )
+            cur.executemany("INSERT INTO fogata_estado VALUES (?, ?, ?, ?, ?)", filas_fogata)
 
             # D. Celdas dinámicas -- TODAS las zonas del territorio
             # (2026-08-30, Circulo 1 de profundidad), no solo zonas[0].
@@ -831,6 +860,14 @@ class Persistencia:
                     ),
                 )
 
+            # 4c. Cargar Fogatas
+            cur.execute(
+                "SELECT entidad_id, x, y, combustible_restante, zona_idx FROM fogata_estado"
+            )
+            for foid, fx, fy, combustible, fzidx in cur.fetchall():
+                gestor.anadir_componente(foid, Posicion(x=fx, y=fy, zona_idx=fzidx))
+                gestor.anadir_componente(foid, Fogata(combustible_restante=float(combustible)))
+
             # Ajustar siguiente id autoincremental
             cur.execute("SELECT MAX(id) FROM entidades")
             max_id_ent = cur.fetchone()[0] or 0
@@ -840,6 +877,10 @@ class Persistencia:
             max_id_nec = cur.fetchone()[0] or 0
             cur.execute("SELECT MAX(entidad_id) FROM construccion_estado")
             max_id_con = cur.fetchone()[0] or 0
+            cur.execute("SELECT MAX(entidad_id) FROM fogata_estado")
+            max_id_fog = cur.fetchone()[0] or 0
 
-            gestor._siguiente_id = max(max_id_ent, max_id_plant, max_id_nec, max_id_con) + 1
+            gestor._siguiente_id = (
+                max(max_id_ent, max_id_plant, max_id_nec, max_id_con, max_id_fog) + 1
+            )
             return True

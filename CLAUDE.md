@@ -2123,3 +2123,107 @@ como consumidor futuro sin disparador todavía (mismo hueco ya señalado
 para robo/agravio genérico). El propio arco que Diego pidió -- fuego con
 dos piedras, luego hachas/utensilios -- sigue sin empezar, este círculo
 es solo su cimiento.
+
+## Fuego controlado (Fogata) -- implementado y verificado, con un hallazgo
+## real de que la precondición es casi inalcanzable en juego normal (2026-08-31)
+
+Segundo círculo del arco herramientas/fuego/comida elaborada, sobre el
+cimiento de `Agarre` de más arriba. Dos decisiones de diseño previas,
+cerradas en conversación con Diego antes de escribir código:
+
+1. **Confort térmico ya no era un campo inerte** -- hallazgo propio al
+   investigar antes de proponer nada: `nucleo/clima.py`/
+   `sistema_necesidades.py` ya mueven `Necesidades.confort_termico` de
+   verdad cada tick hacia un objetivo que depende de estación+clima del
+   día (implementado en una sesión anterior, la nota de "declarado pero
+   sin mecánica" en este mismo documento estaba desactualizada). Esto
+   evitó inventar un payoff nuevo para el fuego -- ya había uno
+   funcionando y sin consumidor real que lo completara del todo.
+2. **Bono ADITIVO, no sustitutivo, tras la pregunta de Diego** ("otoño 15
+   grados, estoy en mi cabaña... invierno 3 grados, ¿es suficiente, o
+   debo encender un fuego?"): refugio y fogata SUMAN al objetivo
+   ambiental de estación+clima en vez de fijarlo a un valor fijo -- la
+   severidad real del frío importa. Con los números reales de
+   `config/clima.yaml` (otoño=0.45, invierno=0.15, brecha de 0.3) y
+   `bono_confort_refugio`/`bono_confort_fogata`=+0.3 cada uno
+   (PROVISIONAL): otoño+refugio≈0.75 (suficiente, sin necesidad real de
+   fuego), invierno+refugio≈0.45 (todavía frío, la utilidad de
+   `ENCENDER_FUEGO` sigue siendo real), invierno+refugio+fogata≈0.75
+   (equivalente al confort de un otoño con refugio) -- emergente de la
+   estación/clima real del día, no un umbral fijo por estación.
+
+**Implementado**:
+- `componentes/fogata.py`: `Fogata.combustible_restante` -- mismo molde
+  que `Necromasa`/`Construccion` (Posición + dato puro, sin Identidad ni
+  Intención). Distinta del incendio (`Celda.en_llamas`,
+  `sistema_desastres.py`): esa es un peligro estocástico que se propaga y
+  daña a quien esté encima; una Fogata es deliberada, no se propaga, no
+  daña a nadie.
+- `nucleo/fuego.py`: funciones puras -- `fogata_en`/`hay_refugio_en`
+  (búsqueda lineal por celda+zona, mismo criterio de escala que
+  `construccion_propia`) y `celda_tiene_combustible` (mismo catálogo
+  apto_construccion+combustibilidad>0 que ya usa RECOLECTAR).
+- `Accion.ENCENDER_FUEGO` nueva: utilidad = `1.0 - confort_termico`
+  (responde a una necesidad real, a diferencia de CONSTRUIR/RECOLECTAR
+  que usan una utilidad base fija), gateada a 0.0 si falta consciencia,
+  menos de `piedras_necesarias`=2 en `Agarre.objetos`, sin combustible en
+  la celda actual, o ya hay una Fogata ahí. Sin desplazamiento, igual que
+  RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
+- `sistema_recursos.py:_resolver_encender_fuego`: tirada de éxito
+  (`probabilidad_encender_fuego`=0.4, PROVISIONAL -- golpear piedra
+  contra piedra no siempre prende), consume yesca de `Celda.recursos` (NO
+  las piedras del `Agarre` -- son herramientas de percusión, se quedan
+  sujetas). `_consumir_fogatas`: cada Fogata quema su propio combustible
+  cada tick con independencia de quién la encendió, se elimina sola al
+  agotarse -- mismo patrón que la descomposición de Necromasa, sin acción
+  de avivar/alimentar todavía.
+- `nucleo/persistencia.py`: `Fogata` persistida (tabla `fogata_estado`,
+  mismo molde que `construccion_estado`), `VERSION_ESQUEMA` →
+  `0.30-fase0`.
+
+**HALLAZGO REAL, no resuelto -- la precondición de "dos piedras" resultó
+casi inalcanzable en juego normal**. Verificado con arnés dirigido (6
+comprobaciones: gate sin piedras, utilidad gana con piedras+frío, gate
+con Fogata ya presente, tirada+consumo real, extinción tras agotar
+combustible, bono aditivo confirmado numéricamente -- 0.6 sin nada, 0.9
+con refugio, 1.0 con ambos topado) -- todo correcto en aislamiento. Pero
+en 4 semillas × 3000 ticks de motor real sin intervención, **ningún gnomo
+encendió fuego ni una sola vez**. Diagnóstico: `piedra` como
+`tipo_sustrato` es rara en el mapa (52-198 celdas de ~1600, frente a
+1281-1547 de `arcilla`) -- un gnomo solo agarra piedra si está de pie
+sobre una celda cuyo sustrato es literalmente piedra en el instante
+exacto en que le queda un punto de agarre libre, y como
+RECOLECTAR/`Agarre` son puramente oportunistas (sin búsqueda de sitio),
+en las 4 semillas los gnomos terminaron agarrando `arcilla` (o nada),
+nunca piedra. Posible error de modelo de fondo, no solo de calibración:
+`tipo_sustrato` describe el terreno bajo los pies (relevante para
+infiltración de agua), no necesariamente "hay piedras sueltas para
+recoger aquí" -- en la realidad se encuentra una piedra de mano en
+cualquier bioma sin que el suelo entero sea rocoso.
+
+**Tres vías planteadas a Diego, ninguna implementada, decisión
+pendiente**: (a) aflojar el gate de ENCENDER_FUEGO a cualquier material
+duro/mineral en vez de exigir literalmente "piedra" -- resuelve el
+problema pero diluye la especificidad de "dos piedras"; (b) sesgar el
+movimiento de un gnomo frío sin piedras hacia terreno con piedra --
+resuelve de raíz pero es una pieza de comportamiento nueva, más grande
+de lo que pide este círculo; (c) separar "piedra suelta" de
+`tipo_sustrato` como un recurso propio, independiente del terreno base,
+presente con cierta probabilidad en cualquier bioma -- mismo patrón que
+`deposito_mineral`/materiales de flora ya son capas independientes del
+terreno, más fiel a la realidad pero es una pieza nueva, no un ajuste.
+
+**Verificado, además**: 3000 ticks de `BOSQUE_AUTO_TICKS` sin ninguna
+excepción. 22/22 tests en verde. El bono térmico de refugio SÍ es
+alcanzable y se confirmó en el arnés dirigido (no depende de la
+precondición de piedra) -- el hallazgo afecta específicamente a
+ENCENDER_FUEGO, no a todo el círculo.
+
+**Pendiente real, explícito**: la precondición de piedra, sin resolver
+(ver arriba); sin acción de avivar/alimentar una Fogata existente;
+`probabilidad_encender_fuego`/`masa_yesca_consumida_kg`/
+`combustible_inicial_fogata_kg`/`tasa_consumo_combustible_fogata_kg_tick`
+PROVISIONALES sin calibrar; el efecto social del fuego (punto de unión,
+historias) y el cimiento de cocina que Diego mencionó como usos futuros
+del mismo recurso, documentados en `componentes/fogata.py` pero sin una
+sola línea de código.

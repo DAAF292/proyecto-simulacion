@@ -1,0 +1,36 @@
+# ==============================================================================
+# config/fuego.yaml
+# Fuego controlado (hoguera) -- distinto del incendio (config/clima.yaml,
+# seccion desastres): esto es deliberado y beneficioso, aquello es un
+# peligro estocastico. Cimiento del arco de herramientas/fuego/comida
+# elaborada (2026-08-31, conversacion de diseno con Diego).
+#
+# Parte del catálogo de configuración del motor "Un mundo vivo" -- todos los
+# ficheros de config/*.yaml se cargan y fusionan en un solo diccionario
+# (main.py:cargar_configuracion).
+# ==============================================================================
+
+fuego:
+  # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py y nucleo/fuego.py):
+  # "usar dos rocas para hacer un fuego" -- Diego. Cuantas piedras hacen
+  # falta en Agarre para intentarlo.
+  piedras_necesarias: 2
+  # Golpear piedra contra piedra no siempre prende a la primera -- tirada
+  # por tick mientras se mantenga la Accion, mismo patron de probabilidad
+  # que el resto del motor. PROVISIONAL, sin calibrar contra el motor en
+  # marcha.
+  probabilidad_encender_fuego: 0.4
+  # Yesca: cuanto material combustible de la celda actual (mismo catalogo
+  # apto_construccion>combustibilidad>0 que ya usa RECOLECTAR, ver
+  # sistema_recursos.py) se consume al prender -- las piedras NO se
+  # consumen (son herramientas, se quedan en Agarre), solo la yesca.
+  # PROVISIONAL.
+  masa_yesca_consumida_kg: 0.5
+  # Combustible propio de la Fogata ya creada, independiente de la yesca
+  # que la encendio -- cuanto dura ardiendo sin que nadie la alimente
+  # (sin accion de "avivar" todavia, ver componentes/fogata.py). A
+  # tasa_consumo_combustible_fogata_kg_tick=0.1 y 5.0kg iniciales, dura
+  # unos 50 ticks (~2 dias de Reloj.TICKS_POR_DIA=24) -- PROVISIONAL, sin
+  # medir contra el motor en marcha.
+  combustible_inicial_fogata_kg: 5.0
+  tasa_consumo_combustible_fogata_kg_tick: 0.1

@@ -22,6 +22,24 @@ necesidades:
     tasa_perdida_oxigenacion_por_inmersion: 0.5
     tasa_recuperacion_oxigenacion: 1.0
     tasa_deriva_confort_termico: 0.03
+    # bono_confort_refugio/fogata (2026-08-31, ver nucleo/fuego.py y
+    # conversacion de diseno con Diego: "otoño 15 grados, estoy a
+    # cubierto... invierno 3 grados, ¿es suficiente, o debo encender un
+    # fuego?"). SUMAN al objetivo ambiental de estacion+clima (nucleo/
+    # clima.py:objetivo_confort_termico), no lo sustituyen -- la
+    # severidad real del frio importa: en otoño (objetivo ambiental
+    # ~0.45) el refugio solo ya basta (~0.75); en invierno (~0.15) el
+    # refugio solo deja un resultado todavia frio (~0.45), y sumar la
+    # fogata lo acerca al mismo nivel que un otoño con refugio (~0.75).
+    # Emergente de la estacion/clima real del dia, no una regla fija por
+    # estacion. Refugio cuenta cualquier Construccion tipo="refugio"
+    # completado_alguna_vez=True en la celda (abriga a quien este dentro,
+    # no solo al propietario -- distinto de la pregunta de A QUIEN
+    # pertenece, que resuelve nucleo/conflicto.py aparte). Mismo orden de
+    # magnitud que la brecha real entre estaciones (0.3) -- PROVISIONAL,
+    # sin calibrar contra el motor en marcha.
+    bono_confort_refugio: 0.3
+    bono_confort_fogata: 0.3
     tasa_perdida_impulso_reproductivo_por_tick: 0.005
     probabilidad_muerte_saciedad_critica: 0.005
     probabilidad_muerte_deshidratacion: 0.005

@@ -16,6 +16,7 @@ from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
+from componentes.fogata import Fogata
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.inventario import Inventario
@@ -31,8 +32,9 @@ from nucleo.construccion import (
     progreso_construccion,
     transferir_a_construccion,
 )
-from nucleo.entidad import GestorEntidades
+from nucleo.entidad import GestorEntidades, crear_fogata
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.inventario import espacio_disponible_kg
 from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
@@ -98,6 +100,19 @@ class SistemaRecursos:
         # Agarre (2026-08-31, ver componentes/agarre.py y config/poblacion.yaml
         # seccion rangos_raciales.<especie>.puntos_agarre).
         self.rangos_raciales: dict[str, Any] = self.config.get("rangos_raciales", {})
+        # Fuego controlado (2026-08-31, ver componentes/fogata.py,
+        # nucleo/fuego.py y config/fuego.yaml).
+        cfg_fuego = self.config.get("fuego", {})
+        self.probabilidad_encender_fuego: float = float(
+            cfg_fuego.get("probabilidad_encender_fuego", 0.4)
+        )
+        self.masa_yesca_consumida: float = float(cfg_fuego.get("masa_yesca_consumida_kg", 0.5))
+        self.combustible_inicial_fogata: float = float(
+            cfg_fuego.get("combustible_inicial_fogata_kg", 5.0)
+        )
+        self.tasa_consumo_fogata: float = float(
+            cfg_fuego.get("tasa_consumo_combustible_fogata_kg_tick", 0.1)
+        )
 
         cfg_dep = self.config.get("depredacion", {})
         self.eficiencia_biomasa_saciedad: float = float(
@@ -179,6 +194,16 @@ class SistemaRecursos:
                 dims = gestor.obtener_componente(eid, DimensionesFisicas)
                 agarre = gestor.obtener_componente(eid, Agarre)
                 self._resolver_recolectar(inv, dims, celda, agarre, ident.especie.value)
+            elif intencion.accion == Accion.ENCENDER_FUEGO:
+                self._resolver_encender_fuego(
+                    gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual
+                )
+
+        # Fogatas: consumo de combustible propio y extincion (2026-08-31,
+        # ver componentes/fogata.py) -- independiente de la Accion de
+        # nadie, mismo criterio que _actualizar_charcos: se procesa cada
+        # tick para TODA fogata existente, no solo para quien la encendio.
+        self._consumir_fogatas(gestor)
 
     def _actualizar_charcos(self, zona: Any) -> None:
         """Genera/evapora charco y llena/drena humedad de subsuelo según el
@@ -478,6 +503,67 @@ class SistemaRecursos:
             return
         cantidad = min(self.tasa_recoleccion, espacio)
         inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
+
+    def _resolver_encender_fuego(
+        self,
+        gestor: GestorEntidades,
+        celda: Celda,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+        bus_eventos: BusEventos,
+        tick_actual: int,
+    ) -> None:
+        """
+        ENCENDER_FUEGO -- cimiento del arco de herramientas/fuego/comida
+        elaborada (2026-08-31, ver componentes/agarre.py, componentes/
+        fogata.py, nucleo/fuego.py y la conversación de diseño con Diego:
+        "usar dos rocas para hacer un fuego"). sistema_decision.py ya
+        comprobó las precondiciones (piedras en Agarre, combustible en la
+        celda, sin Fogata ya presente) antes de elegir esta Accion -- aquí
+        solo se resuelve la tirada de éxito y, si prende, se consume la
+        yesca y se crea la Fogata. Sin desplazamiento, igual que
+        RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
+
+        Las PIEDRAS del Agarre NO se tocan aquí -- son herramientas, se
+        quedan sujetas (percusión repetida, no combustión). Solo se
+        consume yesca de Celda.recursos -- mismo catálogo apto_construccion
+        + combustibilidad que ya usa RECOLECTAR para material de flora.
+        """
+        if self.rng.random() >= self.probabilidad_encender_fuego:
+            return  # golpear piedra contra piedra no siempre prende
+
+        for nombre, cantidad_disponible in celda.recursos.items():
+            if cantidad_disponible <= 0.0:
+                continue
+            info = self.catalogo_materiales.get(nombre, {})
+            if not (info.get("apto_construccion", False) and info.get("combustibilidad", 0.0) > 0.0):
+                continue
+            consumido = min(self.masa_yesca_consumida, cantidad_disponible)
+            celda.recursos[nombre] = cantidad_disponible - consumido
+            fid = crear_fogata(gestor, pos_x, pos_y, self.combustible_inicial_fogata, zona_idx=zona_idx)
+            bus_eventos.emitir(
+                Evento(
+                    tipo="FuegoEncendido",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=fid,
+                    datos={"x": pos_x, "y": pos_y, "zona_idx": zona_idx},
+                )
+            )
+            return
+
+    def _consumir_fogatas(self, gestor: GestorEntidades) -> None:
+        """Cada Fogata existente quema su propio combustible cada tick,
+        independiente de quién la encendió o de si alguien sigue cerca --
+        una hoguera no se apaga porque el gnomo se vaya. Sin acción de
+        avivar/alimentar todavía (ver componentes/fogata.py): se elimina
+        sola al agotarse, mismo patrón que la descomposición de Necromasa."""
+        for fid in list(gestor.entidades_con(Fogata)):
+            fogata = gestor.obtener_componente(fid, Fogata)
+            fogata.combustible_restante -= self.tasa_consumo_fogata
+            if fogata.combustible_restante <= 0.0:
+                gestor.eliminar_entidad(fid)
 
     def _resolver_comer(
         self,

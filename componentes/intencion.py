@@ -45,6 +45,17 @@ class Accion(Enum):
     # (se resuelve donde ya se está, como ALIVIARSE) -- el sustrato está
     # bajo los pies de cualquiera, no hay que buscarlo.
     RECOLECTAR = "recolectar"
+    # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py y
+    # componentes/fogata.py -- "usar dos rocas para hacer un fuego").
+    # Misma compuerta de consciencia que CONSTRUIR/RECOLECTAR. Utilidad =
+    # 1.0 - Necesidades.confort_termico, mismo patron que el resto de
+    # necesidades fisicas -- no una utilidad base fija como CONSTRUIR/
+    # RECOLECTAR, porque esto SI responde a una necesidad real (tener
+    # frio), no a un objetivo administrativo. Gateada a 0.0 si faltan
+    # piedras en Agarre, no hay combustible en la celda actual, o ya hay
+    # una Fogata ahi (nada que encender). Sin desplazamiento (como
+    # RECOLECTAR/ALIVIARSE) -- se resuelve donde ya se este.
+    ENCENDER_FUEGO = "encender_fuego"
     # Bloque F3 (crisis mental, discutida y confirmada con Diego): anulan
     # la Utility AI normal mientras PoolMental.estabilidad este en crisis
     # -- ver sistema_decision.py para el disparador y sistema_movimiento.py
