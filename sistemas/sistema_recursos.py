@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -94,6 +95,9 @@ class SistemaRecursos:
         self.radio_cluster_asentamiento: int = int(
             self.config.get("asentamiento", {}).get("radio_cluster_celdas", 6)
         )
+        # Agarre (2026-08-31, ver componentes/agarre.py y config/poblacion.yaml
+        # seccion rangos_raciales.<especie>.puntos_agarre).
+        self.rangos_raciales: dict[str, Any] = self.config.get("rangos_raciales", {})
 
         cfg_dep = self.config.get("depredacion", {})
         self.eficiencia_biomasa_saciedad: float = float(
@@ -173,7 +177,8 @@ class SistemaRecursos:
             elif intencion.accion == Accion.RECOLECTAR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 dims = gestor.obtener_componente(eid, DimensionesFisicas)
-                self._resolver_recolectar(inv, dims, celda)
+                agarre = gestor.obtener_componente(eid, Agarre)
+                self._resolver_recolectar(inv, dims, celda, agarre, ident.especie.value)
 
     def _actualizar_charcos(self, zona: Any) -> None:
         """Genera/evapora charco y llena/drena humedad de subsuelo según el
@@ -359,6 +364,8 @@ class SistemaRecursos:
         inv: Inventario | None,
         dims: DimensionesFisicas | None,
         celda: Celda,
+        agarre: Agarre | None = None,
+        especie: str | None = None,
     ) -> None:
         """
         RECOLECTAR -- Círculo C de interacción física (2026-08-30, ver
@@ -369,6 +376,23 @@ class SistemaRecursos:
         por la capacidad de carga (nucleo/inventario.py:
         espacio_disponible_kg). Sin desplazamiento: se resuelve donde ya
         se está, el sustrato está bajo los pies de cualquiera.
+
+        AGARRE (2026-08-31, ver componentes/agarre.py y conversación de
+        diseño con Diego -- "un palo para defenderse, o una roca"): antes
+        de tocar el Inventario a granel, si a esta especie le queda algún
+        punto de agarre libre (rangos_raciales[especie]['puntos_agarre']),
+        se llena UNO con el mismo material que ya sería elegible para
+        recolectar (flora > sustrato, mismo orden que abajo, salvo
+        mineral -- minar una veta es un acto deliberado y con coste real,
+        distinto de agarrar un palo o una piedra sueltos del suelo).
+        Deliberadamente GRATUITO y simbólico: no descuenta nada del
+        Inventario, la capacidad de carga ni el recurso finito de la
+        celda -- coger UNA piedra suelta no vacía la celda, y el tope de
+        puntos_agarre (como mucho 1-2 por individuo, nunca se libera
+        todavía) hace que el efecto total sobre la economía del mundo sea
+        insignificante. Si se llena un punto de agarre este tick, se
+        corta aquí -- no compite con la recolección normal en el mismo
+        tick.
 
         MADERA/FIBRA/HIERBA_SECA (2026-08-31, propuesta de Diego: "los
         árboles dejan caer ramas que los gnomos recogen o arrancan
@@ -402,6 +426,25 @@ class SistemaRecursos:
         """
         if inv is None or dims is None:
             return
+
+        if agarre is not None and especie is not None:
+            puntos_agarre = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
+            if len(agarre.objetos) < puntos_agarre:
+                for nombre, cantidad_disponible in celda.recursos.items():
+                    if cantidad_disponible <= 0.0:
+                        continue
+                    info = self.catalogo_materiales.get(nombre, {})
+                    if not info.get("apto_construccion", False):
+                        continue
+                    agarre.objetos.append(nombre)
+                    return
+                material_sustrato = celda.tipo_sustrato
+                if material_sustrato:
+                    info = self.catalogo_materiales.get(material_sustrato, {})
+                    if info.get("apto_construccion", False):
+                        agarre.objetos.append(material_sustrato)
+                        return
+
         espacio = espacio_disponible_kg(inv.contenidos, dims.peso, self.fraccion_carga_maxima)
         if espacio <= 0.0:
             return

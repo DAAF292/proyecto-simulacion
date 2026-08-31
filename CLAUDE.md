@@ -2008,3 +2008,118 @@ elegida está llena (refugio: se resuelve solo por el resto del
 comportamiento; almacén: puede quedarse bloqueado si el centro exacto del
 asentamiento está lleno); estructuras multi-celda sin construir, a la
 espera de un caso real.
+
+## Agarre -- primera pieza de "capacidad de sostener/usar objetos",
+## cimiento del arco de herramientas/fuego/comida elaborada (2026-08-31)
+
+Diego, tras cerrar la capacidad de construcción por celda, retomó
+herramientas/fuego/comida elaborada -- pero reencuadró por dónde empezar:
+no "herramientas" como bloque monolítico, sino la capacidad física más
+básica que las sostiene a todas: "la base es usar herramientas, o mejor
+aún la capacidad de usar cosas, sostenerlas, un palo para defenderse, o
+una roca, después de eso usar dos rocas para hacer un fuego, herramientas
+básicas, hachas utensilios". Fuego (dos piedras) y hachas/utensilios
+quedan como consumidores FUTUROS de este mismo cimiento, no piezas
+paralelas -- este círculo es solo "poder tener un objeto sujeto, con un
+efecto real".
+
+**Primer nombre propuesto y rechazado, con razón**: "Empuñadura" --
+centrado en manos. Diego lo corrigió de inmediato: "si creamos una raza
+que tenga 4 manos que, o una con dos manos y una cola prensil. las
+ardillas tambn sujetan objetos, o los lobos con la boca... es parte de la
+criatura, una capacidad que tiene como tiene la de andar o comer". Mismo
+error de fondo que categorizar cuevas por tamaño/bioma en el arco de
+profundidad (documentado más arriba) -- autorear una forma concreta en
+vez de una ley general. Corregido a `Agarre`, con `puntos_agarre` como
+hecho FIJO por especie (no un rango sorteado por individuo como
+fuerza/agilidad -- cuántos puntos de agarre tiene un individuo no varía
+razonablemente dentro de la misma especie), mismo patrón que
+`fraccion_madurez`/`factor_base_concepcion` en `rangos_raciales`.
+
+**Implementado**:
+- `componentes/agarre.py`: `Agarre.objetos: list[str]` -- objetos
+  discretos sujetos ahora mismo, SIN campo de capacidad propio (se
+  consulta `rangos_raciales[especie]['puntos_agarre']`, no se duplica el
+  dato). Añadido a las CUATRO especies por igual en `crear_criatura` Y
+  `nacer_criatura` (dos fábricas separadas, ver hallazgo de más abajo),
+  vacío al nacer -- mismo criterio que `Inventario`: el componente es
+  universal, su uso real depende de la especie.
+- `config/poblacion.yaml`: `puntos_agarre` PROVISIONAL por especie --
+  gnomo=2 (manos), lobo=1 (boca), ardilla=2 (patas delanteras, el propio
+  ejemplo de Diego), conejo=0 (un conejo real no sujeta objetos de forma
+  activa, a diferencia de una ardilla -- el valor menos seguro de los
+  cuatro, señalado explícitamente a Diego antes de fijarlo, sin objeción).
+- `sistemas/sistema_recursos.py:_resolver_recolectar`: antes de tocar el
+  `Inventario` a granel, si queda algún punto de agarre libre, se llena
+  UNO con el mismo material que ya sería elegible (flora > sustrato,
+  mismo orden que el resto de la función, salvo mineral -- minar una veta
+  es un acto deliberado con coste real, distinto de agarrar un palo o una
+  piedra sueltos del suelo). Deliberadamente GRATUITO y simbólico: no
+  descuenta nada del Inventario, la capacidad de carga ni el recurso
+  finito de la celda -- el tope de 1-2 puntos por individuo (sin ninguna
+  acción de soltar todavía) hace que el efecto total sobre la economía
+  del mundo sea insignificante. Automático al recolectar, sin ninguna
+  Accion nueva de la Utility AI -- mismo criterio que el resto del arco de
+  interacción física (reutilizar RECOLECTAR en vez de inventar una acción
+  con su propia curva de utilidad sin calibrar).
+- `sistemas/sistema_depredacion.py`: primer efecto real, en
+  `_resolver_ataque` -- si la PRESA tiene algún objeto sujeto,
+  `reduccion_prob_captura_por_agarre` (`config/combate.yaml`, PROVISIONAL
+  0.1) se resta de `prob_exito` antes de aplicar los topes min/max ya
+  existentes. Efecto binario por ahora (tener algo agarrado cuenta igual
+  que tener dos, sin diferenciar por material) -- primera pasada
+  deliberadamente simple, revisable cuando haga falta distinguir un palo
+  de una roca de verdad. Conflicto social (`nucleo/conflicto.py`) queda
+  como consumidor futuro del mismo componente, sin lógica nueva -- mismo
+  patrón que ya se usó con el resolutor de disputas.
+- `nucleo/persistencia.py`: `Agarre.objetos` persistido como columna JSON
+  nueva (`agarre`) al final de `componentes_estado`, `VERSION_ESQUEMA`
+  subida a `0.29-fase0` (DROP-and-recreate, mismo criterio ya establecido
+  -- sin campañas reales que conservar). Se hizo explícitamente, no se
+  dejó como estado transitorio: a diferencia de otros campos transitorios
+  del motor (p.ej. `dias_agotada_consecutivos`, inofensivos si se pierden
+  un día), perder `Agarre.objetos` al recargar sería una regresión
+  silenciosa y evitable en un mecanismo que ya tiene un efecto de combate
+  real conectado.
+
+**Hallazgo propio, no señalado por Diego**: `nacer_criatura` (nacimientos
+por reproducción) es una fábrica ECS SEPARADA de `crear_criatura`
+(población fundadora) -- no la reutiliza, construye sus 12 componentes de
+forma paralela. `Agarre()` tuvo que añadirse en ambas por separado; un
+descuido aquí habría dejado a toda cría nacida en partida sin el
+componente, un `AttributeError` la primera vez que `sistema_recursos.py`
+intentara leerlo. Detectado leyendo el código antes de escribir, no al
+fallar en caliente.
+
+**Verificado contra el motor real, cinco comprobaciones** (arnés
+dirigido, `verificar_agarre.py`, scratchpad): (1) `puntos_agarre`
+correcto por especie; (2) recolección real llena `Agarre` antes que
+`Inventario`, respeta el tope (2 puntos en gnomo: se llena en 2 ticks,
+el 3º ya cae a `Inventario`), conejo (0 puntos) nunca lo usa; (3)
+persistencia -- roundtrip guardar/cargar preserva `Agarre.objetos` exacto
+para dos entidades distintas; (4) efecto de defensa medido
+ESTADÍSTICAMENTE, no solo leído del config -- 1000 ataques simulados con
+presa desarmada vs. 1000 con presa armada (mismos temperamentos, misma
+disposición de tamaño): tasa de éxito del cazador 0.779 sin agarre, 0.684
+con agarre, diferencia 0.095 -- coincide con el `reduccion_prob_captura_
+por_agarre=0.1` configurado, confirmando que el efecto se aplica
+correctamente en el camino de ejecución real, no solo en teoría; (5) 4
+semillas × 3000 ticks del pipeline completo sin intervención: el
+mecanismo se ejerce de verdad en juego normal (2 de 4 semillas terminan
+con gnomos con `Agarre` lleno, tope de 2 objetos), las otras 2 no tienen
+gnomos vivos a esos 3000 ticks (fragilidad de gnomo ya documentada en el
+círculo de sobrepoblación, no un fallo de esta pieza). 3000 ticks de
+`BOSQUE_AUTO_TICKS` sin ninguna excepción. 22/22 tests en verde.
+
+**Pendiente real, explícito**: ningún mecanismo para SOLTAR o GASTAR un
+objeto sujeto todavía -- una vez lleno, un punto de agarre se queda lleno
+para siempre (sin impacto práctico hoy, dado el tope de 1-2 por
+individuo, pero bloquea cualquier consumidor futuro que necesite
+"cambiar" de objeto, como fabricar una herramienta a partir de lo
+agarrado); efecto de defensa binario, sin diferenciar por material o
+cantidad; `puntos_agarre`/`reduccion_prob_captura_por_agarre`
+PROVISIONALES sin calibrar contra el harness completo; conflicto social
+como consumidor futuro sin disparador todavía (mismo hueco ya señalado
+para robo/agravio genérico). El propio arco que Diego pidió -- fuego con
+dos piedras, luego hachas/utensilios -- sigue sin empezar, este círculo
+es solo su cimiento.

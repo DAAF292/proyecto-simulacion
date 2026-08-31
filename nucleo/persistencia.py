@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -84,7 +85,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.28-fase0"
+VERSION_ESQUEMA = "0.29-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -221,7 +222,8 @@ class Persistencia:
                     gestacion_padre_snapshot TEXT,
                     recuerdos TEXT,
                     inventario TEXT,
-                    zona_idx INTEGER NOT NULL DEFAULT 0
+                    zona_idx INTEGER NOT NULL DEFAULT 0,
+                    agarre TEXT
                 )
                 """
             )
@@ -418,6 +420,7 @@ class Persistencia:
                 gest = gestor.obtener_componente(eid, Gestacion)
                 mem = gestor.obtener_componente(eid, MemoriaEspacial)
                 inv = gestor.obtener_componente(eid, Inventario)
+                agarre = gestor.obtener_componente(eid, Agarre)
 
                 if pos and nec and dims and pf and temp and cm and pm and rep:
                     filas_criaturas.append(
@@ -470,6 +473,7 @@ class Persistencia:
                             json.dumps(mem.recuerdos) if mem else None,
                             json.dumps(inv.contenidos) if inv else None,
                             pos.zona_idx,
+                            json.dumps(agarre.objetos) if agarre else None,
                         )
                     )
             cur.executemany(
@@ -477,7 +481,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -684,11 +688,13 @@ class Persistencia:
 
             # 2. Cargar entidades biológicas. zona_idx (2026-08-30, Circulo
             # 1 de profundidad) se añadió como ÚLTIMA columna de
-            # componentes_estado, así que `c.*` ya lo incluye como
-            # fila[47] -- desplaza en +1 los índices e.especie..e.id_padre
-            # de más abajo (antes fila[47]..fila[51], ahora fila[48]..
-            # fila[52]), pero ninguno de los índices anteriores (0..46,
-            # incluida la instantánea de gestación) cambia.
+            # componentes_estado en su momento -- fila[47]. agarre
+            # (2026-08-31, ver componentes/agarre.py) se añadió DESPUÉS de
+            # zona_idx, como fila[48] -- desplaza en +1 los índices
+            # e.especie..e.id_padre de más abajo (antes fila[48]..fila[52],
+            # ahora fila[49]..fila[53]), pero ninguno de los índices
+            # anteriores (0..47, incluida la instantánea de gestación)
+            # cambia.
             cur.execute(
                 """
                 SELECT c.*, e.especie, e.nombre, e.tick_nacimiento, e.id_madre, e.id_padre
@@ -770,15 +776,17 @@ class Persistencia:
                 gestor.anadir_componente(eid, MemoriaEspacial(recuerdos=recuerdos_dict))
                 inventario_dict = json.loads(fila[46]) if fila[46] else {}
                 gestor.anadir_componente(eid, Inventario(contenidos=inventario_dict))
+                agarre_lista = json.loads(fila[48]) if fila[48] else []
+                gestor.anadir_componente(eid, Agarre(objetos=agarre_lista))
                 gestor.anadir_componente(eid, Intencion(accion=Accion.DEAMBULAR))
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[48]),
-                        nombre=fila[49],
-                        tick_nacimiento=fila[50],
-                        id_madre=fila[51],
-                        id_padre=fila[52],
+                        especie=Especie(fila[49]),
+                        nombre=fila[50],
+                        tick_nacimiento=fila[51],
+                        id_madre=fila[52],
+                        id_padre=fila[53],
                     ),
                 )
 

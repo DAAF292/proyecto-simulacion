@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.agarre import Agarre
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
@@ -50,6 +51,10 @@ class SistemaDepredacion:
         self.captura_prob_max: float = float(cfg_dep.get("captura_prob_max", 0.5))
         self.factor_agresividad_resistencia: float = float(
             cfg_dep.get("factor_agresividad_resistencia", 0.2)
+        )
+        # Agarre -- primer efecto real (2026-08-31, ver componentes/agarre.py).
+        self.reduccion_prob_captura_por_agarre: float = float(
+            cfg_dep.get("reduccion_prob_captura_por_agarre", 0.1)
         )
         self.umbral_disposicion_caza: float = float(
             cfg_dep.get("umbral_disposicion_caza", 0.5)
@@ -189,6 +194,7 @@ class SistemaDepredacion:
         temp_cazador = gestor.obtener_componente(cazador_id, Temperamento)
         temp_presa = gestor.obtener_componente(presa_id, Temperamento)
         pool_presa = gestor.obtener_componente(presa_id, PoolFisico)
+        agarre_presa = gestor.obtener_componente(presa_id, Agarre)
         nec_cazador = gestor.obtener_componente(cazador_id, Necesidades)
         ident_cazador = gestor.obtener_componente(cazador_id, Identidad)
         ident_presa = gestor.obtener_componente(presa_id, Identidad)
@@ -226,6 +232,15 @@ class SistemaDepredacion:
                 aliados_cazando * self.bono_caza_por_aliado * sociabilidad_cazador,
             )
             prob_exito += bono_grupo
+
+        # AGARRE -- primer efecto real (2026-08-31, ver componentes/agarre.py
+        # y conversación de diseño con Diego: "un palo para defenderse, o
+        # una roca"). Binario por ahora: tener algo sujeto reduce la
+        # probabilidad de captura, sin escalar por cuántos puntos de
+        # agarre estén llenos ni por qué material sea -- primera pasada
+        # deliberadamente simple.
+        if agarre_presa is not None and len(agarre_presa.objetos) > 0:
+            prob_exito -= self.reduccion_prob_captura_por_agarre
 
         prob_exito = max(self.captura_prob_min, min(self.captura_prob_max, prob_exito))
 

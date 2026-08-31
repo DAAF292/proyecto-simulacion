@@ -41,6 +41,16 @@ depredacion:
   captura_prob_min: 0.15
   captura_prob_max: 0.85
   factor_agresividad_resistencia: 0.2
+  # reduccion_prob_captura_por_agarre (2026-08-31, ver componentes/agarre.py
+  # y conversacion de diseno con Diego: "un palo para defenderse, o una
+  # roca"). Primer efecto real de Agarre -- si la PRESA tiene al menos un
+  # objeto sujeto, resta esto de prob_exito antes de aplicar los topes
+  # min/max de arriba. Efecto binario por ahora (tener algo agarrado
+  # cuenta igual que tener dos, no escala por cantidad ni por tipo de
+  # material) -- primera pasada deliberadamente simple, sin diferenciar
+  # una piedra de un palo todavia. PROVISIONAL, sin calibrar contra el
+  # motor en marcha.
+  reduccion_prob_captura_por_agarre: 0.1
   factor_dano_base: 0.4
   eficiencia_biomasa_saciedad: 12.0
   eficiencia_biomasa_hidratacion: 0.5

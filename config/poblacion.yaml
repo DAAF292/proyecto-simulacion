@@ -27,6 +27,20 @@ rangos_raciales:
     camada: [1, 1]
     fraccion_madurez: 0.1
     factor_base_concepcion: 0.0033
+    # puntos_agarre (2026-08-31, conversación de diseño con Diego --
+    # "capacidad de sostener/usar" como cimiento de sociedad: un palo o
+    # una roca para defenderse, luego fuego, luego herramientas). Cuántos
+    # objetos puede sujetar A LA VEZ esta especie -- hecho anatómico
+    # FIJO por especie (a diferencia de fuerza/agilidad, no varía
+    # razonablemente entre individuos), mismo criterio que
+    # fraccion_madurez/factor_base_concepcion arriba: valor único, no
+    # rango [min,max]. No es exclusivo de gnomo -- cualquier especie con
+    # algún medio de sujeción física lo tiene (lobo con la boca, ardilla
+    # con las patas delanteras), es una capacidad de la criatura como
+    # caminar o comer, no un privilegio de la consciencia. Ver
+    # componentes/agarre.py. PROVISIONAL, valores razonados por especie,
+    # sin calibrar contra el motor en marcha.
+    puntos_agarre: 2  # dos manos
     fuerza: [0.2, 0.5]
     agilidad: [0.3, 0.7]
     velocidad: [0.2, 0.5]
@@ -60,6 +74,7 @@ rangos_raciales:
     camada: [4, 6]
     fraccion_madurez: 0.2
     factor_base_concepcion: 0.0033
+    puntos_agarre: 1  # boca
     fuerza: [0.5, 0.9]
     agilidad: [0.5, 0.9]
     velocidad: [0.5, 0.9]
@@ -94,6 +109,10 @@ rangos_raciales:
     camada: [3, 7]
     fraccion_madurez: 0.3
     factor_base_concepcion: 0.015
+    # 0: un conejo real no sujeta objetos de forma activa (a diferencia
+    # de una ardilla) -- el más incierto de los cuatro, abierto a
+    # corrección de Diego si no encaja con lo que tenía en mente.
+    puntos_agarre: 0
     fuerza: [0.1, 0.3]
     agilidad: [0.6, 0.9]
     velocidad: [0.5, 0.8]
@@ -128,6 +147,7 @@ rangos_raciales:
     camada: [2, 4]
     fraccion_madurez: 0.4
     factor_base_concepcion: 0.0067
+    puntos_agarre: 2  # patas delanteras
     fuerza: [0.05, 0.2]
     agilidad: [0.7, 0.95]
     velocidad: [0.5, 0.85]

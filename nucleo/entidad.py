@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 from typing import Any, Type, TypeVar
 
+from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -316,7 +317,15 @@ def crear_criatura(
     # añade a toda criatura por igual, vacío; que se use de verdad depende
     # de consciencia, no de la especie (ver docstring del componente).
     gestor.anadir_componente(entidad_id, Inventario())
-    
+
+    # 8. Agarre (2026-08-31, ver componentes/agarre.py) -- se añade a
+    # TODA criatura por igual, vacío; cuántos puntos puede llenar de
+    # verdad lo decide rangos_raciales[especie]['puntos_agarre'], no la
+    # presencia del componente (mismo criterio que Inventario justo
+    # arriba: el componente es universal, su uso real depende de la
+    # especie).
+    gestor.anadir_componente(entidad_id, Agarre())
+
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gest = _sortear_valor(rng, cfg_esp.get("duracion_gestacion_dias", [30.0, 60.0]))
     gestor.anadir_componente(
@@ -514,6 +523,10 @@ def nacer_criatura(
     # criterio que crear_criatura: se añade vacío a todo nacimiento por
     # igual, un recién nacido no hereda lo que cargaban sus progenitores.
     gestor.anadir_componente(entidad_id, Inventario())
+    # Agarre (2026-08-31, ver componentes/agarre.py) -- mismo criterio:
+    # vacío para todo nacimiento, un recién nacido no hereda lo que
+    # sujetaban sus progenitores.
+    gestor.anadir_componente(entidad_id, Agarre())
 
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gestacion = heredar(
