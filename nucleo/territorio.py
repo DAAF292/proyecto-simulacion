@@ -20,11 +20,25 @@ todo el resto del motor asume que puebla `zonas[0]`.
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 from typing import Any
 
-from nucleo.bioma import TipoTerreno
 from nucleo.cueva import generar_zona_cueva
 from nucleo.zona_bioma import generar_zona_bioma
+
+
+@dataclass(frozen=True)
+class AccesoSubterraneo:
+    """Un punto de paso entre la superficie y UNA zona subterránea
+    concreta -- CÍRCULO 3 de profundidad (2026-08-30, ver CLAUDE.md):
+    generaliza el par único acceso_subterraneo/entrada_cueva del Círculo
+    1/2 a una lista, para soportar varias cuevas por mundo."""
+    superficie: tuple[int, int]
+    """Celda de zonas[0] donde está el acceso."""
+    zona_idx: int
+    """Índice en Territorio.zonas de la cueva a la que da acceso."""
+    entrada: tuple[int, int]
+    """Celda dentro de zonas[zona_idx] donde se aparece al descender."""
 
 
 class Territorio:
@@ -59,70 +73,90 @@ class Territorio:
         # nada de zonas adicionales.
         self.zonas: list = [zona]
 
-        # CÍRCULO 1 de profundidad (2026-08-30): una única zona subterránea
-        # -- zonas[1] -- anclada bajo una celda de montaña con depósito
-        # mineral. CÍRCULO 2 (2026-08-30, ver nucleo/cueva.py): su
-        # geometría interior ya no reutiliza generar_zona_bioma (el
-        # generador orográfico de la superficie -- cordilleras, viento,
-        # lluvia -- no tiene sentido físico bajo tierra) sino un autómata
-        # celular dedicado, con vetas minerales finitas sembradas en su
-        # propio suelo caminable.
-        self.acceso_subterraneo: tuple[int, int] | None = None
-        """Celda de superficie (zona 0) que sirve de acceso determinista
-        al subsuelo -- la celda de montaña con depósito mineral más
-        cercana al centro del mapa entre las candidatas válidas, para que
-        la posición no dependa del orden de iteración del grid. None si
-        no hay ninguna celda de montaña válida (mapas muy pequeños o sin
-        montaña en esta semilla) -- el subsuelo simplemente queda
-        inalcanzable, no es un error."""
-        self.entrada_cueva: tuple[int, int] | None = None
-        """Celda dentro de zonas[1] (el centro de su grid) donde aparece
-        quien atraviesa acceso_subterraneo desde la superficie --
-        garantizada caminable y conectada al resto de la cueva por
-        generar_zona_cueva (ver nucleo/cueva.py)."""
+        # CÍRCULO 1-2 de profundidad (2026-08-30): nacieron con una única
+        # zona subterránea anclada bajo montaña con depósito mineral.
+        # CÍRCULO 3 (2026-08-30, corrección de diseño de Diego: "las
+        # cuevas no deberían aparecer solo en un bioma, son formaciones
+        # naturales que no siguen esas normas... deberían generarse por
+        # todo el mapa" y "para que se use la cueva no es algo que
+        # debamos definir nosotros" -- leyes neutras, principio 5, nunca
+        # un guion de "esta cueva es para lobos, esta para gnomos"):
+        # varias cuevas por mundo, tamaño sorteado dentro de un rango
+        # continuo (sin categorías con propósito adjunto), acceso en
+        # CUALQUIER celda de tierra firme con independencia de su bioma
+        # de superficie -- las cuevas son geología, no clima. Quién las
+        # usa y para qué emerge de la Utility AI de siempre (un lobo que
+        # busca refugio recuerda cualquier acceso que encuentre; un gnomo
+        # mina donde haya veta), no de una regla de generación.
+        self.accesos_subterraneos: list[AccesoSubterraneo] = []
+        """Un elemento por cueva generada -- ver AccesoSubterraneo. Lista
+        vacía si no se generó ninguna cueva (mapas muy pequeños sin
+        celdas de tierra firme candidatas)."""
 
-        celda_acceso = self._elegir_acceso_subterraneo(zona, rng)
-        if celda_acceso is not None:
-            self.acceso_subterraneo = celda_acceso
-            ancho_cueva = min(ancho, 12)
-            alto_cueva = min(alto, 12)
+        self._generar_cuevas(zona, config, rng, ancho, alto)
+
+    def _generar_cuevas(
+        self, zona, config: dict[str, Any], rng: random.Random, ancho: int, alto: int
+    ) -> None:
+        cfg_cueva = config["cueva"]
+        num_min = int(cfg_cueva.get("num_cuevas_min", 3))
+        num_max = int(cfg_cueva.get("num_cuevas_max", 6))
+        num_cuevas = rng.randint(num_min, num_max) if num_max >= num_min else 0
+
+        candidatos_acceso = self._candidatos_acceso_subterraneo(zona)
+        separacion_minima = int(cfg_cueva.get("separacion_minima_celdas", 8))
+        accesos_elegidos: list[tuple[int, int]] = []
+
+        rng.shuffle(candidatos_acceso)
+        for candidato in candidatos_acceso:
+            if len(accesos_elegidos) >= num_cuevas:
+                break
+            cx, cy = candidato
+            if all(
+                abs(cx - ax) + abs(cy - ay) >= separacion_minima
+                for ax, ay in accesos_elegidos
+            ):
+                accesos_elegidos.append(candidato)
+
+        ancho_min = min(ancho, int(cfg_cueva.get("ancho_min_celdas", 6)))
+        ancho_max = min(ancho, int(cfg_cueva.get("ancho_max_celdas", 22)))
+        alto_min = min(alto, int(cfg_cueva.get("alto_min_celdas", 6)))
+        alto_max = min(alto, int(cfg_cueva.get("alto_max_celdas", 22)))
+
+        for celda_acceso in accesos_elegidos:
+            # Rango + sorteo individual (2026-08-30, mismo patrón que ya
+            # usa el motor para cualquier atributo con variación
+            # individual, ver CLAUDE.md "mecanismos genéricos ya
+            # construidos") -- cada cueva sortea su propio tamaño dentro
+            # del rango, sin categorías discretas con propósito adjunto.
+            ancho_cueva = rng.randint(ancho_min, ancho_max) if ancho_max >= ancho_min else ancho_min
+            alto_cueva = rng.randint(alto_min, alto_max) if alto_max >= alto_min else alto_min
             entrada_cueva = (ancho_cueva // 2, alto_cueva // 2)
+
             zona_cueva = generar_zona_cueva(
                 rng,
-                config["cueva"],
+                cfg_cueva,
                 config["materiales"],
                 config["generacion_vetas"],
                 ancho_cueva,
                 alto_cueva,
                 entrada_cueva,
             )
+            zona_idx = len(self.zonas)
             self.zonas.append(zona_cueva)
-            self.entrada_cueva = entrada_cueva
+            self.accesos_subterraneos.append(
+                AccesoSubterraneo(superficie=celda_acceso, zona_idx=zona_idx, entrada=entrada_cueva)
+            )
 
     @staticmethod
-    def _elegir_acceso_subterraneo(zona, rng: random.Random) -> tuple[int, int] | None:
-        """Celda determinista de acceso al subsuelo: MONTANA, sin agua ni
-        fuego (salvaguardas del informe original de Diego, correctas por
-        sí mismas con independencia del resto de ese informe), preferida
-        con depósito mineral (ancla el acceso a "hay mina donde hay
-        mineral" en vez de ser un sistema sin relación con las vetas ya
-        existentes -- nucleo/materiales.py). Sorteo determinista sobre las
-        candidatas encontradas (mismo rng de generación, ya atado a la
-        semilla del mundo) en vez de "la primera que aparezca en el grid",
-        para no depender del orden de iteración."""
-        candidatas_con_mineral: list[tuple[int, int]] = []
-        candidatas_sin_mineral: list[tuple[int, int]] = []
-        for x, y, celda in zona.celdas():
-            if celda.tipo_terreno != TipoTerreno.MONTANA:
-                continue
-            if celda.tiene_agua or celda.en_llamas:
-                continue
-            if celda.deposito_mineral:
-                candidatas_con_mineral.append((x, y))
-            else:
-                candidatas_sin_mineral.append((x, y))
-
-        candidatas = candidatas_con_mineral or candidatas_sin_mineral
-        if not candidatas:
-            return None
-        return candidatas[rng.randrange(len(candidatas))]
+    def _candidatos_acceso_subterraneo(zona) -> list[tuple[int, int]]:
+        """Toda celda de tierra firme (sin agua ni fuego -- salvaguardas
+        físicas correctas por sí mismas, ver conversación de diseño con
+        Diego), de CUALQUIER bioma: las cuevas son formaciones
+        geológicas, no una propiedad del clima de superficie, así que no
+        se filtra por TipoTerreno."""
+        return [
+            (x, y)
+            for x, y, celda in zona.celdas()
+            if not celda.tiene_agua and not celda.en_llamas
+        ]

@@ -1429,12 +1429,79 @@ correctamente en ambas zonas); los 22 tests existentes siguen en verde.
 distintas" bajo tierra sigue exactamente igual de abierto que tras el
 Círculo 1 (la cueva no tiene clima propio, hereda el sorteo diario
 genérico); excavar un túnel de verdad (mutar una pared a suelo al agotar
-su veta) no existe; la cueva de prueba sigue siendo un único nivel de
-12×12, sin habitaciones temáticas ni conexión con "grandes ciudades
-enanas"; ningún consumo de tala/siega de madera-fibra-hierba_seca (hueco
-ya señalado en el Círculo de interacción física, sigue igual).
+su veta) no existe; ningún consumo de tala/siega de madera-fibra-
+hierba_seca (hueco ya señalado en el Círculo de interacción física,
+sigue igual). **La única zona de prueba de 12×12 y su anclaje exclusivo a
+montaña, descritos aquí originalmente, quedaron superados por el Círculo
+3 el mismo día — ver más abajo.**
 
-### Qué sigue tras el Círculo 2
+### Círculo 3 — varias cuevas, tamaño variable, sin bioma ni propósito
+### asignado (2026-08-30)
+
+Corrección de diseño de Diego, el mismo día, al ver el Círculo 2
+funcionando: preguntó "¿las cuevas son todas del mismo tamaño? podría
+haber cuevas superficiales que usen los lobos para habitar y grandes
+galerías naturales con su propio bioma". Primera respuesta propuesta
+(dos categorías discretas — "madriguera" pequeña vs. "galería" grande,
+cada una con su propia regla de acceso por bioma/propósito) **rechazada
+por Diego, con razón, por violar el principio 5 (leyes neutras)**: "las
+cuevas no deberían aparecer solo en un bioma, son formaciones naturales
+que no siguen esas normas... para que se use la cueva no es algo que
+debamos definir nosotros, si un lobo está buscando refugio y encuentra
+un acceso no se tiene que plantear si puede entrar ahí porque es grande
+o pequeña". Autoría de guion disfrazada de categoría de generación —
+exactamente el patrón que este documento pide vigilar.
+
+**Rediseño aceptado**: cuevas como fenómeno geológico puro, desacoplado
+del clima de superficie —
+
+- `nucleo/territorio.py:AccesoSubterraneo` (nuevo dataclass): generaliza
+  el par único `acceso_subterraneo`/`entrada_cueva` del Círculo 1-2 (ya
+  retirado) a `Territorio.accesos_subterraneos: list[AccesoSubterraneo]`
+  — una entrada por cueva generada.
+- **Acceso en cualquier bioma**: `_candidatos_acceso_subterraneo` ya no
+  filtra por `TipoTerreno.MONTANA` ni prefiere celdas con depósito
+  mineral (ese anclaje "hay mina donde hay acceso" era un vestigio del
+  diseño de una única cueva — ya no tiene sentido cuando cada cueva
+  genera sus propias vetas en su propio interior, con independencia de
+  qué haya en superficie). Solo se conservan las dos salvaguardas
+  físicas reales: sin agua, sin fuego. Verificado que los accesos caen
+  de hecho en los cinco biomas (bosque, pradera, desierto, montaña,
+  tundra), no solo montaña.
+- **Tamaño continuo, sin categorías**: cada cueva sortea su propio ancho
+  y alto (por separado, no forzado a cuadrado) dentro de un rango
+  (`ancho_min/max_celdas`, `alto_min/max_celdas`, PROVISIONAL 6–22) —
+  mismo patrón de "rango racial + sorteo individual" que el motor ya
+  reutiliza para atributos de criatura, aplicado aquí a un rasgo
+  geográfico en vez de biológico. Sin bifurcación "pequeña"/"grande" en
+  el código: quién acaba usando cada cueva emerge de la Utility AI de
+  siempre (memoria instintiva de refugio para fauna, RECOLECTAR donde
+  haya veta para el gnomo), no de una etiqueta puesta en generación.
+- **Varias cuevas por mundo**: `num_cuevas_min/max` (PROVISIONAL 3–6),
+  con `separacion_minima_celdas` (PROVISIONAL 8) entre accesos para que
+  el sorteo no las amontone en un rincón del mapa.
+- `sistemas/sistema_movimiento.py:_aplicar_movimiento` generalizado:
+  busca en la lista de accesos en vez de comparar contra un par fijo —
+  búsqueda lineal O(N) sobre un puñado de cuevas, mismo límite de
+  escalabilidad ya aceptado en el resto del motor a esta escala.
+  `nucleo/cueva.py` no cambió nada de su algoritmo — solo pasó a
+  recibir ancho/alto variables en vez de la constante 12.
+
+**Verificado contra el motor real**: 5 semillas — número de cuevas
+dentro del rango configurado, separación mínima respetada, cada cueva
+caminable y conexa (mismo chequeo del Círculo 2, ahora por cueva), 22
+tamaños distintos vistos entre semillas (sin agrupamiento en dos
+valores, confirmando que no quedó una categoría discreta oculta),
+accesos repartidos en los cinco biomas; el portal generalizado probado
+explícitamente con descensos por CADA acceso de una semilla real,
+confirmando que cada uno lleva a su propia zona/entrada; aislamiento de
+percepción confirmado también entre dos cuevas no-superficie (zona_idx 1
+frente a 2, no solo 0 frente a 1 — caso que el Círculo 1 no pudo probar
+porque solo existía una cueva); 300 ticks de pipeline completo con
+gnomos en cuevas distintas simultáneas sin excepciones; 3000 ticks de
+`BOSQUE_AUTO_TICKS`; los 22 tests existentes en verde.
+
+### Qué sigue tras el Círculo 3
 
 1. **Fauna subterránea** ("animales fantásticos", monstruos) como
    catálogo nuevo de especies, reutilizando rango racial + sorteo
@@ -1442,6 +1509,9 @@ ya señalado en el Círculo de interacción física, sigue igual).
 2. **"Ciudad enana"**: extender `SistemaAsentamiento`/`Construccion` para
    que funcionen dentro de una cueva — primer paso real sigue siendo
    corregir el hueco de `almacen_cercano`/`agrupar_por_proximidad` sin
-   filtrar por `zona_idx` (señalado en el Círculo 1, todavía sin tocar).
+   filtrar por `zona_idx` (señalado en el Círculo 1, todavía sin tocar,
+   y ahora más urgente: con varias cuevas por mundo, dos almacenes en
+   cuevas distintas con coordenadas numéricamente cercanas podrían
+   confundirse entre sí).
 3. **Presentación** (`presentacion/vista_web.py`) — deliberadamente sin
    tocar todavía. Motor primero.

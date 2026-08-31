@@ -223,32 +223,33 @@ class SistemaMovimiento:
         if not (0 <= nx < zona.ancho and 0 <= ny < zona.alto):
             return
 
-        # (2026-08-30, Circulo 1 de profundidad) TRANSICION DE ZONA --
-        # mecanismo de "portal", no una decision de la Utility AI: pisar
-        # la celda de acceso es en si mismo el cruce, igual que una
-        # escalera de Dwarf Fortress -- ninguna especie necesita "elegir"
-        # bajar, es un rasgo fisico del terreno (leyes neutras, nunca
-        # teleologicas -- principio 5). Se comprueba ANTES de las
-        # restricciones de agua/relieve de mas abajo porque son
-        # restricciones DE LA CELDA DE ORIGEN de esta misma zona, no
-        # tienen sentido aplicadas al destino en otra zona.
+        # (2026-08-30, Circulo 1 de profundidad; generalizado a varias
+        # cuevas en el Circulo 3) TRANSICION DE ZONA -- mecanismo de
+        # "portal", no una decision de la Utility AI: pisar la celda de
+        # acceso es en si mismo el cruce, igual que una escalera de
+        # Dwarf Fortress -- ninguna especie necesita "elegir" bajar, es
+        # un rasgo fisico del terreno (leyes neutras, nunca teleologicas
+        # -- principio 5). Se comprueba ANTES de las restricciones de
+        # agua/relieve de mas abajo porque son restricciones DE LA CELDA
+        # DE ORIGEN de esta misma zona, no tienen sentido aplicadas al
+        # destino en otra zona. territorio.accesos_subterraneos es una
+        # LISTA (una entrada por cueva, ver nucleo/territorio.py:
+        # AccesoSubterraneo) -- busqueda lineal O(N) sobre un puñado de
+        # cuevas por mundo, mismo limite de escalabilidad ya aceptado en
+        # el resto del motor a esta escala.
         territorio = mundo.territorio
-        if (
-            pos.zona_idx == 0
-            and territorio.acceso_subterraneo is not None
-            and (nx, ny) == territorio.acceso_subterraneo
-        ):
-            pos.zona_idx = 1
-            pos.x, pos.y = territorio.entrada_cueva
-            return
-        if (
-            pos.zona_idx == 1
-            and territorio.entrada_cueva is not None
-            and (nx, ny) == territorio.entrada_cueva
-        ):
-            pos.zona_idx = 0
-            pos.x, pos.y = territorio.acceso_subterraneo
-            return
+        if pos.zona_idx == 0:
+            for acceso in territorio.accesos_subterraneos:
+                if (nx, ny) == acceso.superficie:
+                    pos.zona_idx = acceso.zona_idx
+                    pos.x, pos.y = acceso.entrada
+                    return
+        else:
+            for acceso in territorio.accesos_subterraneos:
+                if pos.zona_idx == acceso.zona_idx and (nx, ny) == acceso.entrada:
+                    pos.zona_idx = 0
+                    pos.x, pos.y = acceso.superficie
+                    return
 
         celda_orig = zona.obtener_celda(pos.x, pos.y)
         celda_dest = zona.obtener_celda(nx, ny)
