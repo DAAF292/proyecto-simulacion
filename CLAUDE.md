@@ -1534,6 +1534,41 @@ el mismo arnés que reproducía la fusión incorrecta ahora detecta dos
 asentamientos distintos, uno por zona, sin miembros cruzados; 4000 ticks
 de `BOSQUE_AUTO_TICKS` sin excepciones; 22 tests en verde.
 
+**Comprobación adicional, mismo día, tras preguntar Diego otra vez "¿hay
+algo más que añadir al tema de las formaciones subterráneas?"**: dos
+cosas más verificadas contra el motor real, una confirmada en verde y
+otra decidida explícitamente en vez de dejarla en el aire.
+
+- **Roundtrip de persistencia con número de cuevas variable**: no se
+  había reprobado explícitamente desde que el Círculo 3 dejó de ser
+  "siempre exactamente una cueva" — verificado ahora (mundo con 5
+  cuevas, marca de estado distinta en cada una, guardado, mundo
+  regenerado desde cero con la misma semilla, cargado): las 5 zonas
+  recuperan su estado exacto. Correcto, no hacía falta tocar nada.
+- **Desequilibrio de mineral entre superficie y cuevas, medido, NO
+  corregido — decisión explícita**: con varias cuevas por mundo, el
+  mineral total bajo tierra resultó ser 4-10× el de toda la superficie
+  junta (medido en 5 semillas: 240-680kg en superficie frente a
+  1400-3840kg repartidos entre las cuevas de ese mismo mundo). Diego,
+  consultado, delegó el criterio ("haz lo que consideres que será
+  mejor"). Decisión: **dejarlo tal cual, sin ningún parámetro nuevo que
+  rebaje la abundancia bajo tierra**. Razonamiento: el número no es un
+  accidente sin sentido -- surge de aplicar la MISMA fórmula
+  (`escala_abundancia_a_fraccion_piedra`) a más terreno de piedra en
+  total (varias cuevas enteras de suelo caminable suman más superficie
+  minable que la montaña de la superficie sola), y encaja temáticamente
+  con el motivo original de todo este arco ("hace falta minería
+  vertical... grandes ciudades enanas... minas" -- concentrar mineral
+  bajo tierra es precisamente la razón real por la que se cava).
+  Introducir un parámetro nuevo solo para que el número "se sienta más
+  equilibrado" sin ningún motivo de diseño detrás habría sido inventar
+  una regla para forzar una sensación estética, justo lo que el
+  proyecto pide evitar. `masa_inicial_por_celda_veta_kg` y
+  `escala_abundancia_a_fraccion_piedra` siguen marcados PROVISIONAL,
+  pendientes del harness completo (15 semillas × 12000 ticks) -- este
+  hallazgo queda anotado para revisar entonces con datos de partida
+  real, no para ajustar a ojo sobre una foto de generación.
+
 ### Qué sigue tras el Círculo 3
 
 1. **Fauna subterránea** ("animales fantásticos", monstruos) como
