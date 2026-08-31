@@ -611,11 +611,32 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         # combustible en la celda actual, o ya hay una Fogata ahí (nada
         # que encender, beneficiarse de una ya existente no exige
         # ninguna acción, sistema_necesidades.py la detecta pasivamente).
+        #
+        # CORRECCIÓN (2026-08-31, conversación de diseño con Diego --
+        # "la recolección de recursos es el efecto, no la causa"): buscar
+        # piedra_suelta para poder encender fuego NO es una utilidad
+        # independiente ("tangencial", palabra de Diego) que lea
+        # confort_termico por su cuenta -- eso sería una regla de
+        # "recoge piedras porque sí" aunque el individuo jamás haya
+        # pasado frío. La utilidad de RECOLECTAR hereda el valor que
+        # ENCENDER_FUEGO tendría SI YA tuviera las piedras (la misma
+        # fórmula, propagada hacia abajo, no recalculada desde la causa
+        # raíz por separado) -- así, un individuo que nunca ha
+        # experimentado frío real nunca desarrolla ningún interés en
+        # buscar piedra tampoco (ambos comparten la misma causa, no dos
+        # causas paralelas). Piedra_suelta ahora vive en Celda.recursos,
+        # independiente de tipo_sustrato (ver docstring de
+        # config/fuego.yaml para el error de modelo corregido).
         utilidad_encender_fuego = 0.0
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             agarre = gestor.obtener_componente(id_entidad, Agarre)
-            piedras = agarre.objetos.count("piedra") if agarre is not None else 0
-            if piedras >= piedras_necesarias_fuego:
+            piedras = agarre.objetos.count("piedra_suelta") if agarre is not None else 0
+            if piedras < piedras_necesarias_fuego:
+                # Eslabón heredado: "cuánto valdría encender fuego si ya
+                # tuviera las piedras" empuja a RECOLECTAR, no una
+                # utilidad propia de "buscar piedra".
+                utilidad_recolectar = max(utilidad_recolectar, 1.0 - necesidades.confort_termico)
+            else:
                 zona_fuego = mundo.territorio.zonas[pos.zona_idx]
                 celda_fuego = zona_fuego.obtener_celda(pos.x, pos.y)
                 if (

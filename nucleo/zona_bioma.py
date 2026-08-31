@@ -160,6 +160,7 @@ def generar_zona_bioma(
     config_generacion_vetas: dict,
     ancho: int,
     alto: int,
+    probabilidad_piedra_suelta: float = 0.0,
 ) -> ZonaBioma:
     todas_las_celdas = {(x, y) for x in range(ancho) for y in range(alto)}
 
@@ -335,6 +336,11 @@ def generar_zona_bioma(
                 {r["nombre"]: r["capacidad_maxima"] for r in recursos_alimento(config_flora["especies"][especie_key])}
                 if tiene_recurso else {}
             )
+            # piedra_suelta (2026-08-31, ver config/fuego.yaml): recurso
+            # independiente de tipo_sustrato/bioma -- puede coexistir con
+            # cualquier flora, no depletable al agarrar.
+            if probabilidad_piedra_suelta > 0.0 and rng.random() < probabilidad_piedra_suelta:
+                recursos_iniciales["piedra_suelta"] = 1.0
             grid[x][y] = Celda(
                 tipo_terreno=tipo, elevacion=campo_elevacion[x][y],
                 lluvia=campo_lluvia[x][y], temperatura=campo_temperatura[x][y],

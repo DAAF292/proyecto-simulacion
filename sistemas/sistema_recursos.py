@@ -113,6 +113,12 @@ class SistemaRecursos:
         self.tasa_consumo_fogata: float = float(
             cfg_fuego.get("tasa_consumo_combustible_fogata_kg_tick", 0.1)
         )
+        self.piedras_necesarias_fuego: int = int(cfg_fuego.get("piedras_necesarias", 2))
+        # Mismo umbral que ya exime del sesgo de territorio y gatea
+        # CONSTRUIR/RECOLECTAR de material -- ver sistema_decision.py.
+        self.umbral_consciencia_agencia: float = float(
+            self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
 
         cfg_dep = self.config.get("depredacion", {})
         self.eficiencia_biomasa_saciedad: float = float(
@@ -193,7 +199,10 @@ class SistemaRecursos:
                 inv = gestor.obtener_componente(eid, Inventario)
                 dims = gestor.obtener_componente(eid, DimensionesFisicas)
                 agarre = gestor.obtener_componente(eid, Agarre)
-                self._resolver_recolectar(inv, dims, celda, agarre, ident.especie.value)
+                consciente = (
+                    cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia
+                )
+                self._resolver_recolectar(inv, dims, celda, agarre, ident.especie.value, consciente)
             elif intencion.accion == Accion.ENCENDER_FUEGO:
                 self._resolver_encender_fuego(
                     gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual
@@ -391,6 +400,7 @@ class SistemaRecursos:
         celda: Celda,
         agarre: Agarre | None = None,
         especie: str | None = None,
+        consciente: bool = False,
     ) -> None:
         """
         RECOLECTAR -- Círculo C de interacción física (2026-08-30, ver
@@ -402,22 +412,37 @@ class SistemaRecursos:
         espacio_disponible_kg). Sin desplazamiento: se resuelve donde ya
         se está, el sustrato está bajo los pies de cualquiera.
 
-        AGARRE (2026-08-31, ver componentes/agarre.py y conversación de
-        diseño con Diego -- "un palo para defenderse, o una roca"): antes
-        de tocar el Inventario a granel, si a esta especie le queda algún
-        punto de agarre libre (rangos_raciales[especie]['puntos_agarre']),
-        se llena UNO con el mismo material que ya sería elegible para
-        recolectar (flora > sustrato, mismo orden que abajo, salvo
-        mineral -- minar una veta es un acto deliberado y con coste real,
-        distinto de agarrar un palo o una piedra sueltos del suelo).
-        Deliberadamente GRATUITO y simbólico: no descuenta nada del
-        Inventario, la capacidad de carga ni el recurso finito de la
-        celda -- coger UNA piedra suelta no vacía la celda, y el tope de
-        puntos_agarre (como mucho 1-2 por individuo, nunca se libera
-        todavía) hace que el efecto total sobre la economía del mundo sea
-        insignificante. Si se llena un punto de agarre este tick, se
-        corta aquí -- no compite con la recolección normal en el mismo
-        tick.
+        AGARRE, DOS MECANISMOS DISTINTOS (2026-08-31, ver componentes/
+        agarre.py y config/fuego.yaml para el porqué de la separación):
+
+        1. PIEDRA_SUELTA CON CAUSA (corrección tras conversación con
+           Diego -- "la recolección de recursos es el efecto, no la
+           causa"): un individuo CONSCIENTE que todavía no tiene sus
+           piedras_necesarias_fuego (sistema_decision.py ya elevó la
+           utilidad de RECOLECTAR heredando el valor de ENCENDER_FUEGO --
+           nunca una razón propia) intenta agarrar piedra_suelta
+           ESPECÍFICAMENTE, si la celda actual la tiene. Un individuo que
+           jamás ha necesitado fuego (confort_termico siempre alto) nunca
+           llega a esta rama con utilidad real, así que nunca desarrolla
+           interés en buscar piedra tampoco -- ninguna instrucción
+           universal, la necesidad empuja la determinación.
+        2. AGARRE GENÉRICO, sin causa concreta (diseño original, sin
+           cambios -- "un palo para defenderse, o una roca"): si queda
+           algún punto de agarre libre tras lo anterior, se llena con el
+           mismo material que ya sería elegible para recolectar (flora >
+           sustrato, mismo orden que abajo, salvo mineral -- minar una
+           veta es un acto deliberado y con coste real). piedra_suelta
+           queda fuera de este segundo mecanismo a propósito (no está en
+           el catálogo de materiales, así que apto_construccion la
+           excluye sin necesidad de una comprobación aparte) -- solo se
+           agarra por la vía 1, con causa.
+
+        Ambos deliberadamente GRATUITOS y simbólicos, sin cambios respecto
+        al diseño original: no descuentan nada del Inventario, la
+        capacidad de carga ni el recurso de la celda (ni piedra_suelta ni
+        un palo de flora se agotan por agarrar una unidad). Si se llena
+        un punto de agarre este tick, se corta aquí -- no compite con la
+        recolección normal en el mismo tick.
 
         MADERA/FIBRA/HIERBA_SECA (2026-08-31, propuesta de Diego: "los
         árboles dejan caer ramas que los gnomos recogen o arrancan
@@ -452,6 +477,22 @@ class SistemaRecursos:
         if inv is None or dims is None:
             return
 
+        # Vía 1: piedra_suelta CON CAUSA -- ver docstring arriba. Solo
+        # conscientes, solo si todavía faltan piedras para fuego, solo si
+        # queda algún punto de agarre libre en total, solo si la celda
+        # actual tiene piedra_suelta.
+        if consciente and agarre is not None and especie is not None:
+            puntos_agarre_total = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
+            piedras_agarradas = agarre.objetos.count("piedra_suelta")
+            if (
+                len(agarre.objetos) < puntos_agarre_total
+                and piedras_agarradas < self.piedras_necesarias_fuego
+                and celda.recursos.get("piedra_suelta", 0.0) > 0.0
+            ):
+                agarre.objetos.append("piedra_suelta")
+                return
+
+        # Vía 2: agarre genérico, sin causa concreta -- diseño original.
         if agarre is not None and especie is not None:
             puntos_agarre = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
             if len(agarre.objetos) < puntos_agarre:

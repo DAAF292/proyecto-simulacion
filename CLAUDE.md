@@ -2219,11 +2219,105 @@ alcanzable y se confirmó en el arnés dirigido (no depende de la
 precondición de piedra) -- el hallazgo afecta específicamente a
 ENCENDER_FUEGO, no a todo el círculo.
 
-**Pendiente real, explícito**: la precondición de piedra, sin resolver
-(ver arriba); sin acción de avivar/alimentar una Fogata existente;
+**Pendiente real, explícito (CORREGIDO -- ver "Piedra suelta" más abajo
+para la precondición de piedra, ya resuelta el mismo día)**: sin acción
+de avivar/alimentar una Fogata existente;
 `probabilidad_encender_fuego`/`masa_yesca_consumida_kg`/
 `combustible_inicial_fogata_kg`/`tasa_consumo_combustible_fogata_kg_tick`
 PROVISIONALES sin calibrar; el efecto social del fuego (punto de unión,
 historias) y el cimiento de cocina que Diego mencionó como usos futuros
 del mismo recurso, documentados en `componentes/fogata.py` pero sin una
 sola línea de código.
+
+## Piedra suelta -- corrección de modelo de recursos y de causalidad para
+## que ENCENDER_FUEGO sea alcanzable de verdad (2026-08-31, mismo día)
+
+El hallazgo de arriba ("la precondición de piedra, sin resolver") se
+investigó a fondo el mismo día, con Diego, y llevó a dos correcciones de
+diseño reales -- no solo una calibración numérica.
+
+**Corrección 1 -- modelo de recursos**. `piedra` como `tipo_sustrato` era
+la fuente equivocada: `tipo_sustrato` describe el TERRENO (relevante para
+infiltración de agua, generación del mundo), nunca fue pensado como
+catálogo de recursos recolectables. Diego lo conectó directamente con la
+conversación de esa misma tarde sobre "qué es una celda" ("en una celda
+de 100 metros cuadrados puede haber muchos recursos, árboles, hierba,
+piedras, setas, raíces... lo lógico es enfocarlo en este punto como un
+recurso más"). Solución: `piedra_suelta` como recurso propio en
+`Celda.recursos`, independiente de `tipo_sustrato` y del bioma --
+presente con `probabilidad_piedra_suelta_por_celda` (PROVISIONAL 0.2) en
+CUALQUIER celda (superficie Y cuevas, `nucleo/zona_bioma.py` y
+`nucleo/cueva.py`), no depletable al agarrar (mismo criterio "gratuito y
+simbólico" que ya regía `Agarre`). `tipo_sustrato` sigue existiendo
+exactamente igual para su propósito original (infiltración, recolección a
+granel de arcilla/tierra/piedra para construcción) -- no se tocó nada de
+esa vía, solo se dejó de usarla como fuente de piedra agarrable.
+
+**Corrección 2 -- causalidad, no solo disponibilidad**. Con `piedra_suelta`
+ya como recurso real, la primera propuesta seguía siendo defectuosa:
+hacer que `RECOLECTAR` ganara utilidad "si `confort_termico` está bajo Y
+faltan piedras" -- Diego lo rechazó con precisión: "¿tiene sentido que un
+ser consciente que jamás ha experimentado el frío antes necesite hacerse
+con dos piedras para hacer fuego más adelante? [...] si no sería una
+norma, los seres conscientes desde que existen recogen dos piedras para
+hacer fuego". Leer `confort_termico` directamente en la fórmula de
+`RECOLECTAR` es una causa PARALELA a la de `ENCENDER_FUEGO`, no una
+cadena -- exactamente el tipo de regla universal-sin-experiencia que el
+principio 5 (leyes neutras) prohíbe. Corrección: la utilidad de
+`RECOLECTAR` por piedra HEREDA el valor que `ENCENDER_FUEGO` tendría SI YA
+tuviera las piedras (`1.0 - confort_termico`, la misma fórmula, propagada
+hacia abajo desde el eslabón padre, no recalculada de forma independiente
+desde la causa raíz) -- un individuo que jamás ha pasado frío real nunca
+llega a esta rama con utilidad significativa, así que nunca desarrolla
+interés en piedra tampoco. Diego describió esto como parte de un árbol de
+decisión general (frío→fuego→piedra+combustible; hambre→cocinar→fuego→
+piedra+combustible→si no hay, como fruta cruda) -- confirmado que el
+patrón es correcto, pero NO se reescribió el motor a un planificador
+jerárquico explícito (cambio de arquitectura desproporcionado): el propio
+argmax de la Utility AI plana ya produce el mismo resultado (RECOLECTAR
+compite con hambre/sed/sueño de siempre; si no hay piedra que agarrar, la
+utilidad simplemente no crece y otra necesidad gana cuando pesa más --
+"¿merece la pena seguir buscando, o como manzanas crudas?" emerge solo,
+sin ninguna señal explícita de "abandono" que construir).
+
+**Implementado**:
+- `nucleo/zona_bioma.py:generar_zona_bioma` y `nucleo/cueva.py:
+  generar_zona_cueva` ganan `probabilidad_piedra_suelta` (por defecto
+  0.0, sin romper compatibilidad con otros llamadores) -- sembrado
+  independiente del resto de recursos, mismo patrón de capas
+  independientes que ya usan flora y `deposito_mineral`.
+- `sistemas/sistema_decision.py`: el gate de `ENCENDER_FUEGO` pasa de
+  contar `"piedra"` a contar `"piedra_suelta"` en `Agarre.objetos`. Si
+  faltan piedras, `utilidad_recolectar = max(utilidad_recolectar, 1.0 -
+  confort_termico)` -- el eslabón heredado, no una utilidad propia.
+- `sistemas/sistema_recursos.py:_resolver_recolectar`: DOS vías
+  distintas y documentadas, no una sola mezclada -- Vía 1 (piedra_suelta
+  CON CAUSA: consciente + piedras faltantes + celda con `piedra_suelta`)
+  se comprueba PRIMERO; Vía 2 (agarre genérico sin causa concreta,
+  diseño original de `Agarre`, sin cambios) se mantiene intacta para el
+  resto de materiales -- `piedra_suelta` queda automáticamente excluida
+  de la Vía 2 porque no está en el catálogo de materiales
+  (`apto_construccion` la filtra sin comprobación aparte).
+
+**Verificado contra el motor real, dos pasadas**: (1) arnés dirigido
+aislando la causalidad -- un gnomo con refugio ya terminado (sin ningún
+otro motivo para que `RECOLECTAR` tenga utilidad) y `confort_termico=1.0`
+elige `DEAMBULAR`, nunca `RECOLECTAR`; el mismo individuo con
+`confort_termico=0.1` sí elige `RECOLECTAR`, heredando la utilidad de
+fuego -- confirmado que la causa nunca se activa sin frío real. (2) Las
+mismas 4 semillas del hallazgo original (42, 1, 7, 99; 3000 ticks cada
+una): **3, 37, 38 y 2 fuegos encendidos respectivamente** (frente a 0 en
+las cuatro con el diseño anterior), ninguna fogata quedó activa
+indefinidamente en ninguna semilla (todas se extinguen solas, confirmando
+que `_consumir_fogatas` funciona en juego real). 3000 ticks de
+`BOSQUE_AUTO_TICKS` sin ninguna excepción. 22/22 tests en verde.
+
+**Pendiente real, explícito**: `probabilidad_piedra_suelta_por_celda=0.2`
+sigue PROVISIONAL, sin calibrar; sin acción de avivar/alimentar una
+Fogata existente (sigue igual que antes de esta corrección); efecto
+social y cocina siguen sin una sola línea de código; la Vía 2 (agarre
+genérico) todavía puede coger `"piedra"` de `tipo_sustrato` para fines de
+defensa general -- deliberadamente distinto de `"piedra_suelta"`
+(propósito de fuego), sin que esto sea confuso en la práctica porque son
+claves de cadena distintas, pero merece quedar anotado por si una sesión
+futura confunde ambos conceptos de "piedra".

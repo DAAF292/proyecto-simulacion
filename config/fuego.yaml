@@ -11,6 +11,30 @@
 # ==============================================================================
 
 fuego:
+  # piedra_suelta (2026-08-31, CORRECCION de diseño tras conversacion con
+  # Diego -- "la recoleccion de recursos es el efecto, no la causa").
+  # ANTES: la precondicion de piedra se resolvia contra tipo_sustrato de
+  # la celda (piedra/arcilla/tierra) -- error de modelo doble, sennalado
+  # por Diego: (1) tipo_sustrato describe el TERRENO (relevante para
+  # infiltracion de agua), nunca fue pensado como catalogo de recursos
+  # recolectables -- una celda de 100 m2 puede alojar piedra suelta
+  # igual que alberga arboles/hierba, independientemente de que sea
+  # bosque o pradera; (2) el propio Agarre se llenaba de forma
+  # oportunista, sin ninguna razon -- "uno recoge cosas si las necesita
+  # o preve necesitarla, la recoleccion es el efecto, no la causa".
+  # Verificado el error empiricamente: piedra como tipo_sustrato es rara
+  # (52-198 celdas de ~1600 en las semillas probadas, frente a 1281-1547
+  # de arcilla) y en 12000 ticks repartidos en 4 semillas NINGUN gnomo
+  # llego a encender fuego nunca.
+  #
+  # piedra_suelta es ahora un recurso propio en Celda.recursos,
+  # independiente de tipo_sustrato, presente con esta probabilidad en
+  # CUALQUIER bioma (piedras sueltas se encuentran en un bosque igual
+  # que en una pradera) -- PROVISIONAL, sin calibrar contra el motor en
+  # marcha. NO se agota al agarrar (mismo criterio "gratuito y
+  # simbolico" que ya regia el Agarre original -- una piedra suelta de
+  # 100 m2 no se acaba porque alguien coja una).
+  probabilidad_piedra_suelta_por_celda: 0.2
   # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py y nucleo/fuego.py):
   # "usar dos rocas para hacer un fuego" -- Diego. Cuantas piedras hacen
   # falta en Agarre para intentarlo.

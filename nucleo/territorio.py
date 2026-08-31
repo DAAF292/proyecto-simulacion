@@ -65,6 +65,9 @@ class Territorio:
             config["generacion_vetas"],
             ancho,
             alto,
+            probabilidad_piedra_suelta=float(
+                config.get("fuego", {}).get("probabilidad_piedra_suelta_por_celda", 0.0)
+            ),
         )
         # Fase 0: un único territorio -- este atributo `zonas` ya era una
         # lista a propósito desde antes de que hubiera una segunda zona,
@@ -141,6 +144,9 @@ class Territorio:
                 ancho_cueva,
                 alto_cueva,
                 entrada_cueva,
+                probabilidad_piedra_suelta=float(
+                    config.get("fuego", {}).get("probabilidad_piedra_suelta_por_celda", 0.0)
+                ),
             )
             zona_idx = len(self.zonas)
             self.zonas.append(zona_cueva)

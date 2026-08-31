@@ -158,6 +158,7 @@ def generar_zona_cueva(
     ancho: int,
     alto: int,
     entrada: tuple[int, int],
+    probabilidad_piedra_suelta: float = 0.0,
 ) -> ZonaBioma:
     """Genera una ZonaBioma para el interior de una cueva: geometría por
     autómata celular (generar_geometria_cueva) + vetas minerales sembradas
@@ -189,12 +190,23 @@ def generar_zona_cueva(
         for y in range(alto):
             pared = es_pared[x][y]
             deposito_mineral = "" if pared else vetas_minerales.get((x, y), "")
+            # piedra_suelta (2026-08-31, ver config/fuego.yaml): tan
+            # plausible o mas en una cueva que en superficie -- solo en
+            # suelo caminable, igual que el resto de recursos.
+            recursos_iniciales: dict[str, float] = {}
+            if (
+                not pared
+                and probabilidad_piedra_suelta > 0.0
+                and rng.random() < probabilidad_piedra_suelta
+            ):
+                recursos_iniciales["piedra_suelta"] = 1.0
             grid[x][y] = Celda(
                 tipo_terreno=TipoTerreno.MONTANA,
                 elevacion=ELEVACION_PARED if pared else ELEVACION_SUELO,
                 tipo_sustrato="piedra",
                 deposito_mineral=deposito_mineral,
                 masa_mineral_restante=masa_inicial_veta if deposito_mineral else 0.0,
+                recursos=recursos_iniciales,
             )
 
     return ZonaBioma(ancho=ancho, alto=alto, grid=grid, clima_actual=Clima.DESPEJADO)
