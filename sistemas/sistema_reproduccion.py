@@ -103,15 +103,20 @@ coespecificos hay alrededor, es que un individuo mal alimentado no
 concibe. Dos correcciones, misma ley para las cuatro especies, ninguna
 rama por especie:
 
-1. GATE DE CONCEPCION: se reutiliza EXACTAMENTE el mismo gate que ya
-   protege BUSCAR_PAREJA (mismo _NECESIDADES_FISICAS, mismo
-   decision.umbral_atencion_pareja, importado de sistema_decision.py en
-   vez de duplicar la tupla) -- si hembra O macho tienen cualquier
-   necesidad fisica con accion de satisfaccion por debajo del umbral, la
-   concepcion ni se intenta (se salta antes de sortear probabilidad). El
-   freno de densidad emerge sin disenarse: mas poblacion -> mas presion
-   sobre el mismo alimento -> saciedad media cae -> menos individuos pasan
-   el gate -> menos concepciones -> el crecimiento se autolimita.
+1. GATE DE CONCEPCION: si hembra O macho tienen saciedad por debajo de
+   decision.umbral_atencion_pareja (mismo umbral que ya usa BUSCAR_PAREJA,
+   reutilizado en vez de inventar uno nuevo), la concepcion ni se intenta
+   (se salta antes de sortear probabilidad). RONDA 1 de este mismo dia
+   gateaba por las 4 necesidades fisicas completas (_NECESIDADES_FISICAS
+   de sistema_decision.py, igual que BUSCAR_PAREJA) -- sobrecorregia: con
+   las 4 semillas de control, 3 de 4 pasaron de "sin techo" a colapsar muy
+   por debajo del rango de referencia (ver correccion RONDA 2 mas abajo en
+   el codigo, junto al gate). Estrechado a saciedad unicamente -- energia/
+   hidratacion/aliviado siguen gateando BUSCAR_PAREJA sin cambios, pero ya
+   no bloquean la concepcion en si. El freno de densidad emerge sin
+   disenarse: mas poblacion -> mas presion sobre el mismo alimento ->
+   saciedad media cae -> menos individuos pasan el gate -> menos
+   concepciones -> el crecimiento se autolimita.
 2. TAMANO DE CAMADA POR NUTRICION (peticion directa de Diego: "un conejo
    mal alimentado lo normal es que produzca menos crias"): tamano_camada
    deja de sortearse uniforme en [camada_min, camada_max] -- el limite
@@ -201,7 +206,6 @@ from nucleo.ciclo_vital import TICKS_POR_ANIO, edad_ticks, es_adulto
 from nucleo.entidad import nacer_criatura
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.reloj import Reloj
-from sistemas.sistema_decision import _NECESIDADES_FISICAS
 
 
 def _macho_elegible_en_contacto(
@@ -358,21 +362,30 @@ def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mun
         if id_macho is None:
             continue
 
-        # GATE DE CONCEPCION (2026-08-31, ver docstring del modulo):
-        # mismo gate que ya protege BUSCAR_PAREJA -- cualquier necesidad
-        # fisica con accion de satisfaccion por debajo de
-        # decision.umbral_atencion_pareja en CUALQUIERA de los dos
-        # progenitores bloquea la concepcion, ni se sortea probabilidad.
-        # Reutiliza _NECESIDADES_FISICAS de sistema_decision.py en vez de
-        # duplicar la tupla.
+        # GATE DE CONCEPCION (2026-08-31, ver docstring del modulo).
+        # RONDA 2 (mismo dia, tras verificar contra el motor real): la
+        # primera version gateaba por _NECESIDADES_FISICAS completa (las
+        # 4 necesidades, igual que BUSCAR_PAREJA) -- sobrecorregia. Con
+        # las 4 semillas de control, 3 de 4 pasaron de "sin techo" a
+        # colapsar muy por debajo del rango de referencia (0.05-0.07;
+        # semilla 42 estabilizo en 0.0037, semilla 1 en caida hacia 0.0031
+        # y bajando). Exigir las 4 necesidades altas EN AMBOS progenitores
+        # A LA VEZ, cada tick, es una condicion mucho mas estricta que
+        # cualquiera de sus gates individuales previos -- y ademas mezclaba
+        # dos cosas distintas: la peticion de Diego fue especificamente
+        # sobre NUTRICION ("un conejo mal alimentado"), no sobre el estado
+        # fisico general. Estrechado a saciedad unicamente -- coherente con
+        # el escalado de camada de mas abajo, que ya solo miraba saciedad.
+        # energia/hidratacion/aliviado siguen gateando BUSCAR_PAREJA (sin
+        # cambios ahi), simplemente no bloquean ya la concepcion en si.
         umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
         necesidades_hembra = gestor.obtener_componente(id_hembra, Necesidades)
         necesidades_macho = gestor.obtener_componente(id_macho, Necesidades)
-        hembra_desnutrida = necesidades_hembra is not None and any(
-            getattr(necesidades_hembra, n) < umbral_atencion_pareja for n in _NECESIDADES_FISICAS
+        hembra_desnutrida = (
+            necesidades_hembra is not None and necesidades_hembra.saciedad < umbral_atencion_pareja
         )
-        macho_desnutrido = necesidades_macho is not None and any(
-            getattr(necesidades_macho, n) < umbral_atencion_pareja for n in _NECESIDADES_FISICAS
+        macho_desnutrido = (
+            necesidades_macho is not None and necesidades_macho.saciedad < umbral_atencion_pareja
         )
         if hembra_desnutrida or macho_desnutrido:
             continue
