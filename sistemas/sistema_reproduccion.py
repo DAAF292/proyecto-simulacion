@@ -81,11 +81,61 @@ funcion -- sin downside real: su propia comparacion (tick_actual -
 tick_inicio >= duracion_ticks) ya era correcta a cualquier cadencia, solo
 antes se comprobaba con hasta un dia de retraso sobre el instante exacto.
 
-Simplificacion deliberada, senalada, no oculta: no exige que ninguno de
-los dos tenga sus necesidades fisicas basicas resueltas -- podrian
-concebir con hambre o sed critica. Queda fuera de esta primera pasada a
-proposito, revisable si en la practica produce algo que no se sienta
-natural.
+CORRECCION 2026-08-31 (investigacion de sobrepoblacion sin techo aparente
+-- ver CLAUDE.md, migracion 24-08-2026, y el hallazgo real: no era "sin
+techo", era un ciclo boom-bust que en la semilla mas extrema llegaba a
+densidad 0.34, cerca del peor caso historico 0.45, con extincion total en
+otra semilla). La simplificacion de arriba ("no exige necesidades fisicas
+resueltas") queda CERRADA -- si producia algo que no se sentia natural:
+dos elegibles que se tocaban por casualidad (huyendo, migrando hacia
+comida, deambulando) concebian sin que importara si estaban muriendo de
+hambre, porque el unico gate de necesidades fisicas existente
+(umbral_atencion_pareja, ver sistema_decision.py) actuaba sobre la
+UTILIDAD de BUSCAR_PAREJA -- bloqueaba la busqueda consciente, no el roll
+de concepcion en si, que no consulta Necesidades en absoluto.
+
+Descartada deliberadamente la alternativa de un contador de densidad local
+(freno artificial pensado para el sintoma observado en conejo, no una ley
+que pudiera producirlo entre otros -- violaria el principio 5, leyes
+neutras). La ley natural real es la contraria: desnutricion/deshidratacion
+suprime la fertilidad -- no es que un individuo "cuente" cuantos
+coespecificos hay alrededor, es que un individuo mal alimentado no
+concibe. Dos correcciones, misma ley para las cuatro especies, ninguna
+rama por especie:
+
+1. GATE DE CONCEPCION: se reutiliza EXACTAMENTE el mismo gate que ya
+   protege BUSCAR_PAREJA (mismo _NECESIDADES_FISICAS, mismo
+   decision.umbral_atencion_pareja, importado de sistema_decision.py en
+   vez de duplicar la tupla) -- si hembra O macho tienen cualquier
+   necesidad fisica con accion de satisfaccion por debajo del umbral, la
+   concepcion ni se intenta (se salta antes de sortear probabilidad). El
+   freno de densidad emerge sin disenarse: mas poblacion -> mas presion
+   sobre el mismo alimento -> saciedad media cae -> menos individuos pasan
+   el gate -> menos concepciones -> el crecimiento se autolimita.
+2. TAMANO DE CAMADA POR NUTRICION (peticion directa de Diego: "un conejo
+   mal alimentado lo normal es que produzca menos crias"): tamano_camada
+   deja de sortearse uniforme en [camada_min, camada_max] -- el limite
+   superior efectivo se escala por la saciedad de la MADRE en el instante
+   de la concepcion (unico rasgo usado, no un compuesto de las cuatro
+   necesidades ni la condicion del padre -- "mal alimentado" es
+   literalmente saciedad, y el tamano de camada en biologia real depende
+   de la condicion materna -- capacidad uterina/ovulacion -- no de la
+   paterna; simplificacion deliberada, revisable si Diego quiere sumar mas
+   factores). Interpolacion lineal entre umbral_atencion_pareja (el limite
+   inferior de saciedad con el que aun se puede concebir -- ahi la camada
+   efectiva cae a camada_min, la minima biologicamente posible) y 1.0
+   (saciedad plena -- ahi se conserva el rango completo hasta camada_max).
+   Sigue habiendo sorteo real (rng.randint), no un numero fijo por nivel
+   de saciedad -- la nutricion mueve el TECHO de la tirada, no elimina el
+   azar.
+
+Riesgo senalado a Diego antes de implementar, no resuelto por este cambio
+en si: si el recurso del que vive una especie se regenera lo bastante
+rapido como para mantener la saciedad alta incluso a densidad extrema,
+este freno no se activara -- en ese caso el problema pasa a ser de
+calibracion de sistema_flora.py, no de reproduccion. Pendiente de
+reverificar con el arnes de diagnostico (mismas 4 semillas: 42, 99, 1, 7)
+tras este cambio.
 
 Efecto de exito (emparejamiento): se ANADE Gestacion a la hembra --
 ademas de tick_inicio, una instantanea de los rasgos heredables del macho
@@ -151,6 +201,7 @@ from nucleo.ciclo_vital import TICKS_POR_ANIO, edad_ticks, es_adulto
 from nucleo.entidad import nacer_criatura
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.reloj import Reloj
+from sistemas.sistema_decision import _NECESIDADES_FISICAS
 
 
 def _macho_elegible_en_contacto(
@@ -307,6 +358,25 @@ def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mun
         if id_macho is None:
             continue
 
+        # GATE DE CONCEPCION (2026-08-31, ver docstring del modulo):
+        # mismo gate que ya protege BUSCAR_PAREJA -- cualquier necesidad
+        # fisica con accion de satisfaccion por debajo de
+        # decision.umbral_atencion_pareja en CUALQUIERA de los dos
+        # progenitores bloquea la concepcion, ni se sortea probabilidad.
+        # Reutiliza _NECESIDADES_FISICAS de sistema_decision.py en vez de
+        # duplicar la tupla.
+        umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
+        necesidades_hembra = gestor.obtener_componente(id_hembra, Necesidades)
+        necesidades_macho = gestor.obtener_componente(id_macho, Necesidades)
+        hembra_desnutrida = necesidades_hembra is not None and any(
+            getattr(necesidades_hembra, n) < umbral_atencion_pareja for n in _NECESIDADES_FISICAS
+        )
+        macho_desnutrido = necesidades_macho is not None and any(
+            getattr(necesidades_macho, n) < umbral_atencion_pareja for n in _NECESIDADES_FISICAS
+        )
+        if hembra_desnutrida or macho_desnutrido:
+            continue
+
         temperamento_hembra = gestor.obtener_componente(id_hembra, Temperamento)
         temperamento_macho = gestor.obtener_componente(id_macho, Temperamento)
         sociabilidad_media = (temperamento_hembra.sociabilidad + temperamento_macho.sociabilidad) / 2.0
@@ -326,8 +396,21 @@ def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mun
         # config/constantes.yaml seccion 'camada'): se sortea AQUI, en la
         # concepcion -- mismo criterio que el resto de la instantanea del
         # padre, un hecho que se fija en este instante, no en el parto.
+        # ESCALADO POR NUTRICION (2026-08-31, ver docstring del modulo):
+        # el techo efectivo de la tirada se interpola entre camada_min (en
+        # umbral_atencion_pareja, el limite inferior de saciedad con el
+        # que aun se puede concebir) y camada_max (en saciedad plena) --
+        # solo la saciedad de la MADRE, sigue habiendo sorteo real dentro
+        # de ese rango reducido, no un numero fijo.
         camada_min, camada_max = rangos_raciales[especie_hembra]["camada"]
-        tamano_camada = rng.randint(camada_min, camada_max)
+        rango_saciedad = 1.0 - umbral_atencion_pareja
+        if necesidades_hembra is not None and rango_saciedad > 0:
+            fraccion_nutricion = (necesidades_hembra.saciedad - umbral_atencion_pareja) / rango_saciedad
+            fraccion_nutricion = max(0.0, min(1.0, fraccion_nutricion))
+        else:
+            fraccion_nutricion = 1.0
+        camada_max_efectiva = camada_min + round((camada_max - camada_min) * fraccion_nutricion)
+        tamano_camada = rng.randint(camada_min, max(camada_min, camada_max_efectiva))
         gestor.anadir_componente(
             id_hembra,
             Gestacion(
@@ -343,9 +426,9 @@ def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mun
         # impulso_reproductivo (2026-08-20, diseno conjunto -- ver
         # componentes/necesidades.py): se repone a 1.0 en AMBOS
         # progenitores en el momento de la concepcion, simplificacion
-        # aceptada y documentada alli para el macho.
-        necesidades_hembra = gestor.obtener_componente(id_hembra, Necesidades)
-        necesidades_macho = gestor.obtener_componente(id_macho, Necesidades)
+        # aceptada y documentada alli para el macho. Reutiliza
+        # necesidades_hembra/necesidades_macho ya obtenidas arriba para
+        # el gate -- no hace falta volver a consultarlas.
         if necesidades_hembra is not None:
             necesidades_hembra.impulso_reproductivo = 1.0
         if necesidades_macho is not None:
