@@ -1693,3 +1693,150 @@ selector de zona real en el visor (el arreglo de hoy solo evita que la
 vista de superficie mienta, no añade forma de ver el subsuelo); liquen
 (montaña) y musgo (tundra) siguen sin ganar su propia entrada de
 material recolectable -- Diego no lo pidió esta vez, no se ha tocado.
+
+## Sobrepoblación sin techo aparente -- investigado y mitigado con un
+## mecanismo natural de fertilidad por nutrición (2026-08-31)
+
+Retomado el límite conocido más antiguo del proyecto (migración
+24-08-2026: "varias semillas de referencia terminan con densidades de
+hasta 0.45 individuos/celda, referencia 0.05-0.07"). Diego, ante cinco
+opciones posibles para seguir ("con que podemos avanzar ahora?"), descartó
+"ciudad enana" (no tiene sentido hasta plantear esa raza), el selector de
+zona en el visor (va a sufrir bastantes cambios a futuro) y el transporte
+de agua (pertenece a la capa de fabricación de objetos, sin empezar), y
+eligió explícitamente este: "me pondria con el 4".
+
+**Diagnóstico empírico, no razonado sobre el papel** (mismo criterio que
+el resto del proyecto: "verifica contra el motor real"). Arnés nuevo,
+`diagnostico_poblacion.py` (no forma parte del repo, vive en el
+scratchpad de la sesión -- reutilizable si hace falta retomar esto),
+que corre `main.py` real sin persistencia SQLite, muestreando población
+por especie/zona y tallando causas de muerte. Primeras 4 semillas (42,
+99, 1, 7; 6000-8000 ticks): el problema NO era "crecimiento sin techo" tal
+cual estaba documentado -- es un ciclo boom-bust real, que en el peor caso
+(semilla 7) alcanzó densidad 0.34 (cerca del histórico 0.45) y en otro
+(semilla 42) terminó en extinción total de las cuatro especies hacia
+t=6000. Causa raíz identificada leyendo `sistema_reproduccion.py`: la
+probabilidad de concepción (`factor_base_concepcion * sociabilidad_media`)
+no consultaba `Necesidades` en absoluto -- el único gate de necesidades
+físicas existente (`decision.umbral_atencion_pareja`) actuaba solo sobre
+la utilidad de `Accion.BUSCAR_PAREJA` (búsqueda consciente de pareja), no
+sobre el roll de concepción en sí, así que dos elegibles que coincidían en
+la misma celda por cualquier motivo (huyendo, migrando, deambulando)
+concebían sin que importara si estaban muriendo de hambre. Hallazgo
+secundario, no la causa principal: las cuevas (del arco de profundidad,
+mismo día) están 100% desprovistas de comida (`sembrar_flora_inicial`
+solo siembra `zonas[0]`, y sin ninguna `Planta` semilla no hay propagación
+posible bajo tierra) -- entre 8% y 42% de las muertes por inanición según
+la semilla ocurrían en cuevas, un amplificador real pero secundario.
+
+**Decisión de diseño con Diego, no autorada por Claude**: pregunta directa
+("¿Cómo quieres encarar esto?") con dos alternativas descartadas
+explícitamente antes de plantearlas -- un contador de densidad local
+(freno artificial con la forma exacta del síntoma observado en conejo, no
+una ley que pudiera producirlo entre otras; violaría el principio 5, leyes
+neutras) fue rechazado por Diego con la misma lógica del proyecto: "hay
+que encontrar un mecanismo natural no una solucion para conejo". La ley
+natural real, confirmada en conversación: desnutrición suprime fertilidad
+-- no es que un individuo "cuente" cuántos coespecíficos hay alrededor, es
+que un individuo mal alimentado no concibe (y, añadido por Diego en el
+mismo intercambio, "un conejo mal alimentado lo normal es que produzca
+menos crias" -- también el tamaño de camada, no solo si concibe).
+
+**Implementación** (`sistemas/sistema_reproduccion.py`), misma ley para
+las cuatro especies, ninguna rama por especie:
+1. Gate de concepción: si hembra o macho tienen saciedad por debajo de
+   `decision.umbral_atencion_pareja` (reutilizado, mismo umbral que ya
+   protege `BUSCAR_PAREJA`, sin inventar uno nuevo), la concepción ni se
+   intenta.
+2. Tamaño de camada escalado por la saciedad de la MADRE en el instante
+   de concepción (único rasgo usado -- ni el resto de necesidades ni la
+   condición del padre; el tamaño de camada en biología real depende de
+   capacidad uterina/ovulación materna, no paterna): interpolación lineal
+   entre `umbral_atencion_pareja` (ahí el techo efectivo de la tirada cae
+   a `camada_min`) y saciedad plena (techo = `camada_max`), con sorteo
+   real (`rng.randint`) dentro de ese rango reducido -- la nutrición
+   mueve el techo, no elimina el azar.
+
+**RONDA 1 (gate por las 4 necesidades físicas, igual que BUSCAR_PAREJA)
+sobrecorregía**: con las mismas 4 semillas, 3 de 4 pasaron de "sin techo"
+a colapsar muy por debajo del rango de referencia (semilla 42 estabilizó
+en 0.0037 con solo ardilla superviviente; semilla 1 en caída hacia
+0.0031). Solo semilla 7 aterrizó bien (pico 0.12 -> 0.065). Diagnosticado:
+exigir las 4 necesidades altas EN AMBOS progenitores a la vez, cada tick,
+es una condición mucho más estricta que cualquier gate previo, y además
+mezclaba "estado físico general" con lo que Diego pidió específicamente
+(nutrición). **RONDA 2, mismo día**: gate estrechado a saciedad
+únicamente (energía/hidratación/aliviado siguen gateando `BUSCAR_PAREJA`
+sin cambios, ya no bloquean la concepción en sí) -- coherente con que el
+escalado de camada ya solo miraba saciedad.
+
+**Hallazgo metodológico real, encontrado al re-verificar ronda 2 con las
+mismas 4 semillas**: los resultados semilla-a-semilla entre ronda 1 y
+ronda 2 fueron incoherentes con causalidad simple (semilla 1 mejoró
+mucho, semillas 42 y 7 empeoraron a casi-extinción con un gate MÁS
+permisivo que en ronda 1) -- la firma de trayectorias caóticas
+divergentes, no de un efecto causal. Causa: `sistema_reproduccion.py` y
+el resto de sistemas comparten un único `rng_juego` por partida; cambiar
+cuántas veces se llama a `rng.random()`/`rng.randint()` en el gate de
+concepción desplaza la secuencia de aleatoriedad que consume TODO lo
+demás (movimiento, decisión) en los ticks siguientes -- con una dinámica
+tan sensible a condiciones iniciales (retroalimentación depredación/
+inanición), "la misma semilla" bajo dos versiones de código son en la
+práctica dos partidas distintas. **Lección para cualquier calibración
+futura de esta clase**: una comparación semilla-a-semilla entre versiones
+de código que cambian el número de tiradas de `rng` no es fiable --
+hace falta comparar DISTRIBUCIONES sobre muchas semillas nuevas, no pares
+puntuales. `sistema_reproduccion.py` sigue compartiendo `rng_juego` con
+el resto del motor -- decidido no separarlo en un rng propio esta vez
+(cambio de infraestructura no pedido, fuera de alcance de este círculo),
+pero queda anotado aquí como candidato si se retoma calibración fina de
+reproducción en el futuro.
+
+**Verificación final, 14 semillas (42, 99, 1, 7 reverificadas + 2, 3, 4,
+5, 6, 8, 9, 10, 11, 12 nuevas, hasta 8000 ticks las que mostraban boom o
+colapso sin resolver a los primeros 4000)**: 10 de 14 (71%) se comportan
+razonablemente -- estables desde el principio o con un ciclo boom-bust
+real que se autocorrige hacia el rango de referencia (algunas tardan
+hasta t=7000 en aterrizar, ej. semilla 12: pico 0.19, aterriza en
+0.065-0.075). Ninguna semilla queda instalada de forma permanente en
+crecimiento sin control como antes (0.34 sostenido). Quedan DOS modos de
+fallo residuales, señalados explícitamente, NO corregidos:
+1. **Colapso/extinción** (semillas 42, 7): el gate sobrecorrige en
+   trayectorias concretas y borra la población entera -- efecto
+   secundario nuevo que el problema original no tenía.
+2. **Overshoot sin resolver o muy lento** (semillas 9, 11): semilla 9
+   sigue subiendo sin bust hasta el final de la corrida (0.29 a t=8000,
+   cerca del histórico 0.34); semilla 11 se estabiliza en una meseta
+   ruidosa 0.10-0.17 sin bajar nunca al rango de referencia. Hipótesis
+   razonada, no confirmada con más profundidad: retraso (lag) entre "hay
+   demasiada población" y "la saciedad cae lo bastante" -- con
+   concepción evaluada cada tick y camadas de hasta `camada_max` mientras
+   la comida siga alcanzando, una población bien alimentada puede
+   componer muchos ticks antes de que la escasez local golpee lo
+   bastante fuerte como para que el gate actúe.
+
+**Decisión de cierre, con Diego**: aceptado como mejora sustancial y
+PROVISIONAL (mismo criterio que el resto de constantes del proyecto sin
+calibrar contra el harness completo de 15 semillas x 12000 ticks -- esta
+verificación de 14 semillas hasta 8000 ticks es la más cercana a ese
+estándar que se ha hecho en el proyecto hasta ahora para una sola pieza,
+pero sigue sin ser ese harness exacto). No se persigue eliminar el 29% de
+casos con overshoot/colapso ahora mismo -- exigiría algo más sofisticado
+que mover el mismo umbral (separar el umbral de concepción del de
+`BUSCAR_PAREJA`, o una capa adicional), inversión no claramente
+justificada frente a seguir con otra pieza del proyecto. Los 22 tests
+existentes en verde en todo momento (ninguno cubre reproducción
+directamente). Commits: `6eff7cc` (ronda 1, gate de 4 necesidades +
+camada por saciedad), `2e11912` (ronda 2, gate estrechado a saciedad
+únicamente -- estado final).
+
+**Pendiente real, explícito**: las cuevas siguen sin ninguna fuente de
+comida (hallazgo secundario de esta investigación, no corregido -- las
+cuevas fueron diseñadas en un círculo previo sin plantearse el hueco de
+flora, y esta sesión no lo tocó); los dos modos de fallo residuales
+(colapso, overshoot lento) sin resolver, candidatos para cuando se aborde
+una calibración más profunda de reproducción; separar `sistema_
+reproduccion.py` a su propio `rng` en vez de compartir `rng_juego` con el
+resto del motor, si se quiere volver a comparar versiones de código
+semilla-a-semilla de forma fiable en el futuro.
