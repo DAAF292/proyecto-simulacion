@@ -2521,11 +2521,29 @@ def construir_instantanea(
     # Posicion, ver componentes/planta.py) -- se adjuntan a su celda en
     # vez de mezclarse en la lista de "entidades" biologicas: para el
     # renderizado del mapa son una propiedad del terreno, no un agente.
+    #
+    # CORRECCION (2026-08-31, hallazgo real tras el Circulo 3 de
+    # profundidad -- ver CLAUDE.md): este DTO solo dibuja zonas[0]
+    # (superficie), pero las tres consultas de entidades de aqui abajo no
+    # filtraban por zona_idx -- una entidad en una cueva con las MISMAS
+    # coordenadas numericas que una de superficie se mezclaba sin
+    # distincion (dos criaturas en (5,5) de zonas distintas llegaban
+    # como dos filas identicas, sin ningun campo que las diferenciara;
+    # una planta de cueva podia incluso PISAR la entrada del dict de una
+    # planta de superficie, misma clave (x,y)). No es "todavia no hay
+    # arte de cueva" (omision aceptada) -- es corromper la vista de
+    # superficie en cuanto algo cruza a una cueva por deambulacion
+    # normal (el portal no exige ninguna decision consciente, ver
+    # sistema_movimiento.py). Filtrar por zona_idx==0 aqui no es una
+    # capacidad nueva, es la correccion minima para que la vista que YA
+    # existe (solo superficie) deje de mentir cuando hay contenido bajo
+    # tierra -- un selector de zona real sigue siendo trabajo de
+    # presentacion aparte, no resuelto aqui.
     plantas_por_celda: dict[tuple[int, int], dict[str, Any]] = {}
     for pid in sorted(gestor.entidades_con(Planta, Posicion)):
         planta = gestor.obtener_componente(pid, Planta)
         pos_p = gestor.obtener_componente(pid, Posicion)
-        if planta and pos_p:
+        if planta and pos_p and pos_p.zona_idx == 0:
             plantas_por_celda[(pos_p.x, pos_p.y)] = {
                 "especie": planta.especie,
                 "etapa": round(planta.etapa, 3),
@@ -2537,7 +2555,7 @@ def construir_instantanea(
     for eid in sorted(gestor.entidades_con(Identidad, Posicion)):
         ident = gestor.obtener_componente(eid, Identidad)
         pos = gestor.obtener_componente(eid, Posicion)
-        if not (ident and pos):
+        if not (ident and pos) or pos.zona_idx != 0:
             continue
 
         esp = ident.especie.value
@@ -2626,7 +2644,7 @@ def construir_instantanea(
     for nid in sorted(gestor.entidades_con(Necromasa, Posicion)):
         nec = gestor.obtener_componente(nid, Necromasa)
         pos_n = gestor.obtener_componente(nid, Posicion)
-        if nec and pos_n:
+        if nec and pos_n and pos_n.zona_idx == 0:
             censo["necromasa"] = censo.get("necromasa", 0) + 1
             lista_entidades.append(
                 {
