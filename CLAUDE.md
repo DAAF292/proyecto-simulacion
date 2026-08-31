@@ -1161,8 +1161,16 @@ sigue usando `progreso` (fluctuante) para decidir si hace falta aportar
 más. Verificado: un refugio que decae de 1.0 a 0.99 tras un día sigue
 contando como miembro en el recálculo siguiente.
 
+**CORRECCIÓN 2026-08-31 -- lo siguiente quedó IMPLEMENTADO el mismo día
+31-08 (commit `2640a82`, antes de la auditoría de coherencia de más
+abajo) y esta nota de "pendiente" nunca se actualizó para reflejarlo --
+hallazgo propio al releer esta sección antes de re-implementar algo que
+ya existía. Ver la nueva sección dedicada más abajo, "Conflicto por
+refugio ocupado", para el estado real (implementado, verificado dos
+veces, config todavía provisional).**
+
 **Pendiente, señalado explícitamente, ninguno implementado todavía**:
-- **Conflicto por refugio ocupado / resolutor genérico de disputas**
+- ~~**Conflicto por refugio ocupado / resolutor genérico de disputas**
   (`nucleo/conflicto.py`, no creado). Diseñado en conversación completa
   con Diego pero sin una sola línea de código: `indice_asertividad_social`
   (dominancia+agresividad+valentía+urgencia) comparado bilateralmente
@@ -1171,7 +1179,7 @@ contando como miembro en el recálculo siguiente.
   refugio ("esto debe ser reutilizable a futuro... que un individuo robe
   a otro, un agravio del tipo que sea") — el refugio ocupado sería solo su
   primer consumidor, robo/agravio quedan como consumidores futuros del
-  mismo resolutor sin lógica nueva. Memoria de agravios entre individuos
+  mismo resolutor sin lógica nueva.~~ Memoria de agravios entre individuos
   con nombre propio (rencor persistente) explícitamente fuera de esto —
   conecta con lo que `Temperamento.empatia`/`lealtad` ya señalan como
   pendiente ("esperan vínculos personales con nombre propio").
@@ -1840,3 +1848,67 @@ una calibración más profunda de reproducción; separar `sistema_
 reproduccion.py` a su propio `rng` en vez de compartir `rng_juego` con el
 resto del motor, si se quiere volver a comparar versiones de código
 semilla-a-semilla de forma fiable en el futuro.
+
+## Conflicto por refugio ocupado -- estado real corregido, no una pieza
+## nueva (2026-08-31)
+
+Diego pidió empezar a perfilar "sociedad" retomando el resolutor de
+conflicto, creyendo (por la nota de "Pendiente" de más arriba, sección de
+refugio/asentamiento del 30-08) que seguía sin una sola línea de código.
+Antes de implementar nada por segunda vez, la propia disciplina del
+proyecto ("verifica contra el código real, no la lectura en abstracto")
+obligaba a comprobarlo primero -- y **ya estaba hecho**: commit `2640a82`,
+el mismo 31-08 pero ANTES de la auditoría de coherencia documentada más
+arriba, implementó `nucleo/conflicto.py` completo
+(`indice_asertividad_social`, `resolver_disputa` con CEDE_A/CEDE_B/
+COMPARTE/ENFRENTAMIENTO) y su primer consumidor,
+`sistema_movimiento.py:_resolver_posible_intruso`, disparado desde
+`_calcular_dormir` cuando el propietario llega a su refugio CONSTRUIDO
+(`completado_alguna_vez`, no un punto de memoria instintivo) y encuentra
+a otra entidad en la misma celda/zona. La nota de "pendiente, sin una
+sola línea de código" de la sección de arriba nunca se corrigió tras ese
+commit -- documentación desfasada, no un hueco funcional real. Tachada
+arriba en vez de borrada, mismo criterio de honestidad que el resto del
+documento (registro de qué se creyó en cada momento, no solo el estado
+final).
+
+El propio commit ya documentaba verificación real: arnés dirigido de los
+cuatro desenlaces, despacho normal a través de `Accion.DORMIR` de
+principio a fin (no solo llamando al método directamente), 4000 ticks de
+motor real sin fallos, 22/22 tests. Esta sesión añadió una segunda
+re-verificación independiente antes de confiar en la primera (arnés en
+el scratchpad, `verificar_conflicto.py`, no en el repo): cinco escenarios
+construidos a mano llamando a `_resolver_posible_intruso` directamente --
+propietario dominante (intruso pierde 0.3 de `Necesidades.seguridad`,
+propietario intacto), intruso dominante (al revés), empate agresivo
+(ambos pierden 0.2, el drenaje de `ENFRENTAMIENTO`), mismo asentamiento
+con alta cohesión (`COMPARTE`, nadie pierde nada), y temperamento
+exactamente parejo pero con la seguridad del propietario ya baja --
+confirmando que la urgencia (`1.0 - seguridad`) desempata a su favor
+incluso sin ventaja de temperamento. Los cinco coinciden exactamente con
+el diseño documentado.
+
+**Lo que sí sigue siendo un hueco real, no documentación desfasada**:
+1. Robo y "agravio genérico", nombrados explícitamente en el diseño
+   original como consumidores futuros del mismo resolutor ("esto debe
+   ser reutilizable a futuro... que un individuo robe a otro") --
+   `resolver_disputa`/`indice_asertividad_social` no tienen ningún otro
+   punto de disparo en el motor todavía, solo refugio ocupado.
+2. Memoria de agravios entre individuos con nombre propio (rencor
+   persistente tras perder una disputa) -- deliberadamente fuera de
+   `nucleo/conflicto.py` desde su diseño original, conecta con lo que
+   `Temperamento.empatia`/`lealtad` ya señalan como pendiente.
+3. `config/comportamiento.yaml` sección `conflicto` (umbrales de
+   cohesión/empate reñido/agresividad, drenajes de seguridad) sigue
+   PROVISIONAL, sin calibrar contra el motor en marcha -- ni el commit
+   original ni esta sesión lo han hecho.
+4. No confirmado si el disparador llega a ocurrir con población real
+   corriendo sola (el "4000 ticks sin fallos" del commit original
+   confirma ausencia de crash, no que la ruta de conflicto se ejerciera
+   de verdad) -- candidato a comprobar si se retoma esta pieza.
+
+No se ha escrito código nuevo en esta sesión para esto -- la corrección
+fue de documentación, más la re-verificación. Pendiente de que Diego
+decida si el siguiente paso real es extender a robo/agravio (mismo
+resolutor, un disparador nuevo en su propio sistema, sin lógica nueva en
+`nucleo/conflicto.py`) o calibrar lo ya existente.
