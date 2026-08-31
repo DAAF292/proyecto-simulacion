@@ -100,18 +100,21 @@ class SistemaDepredacion:
         Procesa los encuentros de depredación en el tick actual.
         Debe invocarse en la Fase 2, posterior a SistemaMovimiento.
         """
-        posiciones_mapa: dict[tuple[int, int], list[int]] = {}
+        # (2026-08-30, Circulo 1 de profundidad) la clave de agrupacion
+        # incluye zona_idx -- dos entidades con el mismo (x, y) en zonas
+        # distintas NO comparten celda (ver componentes/posicion.py).
+        posiciones_mapa: dict[tuple[int, int, int], list[int]] = {}
         for entidad_id in sorted(gestor.entidades_con(Posicion, DimensionesFisicas)):
             pos = gestor.obtener_componente(entidad_id, Posicion)
             if pos is not None:
-                clave = (pos.x, pos.y)
+                clave = (pos.x, pos.y, pos.zona_idx)
                 if clave not in posiciones_mapa:
                     posiciones_mapa[clave] = []
                 posiciones_mapa[clave].append(entidad_id)
 
         entidades_eliminadas: set[int] = set()
 
-        for (x, y), entidades in posiciones_mapa.items():
+        for (x, y, zona_idx), entidades in posiciones_mapa.items():
             if len(entidades) < 2:
                 continue
 
@@ -137,7 +140,7 @@ class SistemaDepredacion:
 
                 presa_id = min(presas_candidatas)
                 muerte_presa = self._resolver_ataque(
-                    gestor, bus_eventos, cazador_id, presa_id, x, y
+                    gestor, bus_eventos, cazador_id, presa_id, x, y, zona_idx
                 )
 
                 if muerte_presa:
@@ -175,6 +178,7 @@ class SistemaDepredacion:
         presa_id: int,
         pos_x: int,
         pos_y: int,
+        zona_idx: int = 0,
     ) -> bool:
         """
         Calcula el desenlace del ataque, aplica daño a la vitalidad de la presa,
@@ -215,7 +219,7 @@ class SistemaDepredacion:
         if sociabilidad_cazador > 0.0 and self.bono_caza_por_aliado > 0.0:
             aliados_cazando = contar_conspecificos_cercanos(
                 gestor, cazador_id, ident_cazador.especie, pos_x, pos_y,
-                self.radio_apoyo_grupal, solo_cazando=True,
+                self.radio_apoyo_grupal, solo_cazando=True, zona_idx=zona_idx,
             )
             bono_grupo = min(
                 self.bono_caza_maximo,
@@ -291,6 +295,7 @@ class SistemaDepredacion:
                 agua_tisular=agua_residual,
                 origen_especie=ident_presa.especie.value,
                 tasa_putrefaccion=0.05,
+                zona_idx=zona_idx,
             )
 
         # 6. Emisión de defunción y purga de la entidad biológica activa
@@ -307,6 +312,7 @@ class SistemaDepredacion:
                     "nombre": ident_presa.nombre,
                     "x": pos_x,
                     "y": pos_y,
+                    "zona_idx": zona_idx,
                 },
             )
         )

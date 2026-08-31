@@ -77,17 +77,39 @@ class SistemaFlora:
     ) -> None:
         """
         Ejecuta el ciclo biológico de la flora al inicio de cada día.
+
+        (2026-08-30, Circulo 1 de profundidad) se ejecuta UNA VEZ POR ZONA
+        del territorio -- cada ZonaBioma tiene su propio grid y su propio
+        clima_actual, y las Plantas de una zona no deben colonizar ni
+        compararse contra posiciones de otra zona (ver componentes/
+        posicion.py:zona_idx).
         """
-        zona = mundo.territorio.zonas[0]
         # (2026-08-23) Reloj.estacion es un int creciente, no el Enum
         # Estacion que factor_produccion() necesita (llama a .value sobre
         # él) -- este código pasaba el int en crudo, mismo bug que se
         # encontró en sistema_necesidades.py. Renombrada la variable local
         # para no sombrear la función importada de nucleo.clima.
         estacion_hoy = _estacion_actual_desde_indice(reloj.estacion)
+
+        todas_las_plantas = sorted(gestor.entidades_con(Planta, Posicion))
+
+        for zona_idx, zona in enumerate(mundo.territorio.zonas):
+            self._ejecutar_zona(gestor, zona, zona_idx, estacion_hoy, todas_las_plantas)
+
+    def _ejecutar_zona(
+        self,
+        gestor: GestorEntidades,
+        zona: Any,
+        zona_idx: int,
+        estacion_hoy,
+        todas_las_plantas: list[int],
+    ) -> None:
         clima_actual = getattr(zona, "clima_actual", None)
 
-        plantas_entidades = sorted(gestor.entidades_con(Planta, Posicion))
+        plantas_entidades = [
+            pid for pid in todas_las_plantas
+            if gestor.obtener_componente(pid, Posicion).zona_idx == zona_idx
+        ]
 
         # Índice de posiciones ocupadas (2026-08-23, perfilado tras el
         # arreglo de siembra inicial del mismo día): _intentar_propagacion
@@ -212,7 +234,8 @@ class SistemaFlora:
                 prob_prop = float(cfg_esp.get("prob_propagacion_por_dia", 0.02))
                 if self.rng.random() < prob_prop:
                     self._intentar_propagacion(
-                        gestor, zona, pos.x, pos.y, planta.especie, cfg_esp, posiciones_planta
+                        gestor, zona, pos.x, pos.y, planta.especie, cfg_esp,
+                        posiciones_planta, zona_idx,
                     )
 
     def _intentar_propagacion(
@@ -224,6 +247,7 @@ class SistemaFlora:
         especie_nombre: str,
         especie_cfg: dict[str, Any],
         posiciones_planta: set[tuple[int, int]],
+        zona_idx: int = 0,
     ) -> None:
         """Coloniza una celda adyacente compatible inicializando sus recursos en 0.0.
 
@@ -252,7 +276,7 @@ class SistemaFlora:
                 # colonizaba celdas de rio/lago/poza de su mismo bioma.
                 if celda_dest.tipo_terreno in biomas_compatibles and not celda_dest.tiene_agua:
                     if (nx, ny) not in posiciones_planta:
-                        crear_planta(gestor, especie_nombre, nx, ny, etapa=0.1)
+                        crear_planta(gestor, especie_nombre, nx, ny, etapa=0.1, zona_idx=zona_idx)
                         posiciones_planta.add((nx, ny))
                         # Inicialización explícita del diccionario de recursos de la celda
                         for r_cfg in especie_cfg.get("recursos", []):

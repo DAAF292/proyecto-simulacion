@@ -33,6 +33,14 @@ class Asentamiento:
     miembros: frozenset[int]
     lideres: frozenset[int] = field(default_factory=frozenset)
     almacen_id: int | None = None
+    zona_idx: int = 0
+    """CÍRCULO 3 de profundidad (2026-08-30, hallazgo propio al revisar
+    el motor tras varias cuevas): un asentamiento no puede tener miembros
+    en zonas distintas -- sus refugios no comparten espacio real (ver
+    componentes/posicion.py:zona_idx), así que sistema_asentamiento.py
+    agrupa primero por zona y clusteriza dentro de cada una por separado.
+    Este campo es la zona de TODOS sus miembros (garantizado por esa
+    partición previa, no algo que este dataclass verifique por sí solo)."""
 
 
 def agrupar_por_proximidad(
@@ -43,7 +51,7 @@ def agrupar_por_proximidad(
     de escalabilidad ya aceptado en el resto del motor
     (contar_conspecificos_cercanos, _buscar_conspecifico_mas_cercano) a
     esta escala de población. NO es el mismo algoritmo que
-    nucleo/materiales.py:_componentes_conexas (flood-fill de celdas
+    nucleo/materiales.py:componentes_conexas (flood-fill de celdas
     contiguas en una máscara de grid) -- aquí los puntos pueden estar
     varias celdas separados entre sí, así que hace falta un grafo por
     distancia, no adyacencia de grid."""
@@ -138,11 +146,17 @@ def asentamiento_de(mundo: Any, id_entidad: int) -> Asentamiento | None:
     return None
 
 
-def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int):
+def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int, zona_idx: int = 0):
     """Id de la Construccion tipo 'almacen' más cercana a `centro` dentro
     de `radio`, o None -- búsqueda EN VIVO (no el almacen_id cacheado a
     diario en Asentamiento) para no perder una construcción arrancada por
-    otro miembro este mismo día, antes del próximo recálculo diario."""
+    otro miembro este mismo día, antes del próximo recálculo diario.
+
+    zona_idx (2026-08-30, Círculo 3 de profundidad, hallazgo propio):
+    sin este filtro, un almacén en una cueva y otro en superficie (o en
+    otra cueva) con coordenadas numéricamente cercanas se confundían
+    entre sí -- ya no es un caso hipotético con varias cuevas por mundo
+    compartiendo rangos de coordenadas pequeños."""
     from componentes.construccion import Construccion
     from componentes.posicion import Posicion
 
@@ -153,6 +167,8 @@ def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int):
         if construccion.tipo != "almacen":
             continue
         pos = gestor.obtener_componente(cid, Posicion)
+        if pos.zona_idx != zona_idx:
+            continue
         dist = abs(pos.x - centro[0]) + abs(pos.y - centro[1])
         if dist <= radio and (mejor_dist is None or dist < mejor_dist):
             mejor = cid

@@ -84,7 +84,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.26-fase0"
+VERSION_ESQUEMA = "0.28-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -220,7 +220,8 @@ class Persistencia:
                     gestacion_padre_id INTEGER,
                     gestacion_padre_snapshot TEXT,
                     recuerdos TEXT,
-                    inventario TEXT
+                    inventario TEXT,
+                    zona_idx INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -233,7 +234,8 @@ class Persistencia:
                     x INTEGER NOT NULL,
                     y INTEGER NOT NULL,
                     especie TEXT NOT NULL,
-                    etapa REAL NOT NULL
+                    etapa REAL NOT NULL,
+                    zona_idx INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -254,7 +256,8 @@ class Persistencia:
                     masas TEXT NOT NULL,
                     agua_tisular REAL NOT NULL,
                     tasa_putrefaccion REAL NOT NULL,
-                    origen_especie TEXT NOT NULL
+                    origen_especie TEXT NOT NULL,
+                    zona_idx INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -272,7 +275,8 @@ class Persistencia:
                     materiales TEXT NOT NULL,
                     propietario_id INTEGER,
                     progreso REAL NOT NULL,
-                    completado_alguna_vez BOOLEAN NOT NULL
+                    completado_alguna_vez BOOLEAN NOT NULL,
+                    zona_idx INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -289,7 +293,10 @@ class Persistencia:
                     recursos TEXT NOT NULL,
                     tiene_recurso BOOLEAN NOT NULL,
                     tipo_recurso TEXT NOT NULL,
-                    PRIMARY KEY (x, y)
+                    zona_idx INTEGER NOT NULL DEFAULT 0,
+                    deposito_mineral TEXT NOT NULL DEFAULT '',
+                    masa_mineral_restante REAL NOT NULL DEFAULT 0.0,
+                    PRIMARY KEY (x, y, zona_idx)
                 )
                 """
             )
@@ -393,8 +400,6 @@ class Persistencia:
         produjo el estado dinámico guardado, y hasta ahora eso pasaba en
         silencio. Guardarla aquí permite que cargar_snapshot lo detecte y
         avise -- ver su propio docstring."""
-        zona = mundo.territorio.zonas[0]
-
         with self._conectar() as con:
             cur = con.cursor()
 
@@ -464,6 +469,7 @@ class Persistencia:
                             json.dumps(_serializar_snapshot_padre(gest)) if gest else None,
                             json.dumps(mem.recuerdos) if mem else None,
                             json.dumps(inv.contenidos) if inv else None,
+                            pos.zona_idx,
                         )
                     )
             cur.executemany(
@@ -471,7 +477,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -484,8 +490,10 @@ class Persistencia:
                 planta = gestor.obtener_componente(pid, Planta)
                 pos_p = gestor.obtener_componente(pid, Posicion)
                 if planta and pos_p:
-                    filas_flora.append((pid, pos_p.x, pos_p.y, planta.especie, planta.etapa))
-            cur.executemany("INSERT INTO plantas_estado VALUES (?, ?, ?, ?, ?)", filas_flora)
+                    filas_flora.append(
+                        (pid, pos_p.x, pos_p.y, planta.especie, planta.etapa, pos_p.zona_idx)
+                    )
+            cur.executemany("INSERT INTO plantas_estado VALUES (?, ?, ?, ?, ?, ?)", filas_flora)
 
             # C. Necromasa
             cur.execute("DELETE FROM necromasa_estado")
@@ -503,9 +511,10 @@ class Persistencia:
                             nec_comp.agua_tisular,
                             nec_comp.tasa_putrefaccion,
                             nec_comp.origen_especie,
+                            pos_n.zona_idx,
                         )
                     )
-            cur.executemany("INSERT INTO necromasa_estado VALUES (?, ?, ?, ?, ?, ?, ?)", filas_necromasa)
+            cur.executemany("INSERT INTO necromasa_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?)", filas_necromasa)
 
             # C2. Construcciones
             cur.execute("DELETE FROM construccion_estado")
@@ -524,31 +533,39 @@ class Persistencia:
                             con_comp.propietario_id,
                             con_comp.progreso,
                             con_comp.completado_alguna_vez,
+                            pos_c.zona_idx,
                         )
                     )
             cur.executemany(
-                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
+                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
             )
 
-            # D. Celdas dinámicas
+            # D. Celdas dinámicas -- TODAS las zonas del territorio
+            # (2026-08-30, Circulo 1 de profundidad), no solo zonas[0].
             cur.execute("DELETE FROM celdas_estado")
             filas_celdas = []
-            for y in range(zona.alto):
-                for x in range(zona.ancho):
-                    celda = zona.obtener_celda(x, y)
-                    filas_celdas.append(
-                        (
-                            x,
-                            y,
-                            celda.fertilidad,
-                            celda.profundidad_charco,
-                            celda.en_llamas,
-                            json.dumps(celda.recursos),
-                            celda.tiene_recurso,
-                            celda.tipo_recurso,
+            for zona_idx, zona in enumerate(mundo.territorio.zonas):
+                for y in range(zona.alto):
+                    for x in range(zona.ancho):
+                        celda = zona.obtener_celda(x, y)
+                        filas_celdas.append(
+                            (
+                                x,
+                                y,
+                                celda.fertilidad,
+                                celda.profundidad_charco,
+                                celda.en_llamas,
+                                json.dumps(celda.recursos),
+                                celda.tiene_recurso,
+                                celda.tipo_recurso,
+                                zona_idx,
+                                celda.deposito_mineral,
+                                celda.masa_mineral_restante,
+                            )
                         )
-                    )
-            cur.executemany("INSERT INTO celdas_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?)", filas_celdas)
+            cur.executemany(
+                "INSERT INTO celdas_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_celdas
+            )
 
             # E. Metadatos de ejecución y RNG
             cur.execute("REPLACE INTO configuracion_ejecucion VALUES ('tick_actual', ?)", (reloj.tick_actual,))
@@ -583,8 +600,6 @@ class Persistencia:
         bloquear la carga: no hay overhead de UI de por medio (nucleo/ no
         importa nada de presentacion/) y un guardado antiguo sigue siendo
         mejor que ninguno, incluso si el terreno ya no encaja."""
-        zona = mundo.territorio.zonas[0]
-
         with self._conectar() as con:
             cur = con.cursor()
 
@@ -626,17 +641,35 @@ class Persistencia:
             for eid in list(gestor.entidades_con(Posicion)):
                 gestor.eliminar_entidad(eid)
 
-            # 1. Cargar celdas
+            # 1. Cargar celdas -- TODAS las zonas (2026-08-30, Circulo 1 de
+            # profundidad). Una fila cuyo zona_idx ya no existe en el
+            # territorio recien generado (semilla distinta, o menos zonas
+            # que cuando se guardo) se descarta con un aviso en vez de
+            # reventar -- mismo criterio defensivo que el aviso de semilla
+            # de mas arriba.
             cur.execute(
                 "SELECT x, y, fertilidad, profundidad_charco, en_llamas, recursos, "
-                "tiene_recurso, tipo_recurso FROM celdas_estado"
+                "tiene_recurso, tipo_recurso, zona_idx, deposito_mineral, "
+                "masa_mineral_restante FROM celdas_estado"
             )
-            for x, y, fert, prof_ch, fuego, rec_json, tiene_rec, tipo_rec in cur.fetchall():
-                celda = zona.obtener_celda(x, y)
+            for (
+                x, y, fert, prof_ch, fuego, rec_json, tiene_rec, tipo_rec, zona_idx,
+                dep_mineral, masa_mineral,
+            ) in cur.fetchall():
+                if zona_idx >= len(mundo.territorio.zonas):
+                    continue
+                celda = mundo.territorio.zonas[zona_idx].obtener_celda(x, y)
                 celda.fertilidad = float(fert)
                 celda.profundidad_charco = float(prof_ch)
                 celda.en_llamas = bool(fuego)
                 celda.recursos = json.loads(rec_json)
+                # CÍRCULO 2 de profundidad (2026-08-30): deposito_mineral/
+                # masa_mineral_restante son ahora estado mutable de la
+                # partida (una veta agotada por Accion.RECOLECTAR), no
+                # puramente derivable de la semilla -- se restauran igual
+                # que fertilidad/profundidad_charco.
+                celda.deposito_mineral = str(dep_mineral)
+                celda.masa_mineral_restante = float(masa_mineral)
                 # CORRECCIÓN (2026-08-23): tiene_recurso/tipo_recurso tienen
                 # su propio docstring en nucleo/celda.py afirmando "SI se
                 # persiste" -- hasta ahora no había columnas para ellos y se
@@ -649,7 +682,13 @@ class Persistencia:
                 celda.tiene_recurso = bool(tiene_rec)
                 celda.tipo_recurso = str(tipo_rec)
 
-            # 2. Cargar entidades biológicas
+            # 2. Cargar entidades biológicas. zona_idx (2026-08-30, Circulo
+            # 1 de profundidad) se añadió como ÚLTIMA columna de
+            # componentes_estado, así que `c.*` ya lo incluye como
+            # fila[47] -- desplaza en +1 los índices e.especie..e.id_padre
+            # de más abajo (antes fila[47]..fila[51], ahora fila[48]..
+            # fila[52]), pero ninguno de los índices anteriores (0..46,
+            # incluida la instantánea de gestación) cambia.
             cur.execute(
                 """
                 SELECT c.*, e.especie, e.nombre, e.tick_nacimiento, e.id_madre, e.id_padre
@@ -659,7 +698,7 @@ class Persistencia:
             )
             for fila in cur.fetchall():
                 eid = fila[0]
-                gestor.anadir_componente(eid, Posicion(x=fila[1], y=fila[2]))
+                gestor.anadir_componente(eid, Posicion(x=fila[1], y=fila[2], zona_idx=fila[47]))
                 gestor.anadir_componente(
                     eid,
                     Necesidades(
@@ -735,24 +774,27 @@ class Persistencia:
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[47]),
-                        nombre=fila[48],
-                        tick_nacimiento=fila[49],
-                        id_madre=fila[50],
-                        id_padre=fila[51],
+                        especie=Especie(fila[48]),
+                        nombre=fila[49],
+                        tick_nacimiento=fila[50],
+                        id_madre=fila[51],
+                        id_padre=fila[52],
                     ),
                 )
 
             # 3. Cargar Flora
-            cur.execute("SELECT entidad_id, x, y, especie, etapa FROM plantas_estado")
-            for pid, px, py, esp, etapa in cur.fetchall():
-                gestor.anadir_componente(pid, Posicion(x=px, y=py))
+            cur.execute("SELECT entidad_id, x, y, especie, etapa, zona_idx FROM plantas_estado")
+            for pid, px, py, esp, etapa, zidx in cur.fetchall():
+                gestor.anadir_componente(pid, Posicion(x=px, y=py, zona_idx=zidx))
                 gestor.anadir_componente(pid, Planta(especie=esp, etapa=float(etapa)))
 
             # 4. Cargar Necromasa
-            cur.execute("SELECT entidad_id, x, y, masas, agua_tisular, tasa_putrefaccion, origen_especie FROM necromasa_estado")
-            for nid, nx, ny, masas_json, agua, tasa, orig in cur.fetchall():
-                gestor.anadir_componente(nid, Posicion(x=nx, y=ny))
+            cur.execute(
+                "SELECT entidad_id, x, y, masas, agua_tisular, tasa_putrefaccion, origen_especie, "
+                "zona_idx FROM necromasa_estado"
+            )
+            for nid, nx, ny, masas_json, agua, tasa, orig, zidx in cur.fetchall():
+                gestor.anadir_componente(nid, Posicion(x=nx, y=ny, zona_idx=zidx))
                 gestor.anadir_componente(
                     nid,
                     Necromasa(
@@ -766,10 +808,10 @@ class Persistencia:
             # 4b. Cargar Construcciones
             cur.execute(
                 "SELECT entidad_id, x, y, tipo, materiales, propietario_id, progreso, "
-                "completado_alguna_vez FROM construccion_estado"
+                "completado_alguna_vez, zona_idx FROM construccion_estado"
             )
-            for coid, cx, cy, tipo, mats_json, propietario_id, progreso, completado in cur.fetchall():
-                gestor.anadir_componente(coid, Posicion(x=cx, y=cy))
+            for coid, cx, cy, tipo, mats_json, propietario_id, progreso, completado, zidx in cur.fetchall():
+                gestor.anadir_componente(coid, Posicion(x=cx, y=cy, zona_idx=zidx))
                 gestor.anadir_componente(
                     coid,
                     Construccion(

@@ -45,12 +45,19 @@ def _es_celda_peligrosa(celda) -> bool:
 
 
 def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
-                                  radio: int, peso_propio: float, umbral_disposicion: float):
+                                  radio: int, peso_propio: float, umbral_disposicion: float,
+                                  zona_idx: int = 0):
     """Posicion (x, y) de la amenaza mas cercana -- por criatura o
     ambiental -- dentro del radio de percepcion. None si no se percibe
-    ninguna."""
+    ninguna.
+
+    zona_idx (2026-08-30, Circulo 1 de profundidad): filtra la amenaza por
+    CRIATURA a la misma zona que id_propio -- la amenaza AMBIENTAL ya
+    viene acotada porque `zona` (el objeto ZonaBioma, distinto de este
+    indice) es la que corresponde a quien pregunta."""
     amenaza_criatura = posicion_mas_cercana_por_disposicion(
         gestor, id_propio, x, y, radio, peso_propio, umbral_disposicion, buscar_mayor=True,
+        zona_idx=zona_idx,
     )
     amenaza_ambiental = celda_percibida(zona, x, y, radio, _es_celda_peligrosa)
 

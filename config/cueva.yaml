@@ -1,0 +1,43 @@
+# CÍRCULO 2 de profundidad (2026-08-30, ver nucleo/cueva.py y CLAUDE.md).
+# Parámetros del autómata celular que genera la geometría INTERIOR de
+# cada zona subterránea -- se aplican igual a cada cueva, con
+# independencia de su tamaño. Ninguno de estos números está calibrado
+# contra el motor en marcha; son la parametrización estándar documentada
+# del algoritmo (relleno ~45%, suavizado 4-5 iteraciones, umbral de
+# mayoría 5 de 8 vecinos), no una cifra propia medida para este mundo.
+cueva:
+  # Probabilidad de que una celda nazca como pared en el relleno aleatorio
+  # inicial, antes de cualquier suavizado.
+  prob_pared_inicial: 0.45
+  # Número de pasadas de suavizado (mayoría de vecinos) -- pocas pasadas
+  # dejan ruido reconocible, demasiadas colapsan la cueva en una única
+  # masa compacta sin cavidades interiores.
+  iteraciones_suavizado: 4
+  # Una celda se vuelve pared si tiene este número o más de sus 8 vecinos
+  # (vecindad de Moore) ya como pared.
+  umbral_vecinos_pared: 5
+  # Radio (en celdas) alrededor de la entrada que se fuerza a suelo
+  # caminable ANTES de calcular la componente conexa principal -- evita
+  # que el suavizado selle la entrada por puro azar.
+  radio_garantizado_entrada_celdas: 2
+
+  # CÍRCULO 3 de profundidad (2026-08-30, corrección de diseño de Diego:
+  # "las cuevas no deberían aparecer solo en un bioma... deberían
+  # generarse por todo el mapa" y "para que se use la cueva no es algo
+  # que debamos definir nosotros" -- ver CLAUDE.md). Cuántas cuevas
+  # genera el mundo, y qué tamaño sortea cada una -- PROVISIONAL, sin
+  # calibrar contra el motor en marcha, primer número razonado.
+  num_cuevas_min: 3
+  num_cuevas_max: 6
+  # Rango de tamaño (ancho y alto sorteados por separado, no forzados a
+  # cuadrado -- más orgánico) de CADA cueva individual. Sin categorías
+  # discretas "pequeña"/"grande" a propósito -- un rango continuo, quién
+  # la usa emerge del comportamiento, no de una etiqueta de generación.
+  ancho_min_celdas: 6
+  ancho_max_celdas: 22
+  alto_min_celdas: 6
+  alto_max_celdas: 22
+  # Distancia Manhattan mínima entre los accesos de superficie de dos
+  # cuevas distintas -- evita que el sorteo las amontone unas encima de
+  # otras en el mismo rincón del mapa.
+  separacion_minima_celdas: 8

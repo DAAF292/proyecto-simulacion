@@ -53,15 +53,21 @@ class SistemaCapacidadMental:
         Procesa el desgaste por estrés y la recuperación de estabilidad mental.
         Invocado en la Fase 3 del tick.
         """
-        # Extraer posiciones de las muertes ocurridas en este tick
-        posiciones_muertes: list[tuple[int, int]] = []
+        # Extraer posiciones de las muertes ocurridas en este tick.
+        # zona_idx (2026-08-30, Circulo 1 de profundidad): una muerte en la
+        # cueva no debe traumatizar a quien esta en superficie con el mismo
+        # (x, y) numerico -- eventos "Muerte" sin zona_idx en datos (gap
+        # preexistente de la muerte por incendio, sin x/y en absoluto)
+        # caen a zona_idx=0 por el mismo motivo que Posicion por defecto.
+        posiciones_muertes: list[tuple[int, int, int]] = []
         if bus_eventos is not None:
             for ev in bus_eventos.eventos_del_tick:
                 if ev.tipo == "Muerte" and ev.datos:
                     mx = ev.datos.get("x")
                     my = ev.datos.get("y")
                     if mx is not None and my is not None:
-                        posiciones_muertes.append((int(mx), int(my)))
+                        mz = int(ev.datos.get("zona_idx", 0))
+                        posiciones_muertes.append((int(mx), int(my), mz))
 
         entidades = sorted(
             gestor.entidades_con(
@@ -94,8 +100,8 @@ class SistemaCapacidadMental:
                     dims.agudeza_sensorial, self.radio_min, self.radio_max
                 )
                 presencio_muerte = any(
-                    (abs(pos.x - mx) + abs(pos.y - my)) <= radio
-                    for mx, my in posiciones_muertes
+                    mz == pos.zona_idx and (abs(pos.x - mx) + abs(pos.y - my)) <= radio
+                    for mx, my, mz in posiciones_muertes
                 )
                 if presencio_muerte:
                     penalizacion = self.penalizacion_presenciar_muerte / max(

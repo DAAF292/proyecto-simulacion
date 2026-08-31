@@ -106,15 +106,20 @@ class SistemaDescomposicion:
         """
         self._descomponer_construcciones(gestor, mundo, reloj, bus_eventos)
 
-        zona = mundo.territorio.zonas[0]
-        clima_actual = getattr(zona, "clima_actual", None)
-        nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
-
-        factor_humedad = (
-            self.factor_humedad_lluvia
-            if nombre_clima in ("lluvioso", "tormenta")
-            else self.factor_humedad_seco
-        )
+        # (2026-08-30, Circulo 1 de profundidad) factor de humedad
+        # calculado UNA VEZ POR ZONA (cada ZonaBioma tiene su propio
+        # clima_actual), luego aplicado a cada Necromasa segun la zona a
+        # la que pertenezca -- no una unica variable global derivada de
+        # zonas[0] aplicada por igual a toda entidad exista donde exista.
+        factores_humedad_por_zona: dict[int, float] = {}
+        for indice_zona, zona_i in enumerate(mundo.territorio.zonas):
+            clima_actual = getattr(zona_i, "clima_actual", None)
+            nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
+            factores_humedad_por_zona[indice_zona] = (
+                self.factor_humedad_lluvia
+                if nombre_clima in ("lluvioso", "tormenta")
+                else self.factor_humedad_seco
+            )
         factor_temperatura = 1.0
 
         entidades_necromasa = sorted(gestor.entidades_con(Necromasa, Posicion))
@@ -126,6 +131,8 @@ class SistemaDescomposicion:
             if nec is None or pos is None:
                 continue
 
+            zona = mundo.territorio.zonas[pos.zona_idx]
+            factor_humedad = factores_humedad_por_zona[pos.zona_idx]
             celda = zona.obtener_celda(pos.x, pos.y)
 
             # 1-2. Tasa efectiva de degradación y transferencia de biomasa

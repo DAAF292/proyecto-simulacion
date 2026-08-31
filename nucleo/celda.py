@@ -206,18 +206,37 @@ class Celda:
     celda de sustrato 'piedra' puede además tener una veta de 'hierro' o
     'cobre' dentro; el mineral no sustituye a la roca, existe dentro de
     ella (mismo criterio que tiene_agua es ortogonal al bioma). "" si no
-    hay veta -- la inmensa mayoría de celdas de piedra. Determinista de
-    la semilla (colocación de vetas en generación), NO se persiste, mismo
-    motivo que tipo_sustrato. ALCANCE DELIBERADAMENTE ACOTADO (Diego,
-    2026-08-30, tras señalar un problema real: "cual es la profundidad
-    del suelo? ahora es una celda, pero hacia donde va eso?"): este campo
-    es la MISMA abstracción plana que ya usan flora y agua -- un recurso
-    presente en la celda, sin geometría de profundidad real. Si el motor
-    llega a tener un eje de profundidad de verdad (cuevas, estructuras
-    subterráneas), es una decisión de arquitectura aparte, no resuelta ni
-    asumida aquí. Sin consumidor mecánico todavía -- declarado con
-    intención, mismo criterio que tipo_agua/madera/fibra: la extracción
-    real exige Inventario y una acción de minería, círculo muy posterior."""
+    hay veta -- la inmensa mayoría de celdas de piedra. La UBICACIÓN de
+    las vetas sigue siendo determinista de la semilla (colocación fija en
+    generación), pero desde el Círculo 2 de profundidad (2026-08-30, ver
+    masa_mineral_restante) este campo SÍ se persiste -- deja de ser
+    puramente derivable porque la extracción real lo vacía a "" cuando la
+    veta se agota, un hecho de la partida, no de la semilla.
+
+    ALCANCE ORIGINAL, ya superado (Diego, 2026-08-30, tras señalar "cual
+    es la profundidad del suelo? ahora es una celda, pero hacia donde va
+    eso?"): este campo nació como la MISMA abstracción plana que ya usan
+    flora y agua -- un recurso presente en la celda, sin geometría de
+    profundidad real, con la decisión de un eje de profundidad de verdad
+    aparcada aparte. El Círculo 1 (mecanismo multi-zona, ver CLAUDE.md)
+    resolvió esa decisión: sí hay eje de profundidad (Posicion.zona_idx,
+    Territorio.zonas[1]). El Círculo 2 (nucleo/cueva.py) es el primer
+    consumidor mecánico real -- ver masa_mineral_restante y
+    sistemas/sistema_recursos.py:_resolver_recolectar."""
+    masa_mineral_restante: float = 0.0
+    """CÍRCULO 2 de profundidad (2026-08-30, confirmado con Diego: las
+    vetas se agotan de verdad al extraerlas, no son infinitas como
+    tipo_sustrato). Kg de mineral que quedan en esta veta -- asignada en
+    generación (nucleo/zona_bioma.py, generacion_vetas.
+    masa_inicial_por_celda_veta_kg, PROVISIONAL) y decrementada por
+    Accion.RECOLECTAR cuando deposito_mineral no está vacío
+    (sistema_recursos.py:_resolver_recolectar). Al llegar a 0.0,
+    deposito_mineral vuelve a "" (la celda queda como piedra corriente,
+    sin caso especial que ningún consumidor tenga que comprobar aparte:
+    todo el motor ya trata deposito_mineral == "" como "sin veta"). 0.0
+    si deposito_mineral == "" -- mismo criterio de invariante que
+    recursos/tiene_recurso (Celda.recursos vacío si tiene_recurso=False).
+    SÍ se persiste, mismo motivo que deposito_mineral (ver su docstring)."""
     profundidad_charco: float = 0.0
     """Charco efimero (pieza 3 de la revision del sistema de agua pedida
     por Diego, 2026-08-21 -- "quizas la tormenta y lluvia podrian generar

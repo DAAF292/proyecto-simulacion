@@ -112,27 +112,34 @@ class SistemaDesastres:
         Punto de entrada para la evaluación diaria de ignición.
         Invocado al inicio de cada día en el orquestador principal.
         """
-        zona = mundo.territorio.zonas[0]
-        clima_actual = getattr(zona, "clima_actual", None)
-        nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
-        mult_clima = self.mult_riesgo_clima.get(nombre_clima, 1.0)
+        # (2026-08-30, Circulo 1 de profundidad) se evalua ignicion en
+        # TODAS las zonas del territorio -- cada ZonaBioma tiene su propio
+        # clima_actual y su propio grid, la ley de ignicion no distingue
+        # superficie de subsuelo (la zona de prueba de hoy reutiliza los
+        # mismos TipoTerreno que la superficie, asi que BOSQUE ahi tambien
+        # puede arder; una zona realmente subterranea sin bosque no se ve
+        # afectada porque el filtro de tipo_terreno sigue aplicando).
+        for zona_idx, zona in enumerate(mundo.territorio.zonas):
+            clima_actual = getattr(zona, "clima_actual", None)
+            nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
+            mult_clima = self.mult_riesgo_clima.get(nombre_clima, 1.0)
 
-        prob_efectiva = self.prob_ignicion_base * mult_clima
+            prob_efectiva = self.prob_ignicion_base * mult_clima
 
-        for y in range(zona.alto):
-            for x in range(zona.ancho):
-                celda = zona.obtener_celda(x, y)
-                if celda.tipo_terreno == TipoTerreno.BOSQUE and not celda.en_llamas:
-                    if self.rng.random() < prob_efectiva:
-                        celda.en_llamas = True
-                        bus_eventos.emitir(
-                            Evento(
-                                tipo="IncendioIniciado",
-                                severidad=Severidad.HISTORICO,
-                                tick=reloj.tick_actual,
-                                datos={"x": x, "y": y, "clima": nombre_clima},
+            for y in range(zona.alto):
+                for x in range(zona.ancho):
+                    celda = zona.obtener_celda(x, y)
+                    if celda.tipo_terreno == TipoTerreno.BOSQUE and not celda.en_llamas:
+                        if self.rng.random() < prob_efectiva:
+                            celda.en_llamas = True
+                            bus_eventos.emitir(
+                                Evento(
+                                    tipo="IncendioIniciado",
+                                    severidad=Severidad.HISTORICO,
+                                    tick=reloj.tick_actual,
+                                    datos={"x": x, "y": y, "zona_idx": zona_idx, "clima": nombre_clima},
+                                )
                             )
-                        )
 
     def procesar_fuego_tick(
         self,
@@ -144,8 +151,21 @@ class SistemaDesastres:
         """
         Propaga llamas, extingue focos y aplica daño térmico a criaturas y flora.
         Debe ejecutarse a cadencia de tick en la Fase 2 del ciclo.
+
+        (2026-08-30, Circulo 1 de profundidad) procesa TODAS las zonas del
+        territorio -- ver el mismo cambio en ejecutar() de esta clase.
         """
-        zona = mundo.territorio.zonas[0]
+        for zona_idx, zona in enumerate(mundo.territorio.zonas):
+            self._procesar_fuego_tick_zona(gestor, zona, zona_idx, reloj, bus_eventos)
+
+    def _procesar_fuego_tick_zona(
+        self,
+        gestor: GestorEntidades,
+        zona: Any,
+        zona_idx: int,
+        reloj: Reloj,
+        bus_eventos: BusEventos,
+    ) -> None:
         celdas_en_llamas: list[tuple[int, int]] = []
 
         for y in range(zona.alto):
@@ -184,11 +204,14 @@ class SistemaDesastres:
         for nx, ny in nuevos_focos:
             zona.obtener_celda(nx, ny).en_llamas = True
 
-        # 1. Flora en llamas -> Ceniza mineralizada
+        # 1. Flora en llamas -> Ceniza mineralizada. zona_idx (2026-08-30,
+        # Circulo 1 de profundidad): se descarta ANTES de indexar el grid
+        # de esta zona -- una entidad de otra zona puede tener (x, y) fuera
+        # de los limites de esta (zonas de distinto tamaño).
         plantas_a_purgar: list[int] = []
         for planta_id in sorted(gestor.entidades_con(Planta, Posicion)):
             pos_p = gestor.obtener_componente(planta_id, Posicion)
-            if pos_p is not None:
+            if pos_p is not None and pos_p.zona_idx == zona_idx:
                 celda_p = zona.obtener_celda(pos_p.x, pos_p.y)
                 if celda_p.en_llamas:
                     celda_p.fertilidad = min(
@@ -212,6 +235,8 @@ class SistemaDesastres:
 
             if pos_c is None or pool_c is None or dims_c is None or ident_c is None:
                 continue
+            if pos_c.zona_idx != zona_idx:
+                continue
 
             celda_c = zona.obtener_celda(pos_c.x, pos_c.y)
             if celda_c.en_llamas:
@@ -231,6 +256,7 @@ class SistemaDesastres:
                         agua_tisular=agua_tisular_restante,
                         origen_especie=ident_c.especie.value,
                         tasa_putrefaccion=self.tasa_putrefaccion_calcinada,
+                        zona_idx=zona_idx,
                     )
 
                     bus_eventos.emitir(
@@ -268,6 +294,8 @@ class SistemaDesastres:
             pos_co = gestor.obtener_componente(con_id, Posicion)
             construccion = gestor.obtener_componente(con_id, Construccion)
             if pos_co is None or construccion is None or not construccion.materiales:
+                continue
+            if pos_co.zona_idx != zona_idx:
                 continue
             celda_co = zona.obtener_celda(pos_co.x, pos_co.y)
             if not celda_co.en_llamas:

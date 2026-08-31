@@ -69,6 +69,7 @@ class SistemaAsentamiento:
         # poco sigue contando -- necesita reparación, no deja de ser
         # parte del pueblo mientras tanto.
         refugios: dict[int, tuple[int, int]] = {}
+        zona_por_refugio: dict[int, int] = {}
         for cid in gestor.entidades_con(Construccion, Posicion):
             construccion = gestor.obtener_componente(cid, Construccion)
             if construccion.tipo != "refugio" or not construccion.completado_alguna_vez:
@@ -77,13 +78,26 @@ class SistemaAsentamiento:
                 continue
             pos = gestor.obtener_componente(cid, Posicion)
             refugios[construccion.propietario_id] = (pos.x, pos.y)
+            zona_por_refugio[construccion.propietario_id] = pos.zona_idx
 
         if not refugios:
             mundo.asentamientos = {}
             self._miembros_vistos_ayer = set()
             return
 
-        grupos = agrupar_por_proximidad(refugios, self.radio_cluster)
+        # CÍRCULO 3 de profundidad (2026-08-30, hallazgo propio: con
+        # varias cuevas compartiendo rangos de coordenadas pequeños, dos
+        # refugios en zonas DISTINTAS podían agruparse por pura
+        # coincidencia numérica). Un asentamiento no puede tener miembros
+        # que no comparten espacio real -- se agrupa por zona primero, y
+        # agrupar_por_proximidad (genérica, sin noción de zona) se llama
+        # una vez por zona, nunca mezclando refugios de zonas distintas.
+        grupos: list[set[int]] = []
+        for zona_idx_actual in sorted(set(zona_por_refugio.values())):
+            refugios_de_zona = {
+                rid: pos for rid, pos in refugios.items() if zona_por_refugio[rid] == zona_idx_actual
+            }
+            grupos.extend(agrupar_por_proximidad(refugios_de_zona, self.radio_cluster))
 
         nuevos: dict[int, Asentamiento] = {}
         miembros_hoy: set[frozenset[int]] = set()
@@ -95,6 +109,7 @@ class SistemaAsentamiento:
             clave = frozenset(grupo)
             miembros_hoy.add(clave)
 
+            zona_asentamiento = zona_por_refugio[next(iter(grupo))]
             centro = calcular_centro(refugios, grupo)
             lideres = calcular_liderazgo(gestor, grupo, self.config_asentamiento)
             asentamiento = Asentamiento(
@@ -102,7 +117,8 @@ class SistemaAsentamiento:
                 centro=centro,
                 miembros=clave,
                 lideres=frozenset(lideres),
-                almacen_id=almacen_cercano(gestor, centro, self.radio_cluster),
+                almacen_id=almacen_cercano(gestor, centro, self.radio_cluster, zona_idx=zona_asentamiento),
+                zona_idx=zona_asentamiento,
             )
             nuevos[siguiente_id] = asentamiento
             siguiente_id += 1

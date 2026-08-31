@@ -278,6 +278,15 @@ generacion_vetas:
   # aceptada: el mundo puede terminar algo por debajo de la fracción de
   # piedra que sugiere escala_abundancia_a_fraccion_piedra.
   celdas_minimas_por_veta: 2
+  # CÍRCULO 2 de profundidad (2026-08-30, confirmado con Diego: las vetas
+  # se agotan de verdad, a diferencia de tipo_sustrato). Kg de mineral en
+  # CADA celda de una veta -- una veta de celdas_por_veta_objetivo=4
+  # celdas suma en torno a 160kg extraíbles en total, del mismo orden de
+  # magnitud que masa_minima_almacen (60kg) para que agotar una veta
+  # entera se sienta como un esfuerzo real, ni trivial ni infinito.
+  # PROVISIONAL, sin calibrar contra el motor en marcha -- primer número
+  # razonado, no medido.
+  masa_inicial_por_celda_veta_kg: 40.0
 
 # --- Construcción (2026-08-30, refugio/almacén físicos) -------------------
 # Qué materiales sirven para construir (apto_construccion, arriba en cada
