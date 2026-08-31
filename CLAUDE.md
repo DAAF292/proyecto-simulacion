@@ -1912,3 +1912,99 @@ fue de documentación, más la re-verificación. Pendiente de que Diego
 decida si el siguiente paso real es extender a robo/agravio (mismo
 resolutor, un disparador nuevo en su propio sistema, sin lógica nueva en
 `nucleo/conflicto.py`) o calibrar lo ya existente.
+
+## Capacidad de construcción por celda -- "¿una hoguera ocupa lo mismo
+## que una casa?" (2026-08-31)
+
+Diego, al plantear perfilar herramientas/fuego/comida elaborada como
+próxima área ("la base de la sociedad realmente"), se detuvo en una duda
+de fondo que venía arrastrando: "¿qué es una celda?". El mundo se planteó
+al principio como una rejilla de 40×40 con `metros_por_celda: 10`
+(`config/mundo.yaml`) -- cada celda son 100 m² reales. Verificado contra
+el código, no supuesto: hoy la ocupación por celda es una mezcla
+inconsistente, no una regla uniforme -- flora tiene un límite duro real
+de 1 `Planta` por celda (`sistema_flora.py:_intentar_propagacion`, un
+`set` de posiciones ya colonizadas, defendible como abstracción a esta
+escala: la mancha/individuo DOMINANTE de esos 100 m², no "la única planta
+literal"); depósito mineral igual (campo propio de `Celda`); criaturas
+sin ningún límite (ya conviven varias por celda de forma rutinaria);
+**construcción no tenía absolutamente ninguna noción de espacio** --
+`construccion_propia` busca por `propietario_id`, nunca por celda, así
+que nada impedía (ni nada comprobaba) que dos refugios coincidieran en la
+misma celda sin distinguir un objeto pequeño de uno grande. De ahí la
+pregunta concreta de Diego: "¿una hoguera ocupa lo mismo que una casa?
+En el caso de los recursos igual".
+
+**Opción descartada explícitamente, con razonamiento**: encoger el grid
+(por ejemplo a 2m/celda) para que los objetos se distingan por
+resolución en vez de por atributo. Se descartó porque casi todo el motor
+está calibrado contra 40×40@10m -- generación de terreno/agua/cuevas
+(`nucleo/orografia.py`, `nucleo/agua.py`, `nucleo/cueva.py`), radios de
+percepción, costes de movimiento, y las propias cifras de referencia de
+densidad poblacional (0.05-0.07 individuos/celda) que se acababan de
+investigar en esta misma sesión. Encoger el grid multiplicaría el número
+de celdas por 25x y reabriría media docena de sistemas ya cerrados sin
+ninguna necesidad real detrás -- desproporción de coste frente a la otra
+vía, no una decisión de diseño en sí.
+
+**Opción elegida**: separar "resolución de movimiento/terreno" (se queda
+igual, 100 m²/celda) de "cuánto espacio ocupa un objeto CONSTRUIDO dentro
+de esa celda" (nuevo). Mismo patrón que `masa_minima_refugio`/
+`masa_minima_almacen` (un umbral acumulado por tipo), aplicado esta vez a
+área en vez de a masa -- `config/materiales.yaml` sección `construccion`
+gana `huella_m2_refugio` (15.0, PROVISIONAL, una choza primitiva ~4x4m),
+`huella_m2_almacen` (40.0, PROVISIONAL, construcción comunal más grande)
+y `capacidad_construccion_celda_m2` (80.0 de los 100 m² reales, margen
+razonado no medido para paso/terreno natural, sin inventar un parámetro
+de margen aparte). `nucleo/construccion.py` gana `huella_m2_para` (mismo
+criterio permisivo por `.get()` que `masa_minima_para`) y
+`espacio_disponible_para_construir` (capacidad menos la suma de huellas
+de toda `Construccion` ya presente en esa celda exacta, filtrado por
+`zona_idx` desde el principio -- no hubo que descubrir ese hueco esta vez,
+ya se sabía del arco de profundidad). `sistema_movimiento.py:
+_calcular_construir` comprueba el espacio disponible contra la huella del
+tipo objetivo antes de crear la `Construccion`; si no cabe, no se crea
+este tick -- deliberadamente SIN ninguna búsqueda de una celda vecina con
+hueco (mismo criterio que "sin lógica de selección de sitio" ya
+documentado para refugio): el individuo simplemente lo reintentará en su
+próxima posición según el resto de su comportamiento ya lo mueva. Límite
+conocido, no resuelto: el almacén se crea en el centro FIJO del
+asentamiento, así que si esa celda exacta está llena, el individuo puede
+quedarse sin poder construirlo -- no se le buscó una celda vecina de
+respaldo, mismo argumento de "no inventar sin necesidad real todavía".
+
+**Estructuras multi-celda (muralla, castillo) -- explícitamente fuera,
+apuntado como extensión futura, no construido**: Diego señaló que a
+futuro algunas construcciones excederán una sola celda. La unidad m² ya
+generaliza a eso sin cambios conceptuales -- una construcción cuya
+huella supere la capacidad de una celda necesariamente reclama celdas
+vecinas, mismo número, más celdas. Pero el MECANISMO real (qué celdas
+vecinas reclama, en qué forma -- una línea para un muro, un bloque para
+un castillo -- y qué pasa si se destruye) no se ha construido: no hay
+todavía ninguna construcción real que lo necesite, y hacerlo ahora sería
+inventar una regla para un caso hipotético (mismo error que ya costó
+tiempo con el hueco de materiales de flora). Queda como punto de
+extensión natural para cuando exista un caso real (candidato: cuando se
+retome "ciudad enana").
+
+**Verificado contra el motor real, tres pasadas**: (1) arnés dirigido
+(`verificar_capacidad.py`, scratchpad) confirmando la aritmética exacta
+-- celda vacía = 80 m² libres, 5 refugios (75 m²) caben y el 6º queda
+bloqueado con 5 m² libres, aislamiento correcto por celda y por zona, un
+almacén cabe tras 2 refugios (50 m² libres > 40 requeridos); (2) 3000
+ticks de `BOSQUE_AUTO_TICKS` sin ninguna excepción; (3) 4 semillas (42,
+1, 7, 99) × 4000 ticks del pipeline completo sin intervención,
+inspeccionando construcciones reales al final: **0 celdas exceden los 80
+m² de capacidad en las 4 semillas** -- el invariante nunca se viola en
+juego normal. El mecanismo se ejerce de verdad, no solo en teoría: 2 de
+4 semillas ya tienen celdas con más de una construcción compartiendo
+espacio de forma espontánea (hasta 55 m² de huella conjunta en una misma
+celda, refugio + almacén). 22/22 tests en verde.
+
+**Pendiente real, explícito**: `huella_m2_refugio`/`huella_m2_almacen`/
+`capacidad_construccion_celda_m2` son PROVISIONALES, sin calibrar contra
+el harness completo; sin búsqueda de celda vecina de respaldo si la
+elegida está llena (refugio: se resuelve solo por el resto del
+comportamiento; almacén: puede quedarse bloqueado si el centro exacto del
+asentamiento está lleno); estructuras multi-celda sin construir, a la
+espera de un caso real.

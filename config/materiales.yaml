@@ -308,6 +308,39 @@ generacion_vetas:
 construccion:
   masa_minima_refugio: 15.0
   masa_minima_almacen: 60.0
+  # huella_m2_* / capacidad_construccion_celda_m2 (2026-08-31, conversación
+  # de diseño con Diego: "el enfoque de 100 metros cuadrados por celda es
+  # demasiado... una hoguera ocupa lo mismo que una casa?"). Antes de esto,
+  # una Construccion no tenía ninguna noción de cuánto espacio ocupa --
+  # nada impedía que dos refugios coincidieran en la misma celda de 100 m²
+  # (metros_por_celda, config/mundo.yaml) sin distinguir un objeto pequeño
+  # de uno grande. Mismo patrón que masa_minima_*: un umbral acumulado por
+  # tipo, esta vez en área en vez de masa -- sistema_movimiento.py compara
+  # la huella del tipo que se quiere construir contra el espacio libre de
+  # la celda (capacidad_construccion_celda_m2 menos la suma de huella_m2
+  # de las construcciones ya presentes) antes de crearla.
+  #
+  # Deliberadamente NO resuelve construcciones que excedan una sola celda
+  # (muralla, castillo -- mencionadas por Diego como caso futuro): eso
+  # exigiría reclamar varias celdas vecinas en una forma concreta (línea
+  # para un muro, bloque para un castillo), complejidad real sin ninguna
+  # construcción todavía que la necesite -- se deja como punto de
+  # extensión natural (misma unidad, m², solo que sumando sobre más de
+  # una celda) para cuando exista un caso real, no inventada por
+  # anticipación. Ver CLAUDE.md para la conversación completa.
+  #
+  # PROVISIONAL, sin calibrar contra el motor en marcha: capacidad_
+  # construccion_celda_m2=80.0 dentro de los 100 m² reales de la celda
+  # (config/mundo.yaml:metros_por_celda=10) deja un margen razonado (no
+  # medido) para paso/terreno natural sin necesitar un parámetro de margen
+  # aparte. huella_m2_refugio=15.0 (una choza primitiva pequeña, ~4x4m) y
+  # huella_m2_almacen=40.0 (construcción comunal más grande) -- con esto,
+  # unos 5 refugios o 2 almacenes caben en una misma celda antes de
+  # agotar la capacidad, lo cual es razonable para un asentamiento
+  # primitivo denso sin sentirse infinito.
+  huella_m2_refugio: 15.0
+  huella_m2_almacen: 40.0
+  capacidad_construccion_celda_m2: 80.0
   # Cuánta masa apta transfiere Accion.CONSTRUIR del Inventario a la
   # Construccion por tick, estando en su misma celda -- PROVISIONAL, sin
   # calibrar contra el motor en marcha. Con esto y masa_minima_refugio,

@@ -89,6 +89,42 @@ def material_suficiente_para(
     return masa_total >= masa_minima_para(tipo, config_construccion)
 
 
+def huella_m2_para(tipo: str, config_construccion: dict[str, Any]) -> float:
+    """Área en m² que ocupa una Construccion de este tipo -- config/
+    materiales.yaml sección construccion. Mismo criterio permisivo que
+    masa_minima_para: cualquier tipo no reconocido usa huella_m2_refugio
+    como base razonable en vez de fallar (catálogo abierto, ver
+    Construccion.tipo)."""
+    clave = f"huella_m2_{tipo}"
+    return float(
+        config_construccion.get(clave, config_construccion.get("huella_m2_refugio", 15.0))
+    )
+
+
+def espacio_disponible_para_construir(
+    gestor: Any, pos_x: int, pos_y: int, zona_idx: int, config_construccion: dict[str, Any]
+) -> float:
+    """m² todavía libres para construcción en (pos_x, pos_y, zona_idx) --
+    capacidad_construccion_celda_m2 menos la suma de huella_m2 de toda
+    Construccion YA presente en esa celda exacta (2026-08-31, ver
+    docstring de config/materiales.yaml sección construccion: antes de
+    esto ninguna Construccion tenía noción de área, solo de masa de
+    materiales). Búsqueda lineal O(N) sobre las construcciones del mundo,
+    mismo límite ya aceptado en construccion_propia."""
+    from componentes.construccion import Construccion
+    from componentes.posicion import Posicion
+
+    capacidad = float(config_construccion.get("capacidad_construccion_celda_m2", 80.0))
+    ocupado = 0.0
+    for cid in gestor.entidades_con(Construccion, Posicion):
+        pos = gestor.obtener_componente(cid, Posicion)
+        if pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
+            continue
+        construccion = gestor.obtener_componente(cid, Construccion)
+        ocupado += huella_m2_para(construccion.tipo, config_construccion)
+    return capacidad - ocupado
+
+
 def objetivo_construccion_actual(
     gestor: Any, mundo: Any, id_entidad: int, radio_cluster: int
 ):

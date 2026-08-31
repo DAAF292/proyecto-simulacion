@@ -33,7 +33,12 @@ from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.asentamiento import asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
-from nucleo.construccion import construccion_propia, objetivo_construccion_actual
+from nucleo.construccion import (
+    construccion_propia,
+    espacio_disponible_para_construir,
+    huella_m2_para,
+    objetivo_construccion_actual,
+)
 from nucleo.entidad import GestorEntidades, crear_construccion
 from nucleo.memoria import objetivo_recordado
 from nucleo.mundo import Mundo
@@ -103,6 +108,10 @@ class SistemaMovimiento:
         self.drenaje_seguridad_enfrentamiento: float = float(
             self.config_conflicto.get("drenaje_seguridad_enfrentamiento", 0.2)
         )
+        # Capacidad de construcción por celda (2026-08-31, ver
+        # config/materiales.yaml sección construccion y nucleo/construccion.py:
+        # espacio_disponible_para_construir).
+        self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
 
         # Coste de forrajeo vs. beneficio (2026-08-23, pregunta de Diego:
         # "un lobo intenta depredar una mosca si se introduce" -- ver
@@ -1023,6 +1032,20 @@ class SistemaMovimiento:
         gnomo le pille. Una vez existe, camina hacia él igual que
         _calcular_dormir camina hacia el refugio recordado.
 
+        CAPACIDAD POR CELDA (2026-08-31, ver config/materiales.yaml
+        sección construccion y nucleo/construccion.py:
+        espacio_disponible_para_construir): antes de crear una
+        Construccion nueva se comprueba que su huella_m2 quepa en el
+        espacio libre de la celda -- si no cabe, no se crea este tick.
+        Deliberadamente sin ninguna búsqueda de una celda vecina con
+        hueco: mismo criterio que "sin lógica de selección de sitio" de
+        arriba, el individuo simplemente lo reintentará en su próxima
+        posición según el resto de su comportamiento (sesgo gregario,
+        deambular) ya lo mueva. Para el almacén esto puede significar
+        quedarse parado en el centro del asentamiento sin poder construir
+        si esa celda exacta está llena -- límite conocido, no resuelto
+        aquí (ver CLAUDE.md).
+
         La transferencia real de materiales (Inventario ->
         Construccion.materiales) NO ocurre aquí -- sistema_recursos.py la
         resuelve una vez la entidad está en la misma celda, mismo reparto
@@ -1043,6 +1066,10 @@ class SistemaMovimiento:
             return self._acercarse_a(pos_x, pos_y, con_pos.x, con_pos.y)
 
         if tipo == "refugio":
+            if espacio_disponible_para_construir(
+                gestor, pos_x, pos_y, zona_idx, self.config_construccion
+            ) < huella_m2_para("refugio", self.config_construccion):
+                return (0, 0)
             crear_construccion(
                 gestor, pos_x, pos_y, "refugio", propietario_id=entidad_id, zona_idx=zona_idx
             )
@@ -1053,6 +1080,10 @@ class SistemaMovimiento:
         cx, cy = pos_creacion
         if (cx, cy) != (pos_x, pos_y):
             return self._acercarse_a(pos_x, pos_y, cx, cy)
+        if espacio_disponible_para_construir(
+            gestor, pos_x, pos_y, zona_idx, self.config_construccion
+        ) < huella_m2_para("almacen", self.config_construccion):
+            return (0, 0)
         crear_construccion(gestor, pos_x, pos_y, "almacen", propietario_id=None, zona_idx=zona_idx)
         return (0, 0)
 
