@@ -1581,3 +1581,115 @@ otra decidida explícitamente en vez de dejarla en el aire.
    una corrección previa.
 3. **Presentación** (`presentacion/vista_web.py`) — deliberadamente sin
    tocar todavía. Motor primero.
+
+## Auditoría de coherencia tras el merge del sistema de profundidad, y dos
+## piezas más del arco de refugio (2026-08-31)
+
+Dos sesiones de Claude Code trabajaron en paralelo el mismo día sobre el
+mismo `master` — esta (refugio/recolección/asentamiento/conflicto, arriba)
+y otra (profundidad/cuevas, también arriba). Al fusionar de vuelta a la
+rama de esta sesión, `git` resolvió solo el conflicto textual; verificar
+que la SEMÁNTICA seguía siendo correcta exigió trabajo aparte, ya que
+ambas líneas tocaron `nucleo/asentamiento.py`, `nucleo/construccion.py` y
+`sistema_movimiento.py`.
+
+**Corrección propia encontrada durante el merge**: `_resolver_posible_intruso`
+(conflicto por refugio ocupado) comparaba solo `(x, y)` para decidir "misma
+celda" -- con varias zonas ya en el motor, dos entidades en cuevas
+DISTINTAS con coordenadas numéricamente coincidentes podían disparar un
+conflicto falso. Mismo tipo de hallazgo que el propio Círculo de
+profundidad ya se había encontrado a sí mismo con `almacen_cercano`.
+Corregido con el mismo patrón (filtrar por `zona_idx`) y verificado
+explícitamente el caso negativo (mismas coordenadas, zonas distintas → sin
+conflicto) antes de dar el merge por bueno.
+
+**Auditoría de coherencia pedida por Diego** ("¿con qué continuamos?" →
+"3", el sistema de profundidad) tras confirmar que la otra sesión ya había
+terminado: no solo releer la documentación que dejaron (inusualmente
+rigurosa y autocrítica -- capturaron su propia violación del principio 5
+cuando Diego les corrigió lo de categorizar cuevas por tamaño/bioma), sino
+verificar contra el motor real, mismo criterio de siempre.
+
+**Hallazgo real, no documentado por la otra sesión**: `presentacion/
+vista_web.py:construir_instantanea` no filtraba NINGUNA de sus tres
+consultas de entidades (criaturas, plantas, necromasa) por `zona_idx`,
+pese a que solo dibuja `zonas[0]` (superficie). Esto NO es lo mismo que
+"todavía no hay arte de cueva" (omisión ya documentada y aceptada por la
+otra sesión) -- es corrupción activa de la vista de superficie en cuanto
+algo cruza a una cueva: dos entidades en zonas distintas con las mismas
+coordenadas numéricas llegaban al DTO como filas indistinguibles (mismo
+`x`, `y`, sin ningún campo que las diferenciara), y una planta de cueva
+podía pisar la entrada de una planta de superficie en `plantas_por_celda`
+(misma clave `(x,y)`). Reproducido de forma concreta antes de arreglar
+(dos gnomos en `(5,5)`, uno en superficie y otro en cueva → el DTO los
+devolvía como dos filas idénticas) y verificado a escala real después:
+una partida de 800 ticks sin intervención (población fundadora + sistemas
+reales, sembrada con una semilla distinta a la de mis propios smoke
+tests) terminó con **10 entidades genuinamente bajo tierra** -- confirma
+que el fallo se dispara con facilidad en juego normal, no solo en un caso
+construido a mano. Arreglado con el filtro mínimo (`pos.zona_idx == 0` en
+las tres consultas) -- no una capacidad nueva (selector de zona, arte de
+cueva), la corrección para que la vista que YA existe deje de mentir.
+
+Aparte, sin relación con la profundidad, encontrado de paso mientras
+comprobaba cifras de población: `entidades.viva` en persistencia nunca se
+pone a `False` al morir -- solo se escribe una vez, al crear la entidad
+(commit inicial del proyecto, `879f3f7`, nada que ver con esta sesión ni
+con la de profundidad). El snapshot en vivo (`componentes_estado`) sí
+refleja bien quién sigue vivo; el registro histórico no. Señalado, no
+corregido -- fuera de alcance de lo que se estaba auditando.
+
+**Recolección de madera/fibra/hierba_seca, sin tala/siega** (Diego: "los
+árboles dejan caer ramas que los gnomos recogen o arrancan hierba
+directamente sin mecanismos complejos de tala y siega"). Cierra el hueco
+que quedaba señalado desde el Círculo C de RECOLECTAR (limitado a
+`tipo_sustrato`) y desde el propio catálogo de materiales ("madera y
+fibra... sin consumidor mecánico desde que se escribieron"):
+
+- `sistema_flora.py`: el bucle de producción diaria filtraba
+  `categoria != "alimento": continue`, ignorando por completo las
+  entradas `categoria: material` ya declaradas bajo manzano/cactus desde
+  hacía días. Ampliado a alimento+material -- MISMA fórmula de
+  producción (`tasa_regeneracion * eficiencia_total`, mismo
+  desbordamiento a mantillo al llenarse) que ya usa la fruta, sin
+  ninguna acción de tala/siega que destruya la `Planta`. El chequeo de
+  sobreforrajeo (`agotada_hoy`) queda restringido a alimento --
+  quedarse sin ramas que recoger no es hambre, no debe hacer retroceder
+  la planta a brote.
+- `config/flora.yaml`: `madera` (manzano) y `fibra` (cactus) ganan
+  `capacidad_maxima`/`tasa_regeneracion` (ya declaradas, sin numérica
+  hasta ahora); `hierba_seca` se añade como entrada nueva bajo
+  `hierba_silvestre`, categoria material, junto a la ya existente
+  "hierba" de alimento. Todo PROVISIONAL, sin calibrar.
+- `sistema_recursos.py:_resolver_recolectar`: nueva rama genérica por
+  catálogo -- cualquier clave de `Celda.recursos` que sea
+  `apto_construccion` en `config/materiales.yaml` cuenta, no una lista
+  de nombres fija -- insertada entre `deposito_mineral` (más
+  prioritario, finito de verdad) y `tipo_sustrato` (fallback, siempre
+  disponible): mineral > material de flora > sustrato. Cero cambios en
+  `sistema_decision.py` -- mismo motivo que la minería del Círculo 2 de
+  profundidad, RECOLECTAR ya gatea genéricamente por masa apta
+  pendiente.
+
+Verificado: un manzano maduro produce madera de verdad en su celda (2.8kg
+tras 29 días de partida); un gnomo colocado ahí la recolecta al
+Inventario y cae a arcilla (sustrato) en cuanto la madera se agota en esa
+celda concreta -- prioridad funcionando; "manzanas"/comida nunca terminan
+en el inventario de construcción (no están en el catálogo de materiales,
+así que el filtro `apto_construccion` las excluye sin necesidad de una
+lista de exclusión). Motor real (4000 ticks) sin intervención:
+construcciones reales usaron arcilla + hierba_seca. Con esto, "un
+habitáculo de madera con un techo de paja" -- el propio ejemplo original
+de Diego para refugio construido -- ya es alcanzable de verdad, no solo
+teórico.
+
+Commits de esta pieza: `a2ab5e7`/`164a5e9` (merge del sistema de
+profundidad + corrección de `zona_idx` en el conflicto por refugio),
+`fe47bb1` (arreglo del visor), `622abe8` (recolección de flora).
+
+**Pendiente real que sigue abierto**, sin una sola línea de código:
+`entidades.viva` nunca actualizado (señalado arriba, pre-existente);
+selector de zona real en el visor (el arreglo de hoy solo evita que la
+vista de superficie mienta, no añade forma de ver el subsuelo); liquen
+(montaña) y musgo (tundra) siguen sin ganar su propia entrada de
+material recolectable -- Diego no lo pidió esta vez, no se ha tocado.
