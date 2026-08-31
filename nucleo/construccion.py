@@ -115,7 +115,7 @@ def objetivo_construccion_actual(
     asen = asentamiento_de(mundo, id_entidad)
     if asen is None:
         return None
-    cid_almacen = almacen_cercano(gestor, asen.centro, radio_cluster)
+    cid_almacen = almacen_cercano(gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx)
     if cid_almacen is not None:
         almacen = gestor.obtener_componente(cid_almacen, Construccion)
         if almacen is not None and almacen.progreso >= 1.0:

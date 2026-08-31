@@ -1501,17 +1501,48 @@ porque solo existía una cueva); 300 ticks de pipeline completo con
 gnomos en cuevas distintas simultáneas sin excepciones; 3000 ticks de
 `BOSQUE_AUTO_TICKS`; los 22 tests existentes en verde.
 
+### Corrección — aislamiento de asentamientos por zona (2026-08-30, mismo día)
+
+Diego preguntó, tras cerrar el Círculo 3, "¿hay que afinar algo de aquí?"
+— en vez de repetir solo lo ya documentado, se verificó el motor de
+verdad en busca de algo concreto. Dos comprobaciones:
+
+- **Vetas en cuevas pequeñas**: la preocupación razonada (una "madriguera"
+  de 6×6 podría no generar ninguna veta, dado el redondeo de
+  `escala_abundancia_a_fraccion_piedra`) **no se confirmó** al medirla:
+  50 semillas, 221 cuevas generadas, 0 sin ninguna veta (mínimo 4 celdas
+  de veta incluso en las más pequeñas). Descartada explícitamente en vez
+  de "arreglada" sin necesidad — el motor real dijo que no hacía falta.
+- **`almacen_cercano`/`agrupar_por_proximidad` sin filtrar por zona**: el
+  hueco que el Círculo 1 ya había señalado como "inofensivo hoy" dejó de
+  serlo — con varias cuevas por mundo compartiendo rangos de coordenadas
+  pequeños (6-22 en vez de los 40×40 de superficie), dos refugios en
+  CUEVAS DISTINTAS caen dentro del mismo `radio_cluster_celdas` por pura
+  coincidencia numérica con mucha más frecuencia que en superficie.
+  Reproducido explícitamente con un arnés dirigido (dos grupos de 3
+  gnomos con refugio terminado, mismas coordenadas relativas, en
+  `zona_idx=1` y `zona_idx=2`) antes de corregir, no solo razonado.
+
+**Corregido**: `sistema_asentamiento.py` agrupa refugios POR ZONA antes
+de llamar a `agrupar_por_proximidad` (que sigue siendo genérica, sin
+noción de zona — la partición es responsabilidad de quien la llama, no
+de la función geométrica en sí). `Asentamiento` gana `zona_idx` (la de
+todos sus miembros, garantizada por esa partición previa). `almacen_cercano`
+gana un parámetro `zona_idx` y filtra por él; `nucleo/construccion.py:
+objetivo_construccion_actual` lo propaga desde `asen.zona_idx`. Verificado:
+el mismo arnés que reproducía la fusión incorrecta ahora detecta dos
+asentamientos distintos, uno por zona, sin miembros cruzados; 4000 ticks
+de `BOSQUE_AUTO_TICKS` sin excepciones; 22 tests en verde.
+
 ### Qué sigue tras el Círculo 3
 
 1. **Fauna subterránea** ("animales fantásticos", monstruos) como
    catálogo nuevo de especies, reutilizando rango racial + sorteo
    individual.
 2. **"Ciudad enana"**: extender `SistemaAsentamiento`/`Construccion` para
-   que funcionen dentro de una cueva — primer paso real sigue siendo
-   corregir el hueco de `almacen_cercano`/`agrupar_por_proximidad` sin
-   filtrar por `zona_idx` (señalado en el Círculo 1, todavía sin tocar,
-   y ahora más urgente: con varias cuevas por mundo, dos almacenes en
-   cuevas distintas con coordenadas numéricamente cercanas podrían
-   confundirse entre sí).
+   que funcionen dentro de una cueva — el aislamiento por zona (arriba)
+   ya no es un hueco pendiente, así que este paso puede empezar
+   directamente por diseñar cómo es una ciudad enana de verdad, no por
+   una corrección previa.
 3. **Presentación** (`presentacion/vista_web.py`) — deliberadamente sin
    tocar todavía. Motor primero.
