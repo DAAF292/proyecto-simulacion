@@ -1,0 +1,23 @@
+# CÍRCULO 2 de profundidad (2026-08-30, ver nucleo/cueva.py y CLAUDE.md).
+# Parámetros del autómata celular que genera la geometría interior de la
+# zona subterránea -- primer consumidor, la única zona de prueba
+# (Territorio.zonas[1], ver nucleo/territorio.py). Ninguno de estos
+# números está calibrado contra el motor en marcha; son la parametrización
+# estándar documentada del algoritmo (relleno ~45%, suavizado 4-5
+# iteraciones, umbral de mayoría 5 de 8 vecinos), no una cifra propia
+# medida para este mundo.
+cueva:
+  # Probabilidad de que una celda nazca como pared en el relleno aleatorio
+  # inicial, antes de cualquier suavizado.
+  prob_pared_inicial: 0.45
+  # Número de pasadas de suavizado (mayoría de vecinos) -- pocas pasadas
+  # dejan ruido reconocible, demasiadas colapsan la cueva en una única
+  # masa compacta sin cavidades interiores.
+  iteraciones_suavizado: 4
+  # Una celda se vuelve pared si tiene este número o más de sus 8 vecinos
+  # (vecindad de Moore) ya como pared.
+  umbral_vecinos_pared: 5
+  # Radio (en celdas) alrededor de la entrada que se fuerza a suelo
+  # caminable ANTES de calcular la componente conexa principal -- evita
+  # que el suavizado selle la entrada por puro azar.
+  radio_garantizado_entrada_celdas: 2

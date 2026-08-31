@@ -299,6 +299,13 @@ def generar_zona_bioma(
     vetas_minerales = generar_vetas_minerales(
         rng, catalogo_materiales, config_generacion_vetas, celdas_piedra, ancho, alto
     )
+    # CÍRCULO 2 de profundidad (2026-08-30): masa inicial IGUAL para toda
+    # celda de veta -- la variación real de tamaño ya viene de cuántas
+    # celdas ocupa cada veta (mancha/filón), no hace falta variar también
+    # el kg por celda.
+    masa_inicial_veta = float(
+        config_generacion_vetas.get("masa_inicial_por_celda_veta_kg", 40.0)
+    )
 
     grid = [[None] * alto for _ in range(ancho)]
     for x in range(ancho):
@@ -311,6 +318,7 @@ def generar_zona_bioma(
 
             tipo_sustrato = tipo_sustrato_por_celda[(x, y)]
             deposito_mineral = vetas_minerales.get((x, y), "")
+            masa_mineral_restante = masa_inicial_veta if deposito_mineral else 0.0
             capacidad_retencion = float(
                 catalogo_materiales.get(tipo_sustrato, {}).get("capacidad_retencion", 0.0)
             )
@@ -334,6 +342,7 @@ def generar_zona_bioma(
                 tipo_recurso=especie_key, tiene_agua=tiene_agua, tipo_agua=tipo_agua,
                 profundidad_agua=profundidad_agua, tipo_sustrato=tipo_sustrato,
                 humedad_subsuelo=humedad_subsuelo, deposito_mineral=deposito_mineral,
+                masa_mineral_restante=masa_mineral_restante,
             )
 
     return ZonaBioma(ancho=ancho, alto=alto, grid=grid)

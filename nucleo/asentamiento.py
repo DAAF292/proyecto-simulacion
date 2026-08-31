@@ -43,7 +43,7 @@ def agrupar_por_proximidad(
     de escalabilidad ya aceptado en el resto del motor
     (contar_conspecificos_cercanos, _buscar_conspecifico_mas_cercano) a
     esta escala de población. NO es el mismo algoritmo que
-    nucleo/materiales.py:_componentes_conexas (flood-fill de celdas
+    nucleo/materiales.py:componentes_conexas (flood-fill de celdas
     contiguas en una máscara de grid) -- aquí los puntos pueden estar
     varias celdas separados entre sí, así que hace falta un grafo por
     distancia, no adyacencia de grid."""

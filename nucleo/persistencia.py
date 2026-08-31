@@ -84,7 +84,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.27-fase0"
+VERSION_ESQUEMA = "0.28-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -294,6 +294,8 @@ class Persistencia:
                     tiene_recurso BOOLEAN NOT NULL,
                     tipo_recurso TEXT NOT NULL,
                     zona_idx INTEGER NOT NULL DEFAULT 0,
+                    deposito_mineral TEXT NOT NULL DEFAULT '',
+                    masa_mineral_restante REAL NOT NULL DEFAULT 0.0,
                     PRIMARY KEY (x, y, zona_idx)
                 )
                 """
@@ -557,10 +559,12 @@ class Persistencia:
                                 celda.tiene_recurso,
                                 celda.tipo_recurso,
                                 zona_idx,
+                                celda.deposito_mineral,
+                                celda.masa_mineral_restante,
                             )
                         )
             cur.executemany(
-                "INSERT INTO celdas_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_celdas
+                "INSERT INTO celdas_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_celdas
             )
 
             # E. Metadatos de ejecución y RNG
@@ -645,9 +649,13 @@ class Persistencia:
             # de mas arriba.
             cur.execute(
                 "SELECT x, y, fertilidad, profundidad_charco, en_llamas, recursos, "
-                "tiene_recurso, tipo_recurso, zona_idx FROM celdas_estado"
+                "tiene_recurso, tipo_recurso, zona_idx, deposito_mineral, "
+                "masa_mineral_restante FROM celdas_estado"
             )
-            for x, y, fert, prof_ch, fuego, rec_json, tiene_rec, tipo_rec, zona_idx in cur.fetchall():
+            for (
+                x, y, fert, prof_ch, fuego, rec_json, tiene_rec, tipo_rec, zona_idx,
+                dep_mineral, masa_mineral,
+            ) in cur.fetchall():
                 if zona_idx >= len(mundo.territorio.zonas):
                     continue
                 celda = mundo.territorio.zonas[zona_idx].obtener_celda(x, y)
@@ -655,6 +663,13 @@ class Persistencia:
                 celda.profundidad_charco = float(prof_ch)
                 celda.en_llamas = bool(fuego)
                 celda.recursos = json.loads(rec_json)
+                # CÍRCULO 2 de profundidad (2026-08-30): deposito_mineral/
+                # masa_mineral_restante son ahora estado mutable de la
+                # partida (una veta agotada por Accion.RECOLECTAR), no
+                # puramente derivable de la semilla -- se restauran igual
+                # que fertilidad/profundidad_charco.
+                celda.deposito_mineral = str(dep_mineral)
+                celda.masa_mineral_restante = float(masa_mineral)
                 # CORRECCIÓN (2026-08-23): tiene_recurso/tipo_recurso tienen
                 # su propio docstring en nucleo/celda.py afirmando "SI se
                 # persiste" -- hasta ahora no había columnas para ellos y se

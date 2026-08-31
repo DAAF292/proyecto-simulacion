@@ -23,6 +23,7 @@ import random
 from typing import Any
 
 from nucleo.bioma import TipoTerreno
+from nucleo.cueva import generar_zona_cueva
 from nucleo.zona_bioma import generar_zona_bioma
 
 
@@ -58,45 +59,45 @@ class Territorio:
         # nada de zonas adicionales.
         self.zonas: list = [zona]
 
-        # CÍRCULO 1 de profundidad (2026-08-30, ver conversación de diseño
-        # con Diego y componentes/posicion.py:zona_idx): una única zona
-        # subterránea de PRUEBA -- zonas[1] -- generada con el mismo
-        # generar_zona_bioma que la superficie, sin bioma/flora/fauna
-        # propios todavía (eso es Círculo 2+). El objetivo de este círculo
-        # es demostrar que el mecanismo de multi-zona funciona de punta a
-        # punta (movimiento, persistencia, aislamiento de percepción), no
-        # todavía diseñar cómo es una cueva de verdad.
+        # CÍRCULO 1 de profundidad (2026-08-30): una única zona subterránea
+        # -- zonas[1] -- anclada bajo una celda de montaña con depósito
+        # mineral. CÍRCULO 2 (2026-08-30, ver nucleo/cueva.py): su
+        # geometría interior ya no reutiliza generar_zona_bioma (el
+        # generador orográfico de la superficie -- cordilleras, viento,
+        # lluvia -- no tiene sentido físico bajo tierra) sino un autómata
+        # celular dedicado, con vetas minerales finitas sembradas en su
+        # propio suelo caminable.
         self.acceso_subterraneo: tuple[int, int] | None = None
         """Celda de superficie (zona 0) que sirve de acceso determinista
         al subsuelo -- la celda de montaña con depósito mineral más
         cercana al centro del mapa entre las candidatas válidas, para que
         la posición no dependa del orden de iteración del grid. None si
         no hay ninguna celda de montaña válida (mapas muy pequeños o sin
-        montaña en esta semilla) -- el subsuelo de prueba simplemente
-        queda inalcanzable, no es un error."""
+        montaña en esta semilla) -- el subsuelo simplemente queda
+        inalcanzable, no es un error."""
         self.entrada_cueva: tuple[int, int] | None = None
         """Celda dentro de zonas[1] (el centro de su grid) donde aparece
-        quien atraviesa acceso_subterraneo desde la superficie."""
+        quien atraviesa acceso_subterraneo desde la superficie --
+        garantizada caminable y conectada al resto de la cueva por
+        generar_zona_cueva (ver nucleo/cueva.py)."""
 
         celda_acceso = self._elegir_acceso_subterraneo(zona, rng)
         if celda_acceso is not None:
             self.acceso_subterraneo = celda_acceso
             ancho_cueva = min(ancho, 12)
             alto_cueva = min(alto, 12)
-            zona_cueva = generar_zona_bioma(
+            entrada_cueva = (ancho_cueva // 2, alto_cueva // 2)
+            zona_cueva = generar_zona_cueva(
                 rng,
-                config["generacion_mapa"],
-                config["bioma"],
-                config["flora"],
-                config["agua"],
+                config["cueva"],
                 config["materiales"],
-                config["sustrato_por_bioma"],
                 config["generacion_vetas"],
                 ancho_cueva,
                 alto_cueva,
+                entrada_cueva,
             )
             self.zonas.append(zona_cueva)
-            self.entrada_cueva = (ancho_cueva // 2, alto_cueva // 2)
+            self.entrada_cueva = entrada_cueva
 
     @staticmethod
     def _elegir_acceso_subterraneo(zona, rng: random.Random) -> tuple[int, int] | None:

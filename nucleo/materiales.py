@@ -82,8 +82,15 @@ def _celdas_filon(
     return celdas
 
 
-def _componentes_conexas(celdas: set) -> list[set]:
+def componentes_conexas(celdas: set) -> list[set]:
     """Agrupa un conjunto de celdas en sus componentes conexas (4-vecindad).
+
+    PROMOVIDA a nombre público (2026-08-30, Círculo 2 de profundidad):
+    dejó de ser privada de este módulo cuando nucleo/cueva.py empezó a
+    reutilizarla para quedarse solo con la componente conexa de HUECO que
+    contiene la entrada de la cueva -- mismo algoritmo genérico de
+    flood-fill por 4-vecindad, sin relación con minerales en sí, así que
+    "reutiliza antes de inventar" pedía exponerla en vez de duplicarla.
 
     Necesario porque _generar_manchas con num_manchas=1 puede devolver un
     resultado que en realidad son VARIOS fragmentos desconectados: si la
@@ -215,12 +222,12 @@ def generar_vetas_minerales(
             # resultado de _generar_manchas que ya sumaba lo suficiente en
             # conjunto (num_manchas=1 puede unir varias semillas
             # desconectadas si la primera queda boxed-in, ver
-            # _componentes_conexas). Cada fragmento se evalúa por
+            # componentes_conexas). Cada fragmento se evalúa por
             # separado: los que no llegan al mínimo se descartan, los que
             # sí llegan se aceptan enteros sin truncar -- mejor pasarse un
             # poco del objetivo total que dejar un resto de una sola
             # celda.
-            for fragmento in _componentes_conexas(celdas_veta):
+            for fragmento in componentes_conexas(celdas_veta):
                 if len(fragmento) < celdas_minimas_por_veta:
                     continue
                 asignadas_este_material |= fragmento

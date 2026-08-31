@@ -1349,3 +1349,99 @@ corregir cuando se aborde el Círculo 4 (ciudades enanas), no antes.
 Ninguna decisión sobre "físicas distintas" (¿sin clima?, ¿modelo de luz/
 oscuridad?, ¿temperatura desacoplada?) está tomada — explícitamente abierta
 para cuando se llegue al círculo correspondiente, no asumida aquí.
+
+### Círculo 2 — geometría real de la cueva + extracción minera real (2026-08-30)
+
+Dos decisiones cerradas con Diego (pregunta directa) antes de escribir
+código, igual que en el Círculo 1:
+
+1. **Vetas finitas**: `deposito_mineral` deja de ser una abstracción
+   infinita como `tipo_sustrato` — cada celda de veta nace con
+   `masa_mineral_restante` (kg) y se agota de verdad al extraerla.
+   Consecuencia directa no anticipada al principio: `deposito_mineral`/
+   `masa_mineral_restante` dejan de ser puramente derivables de la
+   semilla (como decía el docstring original) y pasan a ser estado
+   mutable de la partida — **ahora SÍ se persisten** (`celdas_estado`,
+   esquema `0.28-fase0`).
+2. **Geometría por autómata celular**, no habitaciones+pasillos: relleno
+   aleatorio de pared/hueco + suavizado iterativo por mayoría de vecinos
+   (el método estándar de generación procedimental de cavernas orgánicas).
+
+**Implementado**:
+- `nucleo/cueva.py` (nuevo): `generar_geometria_cueva` hace el autómata
+  celular (parámetros en `config/cueva.yaml`, ninguno calibrado, la
+  parametrización estándar documentada del algoritmo) y garantiza que la
+  entrada sea caminable y pertenezca a la única componente conexa de
+  suelo — se fuerza un radio de hueco alrededor de la entrada ANTES de
+  calcular componentes conexas, y cualquier cavidad aislada del resto
+  (inevitable con autómata celular puro) se vuelve pared. `generar_zona_cueva`
+  construye la `ZonaBioma` completa: suelo caminable con vetas minerales
+  sembradas (reutiliza `nucleo/materiales.py:generar_vetas_minerales` tal
+  cual, sin cambios), paredes impasables.
+- **Paredes sin campo nuevo en `Celda`**: en vez de un booleano
+  `transitable` (que habría exigido tocar movimiento, visor y cualquier
+  búsqueda de celda vecina), una pared es una celda con `elevacion=1.0`
+  frente a `elevacion=0.1` del suelo — reutiliza el mecanismo YA
+  existente de `nucleo/relieve.py:pendiente_maxima_transitable` (tope
+  real calibrado ~0.21), que ya bloqueaba un paso cuya diferencia de
+  elevación superase lo que la fuerza del individuo permite. Ninguna
+  criatura, por fuerte que sea, puede escalar una pared.
+- **Vetas en el suelo, no en las paredes**: minar la pared en sí (que la
+  extracción abra un túnel nuevo, mutando la geometría en plena partida)
+  se descartó a propósito por ser una fuente de complejidad aparte
+  (recalcular conectividad/pathing cada vez que se agota una veta) — el
+  suelo caminable es la única superficie minable, mismo criterio que ya
+  usa la superficie (las vetas de montaña ya viven en celdas caminables,
+  no en un concepto de "pared" que la superficie ni siquiera tiene).
+- `nucleo/materiales.py:_componentes_conexas` promovida a pública
+  (`componentes_conexas`) — reutilizada por `nucleo/cueva.py` para el
+  mismo flood-fill de 4-vecindad, sin duplicar el algoritmo.
+- `sistemas/sistema_recursos.py:_resolver_recolectar` extendida: si la
+  celda actual tiene `deposito_mineral` con masa restante, se extrae eso
+  en vez de `tipo_sustrato`, decrementando la masa y limpiando
+  `deposito_mineral` a `""` al agotarse. **Cero cambios en
+  `sistema_decision.py`**: `Accion.RECOLECTAR` ya gateaba genéricamente
+  por "masa apta de construcción pendiente" y hierro/cobre ya eran
+  `apto_construccion: true` en el catálogo — para la Utility AI, extraer
+  mineral o sustrato es indistinguible, solo cambia qué clave del
+  Inventario crece. Esto también significa que la minería de superficie
+  (vetas de montaña, ya existentes desde el Círculo de materiales
+  físicos) queda extraíble por el mismo camino, sin pieza aparte.
+- `config/materiales.yaml`: `masa_inicial_por_celda_veta_kg` (PROVISIONAL
+  =40.0, sin calibrar) en `generacion_vetas` — una veta típica de 4
+  celdas suma ~160kg extraíbles, del mismo orden de magnitud que
+  `masa_minima_almacen` (60kg).
+
+**Verificado contra el motor real**: geometría comprobada en 5 semillas
+distintas (entrada siempre caminable, suelo siempre una única componente
+conexa, proporción pared/suelo en un rango razonable — ni sala vacía ni
+bloque sólido); extracción real de una veta hasta agotarla por completo
+(40kg en 40 ticks a la tasa configurada, con descargas de inventario
+intermedias porque la capacidad de carga es real y menor que una veta
+entera — igual que ya pasa con `tipo_sustrato`); roundtrip de persistencia
+con una veta parcialmente y totalmente agotada; **500 ticks del pipeline
+completo con un gnomo colocado a mano sobre una veta en `zona_idx=1`, sin
+ninguna excepción**; 3000 ticks de `BOSQUE_AUTO_TICKS` sin intervención
+(verificado que `masa_mineral_restante` se inicializa y persiste
+correctamente en ambas zonas); los 22 tests existentes siguen en verde.
+
+**Deliberadamente fuera de este círculo, sin resolver**: "físicas
+distintas" bajo tierra sigue exactamente igual de abierto que tras el
+Círculo 1 (la cueva no tiene clima propio, hereda el sorteo diario
+genérico); excavar un túnel de verdad (mutar una pared a suelo al agotar
+su veta) no existe; la cueva de prueba sigue siendo un único nivel de
+12×12, sin habitaciones temáticas ni conexión con "grandes ciudades
+enanas"; ningún consumo de tala/siega de madera-fibra-hierba_seca (hueco
+ya señalado en el Círculo de interacción física, sigue igual).
+
+### Qué sigue tras el Círculo 2
+
+1. **Fauna subterránea** ("animales fantásticos", monstruos) como
+   catálogo nuevo de especies, reutilizando rango racial + sorteo
+   individual.
+2. **"Ciudad enana"**: extender `SistemaAsentamiento`/`Construccion` para
+   que funcionen dentro de una cueva — primer paso real sigue siendo
+   corregir el hueco de `almacen_cercano`/`agrupar_por_proximidad` sin
+   filtrar por `zona_idx` (señalado en el Círculo 1, todavía sin tocar).
+3. **Presentación** (`presentacion/vista_web.py`) — deliberadamente sin
+   tocar todavía. Motor primero.

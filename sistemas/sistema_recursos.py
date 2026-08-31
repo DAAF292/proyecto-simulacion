@@ -376,17 +376,39 @@ class SistemaRecursos:
         consumo de camino, fuera del alcance de esta pieza. Hueco
         honesto, señalado, no resuelto aquí (ver conversación de diseño
         con Diego, ejemplo de "techo de paja").
+
+        CÍRCULO 2 de profundidad (2026-08-30, ver nucleo/cueva.py y
+        componentes/celda.py:masa_mineral_restante): si la celda actual
+        tiene una veta de mineral con masa restante, se extrae ESO en vez
+        de tipo_sustrato -- a diferencia del sustrato, la veta es finita y
+        se agota de verdad. Ningún cambio hace falta en sistema_decision.py:
+        RECOLECTAR ya gatea genéricamente por "masa apta de construcción
+        pendiente" (nucleo/construccion.py:material_suficiente_para),
+        hierro/cobre ya son apto_construccion=true en el catálogo -- para
+        la Utility AI, extraer mineral o sustrato es indistinguible, solo
+        cambia qué clave del Inventario crece.
         """
         if inv is None or dims is None:
             return
+        espacio = espacio_disponible_kg(inv.contenidos, dims.peso, self.fraccion_carga_maxima)
+        if espacio <= 0.0:
+            return
+
+        if celda.deposito_mineral and celda.masa_mineral_restante > 0.0:
+            material = celda.deposito_mineral
+            cantidad = min(self.tasa_recoleccion, espacio, celda.masa_mineral_restante)
+            inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
+            celda.masa_mineral_restante -= cantidad
+            if celda.masa_mineral_restante <= 0.0:
+                celda.masa_mineral_restante = 0.0
+                celda.deposito_mineral = ""
+            return
+
         material = celda.tipo_sustrato
         if not material:
             return
         info = self.catalogo_materiales.get(material, {})
         if not info.get("apto_construccion", False):
-            return
-        espacio = espacio_disponible_kg(inv.contenidos, dims.peso, self.fraccion_carga_maxima)
-        if espacio <= 0.0:
             return
         cantidad = min(self.tasa_recoleccion, espacio)
         inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
