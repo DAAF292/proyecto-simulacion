@@ -13,6 +13,7 @@ import random
 from typing import Any
 
 from componentes.capacidad_mental import CapacidadMental
+from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
@@ -30,7 +31,9 @@ from componentes.gestacion import Gestacion
 from componentes.reproduccion import Reproduccion
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
-from nucleo.construccion import objetivo_construccion_actual
+from nucleo.asentamiento import asentamiento_de
+from nucleo.conflicto import ResultadoDisputa, resolver_disputa
+from nucleo.construccion import construccion_propia, objetivo_construccion_actual
 from nucleo.entidad import GestorEntidades, crear_construccion
 from nucleo.memoria import objetivo_recordado
 from nucleo.mundo import Mundo
@@ -92,6 +95,14 @@ class SistemaMovimiento:
         self.radio_cluster_asentamiento: int = int(
             self.config.get("asentamiento", {}).get("radio_cluster_celdas", 6)
         )
+        # Conflicto por refugio ocupado (2026-08-30, ver nucleo/conflicto.py).
+        self.config_conflicto: dict[str, Any] = self.config.get("conflicto", {})
+        self.drenaje_seguridad_perdedor: float = float(
+            self.config_conflicto.get("drenaje_seguridad_perdedor", 0.3)
+        )
+        self.drenaje_seguridad_enfrentamiento: float = float(
+            self.config_conflicto.get("drenaje_seguridad_enfrentamiento", 0.2)
+        )
 
         # Coste de forrajeo vs. beneficio (2026-08-23, pregunta de Diego:
         # "un lobo intenta depredar una mosca si se introduce" -- ver
@@ -152,7 +163,7 @@ class SistemaMovimiento:
 
             if accion == Accion.DORMIR:
                 dx, dy = self._calcular_dormir(
-                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
+                    gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental, temperamento
                 )
             elif accion == Accion.HUIR:
                 dx, dy = self._calcular_huida(gestor, zona, eid, pos.x, pos.y, dims.peso, radio)
@@ -734,6 +745,7 @@ class SistemaMovimiento:
     def _calcular_dormir(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
         entidad_id: int,
         especie: Especie,
         pos_x: int,
@@ -789,6 +801,10 @@ class SistemaMovimiento:
                 dist = abs(objetivo_refugio[0] - pos_x) + abs(objetivo_refugio[1] - pos_y)
                 if dist > self.dist_deseada_territorio:
                     return self._acercarse_a(pos_x, pos_y, *objetivo_refugio)
+                if temperamento is not None:
+                    self._resolver_posible_intruso(
+                        gestor, mundo, entidad_id, pos_x, pos_y, temperamento
+                    )
                 return (0, 0)
 
         if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
@@ -801,6 +817,113 @@ class SistemaMovimiento:
                     return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
 
         return (0, 0)
+
+    def _resolver_posible_intruso(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        propietario_id: int,
+        pos_x: int,
+        pos_y: int,
+        temperamento: Temperamento,
+    ) -> None:
+        """
+        CONFLICTO POR REFUGIO OCUPADO -- primer consumidor de
+        nucleo/conflicto.py (2026-08-30, ver conversación de diseño con
+        Diego: "no es el hecho de poder o no poder [entrar]... esa
+        acción deberá tener una consecuencia. ¿qué hace el gnomo
+        propietario si llega y se encuentra a otro en su refugio?").
+        Solo aplica a un refugio CONSTRUIDO propio y ya habitado alguna
+        vez (Construccion real con completado_alguna_vez, no un punto de
+        memoria instintivo sin dueño) -- un refugio instintivo es solo
+        un sitio vacío recordado, no hay nada que "ocupar" en sentido de
+        propiedad. Nada impide físicamente a otro gnomo o a un animal
+        entrar (es una construcción sencilla, sin cerradura) -- esta
+        función no capa esa posibilidad, solo le da consecuencia.
+
+        No desplaza al intruso directamente: esta función resuelve el
+        movimiento de UNA sola entidad por iteración (el propietario),
+        no puede mover a otra desde aquí. La consecuencia de perder es
+        un drenaje de Necesidades.seguridad -- el MISMO campo que ya
+        drena cualquier amenaza (nucleo/amenaza.py) -- que sube la
+        utilidad_huir del perdedor en su propia próxima decisión: el
+        perdedor tiende a irse por su cuenta a través del mecanismo de
+        huida ya existente, sin teletransportarlo desde aquí.
+        """
+        cid = construccion_propia(gestor, propietario_id, "refugio")
+        if cid is None:
+            return
+        con_pos = gestor.obtener_componente(cid, Posicion)
+        construccion = gestor.obtener_componente(cid, Construccion)
+        if (
+            con_pos is None
+            or construccion is None
+            or not construccion.completado_alguna_vez
+            or con_pos.x != pos_x
+            or con_pos.y != pos_y
+        ):
+            return
+
+        intruso_id: int | None = None
+        for otro_id in gestor.entidades_con(Posicion, Temperamento, Identidad):
+            if otro_id == propietario_id:
+                continue
+            pos_otro = gestor.obtener_componente(otro_id, Posicion)
+            if pos_otro is not None and pos_otro.x == pos_x and pos_otro.y == pos_y:
+                intruso_id = otro_id
+                break
+        if intruso_id is None:
+            return
+
+        temperamento_intruso = gestor.obtener_componente(intruso_id, Temperamento)
+        if temperamento_intruso is None:
+            return
+
+        nec_propietario = gestor.obtener_componente(propietario_id, Necesidades)
+        nec_intruso = gestor.obtener_componente(intruso_id, Necesidades)
+        urgencia_propietario = 1.0 - (nec_propietario.seguridad if nec_propietario else 1.0)
+        urgencia_intruso = 1.0 - (nec_intruso.seguridad if nec_intruso else 1.0)
+
+        asen_propietario = asentamiento_de(mundo, propietario_id)
+        mismo_grupo = asen_propietario is not None and intruso_id in asen_propietario.miembros
+
+        resultado = resolver_disputa(
+            temperamento,
+            urgencia_propietario,
+            temperamento_intruso,
+            urgencia_intruso,
+            mismo_grupo,
+            self.config_conflicto,
+        )
+
+        if resultado == ResultadoDisputa.COMPARTE:
+            return
+        if resultado == ResultadoDisputa.CEDE_B:
+            # El intruso cede: el propietario se impone, el intruso paga
+            # el coste de la intimidación.
+            if nec_intruso is not None:
+                nec_intruso.seguridad = max(
+                    0.0, nec_intruso.seguridad - self.drenaje_seguridad_perdedor
+                )
+            return
+        if resultado == ResultadoDisputa.CEDE_A:
+            # El propietario cede en su propio refugio: paga el coste,
+            # no lo reclama de verdad este tick.
+            if nec_propietario is not None:
+                nec_propietario.seguridad = max(
+                    0.0, nec_propietario.seguridad - self.drenaje_seguridad_perdedor
+                )
+            return
+        # ENFRENTAMIENTO: empate reñido entre dos partes asertivas,
+        # ambos pagan el coste del enfrentamiento.
+        if nec_propietario is not None:
+            nec_propietario.seguridad = max(
+                0.0, nec_propietario.seguridad - self.drenaje_seguridad_enfrentamiento
+            )
+        if nec_intruso is not None:
+            nec_intruso.seguridad = max(
+                0.0, nec_intruso.seguridad - self.drenaje_seguridad_enfrentamiento
+            )
 
     def _calcular_construir(
         self,
