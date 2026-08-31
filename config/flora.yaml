@@ -148,6 +148,18 @@ flora:
           tasa_regeneracion: 0.4
           valor_nutricional: 0.12
           valor_hidratacion: 0.12
+        # hierba_seca (2026-08-31, propuesta de Diego: "arrancan hierba
+        # directamente sin mecanismos complejos de siega") -- MISMO
+        # patrón que madera/fibra abajo: material recolectable producido
+        # por la propia planta madura, sin destruir la Planta ni
+        # necesitar una acción de siega dedicada. capacidad_maxima/
+        # tasa_regeneracion PROVISIONALES, mismo orden de magnitud que
+        # "hierba" (alimento) de esta misma especie -- sin calibrar
+        # contra el motor en marcha.
+        - nombre: hierba_seca
+          categoria: material
+          capacidad_maxima: 6.0
+          tasa_regeneracion: 0.15
     manzano:
       biomas: [bosque]
       celdas_por_mancha_objetivo: 10
@@ -163,8 +175,17 @@ flora:
           tasa_regeneracion: 0.2
           valor_nutricional: 0.4
           valor_hidratacion: 0.15
+        # madera (2026-08-31, propuesta de Diego: "los árboles dejan
+        # caer ramas que los gnomos recogen") -- ya declarada desde el
+        # círculo de materiales físicos, sin capacidad_maxima/
+        # tasa_regeneracion hasta hoy (por eso sistema_flora.py la
+        # ignoraba). Ritmo deliberadamente más lento que las manzanas de
+        # esta misma especie (0.2/día) -- una rama caída es un recurso
+        # más escaso que la fruta. PROVISIONAL, sin calibrar.
         - nombre: madera
           categoria: material
+          capacidad_maxima: 6.0
+          tasa_regeneracion: 0.1
     cactus:
       biomas: [desierto]
       celdas_por_mancha_objetivo: 3
@@ -180,8 +201,13 @@ flora:
           tasa_regeneracion: 0.15
           valor_nutricional: 0.35
           valor_hidratacion: 0.2
+        # fibra (2026-08-31): ya declarada desde el círculo de
+        # materiales físicos, sin numérica hasta hoy -- mismo criterio
+        # que madera arriba. PROVISIONAL, sin calibrar.
         - nombre: fibra
           categoria: material
+          capacidad_maxima: 4.0
+          tasa_regeneracion: 0.1
     liquen:
       biomas: [montana]
       celdas_por_mancha_objetivo: 12

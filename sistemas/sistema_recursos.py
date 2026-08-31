@@ -370,12 +370,18 @@ class SistemaRecursos:
         espacio_disponible_kg). Sin desplazamiento: se resuelve donde ya
         se está, el sustrato está bajo los pies de cualquiera.
 
-        Deliberadamente LIMITADO a sustrato: madera/fibra/hierba_seca son
-        depósitos que debería generar un sistema de tala/siega de flora
-        que no existe todavía -- recolectarlos hoy exigiría inventar ese
-        consumo de camino, fuera del alcance de esta pieza. Hueco
-        honesto, señalado, no resuelto aquí (ver conversación de diseño
-        con Diego, ejemplo de "techo de paja").
+        MADERA/FIBRA/HIERBA_SECA (2026-08-31, propuesta de Diego: "los
+        árboles dejan caer ramas que los gnomos recogen o arrancan
+        hierba directamente sin mecanismos complejos de tala y siega").
+        sistema_flora.py ya deposita estos materiales en Celda.recursos
+        con el MISMO mecanismo de producción diaria que ya usa la comida
+        (madera bajo manzano, fibra bajo cactus, hierba_seca bajo
+        hierba_silvestre) -- aquí solo hace falta recogerlos, sin ninguna
+        acción de tala/siega que destruya la Planta. Genérico por
+        catálogo, no una lista de nombres fija: cualquier clave de
+        Celda.recursos que sea un material apto_construccion cuenta,
+        igual que el resto del motor decide qué es "apto" consultando
+        config/materiales.yaml en vez de comprobar nombres a mano.
 
         CÍRCULO 2 de profundidad (2026-08-30, ver nucleo/cueva.py y
         componentes/celda.py:masa_mineral_restante): si la celda actual
@@ -385,8 +391,14 @@ class SistemaRecursos:
         RECOLECTAR ya gatea genéricamente por "masa apta de construcción
         pendiente" (nucleo/construccion.py:material_suficiente_para),
         hierro/cobre ya son apto_construccion=true en el catálogo -- para
-        la Utility AI, extraer mineral o sustrato es indistinguible, solo
-        cambia qué clave del Inventario crece.
+        la Utility AI, extraer mineral, madera o sustrato es indistinguible,
+        solo cambia qué clave del Inventario crece.
+
+        Orden de prioridad dentro de esta única celda -- mineral (más
+        escaso y finito) > material de flora (finito por día, regenera) >
+        sustrato (siempre disponible, nunca se agota): ninguna Utility AI
+        lo decide, es simplemente qué hay de más a menos especial en el
+        sitio donde ya se está.
         """
         if inv is None or dims is None:
             return
@@ -402,6 +414,17 @@ class SistemaRecursos:
             if celda.masa_mineral_restante <= 0.0:
                 celda.masa_mineral_restante = 0.0
                 celda.deposito_mineral = ""
+            return
+
+        for nombre, cantidad_disponible in celda.recursos.items():
+            if cantidad_disponible <= 0.0:
+                continue
+            info = self.catalogo_materiales.get(nombre, {})
+            if not info.get("apto_construccion", False):
+                continue
+            cantidad = min(self.tasa_recoleccion, espacio, cantidad_disponible)
+            inv.contenidos[nombre] = inv.contenidos.get(nombre, 0.0) + cantidad
+            celda.recursos[nombre] = cantidad_disponible - cantidad
             return
 
         material = celda.tipo_sustrato

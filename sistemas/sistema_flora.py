@@ -191,7 +191,27 @@ class SistemaFlora:
             agotada_hoy = False
             recursos_catalogo = cfg_esp.get("recursos", [])
             for rec in recursos_catalogo:
-                if rec.get("categoria") != "alimento":
+                categoria = rec.get("categoria")
+                # RECOLECCIÓN DE MADERA/FIBRA/HIERBA_SECA (2026-08-31,
+                # propuesta de Diego: "los árboles dejan caer ramas que
+                # los gnomos recogen o arrancan hierba directamente, sin
+                # mecanismos complejos de tala y siega"). Antes este
+                # bucle solo producía "alimento" -- categoria "material"
+                # (madera en manzano, fibra en cactus, ya declaradas en
+                # config/flora.yaml desde el círculo de materiales
+                # físicos, "sin consumidor mecánico" hasta hoy) se
+                # ignoraba por completo. MISMA fórmula de producción que
+                # ya usa el alimento (tasa_regeneracion * eficiencia_total,
+                # mismo desbordamiento a mantillo al llenarse) -- una
+                # rama caída o hierba seca es tan "biomasa producida por
+                # la planta" como una manzana, no hace falta un mecanismo
+                # de tala/siega separado. La única diferencia real: el
+                # material NO cuenta para el chequeo de sobreforrajeo
+                # (agotada_hoy, más abajo) -- ese concepto mide presión de
+                # SUBSISTENCIA (comida), quedarse sin ramas que recoger no
+                # es hambre y no debería hacer retroceder la planta a
+                # brote.
+                if categoria not in ("alimento", "material"):
                     continue
 
                 nombre_rec = rec.get("nombre", "")
@@ -199,7 +219,7 @@ class SistemaFlora:
                 tasa_reg = float(rec.get("tasa_regeneracion", 0.5))
 
                 cant_actual = celda.recursos.get(nombre_rec, 0.0)
-                if cant_actual <= 0.0:
+                if categoria == "alimento" and cant_actual <= 0.0:
                     agotada_hoy = True
                 incremento = tasa_reg * eficiencia_total
 
