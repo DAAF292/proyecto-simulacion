@@ -426,6 +426,7 @@ class Persistencia:
         reloj: Reloj,
         rng_juego: random.Random,
         semilla: int,
+        rng_reproduccion: random.Random,
     ) -> None:
         """Serializa el estado completo en una transacción atómica.
 
@@ -627,6 +628,10 @@ class Persistencia:
                 "REPLACE INTO configuracion_ejecucion VALUES ('rng_juego_state', ?)",
                 (pickle.dumps(rng_juego.getstate()),),
             )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('rng_reproduccion_state', ?)",
+                (pickle.dumps(rng_reproduccion.getstate()),),
+            )
 
             con.commit()
 
@@ -637,6 +642,7 @@ class Persistencia:
         reloj: Reloj,
         rng_juego: random.Random,
         semilla: int,
+        rng_reproduccion: random.Random,
     ) -> bool:
         """Restaura el estado completo desde la base de datos.
 
@@ -688,6 +694,11 @@ class Persistencia:
             fila_rng = cur.fetchone()
             if fila_rng:
                 rng_juego.setstate(pickle.loads(fila_rng[0]))
+
+            cur.execute("SELECT valor FROM configuracion_ejecucion WHERE clave = 'rng_reproduccion_state'")
+            fila_rng_reproduccion = cur.fetchone()
+            if fila_rng_reproduccion:
+                rng_reproduccion.setstate(pickle.loads(fila_rng_reproduccion[0]))
 
             # Limpiar gestor en memoria
             for eid in list(gestor.entidades_con(Posicion)):

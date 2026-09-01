@@ -94,8 +94,16 @@ def cargar_configuracion(ruta_config: Path) -> dict[str, Any]:
 def instanciar_sistemas(
     config: dict[str, Any],
     rng_juego: random.Random,
+    rng_reproduccion: random.Random,
 ) -> dict[str, Any]:
-    """Instancia todos los sistemas del motor inyectando configuración y generador determinista."""
+    """Instancia todos los sistemas del motor inyectando configuración y generador determinista.
+
+    rng_reproduccion (2026-09-02, ver CLAUDE.md): generador PROPIO e
+    independiente de rng_juego para SistemaReproduccion -- mismo patrón
+    que rng_mapa ya usa para separar la generación de terreno del resto
+    del motor. Evita que cambiar cuántas tiradas de random() consume la
+    reproducción desplace la secuencia que consumen los demás sistemas.
+    """
     return {
         "decision": SistemaDecision(config, rng_juego),
         "movimiento": SistemaMovimiento(config, rng_juego),
@@ -105,7 +113,7 @@ def instanciar_sistemas(
         "necesidades": SistemaNecesidades(config, rng_juego),
         "capacidad_fisica": SistemaCapacidadFisica(config),
         "capacidad_mental": SistemaCapacidadMental(config),
-        "reproduccion": SistemaReproduccion(config, rng_juego),
+        "reproduccion": SistemaReproduccion(config, rng_reproduccion),
         "clima": SistemaClima(config, rng_juego),
         "descomposicion": SistemaDescomposicion(config, rng_juego),
         "flora": SistemaFlora(config, rng_juego),
@@ -359,6 +367,10 @@ def main() -> None:
     semilla = config.get("semilla_por_defecto", 42)
     rng_mapa = random.Random(semilla)
     rng_juego = random.Random(semilla)
+    # rng_reproduccion (2026-09-02, ver CLAUDE.md): mismo patrón que
+    # rng_mapa -- generador independiente sembrado con la misma semilla,
+    # para que sistema_reproduccion.py no comparta flujo con rng_juego.
+    rng_reproduccion = random.Random(semilla)
 
     reloj = Reloj()
     bus_eventos = BusEventos()
@@ -382,13 +394,13 @@ def main() -> None:
     continuar_partida = os.environ.get("BOSQUE_CONTINUAR") == "1"
     partida_restaurada = False
     if continuar_partida:
-        partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
+        partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego, semilla, rng_reproduccion)
 
     if not partida_restaurada:
         sembrar_poblacion_inicial(gestor, mundo, config, rng_juego, persistencia)
         sembrar_flora_inicial(gestor, mundo, config, rng_juego)
 
-    sistemas = instanciar_sistemas(config, rng_juego)
+    sistemas = instanciar_sistemas(config, rng_juego, rng_reproduccion)
 
     persistencia_cfg = config.get("persistencia", {})
     # PROVISIONAL (2026-08-23): cadencia de autoguardado sin calibrar
@@ -443,7 +455,7 @@ def main() -> None:
             bus_eventos.limpiar()
 
             if guardar_cada_ticks > 0 and reloj.tick_actual % guardar_cada_ticks == 0:
-                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
+                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla, rng_reproduccion)
 
     except KeyboardInterrupt:
         pass
@@ -455,7 +467,7 @@ def main() -> None:
         # guardado, un autoguardado periódico que aún no llegó a su
         # cadencia dejaría la BD desactualizada respecto al último estado
         # real simulado.
-        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla)
+        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla, rng_reproduccion)
 
 
 if __name__ == "__main__":
