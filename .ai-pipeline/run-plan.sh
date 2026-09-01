@@ -134,7 +134,22 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # `- Modify:`/`- Create:`/`- Test:` del bloque **Files:** de cada
     # tarea -- la convención real que ya usa la skill writing-plans, sin
     # falsos positivos de prosa.
-    ARCHIVOS_PLAN=$(grep -oE '\- (Modify|Create|Test): `[A-Za-z0-9_./-]+\.(py|yaml|yml|md)`' "docs/plans/in_progress/$PLAN_NAME.md" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)
+    #
+    # CORRECCIÓN (2026-09-01, hallazgo real de code-review sobre esta
+    # misma línea, antes de que hiciera daño): la extensión reconocida
+    # estaba restringida a py|yaml|yml|md -- inofensivo mientras esta
+    # lista solo era un hint suave para --file, pero pasó a alimentar
+    # también la limpieza DESTRUCTIVA de ficheros basura (más abajo, ver
+    # "LIMPIEZA DE FICHEROS NO DECLARADOS"), que borra cualquier fichero
+    # nuevo que no aparezca aquí. Con la lista vieja, un plan que
+    # legítimamente declarara un `.json`/`.sh`/`.toml`/`.mjs` (p.ej. los
+    # arneses de presentacion/arnes/) se habría borrado por su cuenta.
+    # El prefijo `- Modify/Create/Test: ` ya filtra la prosa por sí solo
+    # (motivo real de la corrección de 2026-09-02, arriba) -- la
+    # restricción de extensión ya no aporta protección extra y solo
+    # puede hacer daño ahora que la lista es también un whitelist. Se
+    # amplía a cualquier extensión alfanumérica.
+    ARCHIVOS_PLAN=$(grep -oE '\- (Modify|Create|Test): `[A-Za-z0-9_./-]+\.[A-Za-z0-9]+`' "docs/plans/in_progress/$PLAN_NAME.md" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)
     ARCHIVOS_ARGS=()
     for f in $ARCHIVOS_PLAN; do
         ARCHIVOS_ARGS+=(--file "$f")
