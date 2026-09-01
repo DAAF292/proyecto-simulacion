@@ -3,11 +3,16 @@ cd "$(dirname "$0")/.."
 
 echo "=== ARRANCANDO SISTEMA DE IA AUTÓNOMA ==="
 
-# 0. Asegurar que Tailscale está activo en segundo plano
+# 0. Asegurar que Tailscale y SSH están activos en segundo plano
 if ! tailscale status > /dev/null 2>&1; then
     echo "[*] Iniciando servicio de Tailscale..."
     sudo service tailscaled start > /dev/null 2>&1 || true
     tailscale up --qr > /dev/null 2>&1 || true
+fi
+
+if ! pgrep -x "sshd" > /dev/null; then
+    echo "[*] Arrancando servidor SSH..."
+    sudo service ssh start > /dev/null 2>&1 || true
 fi
 
 # 1. Comprobar y arrancar LiteLLM Proxy si no está activo
@@ -28,4 +33,4 @@ else
 fi
 
 echo "=== ¡SISTEMA OPERATIVO Y VIGILANDO! ==="
-echo "Acceso remoto por Tailscale activo. Puedes crear planes y se procesarán automáticamente."
+echo "Acceso SSH remoto listo. Puedes crear planes y se procesarán automáticamente."

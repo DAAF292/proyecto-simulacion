@@ -1,0 +1,32 @@
+Traceback (most recent call last):
+  File "/home/diego/.local/bin/litellm", line 6, in <module>
+    sys.exit(run_server())
+             ~~~~~~~~~~^^
+  File "/home/diego/.local/share/pipx/venvs/litellm/lib/python3.14/site-packages/click/core.py", line 1631, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/diego/.local/share/pipx/venvs/litellm/lib/python3.14/site-packages/click/core.py", line 1552, in main
+    rv = self.invoke(ctx)
+  File "/home/diego/.local/share/pipx/venvs/litellm/lib/python3.14/site-packages/click/core.py", line 1415, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/diego/.local/share/pipx/venvs/litellm/lib/python3.14/site-packages/click/core.py", line 910, in invoke
+    return callback(*args, **kwargs)
+  File "/home/diego/.local/share/pipx/venvs/litellm/lib/python3.14/site-packages/litellm/proxy/proxy_cli.py", line 1136, in run_server
+    _config: Final = asyncio.run(proxy_config.get_config(config_file_path=config))
+                     ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/diego/.local/share/pipx/venvs/litellm/lib/python3.14/site-packages/litellm/proxy/proxy_server.py", line 4626, in get_config
+    config = await self._get_config_from_file(config_file_path=config_file_path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/diego/.local/share/pipx/venvs/litellm/lib/python3.14/site-packages/litellm/proxy/proxy_server.py", line 4258, in _get_config_from_file
+    raise Exception(f"Config file not found: {file_path}")
+Exception: Config file not found: .ai-pipeline/litellm_config.yaml
