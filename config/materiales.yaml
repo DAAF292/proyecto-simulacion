@@ -102,23 +102,11 @@ materiales:
     categoria: mineral
     forma_en_mundo: sustrato
     densidad_kg_m3: 2700
-    dureza: 0.9.
-    taa_infiltracion: 0.05
+    dureza: 0.9
+    tasa_infiltracion: 0.05
     capacidad_retencion: 0.05
     combustibilidad: 0.0
     apto_construccion: true
-    # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
-    # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
-    # ninguna capacidad de sostener vegetación por sí misma.
-    fertilidad_base: 0.0
-    # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
-    # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
-    # ninguna capacidad de sostener vegetación por sí mismа.
-    fertilidad_base: 0.0
-    # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
-    # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
-    # ninguna capacidad de sostener vegetación por sí misma.
-    fertilidad_base: 0.0
     # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
     # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
     # ninguna capacidad de sostener vegetación por sí misma.
@@ -132,12 +120,6 @@ materiales:
     capacidad_retencion: 0.8
     combustibilidad: 0.0
     apto_construccion: true
-    # fertilidad_base: vega fértil de bosque/pradera -- ya lo era
-    # conceptualmente antes de este campo, ahora es un número real.
-    fertilidad_base: 0.5
-    # fertilidad_base: vega fértil de bosque/pradera -- ya lo era
-    # conceptualmente antes de este campo, ahora es un número real.
-    fertilidad_base: 0.5
     # fertilidad_base: vega fértil de bosque/pradera -- ya lo era
     # conceptualmente antes de este campo, ahora es un número real.
     fertilidad_base: 0.5
@@ -166,11 +148,11 @@ materiales:
     forma_en_mundo: sustrato
     densidad_kg_m3: 1300
     dureza: 0.15
-    taa_infiltracion: 0.4
+    tasa_infiltracion: 0.4
     capacidad_retencion: 0.35
     combustibilidad: 0.0
     apto_construccion: true
-    # fertilidad_base: suelo pobre y suelo de tundra -- por encima de
+    # fertilidad_base: suelo pobre y suelto de tundra -- por encima de
     # arena, muy por debajo de una vega real.
     fertilidad_base: 0.15
 
