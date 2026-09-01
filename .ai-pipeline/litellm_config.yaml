@@ -53,6 +53,24 @@ model_list:
       # pero es un techo duro real donde antes no había ninguno.
       max_budget: 0.10
       budget_duration: "1d"
+    # model_info (2026-09-02, hallazgo real -- tercer problema encontrado
+    # durante la primera prueba real del pipeline, distinto de los dos ya
+    # corregidos arriba): litellm no tiene en su tabla interna de costes
+    # ningún registro para "deepseek/deepseek-v4-flash-0731" (aviso
+    # repetido en cada llamada: "Unknown context window size and costs,
+    # using sane defaults") -- sin esto, aider tampoco sabe el
+    # max_input_tokens real del modelo. Hipótesis a probar: con ese dato
+    # ausente, aider podría estar recortando o gestionando mal el
+    # ensamblado del prompt final (el modelo, en repetidas pruebas reales,
+    # afirmaba no tener acceso al contenido de main.py/nucleo/persistencia.py
+    # pese a que aider confirmaba haberlos añadido al chat). Valores
+    # tomados del catálogo real de OpenRouter (GET
+    # https://openrouter.ai/api/v1/models), no inventados.
+    model_info:
+      max_input_tokens: 1310720
+      max_output_tokens: 1310720
+      input_cost_per_token: 0.000000065
+      output_cost_per_token: 0.00000018
 
 # drop_params (2026-09-01, pedido por Diego): descarta parámetros que el
 # proveedor de destino no soporta en vez de fallar la llamada entera --

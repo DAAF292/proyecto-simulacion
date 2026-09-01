@@ -1,0 +1,36 @@
+# Metadatos de modelo para aider (2026-09-02, hallazgo real: bucle de
+# razonamiento no convergente en la primera tarea real dada a
+# "agente-obrero"). Diego cuestionó con razón que el fallo fuera del
+# modelo -- se investigó antes de aceptar esa conclusión, y NO lo era.
+#
+# CAUSA RAÍZ REAL: aider/models.py resuelve la temperatura de la llamada
+# por coincidencia de patrones sobre el NOMBRE del modelo (ver
+# ModelSettings/register_models en el propio aider instalado). Modelos de
+# razonamiento YA CONOCIDOS por aider (QwQ-32b, Qwen3-235b) reciben
+# use_temperature=0.6/0.7 a propósito -- exactamente para evitar bucles
+# de repetición, un problema ya conocido y documentado de la propia
+# comunidad de aider para este tipo de modelo con muestreo greedy. Nuestro
+# alias "openai/agente-obrero" no coincide con ningún patrón conocido, así
+# que cae al default genérico (use_temperature=True -> se traduce en
+# temperature=0, muestreo greedy puro) -- la causa real y verificada del
+# bucle, no una limitación del modelo en sí. Con este fichero, aider
+# aplica a nuestro alias el MISMO tratamiento que ya da a otros modelos de
+# razonamiento conocidos.
+- name: openai/agente-obrero
+  edit_format: diff
+  use_temperature: 0.6
+  # examples_as_sys_msg (2026-09-02, segundo hallazgo real, distinto del
+  # de la temperatura): por defecto (false) aider inyecta su ejemplo de
+  # demostración fijo (el clásico "Change get_factorial() to use
+  # math.factorial" de aider/coders/editblock_prompts.py) como turnos
+  # role=user/role=assistant SUELTOS, estructuralmente IDÉNTICOS a una
+  # conversación real -- deepseek-v4-flash-0731 lo confundió con contexto
+  # genuino en dos intentos reales, llegando a proponer ediciones contra
+  # `mathweb/flask/app.py` (un fichero que no existe en este repo, parte
+  # literal del ejemplo) en vez de los ficheros reales que se le pasaron.
+  # Con true, aider mete el ejemplo DENTRO del propio system prompt bajo
+  # un encabezado explícito "# Example conversations:" -- exactamente el
+  # tratamiento que aider ya da a QwQ-32b por el mismo motivo (ver
+  # aider/models.py). Separación textual clara entre "esto es solo un
+  # ejemplo de formato" y la conversación real.
+  examples_as_sys_msg: true

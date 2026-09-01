@@ -104,10 +104,23 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # un modelo atascado así cuelga el intento entero indefinidamente en
     # vez de fallar y liberar el reintento siguiente -- 8 minutos es
     # generoso para una tarea de este tamaño (el intento que sí generaba
-    # texto tardaba bajo 1 minuto) pero corta un cuelgue real.
+    # texto tardaba bajo 1 minuto) pero corta un cuelgue real. CAUSA RAÍZ
+    # REAL de ese bucle (2026-09-02, Diego cuestionó con razón que fuera
+    # el modelo -- se investigó antes de aceptar esa conclusión):
+    # aider/models.py resuelve la temperatura por coincidencia de patrones
+    # sobre el NOMBRE del modelo -- modelos de razonamiento YA CONOCIDOS
+    # por aider (QwQ-32b, Qwen3-235b) reciben use_temperature=0.6/0.7 a
+    # propósito, precisamente para evitar bucles de repetición con
+    # muestreo greedy. Nuestro alias "openai/agente-obrero" no coincide
+    # con ningún patrón conocido y caía al default genérico
+    # (use_temperature=True -> temperature=0, greedy puro) -- la causa
+    # real del bucle, no una limitación del modelo. --model-settings-file
+    # (.ai-pipeline/aider-model-settings.yml) le da a nuestro alias el
+    # MISMO tratamiento que aider ya da a otros modelos de razonamiento.
     set +e
     timeout 480 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy aider \
           --model openai/agente-obrero \
+          --model-settings-file .ai-pipeline/aider-model-settings.yml \
           --edit-format diff \
           --read "docs/plans/in_progress/$PLAN_NAME.md" \
           "${ARCHIVOS_ARGS[@]}" \
