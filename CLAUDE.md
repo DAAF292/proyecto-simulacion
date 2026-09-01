@@ -2321,3 +2321,124 @@ defensa general -- deliberadamente distinto de `"piedra_suelta"`
 (propósito de fuego), sin que esto sea confuso en la práctica porque son
 claves de cadena distintas, pero merece quedar anotado por si una sesión
 futura confunde ambos conceptos de "piedra".
+
+## Pipeline autónomo -- primera prueba real de extremo a extremo, tres
+## hallazgos reales sobre el modelo `agente-obrero` (2026-09-02)
+
+Contexto: el pipeline autónomo (`.ai-pipeline/`, centinela +
+`run-plan.sh` + `aider` vía proxy LiteLLM local, alias `agente-obrero`)
+se configuró y se corrigió de varios fallos de infraestructura en una
+sesión anterior (rama `feature/2026-09-01-armas-fabricadas`, PR #1, sin
+mergear todavía -- esa rama documenta el incidente original: un primer
+intento del pipeline abrió un PR sin ninguna implementación real porque
+el proxy nunca llegó a arrancar). Esta sesión, ya en `master`, hizo la
+**primera prueba real de punta a punta** con un plan minúsculo y de bajo
+riesgo (fix de una línea: `entidades.viva` nunca se actualizaba al
+morir, ver más abajo) -- deliberadamente elegido como prueba de humo del
+pipeline, no como pieza de diseño.
+
+**Modelo `agente-obrero`**: `openrouter/deepseek/deepseek-v4-flash-0731`
+(decisión de Diego, ver commits `dd31a3b`/`67f57af`).
+
+**Hallazgo 1 -- bucle de razonamiento no convergente, causa raíz
+verificada, NO era el modelo**. Al primer intento real, el modelo se
+quedó atascado repitiendo el mismo párrafo de razonamiento cientos de
+veces sin converger nunca a una respuesta. Diego cuestionó con razón que
+un modelo con buena puntuación pudiera fallar así ("tiene que ser
+problema de nuestro flujo") -- se investigó antes de aceptar "el modelo
+es poco fiable" como conclusión, y tenía razón: `aider/models.py`
+resuelve la temperatura de la llamada por coincidencia de patrones sobre
+el NOMBRE del modelo -- modelos de razonamiento ya conocidos por aider
+(QwQ-32b, Qwen3-235b) reciben `use_temperature=0.6/0.7` a propósito,
+precisamente para evitar bucles de repetición con muestreo greedy nuestro
+alias `openai/agente-obrero` no coincidía con ningún patrón conocido y
+caía al default genérico (`use_temperature=True` -> `temperature=0`,
+greedy puro) -- la causa real y demostrada del bucle. Corregido con
+`.ai-pipeline/aider-model-settings.yml` (`--model-settings-file`),
+dándole a nuestro alias el mismo tratamiento que aider ya da a QwQ-32b:
+`use_temperature: 0.6`. Verificado: el bucle exacto desaparece por
+completo tras el fix (994 tokens de respuesta real en vez de cientos de
+párrafos repetidos).
+
+**Hallazgo 2 -- confusión con el ejemplo de demostración integrado en
+aider, distinto del anterior**. Con el bucle ya resuelto, el modelo
+seguía sin avanzar: confundía el ejemplo fijo que aider inyecta en su
+prompt para enseñar el formato SEARCH/REPLACE (el clásico "Change
+get_factorial() to use math.factorial" de
+`aider/coders/editblock_prompts.py`) con conversación real, llegando a
+proponer ediciones contra `mathweb/flask/app.py` -- un fichero que no
+existe en este repo, parte literal del ejemplo, no de nuestra tarea.
+Causa: por defecto aider inyecta ese ejemplo como turnos
+`role=user`/`role=assistant` sueltos, estructuralmente IDÉNTICOS a una
+conversación real -- sin ninguna marca textual de "esto es solo un
+ejemplo". Corregido en el mismo `model-settings.yml`:
+`examples_as_sys_msg: true` mete el ejemplo DENTRO del propio system
+prompt bajo un encabezado explícito "# Example conversations:" --
+exactamente el tratamiento que aider ya da a QwQ-32b por el mismo
+motivo. Verificado: tras el fix, el modelo ya no menciona
+`mathweb/flask/app.py` ni el factorial en ningún intento posterior.
+
+**Hallazgo 3 -- el modelo sigue sin usar el contenido real de los
+ficheros que aider confirma haber añadido al chat, NO resuelto**. Con
+los dos hallazgos anteriores corregidos, en los 3 intentos de una
+ejecución completa el modelo siguió razonando "no tenemos el contenido
+real de `nucleo/persistencia.py`/`main.py`, tenemos que adivinar" --
+pese a que el propio log de aider confirma explícitamente "Added
+main.py to the chat" / "Added nucleo/persistencia.py to the chat" en
+cada intento. Resultado: adivinó una firma de método plausible pero
+incorrecta (`def persistir_eventos(self, eventos):` en vez de la real,
+con anotaciones de tipo), la edición no se aplicó, y el test creado
+(correcto, palabra por palabra igual al plan) falló con
+`AttributeError: 'Persistencia' object has no attribute
+'marcar_entidad_muerta'` las tres veces. Se probó una hipótesis
+adicional concreta antes de rendirse: el aviso repetido "Unknown context
+window size and costs, using sane defaults" sugería que litellm no
+conocía el contexto real del modelo -- se declaró explícitamente
+`model_info` (max_input_tokens/costes reales, tomados del catálogo de
+OpenRouter) en `litellm_config.yaml`. **No resolvió nada**: el aviso
+persiste igual (viene del propio `litellm` que `aider` importa como
+librería cliente, no de nuestro proxy -- declarar el modelo en la config
+del proxy no cambia lo que el cliente aider cree saber de él) y el
+modelo siguió sin usar el contenido de los ficheros. Quedó como
+**hallazgo abierto, no resuelto**, tras haber agotado las palancas de
+configuración razonables sin necesitar cambiar de modelo todavía.
+
+**Reducción de contexto también probada, sin ser la causa raíz por sí
+sola**: se detectó de paso que `CLAUDE.md` (150KB / ~2300 líneas en el
+momento de la prueba) se pasaba entero como fichero editable en
+cualquier plan que lo tocara -- diluyendo el plan real (252 líneas) en
+~40.000 tokens mayormente irrelevantes (`Tokens: 67k sent` observado).
+Se recortó la tarea de documentación del plan de prueba para no
+depender de tocar `CLAUDE.md` desde el pipeline, y aun así el Hallazgo 3
+persistió con un contexto mucho más pequeño (~21-22k tokens) -- así que
+el tamaño de `CLAUDE.md` agrava el problema si un plan lo toca, pero no
+es la causa de fondo del Hallazgo 3. **Lección aparte, con consecuencia
+práctica real**: cualquier plan futuro para el pipeline autónomo debería
+evitar declarar `CLAUDE.md` como fichero a modificar por el propio
+agente -- mejor dejar esa actualización para el cierre manual, como se
+hizo aquí.
+
+**Balance honesto**: 2 de 3 hallazgos reales fueron demostrablemente
+nuestros (configuración de aider, no calidad del modelo) -- confirma que
+cuestionar la primera explicación fue lo correcto. El tercero queda sin
+resolver y es el que realmente bloquea el pipeline hoy: sin que el
+modelo use de forma fiable el contenido de los ficheros que se le
+entregan, no puede completar ni una tarea mínima de una sola línea.
+Ninguna prueba llegó a dejar código real mergeado -- todos los intentos
+se descartaron limpiamente (branches borradas, sin commits huérfanos en
+`master`), el propio `run-plan.sh` (con las correcciones de esta
+sesión: verificación de cambios reales, timeout de 480s, extracción
+precisa de ficheros por convención `- Modify/Create/Test:`) se comportó
+correctamente en todo momento -- el disyuntor de 3 intentos se activó
+como se diseñó.
+
+**Pendiente real, decisión de Diego**: (a) seguir intentando con
+`deepseek-v4-flash-0731` explorando otras palancas (p.ej. probar sin
+`--edit-format diff` forzado, o con `--architect` en vez de edición
+directa, o simplificar aún más el plan de prueba); (b) volver a un
+modelo con track record probado en esta misma prueba de humo
+(`anthropic/claude-sonnet-5` vía OpenRouter, ya confirmado funcionando
+de extremo a extremo en una sesión anterior, aunque nunca probado dentro
+de una sesión real de `aider`); (c) otra opción. No decidido
+unilateralmente por Claude -- el patrón de esta sesión (Diego elige el
+modelo, Claude prueba y reporta con evidencia) se mantiene.
