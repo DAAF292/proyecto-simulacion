@@ -96,6 +96,67 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         ARCHIVOS_ARGS+=(--file "$f")
     done
 
+    # MENSAJE CON CONTENIDO INCRUSTADO (2026-09-02, hallazgo real --
+    # tercer problema del primer intento de prueba, confirmado con
+    # litellm en modo --detailed_debug: el contenido real de los ficheros
+    # SÍ llegaba a la llamada (verificado byte a byte en el payload), pero
+    # el modelo respondía igualmente "asumo que el fichero tiene esta
+    # forma..." y adivinaba una firma incorrecta -- no confía en el
+    # contenido que aider inyecta como --file/--read (turnos de
+    # conversación sintéticos "Added X to the chat" / "Ok, usaré estos
+    # ficheros"). En vez de depender de ese mecanismo, se construye un
+    # único fichero de mensaje que incrusta el plan completo Y el
+    # contenido actual de cada fichero a modificar DIRECTAMENTE en el
+    # turno final del usuario -- la posición del prompt a la que un
+    # modelo, incluso uno con esta debilidad de "no confiar en el
+    # contexto", presta más atención. --file se mantiene (necesario para
+    # que aider trate esas rutas como editables/creables), pero ya no es
+    # la única vía por la que el modelo puede enterarse de su contenido.
+    MENSAJE_FILE=$(mktemp /tmp/aider_mensaje_XXXXXX.md)
+    {
+        echo "Implementa el plan siguiente al pie de la letra, creando los tests que describe, siguiendo sus Task/Step, sin modificar ninguna aserción de test ya existente en el repositorio."
+        echo
+        echo "## PLAN COMPLETO"
+        echo
+        cat "docs/plans/in_progress/$PLAN_NAME.md"
+        for f in $ARCHIVOS_PLAN; do
+            if [ -f "$f" ]; then
+                echo
+                echo "## CONTENIDO ACTUAL Y COMPLETO de \`$f\`"
+                echo
+                echo "Este es el contenido REAL y COMPLETO del fichero ahora mismo en el repositorio -- cópialo literalmente al construir cualquier bloque SEARCH contra este fichero, no lo adivines ni asumas una forma distinta:"
+                echo
+                echo '```'
+                cat "$f"
+                echo '```'
+            fi
+        done
+    } > "$MENSAJE_FILE"
+
+    # --map-tokens 0 (2026-09-02, mismo hallazgo): el repo-map de aider
+    # añade su propio turno de conversación sintético ("Ok, no editaré
+    # esos ficheros sin preguntar") antes del contenido real -- con los
+    # ficheros a tocar ya declarados explícitamente vía --file, el
+    # repo-map no aporta nada aquí y es una capa más de "historia falsa"
+    # de las que el modelo parece desconfiar.
+
+    # --no-detect-urls (2026-09-02, incidente real durante la primera
+    # prueba de MENSAJE_FILE): el propio texto del plan puede contener
+    # URLs legítimas que no son para el modelo -- en concreto, el pie de
+    # commit `Claude-Session: https://claude.ai/code/...` que la propia
+    # convención de commit de este proyecto exige en el Step de "Commit"
+    # de cualquier plan. Al incrustar el plan completo en el mensaje,
+    # aider detectó esa URL (--detect-urls está activado por defecto),
+    # preguntó "Add URL to the chat?", y --yes-always contestó que sí --
+    # intentó raspar la página, no tenía Playwright, preguntó "Install
+    # playwright?", --yes-always volvió a contestar que sí, y disparó
+    # `playwright install --with-deps chromium` (instalación de paquetes
+    # de sistema, sin autorización, que además falló por no soportar esta
+    # versión de Ubuntu). Esto colgó/interrumpió la sesión que lo lanzó.
+    # --no-detect-urls desactiva la detección por completo -- ninguna URL
+    # dentro del plan o del contenido de ficheros debe disparar jamás una
+    # acción de red o de instalación de paquetes por su cuenta.
+
     # timeout (2026-09-02, hallazgo real del mismo intento de prueba): el
     # primer intento con deepseek-v4-flash-0731 quedó atascado en un bucle
     # de razonamiento no convergente -- repitió el mismo párrafo cientos
@@ -122,13 +183,15 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
           --model openai/agente-obrero \
           --model-settings-file .ai-pipeline/aider-model-settings.yml \
           --edit-format diff \
-          --read "docs/plans/in_progress/$PLAN_NAME.md" \
+          --map-tokens 0 \
+          --no-detect-urls \
           "${ARCHIVOS_ARGS[@]}" \
-          --message "Lee el plan que tienes adjunto como fichero de solo lectura (docs/plans/in_progress/$PLAN_NAME.md). Implementa el código y crea los tests que describe, siguiendo sus Task/Step al pie de la letra, sin modificar ninguna aserción de test ya existente en el repositorio." \
+          --message-file "$MENSAJE_FILE" \
           --auto-commits \
           --yes-always
     AIDER_EXIT_CODE=$?
     set -e
+    rm -f "$MENSAJE_FILE"
 
     if [ $AIDER_EXIT_CODE -eq 124 ]; then
         echo "[FALLO DE VALIDACIÓN] Aider superó el timeout de 480s (posible bucle de razonamiento no convergente del modelo, ver CLAUDE.md). Preparando reintento..."

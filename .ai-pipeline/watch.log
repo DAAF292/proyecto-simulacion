@@ -1,3 +1,2 @@
 === CENTINELA ACTIVO ===
-Vigilando la carpeta 'docs/plans' en busca de nuevos planes...
-.ai-pipeline/watch-plans.sh: line 8: inotifywait: command not found
+Vigilando nuevos planes en: docs/superpowers/plans
