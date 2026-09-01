@@ -102,11 +102,27 @@ materiales:
     categoria: mineral
     forma_en_mundo: sustrato
     densidad_kg_m3: 2700
-    dureza: 0.9
-    tasa_infiltracion: 0.05
+    dureza: 0.9.
+    taa_infiltracion: 0.05
     capacidad_retencion: 0.05
     combustibilidad: 0.0
     apto_construccion: true
+    # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
+    # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
+    # ninguna capacidad de sostener vegetación por sí misma.
+    fertilidad_base: 0.0
+    # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
+    # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
+    # ninguna capacidad de sostener vegetación por sí mismа.
+    fertilidad_base: 0.0
+    # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
+    # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
+    # ninguna capacidad de sostener vegetación por sí misma.
+    fertilidad_base: 0.0
+    # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
+    # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
+    # ninguna capacidad de sostener vegetación por sí misma.
+    fertilidad_base: 0.0
   arcilla:
     categoria: mineral
     forma_en_mundo: sustrato
@@ -116,6 +132,15 @@ materiales:
     capacidad_retencion: 0.8
     combustibilidad: 0.0
     apto_construccion: true
+    # fertilidad_base: vega fértil de bosque/pradera -- ya lo era
+    # conceptualmente antes de este campo, ahora es un número real.
+    fertilidad_base: 0.5
+    # fertilidad_base: vega fértil de bosque/pradera -- ya lo era
+    # conceptualmente antes de este campo, ahora es un número real.
+    fertilidad_base: 0.5
+    # fertilidad_base: vega fértil de bosque/pradera -- ya lo era
+    # conceptualmente antes de este campo, ahora es un número real.
+    fertilidad_base: 0.5
   arena:
     categoria: mineral
     forma_en_mundo: sustrato
@@ -125,6 +150,9 @@ materiales:
     capacidad_retencion: 0.15
     combustibilidad: 0.0
     apto_construccion: false
+    # fertilidad_base: casi estéril, drena demasiado rápido para retener
+    # nutrientes.
+    fertilidad_base: 0.03
   tierra:
     # CORREGIDO (2026-08-30, Diego: "suelo helado que es? eso no es nada
     # real"): la primera versión de esta entrada era "suelo_helado" --
@@ -138,10 +166,57 @@ materiales:
     forma_en_mundo: sustrato
     densidad_kg_m3: 1300
     dureza: 0.15
-    tasa_infiltracion: 0.4
+    taa_infiltracion: 0.4
     capacidad_retencion: 0.35
     combustibilidad: 0.0
     apto_construccion: true
+    # fertilidad_base: suelo pobre y suelo de tundra -- por encima de
+    # arena, muy por debajo de una vega real.
+    fertilidad_base: 0.15
+
+  # tierra_negra / marga / grava (2026-09-01, ver docs/superpowers/specs/
+  # 2026-09-01-distribucion-causal-flora-design.md): amplían la variedad
+  # de sustrato dentro de un mismo bioma -- antes de esto,
+  # sustrato_por_bioma mapeaba 1 material fijo por bioma entero (toda
+  # celda de bosque era arcilla, sin variación). El plan 4 de esta pieza
+  # los conecta de verdad a sustrato_por_bioma; aquí solo se declaran.
+  tierra_negra:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 1400
+    dureza: 0.12
+    tasa_infiltracion: 0.3
+    capacidad_retencion: 0.6
+    combustibilidad: 0.0
+    apto_construccion: true
+    # Mantillo acumulado -- el sustrato más fértil del catálogo,
+    # candidato de bosque/pradera en celdas de mucha lluvia.
+    fertilidad_base: 0.7
+  marga:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 1600
+    dureza: 0.18
+    tasa_infiltracion: 0.25
+    capacidad_retencion: 0.5
+    combustibilidad: 0.0
+    apto_construccion: true
+    # Intermedia entre arcilla y tierra_negra -- candidata de pradera en
+    # celdas de lluvia moderada.
+    fertilidad_base: 0.35
+  grava:
+    categoria: mineral
+    forma_en_mundo: sustrato
+    densidad_kg_m3: 1900
+    dureza: 0.5
+    tasa_infiltracion: 0.6
+    capacidad_retencion: 0.1
+    combustibilidad: 0.0
+    apto_construccion: true
+    # Transición piedra-tierra -- casi tan estéril como piedra pero
+    # suelta, candidata de montaña/desierto en celdas menos extremas que
+    # el resto del bioma.
+    fertilidad_base: 0.05
 
   # --- Depósitos orgánicos (círculos posteriores) ------------------------
   # madera y fibra REUTILIZAN los nombres ya declarados en config/flora.yaml
@@ -218,6 +293,12 @@ materiales:
     combustibilidad: 0.0
     abundancia: 0.6
     apto_construccion: true
+    # fertilidad_base (2026-09-01, fix tras el fallo real del plan 1/5 de
+    # la distribución causal de flora -- el test original solo cubría
+    # piedra/arcilla/arena/tierra/tierra_negra/marga/grava y se olvidó de
+    # que hierro/cobre TAMBIÉN llevan forma_en_mundo: sustrato): una veta
+    # de mineral es roca, igual de estéril que la piedra que la contiene.
+    fertilidad_base: 0.0
   cobre:
     categoria: mineral
     forma_en_mundo: sustrato
@@ -226,6 +307,7 @@ materiales:
     combustibilidad: 0.0
     abundancia: 0.35
     apto_construccion: true
+    fertilidad_base: 0.0
 
 # --- Sustrato por bioma (círculo 1) ---------------------------------------
 # Qué material de la lista de arriba ocupa cada bioma -- consumido en
