@@ -26,6 +26,21 @@ mkdir -p docs/plans/{in_progress,in_review,failed,done}
 
 echo "=== INICIANDO TAREA: $PLAN_NAME ==="
 git checkout master || git checkout main
+# git pull --ff-only (2026-09-01, pedido por Diego antes de soltar el
+# primer plan de la distribución causal de flora): la rama nueva nace de
+# este `master` LOCAL -- sin esto, un PR de un plan anterior ya mergeado
+# en el remoto (GitHub) podía seguir invisible aquí si nadie había hecho
+# pull a mano, y un plan que dependiera de ese código (p.ej. flora 4/5
+# necesita flora 1/5 y 2/5 ya mergeados) fallaría sus 3 reintentos contra
+# un master desactualizado en vez de contra el código real ya aprobado.
+# --ff-only en vez de un pull normal: si el master local ha divergido por
+# cualquier motivo (commit local sin subir, historia reescrita), el
+# script debe fallar alto aquí y avisar, no fusionar en silencio ni
+# arriesgar un merge commit inesperado en un flujo desatendido. Sin
+# argumentos de remoto/rama: usa el upstream ya configurado de la rama en
+# la que acabamos de hacer checkout (origin/master u origin/main, lo que
+# corresponda) en vez de asumir el nombre.
+git pull --ff-only
 git checkout -b "$BRANCH"
 mv "$PLAN_PATH" "docs/plans/in_progress/$PLAN_NAME.md"
 git add docs/plans/
