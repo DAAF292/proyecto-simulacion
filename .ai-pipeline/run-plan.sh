@@ -106,6 +106,25 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # mucho más robusto para un modelo barato editando ficheros grandes
     # ya existentes.
     #
+    # --edit-format udiff (2026-09-02, corrección tras incidente real:
+    # dos planes reales -- flora 1/5 y flora 2/5 -- con "diff"/SEARCH-
+    # REPLACE dejaron el mismo bloque de código duplicado con una
+    # variación de typo distinta en cada copia, incluso ya con
+    # max_reflections=1 -- ver CLAUDE.md/la conversación de esta sesión.
+    # aider/coders/editblock_coder.py:find_filename() (usado por "diff")
+    # cae, sin match, en aceptar CUALQUIER línea con un punto como
+    # nombre de fichero, y no deduplica hunks -- si el modelo reemite un
+    # bloque ya aplicado (p.ej. tras un reflejo), se aplica una segunda
+    # vez sin más. aider/coders/udiff_coder.py ("udiff", diff unificado
+    # real) es distinto en las dos piezas que importan aquí: el nombre
+    # de fichero sale SOLO de las cabeceras `--- `/`+++ ` estrictas de
+    # un bloque ```diff (sin cascada de heurísticas laxas), y
+    # apply_edits() deduplica hunks explícitamente antes de aplicarlos
+    # (un `set` de hunks ya vistos) -- un reflejo que reemite el mismo
+    # parche no lo duplica. Nunca probado antes con este modelo -- si el
+    # propio formato le resulta demasiado difícil de producir, se verá
+    # en la tasa de fallos, no algo asumido de antemano.
+    #
     # --read / --file (2026-09-02, segundo hallazgo real del mismo intento
     # de prueba): decirle al modelo "lee el plan en <ruta>" en --message NO
     # le da acceso a ese fichero -- aider (en este modo --message de un
@@ -272,7 +291,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     timeout 480 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy aider \
           --model openai/agente-obrero \
           --model-settings-file .ai-pipeline/aider-model-settings.yml \
-          --edit-format diff \
+          --edit-format udiff \
           --map-tokens 0 \
           --no-detect-urls \
           "${ARCHIVOS_ARGS[@]}" \
