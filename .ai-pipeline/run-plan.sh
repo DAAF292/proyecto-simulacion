@@ -34,6 +34,14 @@ if ! git diff-index --quiet HEAD; then
     git commit -m "chore: iniciar plan $PLAN_NAME"
 fi
 
+# PLAN_START_COMMIT (2026-09-01, corrección tras incidente real: el 1er
+# intento de "armas-fabricadas" dejó pasar un PR sin ninguna implementación
+# porque aider agotó sus reintentos contra un proxy caído, salió con
+# codigo 0, y el pipeline solo comprobaba "los tests siguen en verde" --
+# trivialmente cierto si nada se tocó. Se usa como referencia para medir
+# si el agente tocó algún fichero de código de verdad en este intento.
+PLAN_START_COMMIT=$(git rev-parse HEAD)
+
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     echo "--- [Intento $RETRY_COUNT/$MAX_RETRIES] Ejecutando Agente ---"
@@ -53,6 +61,23 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         git checkout master || git checkout main
         git branch -D "$BRANCH"
         exit 2
+    fi
+
+    # VERIFICACIÓN REAL DE CAMBIOS (2026-09-01, ver comentario de
+    # PLAN_START_COMMIT arriba): aider puede salir con código 0 sin haber
+    # tocado ni una línea si el backend/proxy falló en cada reintento
+    # interno de litellm -- exit 0 NO implica que se haya implementado
+    # nada. Se exige que el diff acumulado desde el commit de arranque de
+    # esta tarea toque al menos un fichero fuera de docs/plans/ y
+    # .ai-pipeline/ (infraestructura propia del pipeline, no código del
+    # motor) antes de gastar un ciclo de tests -- si no hay ningún cambio
+    # real, este intento se trata como fallido y se reintenta, en vez de
+    # dejar que "los tests siguen en verde" (trivialmente cierto si nada
+    # se tocó) lo cuele como éxito.
+    CAMBIOS_REALES=$(git diff --name-only "$PLAN_START_COMMIT" HEAD -- . ':!docs/plans' ':!.ai-pipeline' | wc -l)
+    if [ "$CAMBIOS_REALES" -eq 0 ]; then
+        echo "[FALLO DE VALIDACIÓN] El agente no modificó ningún fichero de código (posible fallo silencioso del proxy/modelo). Preparando reintento..."
+        continue
     fi
 
     set +e

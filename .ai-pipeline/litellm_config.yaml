@@ -1,0 +1,29 @@
+# Config del proxy LiteLLM del pipeline autónomo (.ai-pipeline/start-pipeline.sh
+# lo arranca en el puerto 4000; .ai-pipeline/run-plan.sh llama a aider con
+# --model openai/agente-obrero contra http://0.0.0.0:4000).
+#
+# HISTORIAL (2026-09-01): este fichero nunca existió desde que se creó el
+# resto de la infraestructura del pipeline (commit fdd666c) -- litellm
+# crasheaba al arrancar con "Config file not found", así que el proxy
+# jamás llegó a escuchar en el puerto 4000. Cada llamada de aider contra
+# ese puerto fallaba con "Connection error", agotaba sus reintentos
+# internos, y aider salía con código 0 sin haber tocado ni una línea de
+# código -- el pipeline lo interpretaba como éxito (ver run-plan.sh, la
+# corrección de verificación real de cambios añadida el mismo día) y
+# terminó abriendo un PR (#1, armas-fabricadas) que no implementaba nada
+# del plan. Backend confirmado por Diego: OpenRouter, con
+# OPENROUTER_API_KEY ya presente en el entorno (~/.bashrc).
+#
+# Modelo elegido para el alias "agente-obrero": deepseek/deepseek-chat vía
+# OpenRouter -- decisión explícita de Diego (2026-09-01), tras un primer
+# intento con anthropic/claude-sonnet-5 que también se probó de punta a
+# punta y funcionaba. Confirmado disponible contra el catálogo real de
+# OpenRouter (GET https://openrouter.ai/api/v1/models), no adivinado.
+# Para cambiarlo basta con editar la línea `model:` de abajo, ningún otro
+# fichero del pipeline conoce el modelo real, solo el alias
+# "agente-obrero".
+model_list:
+  - model_name: agente-obrero
+    litellm_params:
+      model: openrouter/deepseek/deepseek-chat
+      api_key: os.environ/OPENROUTER_API_KEY

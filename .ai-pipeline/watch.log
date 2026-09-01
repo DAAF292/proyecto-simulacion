@@ -78,3 +78,18 @@ tests/test_orografia.py .......                                          [100%]
 
 ============================== 22 passed in 0.05s ==============================
 === Tests superados en intento 1 ===
+[feature/2026-09-01-armas-fabricadas b317e8d] feat: completar tareas de 2026-09-01-armas-fabricadas
+ 6 files changed, 139 insertions(+), 18 deletions(-)
+ create mode 100644 .ai-pipeline/proxy.log
+ rename docs/plans/{in_progress => in_review}/2026-09-01-armas-fabricadas.md (100%)
+=== SUBIENDO RAMA A REMOTO Y ABRIENDO PULL REQUEST ===
+remote: 
+remote: Create a pull request for 'feature/2026-09-01-armas-fabricadas' on GitHub by visiting:        
+remote:      https://github.com/DAAF292/proyecto-simulacion/pull/new/feature/2026-09-01-armas-fabricadas        
+remote: 
+To https://github.com/DAAF292/proyecto-simulacion.git
+ * [new branch]      feature/2026-09-01-armas-fabricadas -> feature/2026-09-01-armas-fabricadas
+branch 'feature/2026-09-01-armas-fabricadas' set up to track 'origin/feature/2026-09-01-armas-fabricadas'.
+Warning: 1 uncommitted change
+https://github.com/DAAF292/proyecto-simulacion/pull/1
+=== TAREA COMPLETADA, PUSH REALIZADO Y MR CREADO ===
