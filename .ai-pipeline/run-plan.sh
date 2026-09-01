@@ -252,6 +252,45 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         exit 2
     fi
 
+    # LIMPIEZA DE FICHEROS NO DECLARADOS (2026-09-01, hallazgo real del
+    # plan "flora 1/5", confirmado leyendo el código fuente de aider
+    # instalado -- no una suposición): aider/coders/editblock_coder.py:
+    # find_filename() busca el nombre de fichero de un bloque
+    # SEARCH/REPLACE en las 3 líneas anteriores; si ninguna coincide con
+    # los ficheros ya declarados vía --file, cae en una cascada de
+    # heurísticas cada vez más laxas cuyo último recurso es literalmente
+    # "cualquier línea que contenga un punto" (`if "." in fname: return
+    # fname`), sin comprobar que tenga forma de ruta real. Con un modelo
+    # que narra su razonamiento pegado a un bloque de código ("I'll
+    # compose final.", "I give up trying to format due to time..."),
+    # esto crea ficheros basura reales en el repo -- confirmado en este
+    # incidente: 6 ficheros/directorios vacíos con la propia narración
+    # del modelo como nombre, comiteados por --auto-commits sin que nada
+    # los detectara. Se limpia aquí cualquier fichero NUEVO (no ya
+    # trackeado antes de este intento) que no esté en ARCHIVOS_PLAN
+    # (la lista de Modify/Create/Test que el propio plan declaró) -- si
+    # el único "cambio" de este intento era basura, la limpieza lo deja
+    # en 0 cambios reales y el chequeo de CAMBIOS_REALES de más abajo lo
+    # trata como fallo por su propio mecanismo ya existente, sin
+    # necesitar una condición de fallo aparte.
+    git diff -z --name-only --diff-filter=A "$PLAN_START_COMMIT" HEAD -- . ':!docs/plans' ':!.ai-pipeline' |
+    while IFS= read -r -d '' f; do
+        declarado=false
+        for d in $ARCHIVOS_PLAN; do
+            if [ "$f" = "$d" ]; then
+                declarado=true
+                break
+            fi
+        done
+        if [ "$declarado" = false ]; then
+            echo "[LIMPIEZA] Fichero nuevo no declarado por el plan (probable ruta corrupta del parser de aider): '$f' -- eliminado."
+            git rm -rq -- "$f"
+        fi
+    done
+    if ! git diff-index --quiet HEAD; then
+        git commit -q -m "chore: limpiar ficheros no declarados por el plan (intento $RETRY_COUNT)"
+    fi
+
     # VERIFICACIÓN REAL DE CAMBIOS (2026-09-01, ver comentario de
     # PLAN_START_COMMIT arriba): aider puede salir con código 0 sin haber
     # tocado ni una línea si el backend/proxy falló en cada reintento
