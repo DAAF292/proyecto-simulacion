@@ -425,6 +425,8 @@ def main() -> None:
             for ev in eventos_tick:
                 if ev.tipo == "Nacimiento":
                     persistencia.registrar_entidad_nueva(ev.entidad_id, ev.datos)
+                elif ev.tipo == "Muerte":
+                    persistencia.marcar_entidad_muerta(ev.entidad_id)
             persistencia.persistir_eventos(eventos_tick)
 
             lineas_narradas = narrar(eventos_tick, gestor)

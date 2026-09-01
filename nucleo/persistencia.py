@@ -374,6 +374,25 @@ class Persistencia:
             )
             con.commit()
 
+    def marcar_entidad_muerta(self, entidad_id: int) -> None:
+        """Actualiza el registro histórico de una entidad para reflejar
+        que ha muerto (2026-09-02, fix aislado -- ver CLAUDE.md,
+        'entidades.viva nunca se actualizaba'). Antes de este fix, toda
+        entidad quedaba marcada viva=True para siempre en la tabla
+        histórica una vez creada -- el snapshot en vivo
+        (componentes_estado) sí reflejaba correctamente quién seguía
+        vivo, pero el registro histórico permanente mentía. Se llama
+        desde main.py al procesar cualquier Evento con tipo == "Muerte",
+        el mismo patrón que ya usa registrar_entidad_nueva para
+        "Nacimiento"."""
+        with self._conectar() as con:
+            cur = con.cursor()
+            cur.execute(
+                "UPDATE entidades SET viva = 0 WHERE id = ?",
+                (entidad_id,),
+            )
+            con.commit()
+
     def persistir_eventos(self, eventos: list[Evento]) -> None:
         """Persiste eventos notables e históricos."""
         filas = [
