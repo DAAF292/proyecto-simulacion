@@ -46,10 +46,53 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     echo "--- [Intento $RETRY_COUNT/$MAX_RETRIES] Ejecutando Agente ---"
 
+    # --edit-format diff (2026-09-02, corrección tras incidente real):
+    # sin esto, aider no reconoce el alias custom "openai/agente-obrero"
+    # en su tabla de metadatos de modelos y cae por defecto al formato
+    # "whole" -- exige que el modelo reescriba CADA fichero tocado
+    # ENTERO, de memoria, en cada respuesta. Contra main.py (~450 líneas)
+    # con deepseek-v4-flash-0731 esto produjo una transcripción con
+    # errores reales de sintaxis (typos como "SistemaDeredacion",
+    # "from future import annotations" sin guiones bajos) además de
+    # razonamiento interno ("I'll copy from memory... I messed, need to
+    # redo") filtrándose en la propia respuesta -- se abortó a mano antes
+    # de que aider llegara a aplicar y commitear ese cambio. "diff"
+    # (bloques SEARCH/REPLACE, aider/coders/editblock_coder.py) solo
+    # exige reproducir el fragmento que cambia, con contexto alrededor --
+    # mucho más robusto para un modelo barato editando ficheros grandes
+    # ya existentes.
+    #
+    # --read / --file (2026-09-02, segundo hallazgo real del mismo intento
+    # de prueba): decirle al modelo "lee el plan en <ruta>" en --message NO
+    # le da acceso a ese fichero -- aider (en este modo --message de un
+    # solo turno, sin humano al otro lado para responder) solo ve el
+    # contenido de los ficheros que se le han añadido EXPLÍCITAMENTE a la
+    # conversación. Sin esto, el modelo simplemente respondía "no tengo
+    # acceso al sistema de archivos, pégame el contenido del plan" y la
+    # tarea terminaba sin ningún cambio (correctamente detectado como
+    # fallo por CAMBIOS_REALES=0 más abajo, pero desperdiciando un
+    # intento entero). Arreglado con dos piezas: (1) --read adjunta el
+    # propio plan como contexto de solo lectura -- el modelo lo ve sin
+    # tener que pedirlo; (2) ARCHIVOS_PLAN extrae de la sección "Files:"
+    # del plan (convención ya establecida por la skill writing-plans:
+    # rutas entre backticks terminadas en una extensión reconocida) todo
+    # fichero que el plan declara tocar, y se le pasa a aider como
+    # --file -- así el modelo puede escribir bloques SEARCH/REPLACE
+    # válidos contra su contenido real (o crearlo, si es un fichero
+    # nuevo) en vez de tener que adivinarlo.
+    ARCHIVOS_PLAN=$(grep -oE '`[A-Za-z0-9_./-]+\.(py|yaml|yml|md)`' "docs/plans/in_progress/$PLAN_NAME.md" | tr -d '`' | sort -u)
+    ARCHIVOS_ARGS=()
+    for f in $ARCHIVOS_PLAN; do
+        ARCHIVOS_ARGS+=(--file "$f")
+    done
+
     set +e
     OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy aider \
           --model openai/agente-obrero \
-          --message "Lee el plan en docs/plans/in_progress/$PLAN_NAME.md. Implementa el código y crea los tests sin modificar aserciones previas." \
+          --edit-format diff \
+          --read "docs/plans/in_progress/$PLAN_NAME.md" \
+          "${ARCHIVOS_ARGS[@]}" \
+          --message "Lee el plan que tienes adjunto como fichero de solo lectura (docs/plans/in_progress/$PLAN_NAME.md). Implementa el código y crea los tests que describe, siguiendo sus Task/Step al pie de la letra, sin modificar ninguna aserción de test ya existente en el repositorio." \
           --auto-commits \
           --yes-always
     AIDER_EXIT_CODE=$?
