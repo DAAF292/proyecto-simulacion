@@ -2551,3 +2551,38 @@ llamada real a través de ella sin fallos ni cambio de comportamiento.
 Recomendación de Diego, no verificada por Claude por ser un panel externo:
 limitar también el saldo máximo de la propia clave en el panel web de
 OpenRouter, como segunda barrera independiente del proxy.
+
+**Segundo cambio de modelo -- `deepseek-chat` (V3) → `deepseek-v4-flash-0731`
+(2026-09-01, mismo día)**: Diego pidió explícitamente cambiar de modelo
+("no está pensado para estas tareas") antes de lanzar la primera prueba
+real del pipeline. Comprobado contra el catálogo real de OpenRouter en
+vez de adivinar: de las cuatro variantes "V4" disponibles
+(`deepseek-v4-pro-0423`, `deepseek-v4-pro-0813`, `deepseek-v4-flash-0423`,
+`deepseek-v4-flash-0731`), **solo `flash-0731`** menciona explícitamente
+en su descripción estar "re-post-trained" para "coding, reasoning, and
+agent workflows" -- las otras tres son de propósito general. También la
+más barata de las cuatro y con más contexto (1.3M tokens). Elegida y
+confirmada con Diego antes de tocar la config.
+
+**Hallazgo real al probarla de extremo a extremo, no cosmético**: con un
+prompt trivial ("responde solo con la palabra OK"), la respuesta llegó
+con `message.content: null` -- el texto real apareció solo dentro de
+`reasoning_content`/`provider_specific_fields.reasoning`. Si `aider` lee
+`content` (el campo estándar de la API de OpenAI, que es lo que
+consumen prácticamente todos los clientes compatibles) y le llega
+`null`, vería una respuesta vacía y no editaría nada -- literalmente el
+mismo síntoma que el incidente original de esta sesión (PR sin
+implementación), pero con una causa distinta. Investigado antes de
+darlo por bueno: repetido con un prompt realista ("escribe una función
+python que sume dos números") y el `content` sí llegó relleno
+correctamente, con el razonamiento aparte en `reasoning_content` como
+se espera de un modelo con razonamiento -- el `null` del primer intento
+coincidió con un proveedor distinto sirviendo el modelo por debajo
+(OpenRouter enruta el mismo model id entre varios proveedores; la
+primera respuesta vino de "Sail Research", la segunda de "DeepInfra"),
+probablemente un comportamiento degenerado de ese proveedor concreto
+ante una respuesta de un único token, no un problema del modelo en
+general. **No confirmado con certeza que no vuelva a pasar** -- señalado
+explícitamente como algo a vigilar en la primera ejecución real del
+pipeline, no descartado sin más solo porque el segundo intento salió
+bien.
