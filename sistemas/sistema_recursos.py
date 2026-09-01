@@ -114,6 +114,12 @@ class SistemaRecursos:
             cfg_fuego.get("tasa_consumo_combustible_fogata_kg_tick", 0.1)
         )
         self.piedras_necesarias_fuego: int = int(cfg_fuego.get("piedras_necesarias", 2))
+        # FABRICAR_ARMA (2026-09-01, ver componentes/agarre.py,
+        # config/materiales.yaml sección 'armas' y
+        # sistema_decision.py:_utilidad_fabricar_arma).
+        self.nombre_arma_por_material: dict[str, str] = self.config.get("armas", {}).get(
+            "nombre_arma_por_material", {}
+        )
         # Mismo umbral que ya exime del sesgo de territorio y gatea
         # CONSTRUIR/RECOLECTAR de material -- ver sistema_decision.py.
         self.umbral_consciencia_agencia: float = float(
@@ -206,6 +212,11 @@ class SistemaRecursos:
             elif intencion.accion == Accion.ENCENDER_FUEGO:
                 self._resolver_encender_fuego(
                     gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual
+                )
+            elif intencion.accion == Accion.FABRICAR_ARMA:
+                agarre = gestor.obtener_componente(eid, Agarre)
+                self._resolver_fabricar_arma(
+                    agarre, eid, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual
                 )
 
         # Fogatas: consumo de combustible propio y extincion (2026-08-31,
@@ -492,10 +503,65 @@ class SistemaRecursos:
                 agarre.objetos.append("piedra_suelta")
                 return
 
+        # Vía 1b: madera/piedra CON CAUSA para FABRICAR_ARMA (2026-09-01,
+        # mismo patrón que Vía 1 -- ver sistema_decision.py, eslabón
+        # heredado hacia RECOLECTAR desde _utilidad_fabricar_arma).
+        # OVERRIDE DELIBERADO del Global Constraint original del plan
+        # ("sin rama causal nueva en RECOLECTAR"): verificado contra el
+        # motor real que sin esto, el mecanismo genérico de Vía 2 nunca
+        # llegaba a madera/piedra en la práctica -- arcilla (tipo_sustrato
+        # dominante) o piedra_suelta ganaban casi siempre el turno antes.
+        # Solo conscientes, solo si todavía no tiene ningún material
+        # apto_arma (crudo o ya fabricado), solo si queda algún punto de
+        # agarre libre, solo si la celda actual tiene madera (flora) o su
+        # tipo_sustrato es piedra -- mismo orden flora > sustrato que Vía 2.
+        if consciente and agarre is not None and especie is not None:
+            puntos_agarre_total = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
+            tiene_arma_o_material = any(
+                obj in self.nombre_arma_por_material.values()
+                or self.catalogo_materiales.get(obj, {}).get("apto_arma", False)
+                for obj in agarre.objetos
+            )
+            if len(agarre.objetos) < puntos_agarre_total and not tiene_arma_o_material:
+                for nombre, cantidad_disponible in celda.recursos.items():
+                    if cantidad_disponible <= 0.0:
+                        continue
+                    if self.catalogo_materiales.get(nombre, {}).get("apto_arma", False):
+                        agarre.objetos.append(nombre)
+                        return
+                material_sustrato = celda.tipo_sustrato
+                if material_sustrato and self.catalogo_materiales.get(material_sustrato, {}).get(
+                    "apto_arma", False
+                ):
+                    agarre.objetos.append(material_sustrato)
+                    return
+
         # Vía 2: agarre genérico, sin causa concreta -- diseño original.
+        #
+        # RESERVA DE UN PUNTO PARA ARMA (2026-09-01, hallazgo real: sin
+        # esto, este mismo mecanismo causeless llenaba TODOS los puntos de
+        # agarre de un consciente con lo primero bajo sus pies (arcilla,
+        # tipo_sustrato dominante) mucho antes de que sintiera inseguridad
+        # alguna vez -- para cuando llegaba esa inseguridad, ya no quedaba
+        # ningún punto libre para que Vía 1b pudiera actuar, dejando
+        # FABRICAR_ARMA inalcanzable de por vida para ese individuo. Un
+        # consciente que todavía no tiene ningún material apto_arma (crudo
+        # o fabricado) reserva UN punto de agarre -- Vía 2 no lo ocupa con
+        # material genérico, dejándolo libre para el día en que Vía 1b
+        # encuentre madera o piedra de verdad bajo sus pies. Sin efecto en
+        # especies no conscientes (lobo, ardilla) ni en quien ya tiene
+        # material apto_arma -- usan su capacidad completa como siempre.
         if agarre is not None and especie is not None:
             puntos_agarre = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
-            if len(agarre.objetos) < puntos_agarre:
+            reserva_arma = 0
+            if consciente and not any(
+                obj in self.nombre_arma_por_material.values()
+                or self.catalogo_materiales.get(obj, {}).get("apto_arma", False)
+                for obj in agarre.objetos
+            ):
+                reserva_arma = 1
+            puntos_agarre_disponibles = max(0, puntos_agarre - reserva_arma)
+            if len(agarre.objetos) < puntos_agarre_disponibles:
                 for nombre, cantidad_disponible in celda.recursos.items():
                     if cantidad_disponible <= 0.0:
                         continue
@@ -590,6 +656,50 @@ class SistemaRecursos:
                     tick=tick_actual,
                     entidad_id=fid,
                     datos={"x": pos_x, "y": pos_y, "zona_idx": zona_idx},
+                )
+            )
+            return
+
+    def _resolver_fabricar_arma(
+        self,
+        agarre: Agarre | None,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+        bus_eventos: BusEventos,
+        tick_actual: int,
+    ) -> None:
+        """
+        FABRICAR_ARMA -- primer círculo del arco herramientas/utensilios/
+        armas (2026-09-01, ver componentes/agarre.py, config/materiales.yaml
+        sección 'armas' y sistema_decision.py:_utilidad_fabricar_arma). Un
+        solo tick, determinista -- a diferencia de ENCENDER_FUEGO, tallar
+        un palo o afilar una piedra no es un evento de azar equivalente a
+        que prenda una chispa. Busca el primer objeto en Agarre.objetos
+        cuyo material sea apto_arma y lo sustituye IN SITU por su nombre
+        de arma (nombre_arma_por_material) -- mismo slot de la lista, no
+        toca Inventario ni capacidad de carga. sistema_decision.py ya
+        comprobó las precondiciones (consciente, material crudo presente,
+        sin arma ya fabricada) antes de elegir esta Accion.
+        """
+        if agarre is None:
+            return
+        for indice, objeto in enumerate(agarre.objetos):
+            info = self.catalogo_materiales.get(objeto, {})
+            if not info.get("apto_arma", False):
+                continue
+            nombre_arma = self.nombre_arma_por_material.get(objeto)
+            if not nombre_arma:
+                continue
+            agarre.objetos[indice] = nombre_arma
+            bus_eventos.emitir(
+                Evento(
+                    tipo="ArmaFabricada",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=entidad_id,
+                    datos={"x": pos_x, "y": pos_y, "zona_idx": zona_idx, "arma": nombre_arma},
                 )
             )
             return

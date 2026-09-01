@@ -51,6 +51,16 @@ depredacion:
   # una piedra de un palo todavia. PROVISIONAL, sin calibrar contra el
   # motor en marcha.
   reduccion_prob_captura_por_agarre: 0.1
+  # reduccion_prob_captura_por_arma_fabricada (2026-09-01, primer círculo
+  # del arco herramientas/utensilios/armas -- ver componentes/agarre.py,
+  # sistema_decision.py:_utilidad_fabricar_arma y sistema_recursos.py:
+  # _resolver_fabricar_arma). Reducción REFORZADA cuando la presa tiene
+  # un arma FABRICADA ("lanza" o "hacha_mano") en vez de un objeto crudo
+  # cualquiera -- sustituye a reduccion_prob_captura_por_agarre en ese
+  # caso, no se suma a ella. Mismo efecto numérico para ambos tipos de
+  # arma en este círculo, pese al nombre distinto (deliberado, ver spec).
+  # PROVISIONAL, sin calibrar contra el motor en marcha.
+  reduccion_prob_captura_por_arma_fabricada: 0.2
   factor_dano_base: 0.4
   eficiencia_biomasa_saciedad: 12.0
   eficiencia_biomasa_hidratacion: 0.5

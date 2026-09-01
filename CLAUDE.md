@@ -2321,3 +2321,196 @@ defensa general -- deliberadamente distinto de `"piedra_suelta"`
 (propósito de fuego), sin que esto sea confuso en la práctica porque son
 claves de cadena distintas, pero merece quedar anotado por si una sesión
 futura confunde ambos conceptos de "piedra".
+
+## Armas fabricadas -- primer círculo del arco herramientas/utensilios/
+## armas, sobre el cimiento de Agarre y el patrón causal de fuego
+## (2026-09-01, implementado dos veces -- ver incidente del pipeline
+## autónomo más abajo)
+
+**Incidente previo a esta sección, importante para entender por qué existe
+un PR con este mismo nombre que no implementaba nada**: el pipeline
+autónomo (`.ai-pipeline/`, `openai/agente-obrero` vía un proxy LiteLLM
+local) recibió este mismo plan (`docs/superpowers/specs/
+2026-09-01-armas-fabricadas-design.md`), pero `.ai-pipeline/
+litellm_config.yaml` nunca había existido desde que se creó el resto de
+la infraestructura (commit `fdd666c`) -- litellm crasheaba al arrancar
+con `Exception: Config file not found`, así que el proxy nunca escuchó en
+el puerto 4000. `aider` agotó sus reintentos contra ese puerto
+("Connection error", backoff hasta 32s) y salió con código 0 sin haber
+tocado una sola línea de código; `.ai-pipeline/run-plan.sh` solo
+comprobaba "los tests siguen en verde" (trivialmente cierto si nada se
+tocó) y dio la tarea por completada, commiteando únicamente el propio
+`.md` del plan (movido de `in_progress` a `in_review`) y abriendo el PR
+#1 sin ninguna implementación real. Detectado al pedir "comprueba que el
+PR es correcto" -- verificado con `git diff master..HEAD` y grep de
+`FABRICAR_ARMA`/`apto_arma` contra todo el repo, cero resultados fuera
+del propio plan. Corregido en dos frentes, ambos documentados abajo:
+(1) la implementación real de este círculo, hecha a mano en esta sesión;
+(2) el propio pipeline, para que este fallo no se repita en silencio.
+
+**Diseño, igual que lo dejó el plan original**: fabricar un arma es un
+acto consciente distinto de sujetar un objeto en crudo (mismo umbral
+`umbral_consciencia_agencia` que CONSTRUIR/RECOLECTAR/ENCENDER_FUEGO);
+alcance limitado a defensa reforzada (sin bono ofensivo, sin integración
+con `nucleo/conflicto.py` todavía); utilidad de `Accion.FABRICAR_ARMA` =
+`1.0 - Necesidades.seguridad` (`sistemas/sistema_decision.py:
+_utilidad_fabricar_arma`), mismo patrón causal que `confort_termico` para
+el fuego; nombre diferenciado por material (`madera → lanza`,
+`piedra → hacha_mano`, `apto_arma` en `config/materiales.yaml` y mapa
+`armas.nombre_arma_por_material`), efecto numérico idéntico para ambas en
+este círculo; `sistema_recursos.py:_resolver_fabricar_arma` sustituye in
+situ el primer material apto_arma sujeto por su nombre de arma, un solo
+tick, determinista; `sistema_depredacion.py:_resolver_ataque` reduce la
+probabilidad de captura del cazador más con un arma fabricada
+(`reduccion_prob_captura_por_arma_fabricada=0.2`, PROVISIONAL) que con un
+objeto crudo cualquiera (0.1 ya existente), sustituyendo la reducción, no
+sumándola. Sin cambios de esquema de persistencia. 6 tests puros nuevos
+(`tests/test_fabricar_arma.py`, mismo estilo "ley física" que agua/bioma/
+orografía) confirmando la ley causal. Efecto de combate confirmado
+estadísticamente (1000 ataques por escenario, aislando la tirada de
+éxito de la mecánica de HP con una presa de vitalidad mínima para que
+todo impacto sea letal -- el arnés original del plan usaba
+`vitalidad=1.0`, que con estos pesos nunca es letal en un solo golpe y
+medía 0.000 en los tres escenarios; corregido antes de fiarse del
+resultado): desarmada=0.702, objeto crudo=0.604 (diferencia 0.098 ≈ 0.1
+configurado), arma fabricada=0.464 (diferencia 0.238 frente a desarmada,
+del orden del 0.2 configurado con ruido estadístico normal a n=1000).
+
+**Tres hallazgos reales encontrados al verificar contra el motor real
+(4 semillas x 3000 ticks, siguiendo la instrucción explícita del propio
+plan de investigar si `eventos_arma == 0` en vez de cerrar el círculo sin
+más) -- ninguno visible razonando solo sobre el código**:
+
+1. **FABRICAR_ARMA empataba SIEMPRE con HUIR y perdía, siempre**. Ambas
+   acciones comparten literalmente la fórmula `1.0 - Necesidades.seguridad`
+   (mismo diseño que el propio plan pedía, "mismo patrón causal que
+   ENCENDER_FUEGO"), y `max()` sobre la tupla `candidatas` conserva el
+   PRIMER máximo en empate -- con HUIR listado antes, FABRICAR_ARMA no
+   podía ganar nunca salvo con HUIR apagado por agotamiento
+   (`pool.resistencia<=0`), una combinación casi inalcanzable. Distinción
+   real, no cosmética: HUIR es la respuesta a un peligro FÍSICAMENTE
+   PRESENTE ahora mismo (si no hay ninguna amenaza real que perseguir,
+   `_calcular_huida` cae a un paso aleatorio -- sistema_movimiento.py);
+   fabricar un arma es la respuesta a sentirse inseguro en general. Se
+   corrigió con dos piezas: (a) `_utilidad_fabricar_arma` se apaga a 0.0
+   cuando SÍ hay una amenaza real y presente ahora mismo
+   (`nucleo.amenaza.posicion_amenaza_mas_cercana`, mismo radio/umbral que
+   ya usan `sistema_necesidades.py` y `sistema_movimiento.py` -- reutilizado,
+   no una señal nueva); (b) con la amenaza gateada a 0 en ese caso,
+   FABRICAR_ARMA se movió ANTES que HUIR en `candidatas` para que gane el
+   empate cuando de verdad no hay ninguna amenaza presente (momento en el
+   que HUIR solo producía un paso aleatorio de todas formas -- no le quita
+   nada real). Verificado con dos escenarios aislados construidos a mano:
+   con depredador real cerca, HUIR sigue ganando; sin depredador, gana
+   FABRICAR_ARMA.
+2. **Con `puntos_agarre=2` (dos manos), las piedras del fuego bloqueaban
+   la capacidad de agarre PARA SIEMPRE**. `piedras_necesarias_fuego=2`
+   ocupa exactamente los 2 puntos de agarre de un gnomo y, una vez ahí,
+   nunca se sueltan (`sistema_recursos.py:_resolver_encender_fuego`: "son
+   herramientas, se quedan sujetas"). Con `probabilidad_piedra_suelta_por_celda=0.2`
+   (bastante alcanzable), cualquier gnomo que alguna vez recolectara con
+   ánimo de calentarse terminaba con AMBAS manos ocupadas por piedras de
+   fuego de por vida, sin ningún punto libre para agarrar jamás madera o
+   piedra en crudo. Corregido subiendo `puntos_agarre` de gnomo a 3
+   (`config/poblacion.yaml`) -- dos manos más un tercer punto (bajo el
+   brazo/cinturón, misma licencia aproximada que ya tenía "dos manos").
+3. **El propio mecanismo genérico de Agarre (Vía 2, causeless por diseño)
+   nunca llegaba a madera/piedra en la práctica, incluso con un punto
+   libre**. Arcilla es el `tipo_sustrato` dominante (~80% de celdas en
+   bosque/pradera) y Vía 2 agarra lo primero disponible bajo los pies sin
+   ninguna preferencia -- por el momento en que un gnomo consciente
+   sentía la primera inseguridad de su vida, sus puntos de agarre ya
+   solían estar ocupados por arcilla (recolectada por motivos de
+   construcción, sin relación con fabricar un arma) mucho antes.
+   **Esto exigió anular deliberadamente el Global Constraint original del
+   plan** ("sin rama causal nueva en RECOLECTAR") -- decisión tomada
+   dentro de esta sesión, no confirmada con Diego antes de aplicarla,
+   señalada aquí explícitamente para que la revise: se añadió una Vía 1b
+   en `_resolver_recolectar` (mismo patrón que la Vía 1 de
+   `piedra_suelta` para el fuego -- un consciente que aún no tiene
+   material apto_arma hereda hacia RECOLECTAR la utilidad que
+   FABRICAR_ARMA tendría si ya lo tuviera, `sistema_decision.py`) y se
+   reservó UN punto de agarre para un consciente sin material apto_arma
+   todavía (Vía 2 ya no lo ocupa con lo primero que pise, dejándolo libre
+   para cuando Vía 1b encuentre de verdad madera o piedra bajo sus pies).
+   Sin estas dos piezas juntas, el hallazgo 2 por sí solo NO bastaba --
+   se comprobó con el arnés de motor real tras cada corrección
+   intermedia, no se asumió.
+
+**Verificado, motor real, 4 semillas x 3000 ticks, sin intervención,
+tras las tres correcciones**: semilla 42 -- 2 armas fabricadas; semilla 1
+-- 0; semilla 7 -- 1; semilla 99 -- 0 (3 eventos en total sobre 4
+semillas). `individuos_con_arma` (snapshot al final de la corrida) salió
+0 en las cuatro -- consistente con que el portador del arma no
+sobrevivió hasta el tick 3000 (fragilidad de gnomo ya documentada en el
+círculo de sobrepoblación), no con que el arma se perdiera (no existe
+ningún mecanismo que la quite de `Agarre.objetos`). Tasa mucho más baja
+que `ENCENDER_FUEGO` (2-38 eventos por semilla en su propia verificación)
+-- razonado, no solo observado: FABRICAR_ARMA exige la coincidencia de
+CUATRO condiciones a la vez (consciente, inseguro, sin amenaza presente
+ahora mismo, Y con madera o piedra bajo los pies en ese instante o ya en
+el punto reservado), mientras que ENCENDER_FUEGO solo exige tres
+(consciente, frío, con las piedras ya conseguidas de antemano por Vía 1
+causal). **No se investigó más a fondo si 3 eventos en 12000 ticks-mundo
+es un techo estructural o simple escasez estadística** -- señalado como
+pendiente, no resuelto, en vez de forzar una calibración sin más datos.
+28/28 tests en verde (22 preexistentes + 6 de este círculo). 3000 ticks
+de `BOSQUE_AUTO_TICKS` sin ninguna excepción.
+
+**Pendiente real, explícito**: los tres hallazgos de arriba son
+correcciones aplicadas dentro de esta misma sesión, sin una ronda de
+confirmación previa con Diego (a diferencia del resto del proyecto,
+donde una decisión de diseño así se plantea antes de tocar código) --
+justificado por la instrucción explícita "arréglalo todo" de esa misma
+conversación, pero queda anotado para que Diego las revise con calma,
+sobre todo el hallazgo 3 (anula un Global Constraint del plan original).
+`reduccion_prob_captura_por_arma_fabricada=0.2`, `puntos_agarre=3` de
+gnomo y la reserva de un punto para arma son todos PROVISIONALES, sin
+calibrar contra el harness completo (15 semillas × 12000 ticks); si 3
+eventos/12000 ticks-mundo es demasiado bajo para ser interesante en
+partidas reales sigue siendo una pregunta abierta; sin bono ofensivo en
+caza; sin integración con `nucleo/conflicto.py`; sin diferenciar lanza de
+hacha_mano; sin armas de hierro/cobre (círculo futuro); sin mecanismo
+para soltar/gastar un objeto sujeto (mismo hueco ya señalado en el
+círculo de Agarre); herramientas de trabajo y utensilios de cocina siguen
+como próximos círculos posibles del mismo arco.
+
+## Incidente del pipeline autónomo -- PR sin implementación real,
+## corregido en el propio pipeline (2026-09-01)
+
+Contexto completo del incidente en la sección de arriba. Dos correcciones
+al pipeline en sí, además de la implementación real de armas fabricadas:
+
+1. **`.ai-pipeline/litellm_config.yaml` no existía** desde que se creó el
+   resto de la infraestructura (commit `fdd666c`) -- nadie lo notó porque
+   `start-pipeline.sh` lanzaba litellm en background y seguía adelante
+   sin comprobar que el proceso siguiera vivo ni que el puerto respondiera.
+   Creado ahora: backend OpenRouter (confirmado por Diego,
+   `OPENROUTER_API_KEY` ya en el entorno), alias `agente-obrero` →
+   `openrouter/deepseek/deepseek-chat` -- decisión explícita de Diego,
+   confirmado contra el catálogo real de OpenRouter (`GET
+   https://openrouter.ai/api/v1/models`), no adivinado (un primer intento
+   con `anthropic/claude-3.5-sonnet`, slug ya retirado, falló con 404; un
+   segundo intento con `anthropic/claude-sonnet-5` sí funcionó de extremo
+   a extremo pero Diego pidió DeepSeek en su lugar). Probado de extremo a
+   extremo con el modelo final: arrancado el proxy real y llamado
+   `/v1/chat/completions` con `model: agente-obrero` exactamente como lo
+   haría `aider` -- respuesta real de DeepSeek a través de OpenRouter, no
+   solo "el puerto responde".
+2. **`.ai-pipeline/run-plan.sh` no verificaba que el agente hubiera
+   tocado código real** antes de dar la tarea por completada -- solo
+   comprobaba `exit code == 0` de `aider` y que la suite de tests
+   siguiera en verde, ambas condiciones trivialmente ciertas si aider no
+   tocó nada. Corregido: tras cada intento, se mide el diff acumulado
+   desde el commit de arranque de la tarea excluyendo `docs/plans/` y
+   `.ai-pipeline/` -- si no hay ningún cambio real, el intento se trata
+   como fallido y se reintenta (hasta agotar `MAX_RETRIES`), en vez de
+   colar un PR vacío. `start-pipeline.sh` también gana una comprobación
+   de arranque real (proceso vivo + `/health/readiness`) con un error
+   explícito citando este mismo incidente si litellm muere al arrancar.
+
+**Pendiente real, explícito**: el pipeline autónomo no se ha vuelto a
+lanzar de punta a punta con un plan real tras estas correcciones (solo
+probado el proxy de forma aislada) -- la próxima vez que `watch-plans.sh`
+procese un plan es la primera verificación real de las dos correcciones
+juntas.

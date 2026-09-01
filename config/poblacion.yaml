@@ -40,7 +40,22 @@ rangos_raciales:
     # caminar o comer, no un privilegio de la consciencia. Ver
     # componentes/agarre.py. PROVISIONAL, valores razonados por especie,
     # sin calibrar contra el motor en marcha.
-    puntos_agarre: 2  # dos manos
+    # AJUSTE (2026-09-01, hallazgo real del círculo de armas fabricadas):
+    # con solo 2 puntos de agarre, cualquier gnomo que alguna vez recolecte
+    # piedra_suelta en una celda que la tenga (config/fuego.yaml,
+    # probabilidad_piedra_suelta_por_celda=0.2 -- muy alcanzable) termina
+    # con AMBOS puntos ocupados por piedras de fuego para siempre (nunca
+    # se sueltan, ver componentes/fogata.py y sistema_recursos.py:
+    # _resolver_encender_fuego, "son herramientas, se quedan sujetas") --
+    # sin ningún punto libre, RECOLECTAR nunca puede volver a agarrar
+    # madera/piedra en crudo, así que FABRICAR_ARMA queda estructuralmente
+    # inalcanzable (confirmado: 0 armas fabricadas en 4 semillas x 3000
+    # ticks con puntos_agarre=2, ver CLAUDE.md). Subido a 3 -- dos manos
+    # más un tercer punto (bajo el brazo/en el cinturón, misma licencia
+    # aproximada que ya tenía "2 manos") para que las piedras del fuego no
+    # bloqueen permanentemente la capacidad de agarrar material para un
+    # arma. PROVISIONAL, sin calibrar contra el motor en marcha.
+    puntos_agarre: 3
     fuerza: [0.2, 0.5]
     agilidad: [0.3, 0.7]
     velocidad: [0.2, 0.5]

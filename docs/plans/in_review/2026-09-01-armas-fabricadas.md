@@ -48,7 +48,7 @@
 - Produces: `_utilidad_fabricar_arma(cap_mental: CapacidadMental, necesidades: Necesidades, agarre: Agarre | None, umbral_consciencia_agencia: float, catalogo_materiales: dict, nombres_arma_fabricada: set[str]) -> float`, función pura de módulo en `sistemas/sistema_decision.py` — consumida por Task 4 indirectamente (verificación de motor real) y por cualquier círculo futuro que quiera razonar sobre esta utilidad sin reimplementarla.
 - Consumes: `Agarre` (`componentes/agarre.py`, ya existe — campo `objetos: list[str]`), `CapacidadMental.consciencia`, `Necesidades.seguridad` (ya existen).
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 Crea `tests/test_fabricar_arma.py`:
 
@@ -161,12 +161,12 @@ def test_sin_agarre_no_fabrica():
     assert utilidad == 0.0
 ```
 
-- [ ] **Step 2: Ejecutar el test y confirmar que falla**
+- [x] **Step 2: Ejecutar el test y confirmar que falla**
 
 Run: `cd /home/diego/proyecto-simulacion && python3 -m pytest tests/test_fabricar_arma.py -v`
 Expected: `ImportError` o `ModuleNotFoundError` / `ImportError: cannot import name '_utilidad_fabricar_arma'` — la función no existe todavía.
 
-- [ ] **Step 3: Añadir `Accion.FABRICAR_ARMA` al enum**
+- [x] **Step 3: Añadir `Accion.FABRICAR_ARMA` al enum**
 
 En `componentes/intencion.py`, justo después de la línea `ENCENDER_FUEGO = "encender_fuego"` (y antes del comentario `# Bloque F3 (crisis mental...`), inserta:
 
@@ -187,7 +187,7 @@ En `componentes/intencion.py`, justo después de la línea `ENCENDER_FUEGO = "en
     FABRICAR_ARMA = "fabricar_arma"
 ```
 
-- [ ] **Step 4: Añadir `apto_arma` y la sección `armas` a `config/materiales.yaml`**
+- [x] **Step 4: Añadir `apto_arma` y la sección `armas` a `config/materiales.yaml`**
 
 En la entrada `madera:` (dentro de `materiales:`), añade la línea `apto_arma: true` justo después de `apto_construccion: true`:
 
@@ -241,7 +241,7 @@ armas:
     piedra: hacha_mano
 ```
 
-- [ ] **Step 5: Implementar `_utilidad_fabricar_arma` y cablearla en `actualizar()`**
+- [x] **Step 5: Implementar `_utilidad_fabricar_arma` y cablearla en `actualizar()`**
 
 En `sistemas/sistema_decision.py`, añade esta función de módulo justo después de `_tipo_crisis` y antes de `class SistemaDecision:`:
 
@@ -308,17 +308,17 @@ Dentro del bucle `for id_entidad in gestor.entidades_con(...)`, justo después d
 
 Y en la tupla `candidatas`, añade `(utilidad_fabricar_arma, Accion.FABRICAR_ARMA),` justo después de `(utilidad_encender_fuego, Accion.ENCENDER_FUEGO),` y antes de `(base_deambular, Accion.DEAMBULAR),`.
 
-- [ ] **Step 6: Ejecutar el test y confirmar que pasa**
+- [x] **Step 6: Ejecutar el test y confirmar que pasa**
 
 Run: `cd /home/diego/proyecto-simulacion && python3 -m pytest tests/test_fabricar_arma.py -v`
 Expected: 6 tests PASS.
 
-- [ ] **Step 7: Ejecutar toda la suite para confirmar que no hay regresión**
+- [x] **Step 7: Ejecutar toda la suite para confirmar que no hay regresión**
 
 Run: `cd /home/diego/proyecto-simulacion && python3 -m pytest tests/ -q`
 Expected: `28 passed` (22 existentes + 6 nuevos).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/diego/proyecto-simulacion
@@ -350,7 +350,7 @@ EOF
 - Consumes: `Accion.FABRICAR_ARMA` (Task 1), `Agarre` (`componentes/agarre.py`), `config["armas"]["nombre_arma_por_material"]` (Task 1), `self.catalogo_materiales` (ya existe en `_cachear_configuracion`).
 - Produces: `SistemaRecursos._resolver_fabricar_arma(self, agarre: Agarre | None, entidad_id: int, pos_x: int, pos_y: int, zona_idx: int, bus_eventos: BusEventos, tick_actual: int) -> None` — muta `agarre.objetos` in situ; emite Evento `"ArmaFabricada"`.
 
-- [ ] **Step 1: Cachear `nombre_arma_por_material`**
+- [x] **Step 1: Cachear `nombre_arma_por_material`**
 
 En `sistemas/sistema_recursos.py`, dentro de `_cachear_configuracion`, justo después de la línea:
 ```python
@@ -366,7 +366,7 @@ añade:
         )
 ```
 
-- [ ] **Step 2: Implementar `_resolver_fabricar_arma`**
+- [x] **Step 2: Implementar `_resolver_fabricar_arma`**
 
 Añade este método a la clase `SistemaRecursos`, justo después de `_resolver_encender_fuego` (antes de `_consumir_fogatas`):
 
@@ -416,7 +416,7 @@ Añade este método a la clase `SistemaRecursos`, justo después de `_resolver_e
             return
 ```
 
-- [ ] **Step 3: Cablear el despacho en `ejecutar()`**
+- [x] **Step 3: Cablear el despacho en `ejecutar()`**
 
 En `sistemas/sistema_recursos.py`, dentro de `ejecutar()`, justo después del bloque:
 ```python
@@ -434,7 +434,7 @@ añade:
                 )
 ```
 
-- [ ] **Step 4: Escribir y ejecutar el arnés de verificación (no se commitea)**
+- [x] **Step 4: Escribir y ejecutar el arnés de verificación (no se commitea)**
 
 Crea `/tmp/verificar_fabricar_arma.py`:
 
@@ -490,12 +490,12 @@ print("VERIFICACION TASK 2: TODO OK")
 Run: `python3 /tmp/verificar_fabricar_arma.py`
 Expected: las tres líneas `OK:` y `VERIFICACION TASK 2: TODO OK`, sin `AssertionError`.
 
-- [ ] **Step 5: Ejecutar la suite completa para confirmar que no hay regresión**
+- [x] **Step 5: Ejecutar la suite completa para confirmar que no hay regresión**
 
 Run: `cd /home/diego/proyecto-simulacion && python3 -m pytest tests/ -q`
 Expected: `28 passed`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/diego/proyecto-simulacion
@@ -525,7 +525,7 @@ EOF
 - Consumes: `Agarre.objetos` conteniendo `"lanza"` o `"hacha_mano"` (Task 2), `config["armas"]["nombre_arma_por_material"]` (Task 1).
 - Produces: `SistemaDepredacion.reduccion_prob_captura_por_arma_fabricada: float` (nuevo atributo cacheado); lógica reforzada en `_resolver_ataque` — sin cambio de firma pública.
 
-- [ ] **Step 1: Añadir la constante a `config/combate.yaml`**
+- [x] **Step 1: Añadir la constante a `config/combate.yaml`**
 
 Justo después de la línea `reduccion_prob_captura_por_agarre: 0.1` (y su bloque de comentario ya existente), añade:
 
@@ -542,7 +542,7 @@ Justo después de la línea `reduccion_prob_captura_por_agarre: 0.1` (y su bloqu
   reduccion_prob_captura_por_arma_fabricada: 0.2
 ```
 
-- [ ] **Step 2: Cachear la constante y el conjunto de nombres de arma**
+- [x] **Step 2: Cachear la constante y el conjunto de nombres de arma**
 
 En `sistemas/sistema_depredacion.py`, dentro de `_cachear_configuracion`, justo después de:
 ```python
@@ -563,7 +563,7 @@ añade:
         )
 ```
 
-- [ ] **Step 3: Reforzar la reducción en `_resolver_ataque`**
+- [x] **Step 3: Reforzar la reducción en `_resolver_ataque`**
 
 Sustituye el bloque:
 ```python
@@ -595,7 +595,7 @@ por:
             prob_exito -= self.reduccion_prob_captura_por_agarre
 ```
 
-- [ ] **Step 4: Escribir y ejecutar el arnés estadístico de verificación (no se commitea)**
+- [x] **Step 4: Escribir y ejecutar el arnés estadístico de verificación (no se commitea)**
 
 Crea `/tmp/verificar_efecto_arma.py`:
 
@@ -690,12 +690,12 @@ print("VERIFICACION TASK 3: TODO OK")
 Run: `python3 /tmp/verificar_efecto_arma.py`
 Expected: `desarmada > cruda > armada` en las tres tasas impresas, ambos `assert` sin fallar, y `VERIFICACION TASK 3: TODO OK`.
 
-- [ ] **Step 5: Ejecutar la suite completa para confirmar que no hay regresión**
+- [x] **Step 5: Ejecutar la suite completa para confirmar que no hay regresión**
 
 Run: `cd /home/diego/proyecto-simulacion && python3 -m pytest tests/ -q`
 Expected: `28 passed`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/diego/proyecto-simulacion
@@ -725,7 +725,7 @@ EOF
 **Interfaces:**
 - Consumes: todo lo producido en Tasks 1-3 — ninguna interfaz nueva.
 
-- [ ] **Step 1: Escribir y ejecutar el arnés de motor real (no se commitea)**
+- [x] **Step 1: Escribir y ejecutar el arnés de motor real (no se commitea)**
 
 Crea `/tmp/verificar_armas_motor_real.py`:
 
@@ -803,12 +803,12 @@ Expected: cuatro líneas de resultado (una por semilla) sin ninguna excepción, 
 
 Si las cuatro semillas dan `eventos_arma == 0`, NO continúes al Step 3 dando el círculo por cerrado: investiga primero (mismo patrón que el hallazgo real de "piedra suelta" en el círculo de fuego, donde la precondición resultó casi inalcanzable en juego normal) y decide si hace falta un ajuste antes de documentar.
 
-- [ ] **Step 2: Confirmar que la suite completa de tests sigue en verde**
+- [x] **Step 2: Confirmar que la suite completa de tests sigue en verde**
 
 Run: `cd /home/diego/proyecto-simulacion && python3 -m pytest tests/ -q`
 Expected: `28 passed`.
 
-- [ ] **Step 3: Documentar el cierre del círculo en `CLAUDE.md`**
+- [x] **Step 3: Documentar el cierre del círculo en `CLAUDE.md`**
 
 Añade una nueva sección al final de `CLAUDE.md` (después de la última sección existente, "Fuego controlado (Fogata)..." / "Piedra suelta..."), siguiendo el mismo estilo narrativo que el resto del documento (título con fecha, decisiones de diseño, implementación, verificación con números REALES de Step 1, pendiente explícito). Usa esta plantilla, sustituyendo `<N>` por los números reales observados:
 
@@ -879,7 +879,7 @@ como próximos círculos posibles del mismo arco, ninguno decidido
 todavía.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /home/diego/proyecto-simulacion

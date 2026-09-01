@@ -56,6 +56,15 @@ class SistemaDepredacion:
         self.reduccion_prob_captura_por_agarre: float = float(
             cfg_dep.get("reduccion_prob_captura_por_agarre", 0.1)
         )
+        # FABRICAR_ARMA (2026-09-01, ver componentes/agarre.py,
+        # sistema_decision.py:_utilidad_fabricar_arma y
+        # sistema_recursos.py:_resolver_fabricar_arma).
+        self.reduccion_prob_captura_por_arma_fabricada: float = float(
+            cfg_dep.get("reduccion_prob_captura_por_arma_fabricada", 0.2)
+        )
+        self.nombres_arma_fabricada: set[str] = set(
+            self.config.get("armas", {}).get("nombre_arma_por_material", {}).values()
+        )
         self.umbral_disposicion_caza: float = float(
             cfg_dep.get("umbral_disposicion_caza", 0.5)
         )
@@ -235,11 +244,18 @@ class SistemaDepredacion:
 
         # AGARRE -- primer efecto real (2026-08-31, ver componentes/agarre.py
         # y conversación de diseño con Diego: "un palo para defenderse, o
-        # una roca"). Binario por ahora: tener algo sujeto reduce la
-        # probabilidad de captura, sin escalar por cuántos puntos de
-        # agarre estén llenos ni por qué material sea -- primera pasada
-        # deliberadamente simple.
-        if agarre_presa is not None and len(agarre_presa.objetos) > 0:
+        # una roca"). REFORZADO (2026-09-01, ver componentes/agarre.py y
+        # sistema_recursos.py:_resolver_fabricar_arma): un arma FABRICADA
+        # ("lanza"/"hacha_mano") reduce la probabilidad de captura más que
+        # un objeto crudo cualquiera -- sustituye la reducción binaria, no
+        # se suma a ella. Efecto todavía binario dentro de cada categoría
+        # (crudo vs. fabricada), sin escalar por cantidad ni diferenciar
+        # lanza de hacha_mano -- primera pasada deliberadamente simple.
+        if agarre_presa is not None and any(
+            obj in self.nombres_arma_fabricada for obj in agarre_presa.objetos
+        ):
+            prob_exito -= self.reduccion_prob_captura_por_arma_fabricada
+        elif agarre_presa is not None and len(agarre_presa.objetos) > 0:
             prob_exito -= self.reduccion_prob_captura_por_agarre
 
         prob_exito = max(self.captura_prob_min, min(self.captura_prob_max, prob_exito))

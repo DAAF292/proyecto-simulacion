@@ -56,6 +56,20 @@ class Accion(Enum):
     # una Fogata ahi (nada que encender). Sin desplazamiento (como
     # RECOLECTAR/ALIVIARSE) -- se resuelve donde ya se este.
     ENCENDER_FUEGO = "encender_fuego"
+    # FABRICAR_ARMA (2026-09-01, primer círculo del arco herramientas/
+    # utensilios/armas -- ver componentes/agarre.py, config/materiales.yaml
+    # sección 'armas' y la conversación de diseño con Diego: "un palo para
+    # defenderse, o una roca... hachas utensilios"). Misma compuerta de
+    # consciencia que CONSTRUIR/RECOLECTAR/ENCENDER_FUEGO. Utilidad = 1.0 -
+    # Necesidades.seguridad, mismo patrón causal que ENCENDER_FUEGO con
+    # confort_termico -- responde a una necesidad real (sentirse inseguro),
+    # no a un objetivo administrativo. Gateada a 0.0 si ya tiene un arma
+    # fabricada en Agarre, o si no tiene ningún material apto_arma
+    # (madera/piedra) sujeto todavía. A diferencia de ENCENDER_FUEGO, NO
+    # empuja RECOLECTAR -- el material crudo ya se agarra sin causa por el
+    # mecanismo genérico de Agarre. Sin desplazamiento (como RECOLECTAR/
+    # ENCENDER_FUEGO) -- se resuelve donde ya se esté.
+    FABRICAR_ARMA = "fabricar_arma"
     # Bloque F3 (crisis mental, discutida y confirmada con Diego): anulan
     # la Utility AI normal mientras PoolMental.estabilidad este en crisis
     # -- ver sistema_decision.py para el disparador y sistema_movimiento.py

@@ -107,6 +107,9 @@ materiales:
     capacidad_retencion: 0.05
     combustibilidad: 0.0
     apto_construccion: true
+    # apto_arma (2026-09-01, primer círculo del arco herramientas/
+    # utensilios/armas): una piedra tallada como hacha de mano.
+    apto_arma: true
   arcilla:
     categoria: mineral
     forma_en_mundo: sustrato
@@ -156,6 +159,9 @@ materiales:
     combustibilidad: 0.55
     tasa_descomposicion_dia: 0.01
     apto_construccion: true
+    # apto_arma (2026-09-01, primer círculo del arco herramientas/
+    # utensilios/armas): una lanza tallada de un palo de madera.
+    apto_arma: true
   fibra:
     categoria: organico_vegetal
     forma_en_mundo: deposito
@@ -359,3 +365,18 @@ construccion:
   # inventar ese consumo (hueco honesto, no resuelto en esta pieza).
   # PROVISIONAL, sin calibrar contra el motor en marcha.
   tasa_recoleccion_kg_tick: 1.0
+
+# --- Armas fabricadas (2026-09-01, primer círculo del arco herramientas/
+# utensilios/armas) -----------------------------------------------------
+# Qué materiales sirven para fabricar un arma simple (apto_arma, arriba en
+# cada entrada del catálogo -- madera y piedra por ahora; hierro/cobre
+# quedan fuera, reservados para un círculo futuro de armas metálicas) y
+# qué nombre recibe el arma fabricada a partir de cada uno. Efecto
+# idéntico para ambas en este círculo (ver config/combate.yaml,
+# reduccion_prob_captura_por_arma_fabricada) -- el nombre distinto no
+# cambia nada mecánico todavía, solo deja la puerta abierta para un
+# círculo futuro que sí diferencie por tipo de arma.
+armas:
+  nombre_arma_por_material:
+    madera: lanza
+    piedra: hacha_mano

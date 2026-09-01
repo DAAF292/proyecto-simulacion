@@ -262,6 +262,7 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
+from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.asentamiento import disposicion_a_aportar
 from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.construccion import (
@@ -272,6 +273,7 @@ from nucleo.construccion import (
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.inventario import espacio_disponible_kg
+from nucleo.percepcion import radio_individual
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
 
@@ -408,6 +410,34 @@ def _tipo_crisis(temperamento: Temperamento, config_crisis: dict) -> Accion:
     return Accion.CATATONIA
 
 
+def _utilidad_fabricar_arma(
+    cap_mental: CapacidadMental,
+    necesidades: Necesidades,
+    agarre: Agarre | None,
+    umbral_consciencia_agencia: float,
+    catalogo_materiales: dict,
+    nombres_arma_fabricada: set[str],
+) -> float:
+    """Utilidad de FABRICAR_ARMA -- 1.0 - seguridad, mismo patrón causal
+    que ENCENDER_FUEGO con confort_termico (ver docstring del módulo y
+    componentes/intencion.py). Devuelve 0.0 si no es consciente, si ya
+    tiene un arma fabricada sujeta, o si no tiene ningún material
+    apto_arma en crudo sujeto todavía."""
+    if cap_mental.consciencia < umbral_consciencia_agencia:
+        return 0.0
+    if agarre is None:
+        return 0.0
+    if any(obj in nombres_arma_fabricada for obj in agarre.objetos):
+        return 0.0
+    tiene_material_crudo = any(
+        catalogo_materiales.get(obj, {}).get("apto_arma", False)
+        for obj in agarre.objetos
+    )
+    if not tiene_material_crudo:
+        return 0.0
+    return 1.0 - necesidades.seguridad
+
+
 class SistemaDecision:
     """
     Envoltorio de clase (2026-08-23, mismo motivo que SistemaCapacidadFisica):
@@ -461,6 +491,24 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
     # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py, componentes/
     # fogata.py y nucleo/fuego.py).
     piedras_necesarias_fuego = int(config.get("fuego", {}).get("piedras_necesarias", 2))
+    # FABRICAR_ARMA (2026-09-01, ver componentes/agarre.py,
+    # config/materiales.yaml sección 'armas' y sistema_decision.py:
+    # _utilidad_fabricar_arma).
+    config_armas = config.get("armas", {})
+    nombre_arma_por_material: dict[str, str] = config_armas.get("nombre_arma_por_material", {})
+    nombres_arma_fabricada = set(nombre_arma_por_material.values())
+    # HALLAZGO REAL (2026-09-01, verificado contra el motor: 4 semillas x
+    # 3000 ticks, 0 armas fabricadas en las cuatro -- ver docstring junto
+    # a utilidad_fabricar_arma más abajo). Mismos parámetros de percepción
+    # de amenaza que ya usan sistema_necesidades.py (drenaje de seguridad)
+    # y sistema_movimiento.py (HUIR real) -- reutilizados, no duplicados
+    # con valores propios.
+    cfg_percepcion_amenaza = config.get("percepcion", {})
+    radio_min_percepcion = int(cfg_percepcion_amenaza.get("radio_minimo_celdas", 0))
+    radio_max_percepcion = int(cfg_percepcion_amenaza.get("radio_maximo_celdas", 4))
+    umbral_disposicion_amenaza = float(
+        config.get("depredacion", {}).get("umbral_disposicion_caza", 0.5)
+    )
     # Almacén de asentamiento (2026-08-30, Círculo E -- ver
     # nucleo/asentamiento.py y nucleo/construccion.py:objetivo_construccion_actual).
     config_asentamiento = config.get("asentamiento", {})
@@ -645,7 +693,85 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
                 ):
                     utilidad_encender_fuego = 1.0 - necesidades.confort_termico
 
+        # FABRICAR_ARMA (2026-09-01, ver componentes/agarre.py,
+        # config/materiales.yaml sección 'armas' y el docstring del
+        # módulo). Mismo patrón causal que ENCENDER_FUEGO -- ver
+        # _utilidad_fabricar_arma arriba.
+        agarre = gestor.obtener_componente(id_entidad, Agarre)
+        utilidad_fabricar_arma = _utilidad_fabricar_arma(
+            cap_mental,
+            necesidades,
+            agarre,
+            umbral_consciencia_agencia,
+            catalogo_materiales,
+            nombres_arma_fabricada,
+        )
+        # ESLABÓN HEREDADO hacia RECOLECTAR (2026-09-01, mismo patrón que
+        # ENCENDER_FUEGO/piedra_suelta arriba -- ver su comentario para el
+        # razonamiento completo). OVERRIDE DELIBERADO del Global Constraint
+        # original del plan de armas fabricadas ("sin rama causal nueva en
+        # RECOLECTAR"): verificado contra el motor real (4 semillas x 3000
+        # ticks, ver CLAUDE.md) que SIN esto, FABRICAR_ARMA es
+        # estructuralmente inalcanzable -- el mecanismo genérico de Agarre
+        # (Vía 2 de _resolver_recolectar) agarra lo primero disponible bajo
+        # los pies, y arcilla (tipo_sustrato dominante) o piedra_suelta
+        # ganan casi siempre el turno antes de que madera/piedra (mucho más
+        # raras) tengan ocasión. Un individuo que nunca ha sentido
+        # inseguridad real (seguridad=1.0 siempre) sigue sin heredar nada
+        # aquí -- misma ley causal que ya protege piedra_suelta.
+        if (
+            cap_mental.consciencia >= umbral_consciencia_agencia
+            and agarre is not None
+            and not any(obj in nombres_arma_fabricada for obj in agarre.objetos)
+            and not any(
+                catalogo_materiales.get(obj, {}).get("apto_arma", False) for obj in agarre.objetos
+            )
+        ):
+            utilidad_recolectar = max(utilidad_recolectar, 1.0 - necesidades.seguridad)
+        # HALLAZGO REAL (2026-09-01, motor real: 4 semillas x 3000 ticks,
+        # 0 armas fabricadas en las cuatro con la fórmula desnuda de
+        # arriba). Causa: 1.0 - Necesidades.seguridad es EXACTAMENTE la
+        # misma fórmula que ya usa utilidad_huir (ver arriba en esta
+        # función), y HUIR va primero en `candidatas` -- max() conserva el
+        # primer máximo en empate, así que FABRICAR_ARMA nunca podía ganar
+        # salvo con HUIR apagado por agotamiento (agotado=True), una
+        # combinación casi inalcanzable en juego normal (mismo patrón que
+        # el hallazgo de piedra suelta para el fuego). No es un ajuste
+        # artificial: son dos respuestas distintas a la inseguridad que la
+        # fórmula compartida no distinguía -- huir es la reacción a un
+        # peligro FÍSICAMENTE PRESENTE ahora mismo (por eso
+        # _calcular_huida cae a un paso aleatorio si no encuentra ninguna
+        # amenaza real que perseguir, ver sistema_movimiento.py); fabricar
+        # un arma es la respuesta a sentirse inseguro en general, y no
+        # tiene sentido intentarlo mientras el peligro sigue ahí delante.
+        # Se apaga aquí solo cuando SÍ hay una amenaza real y presente
+        # ahora, con el mismo criterio de disposición y radio que ya usan
+        # sistema_necesidades.py (drenaje de seguridad) y
+        # sistema_movimiento.py (HUIR real) -- reutiliza
+        # posicion_amenaza_mas_cercana en vez de inventar una señal nueva.
+        if utilidad_fabricar_arma > 0.0:
+            radio_amenaza_arma = radio_individual(
+                dims.agudeza_sensorial, radio_min_percepcion, radio_max_percepcion
+            )
+            zona_amenaza_arma = mundo.territorio.zonas[pos.zona_idx]
+            if posicion_amenaza_mas_cercana(
+                gestor, zona_amenaza_arma, id_entidad, pos.x, pos.y, radio_amenaza_arma,
+                dims.peso, umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
+            ) is not None:
+                utilidad_fabricar_arma = 0.0
+
+        # ORDEN (2026-09-01, ver hallazgo real más arriba): FABRICAR_ARMA
+        # va ANTES que HUIR a propósito. Ambas comparten literalmente la
+        # misma fórmula (1.0 - seguridad) -- max() conserva el primer
+        # máximo en empate, así que el orden decide quién gana cuando
+        # ninguna amenaza real está presente ahora mismo (el único caso en
+        # que pueden empatar de verdad, porque el gate de arriba ya puso
+        # FABRICAR_ARMA a 0.0 en cuanto SÍ hay una amenaza real). En ese
+        # empate sin amenaza, HUIR de todas formas cae a un paso aleatorio
+        # (_calcular_huida, sistema_movimiento.py) -- dejar que
+        # FABRICAR_ARMA gane ahí no le quita nada real a HUIR.
         candidatas = (
+            (utilidad_fabricar_arma, Accion.FABRICAR_ARMA),
             (utilidad_huir, Accion.HUIR),
             (utilidad_alimentarse, accion_alimentarse),
             (1.0 - necesidades.hidratacion, Accion.BEBER),
