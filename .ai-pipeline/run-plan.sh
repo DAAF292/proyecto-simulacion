@@ -24,6 +24,35 @@ TEST_PASSED=false
 
 mkdir -p docs/plans/{in_progress,in_review,failed,done}
 
+# PARCHE max_reflections (2026-09-01, pedido por Diego tras el hallazgo
+# real del incidente de "flora 1/5": aider/coders/base_coder.py deja
+# hasta 3 reintentos internos ("reflections") DENTRO DE LA MISMA
+# conversación cuando el modelo produce un bloque SEARCH/REPLACE mal
+# formado, acumulando contexto de fallos anteriores en el mismo turno --
+# coincide con el patrón ya documentado de que este modelo se comporta
+# peor cuanto más se le empuja dentro de un contexto que ya se está
+# degradando (mismo mecanismo que el hallazgo de temperatura/greedy).
+# No expuesto por ningún flag de CLI ni por aider-model-settings.yml
+# (confirmado leyendo aider/args.py -- cero coincidencias de
+# "reflect") -- la única forma de bajarlo es parchear el paquete
+# instalado directamente. Se aplica aquí, al arrancar CADA ejecución
+# (idempotente -- si ya está parcheado, el grep no encuentra nada y no
+# hace nada), en vez de una vez a mano, para que siga vigente aunque
+# `aider` se reinstale o actualice sin que nadie tenga que acordarse de
+# reaplicarlo. Valor elegido: 1 (un solo reintento interno de
+# autocorrección -- suficiente para un tropiezo simple de formato, no
+# tanto como para dejarlo spiralear hacia la narración de pánico que
+# causó el incidente real) -- nuestro propio bucle de reintentos de más
+# abajo ya da un contexto fresco completo si hace falta más margen.
+AIDER_PYTHON="/home/diego/.local/share/uv/tools/aider-chat/bin/python"
+if [ -x "$AIDER_PYTHON" ]; then
+    AIDER_BASE_CODER=$("$AIDER_PYTHON" -c "import aider.coders.base_coder as m; print(m.__file__)" 2>/dev/null || true)
+    if [ -n "$AIDER_BASE_CODER" ] && [ -f "$AIDER_BASE_CODER" ] && grep -q "^    max_reflections = 3$" "$AIDER_BASE_CODER"; then
+        sed -i "s/^    max_reflections = 3$/    max_reflections = 1/" "$AIDER_BASE_CODER"
+        echo "[PARCHE] max_reflections de aider bajado de 3 a 1 en $AIDER_BASE_CODER"
+    fi
+fi
+
 echo "=== INICIANDO TAREA: $PLAN_NAME ==="
 git checkout master || git checkout main
 # git pull --ff-only (2026-09-01, pedido por Diego antes de soltar el
