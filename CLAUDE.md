@@ -2514,3 +2514,40 @@ lanzar de punta a punta con un plan real tras estas correcciones (solo
 probado el proxy de forma aislada) -- la próxima vez que `watch-plans.sh`
 procese un plan es la primera verificación real de las dos correcciones
 juntas.
+
+**Arquitectura completa del flujo, confirmada por Diego (2026-09-01)**:
+Claude/Claude Code redacta el plan en `docs/superpowers/plans/` →
+`watch-plans.sh` (centinela en background, arrancado por
+`start-pipeline.sh`, alias `iniciar-ia` en `~/.bashrc`, ya existente) lo
+detecta y lo mueve a `docs/plans/in_progress/` → `run-plan.sh` despacha
+`aider` contra el proxy LiteLLM local (puerto 4000, alias `agente-obrero`)
+→ `pytest` valida → si pasa, commit + `git push` + `gh pr create`. Acceso
+remoto opcional vía Tailscale + Termius desde Android (ya cubierto por el
+propio `start-pipeline.sh`, sin cambios). Confirmado consistente con el
+código real -- no una aspiración sin verificar.
+
+**Guardas de presupuesto añadidas a `.ai-pipeline/litellm_config.yaml`,
+pedidas explícitamente por Diego**: `max_budget: 0.10` +
+`budget_duration: "1d"` en el despliegue `agente-obrero`, `litellm_settings.
+drop_params: true` global. **Precisión importante sobre lo que esto
+realmente hace, verificada contra el código de litellm instalado (v1.99.0)
+en vez de asumida**: no existe ningún mecanismo en litellm (ni en ningún
+proxy LLM) para rechazar una llamada individual antes de que termine por
+su coste -- el coste depende de los tokens de SALIDA, que no se conocen
+hasta que la generación termina. Lo que Diego pidió como "máximo por
+solicitud individual" se implementó como lo más parecido que existe de
+verdad: `max_budget`/`budget_duration` llevan la cuenta ACUMULADA de
+gasto de ese despliegue en una ventana de tiempo (aquí, 1 día) usando la
+caché en memoria del propio proceso de litellm (sin Redis/Postgres,
+válido para un único proceso siempre activo) -- al superarse, el router
+deja de enrutar a ese despliegue hasta que la ventana se reinicia. Es
+protección real contra un BUCLE que dispare muchas llamadas seguidas (el
+riesgo real de un pipeline sin supervisión), no contra una única llamada
+cara. Con el coste medido de `deepseek-chat` (~$0.000005 por llamada
+trivial), 0.10 USD/día sigue permitiendo miles de llamadas antes de
+cortar -- generoso, pero es un techo duro real donde antes no había
+ninguno. Probado de extremo a extremo: proxy arrancado con esta config,
+llamada real a través de ella sin fallos ni cambio de comportamiento.
+Recomendación de Diego, no verificada por Claude por ser un panel externo:
+limitar también el saldo máximo de la propia clave en el panel web de
+OpenRouter, como segunda barrera independiente del proxy.

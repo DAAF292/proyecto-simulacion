@@ -27,3 +27,31 @@ model_list:
     litellm_params:
       model: openrouter/deepseek/deepseek-chat
       api_key: os.environ/OPENROUTER_API_KEY
+      # GUARDAS DE PRESUPUESTO (2026-09-01, pedidas explícitamente por
+      # Diego -- ver CLAUDE.md, "Incidente del pipeline autónomo").
+      # PRECISIÓN IMPORTANTE, no cosmética: litellm NO tiene forma de
+      # rechazar una llamada individual antes de que se complete por
+      # coste ("por cada solicitud individual") -- el coste de una
+      # llamada depende de los tokens de SALIDA, que no se conocen hasta
+      # que termina de generarse, así que ningún proxy puede vetarla de
+      # antemano por precio. Lo que sí existe y es real: max_budget +
+      # budget_duration llevan la cuenta acumulada de gasto de ESTE
+      # despliegue (agente-obrero) en el periodo indicado (aquí, por
+      # día) usando una caché en memoria del propio proceso de litellm
+      # (sin necesidad de Redis/Postgres para un solo proceso siempre
+      # activo) -- al superar el tope, el router deja de enrutar
+      # llamadas a este despliegue hasta que el periodo se reinicia. Es
+      # la protección real contra un BUCLE que dispare muchas llamadas
+      # (el riesgo real de un pipeline autónomo sin supervisión), no
+      # contra una única llamada cara -- con deepseek-chat (coste medido
+      # ~$0.000005 por llamada trivial) 0.10 USD/día sigue siendo
+      # generoso en número de llamadas, pero es un techo duro real donde
+      # antes no había ninguno.
+      max_budget: 0.10
+      budget_duration: "1d"
+
+# drop_params (2026-09-01, pedido por Diego): descarta parámetros que el
+# proveedor de destino no soporta en vez de fallar la llamada entera --
+# ajuste global de estabilidad, no de coste.
+litellm_settings:
+  drop_params: true
