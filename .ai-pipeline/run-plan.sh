@@ -116,9 +116,40 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     {
         echo "Implementa el plan siguiente al pie de la letra, creando los tests que describe, siguiendo sus Task/Step, sin modificar ninguna aserción de test ya existente en el repositorio."
         echo
+        # AVISO SOBRE LOS PASOS "COMMIT" (2026-09-02, hallazgo real de
+        # eficiencia -- ver CLAUDE.md): el plan incluye pasos "Step N:
+        # Commit" con un bloque bash y un mensaje de commit ya escrito --
+        # convención pensada para un ejecutor que corre shell de verdad
+        # (subagent-driven-development/executing-plans). Con
+        # --auto-commits, ESTE pipeline ya comitea automáticamente cada
+        # bloque de edición aplicado, con su propio mensaje generado por
+        # aider -- confirmado en la primera ejecución real: el mensaje de
+        # commit que terminó en el historial NO coincidió con el que
+        # pedía el plan. El modelo no puede ejecutar bash desde una
+        # respuesta en formato diff -- pedirle igualmente que "siga el
+        # plan al pie de la letra" incluyendo esos pasos es una fuente de
+        # confusión real y probable contribuyente al tic de repetición
+        # residual observado ("We must follow plan exactly... produce
+        # SEARCH/REPLACE blocks") -- el modelo intentando reconciliar un
+        # paso no expresable como SEARCH/REPLACE. Se avisa explícitamente
+        # para que lo ignore en vez de dejarlo adivinar.
+        echo "Los pasos 'Step N: Commit' del plan (bloques bash con git commit) NO son para ti -- este pipeline comitea automáticamente cada edición que apliques (--auto-commits), con su propio mensaje. Ignora esos pasos por completo: no generes ningún bloque para ellos, limítate a los bloques SEARCH/REPLACE de código y de tests."
+        echo
         echo "## PLAN COMPLETO"
         echo
-        cat "docs/plans/in_progress/$PLAN_NAME.md"
+        # FILTRAR CABECERA "For agentic workers" (2026-09-02, hallazgo real
+        # de eficiencia -- ver CLAUDE.md): la plantilla de writing-plans
+        # inyecta una línea "REQUIRED SUB-SKILL: Use
+        # superpowers:subagent-driven-development..." pensada para un
+        # subagente de Claude Code, no para aider -- agente-obrero no tiene
+        # ni idea de qué es esa skill. Es ruido puro en el prompt (y
+        # candidato razonable a contribuir al tic de repetición residual
+        # que sigue apareciendo pese al fix de temperatura): referenciar
+        # una herramienta/skill que no existe en su entorno real. Se filtra
+        # antes de incrustar el plan, sin tocar el fichero de plan en sí
+        # (que sigue siendo válido si algún día se ejecuta con
+        # subagent-driven-development de verdad).
+        grep -v '^> \*\*For agentic workers:\*\*' "docs/plans/in_progress/$PLAN_NAME.md"
         for f in $ARCHIVOS_PLAN; do
             if [ -f "$f" ]; then
                 echo
