@@ -80,14 +80,33 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # --file -- así el modelo puede escribir bloques SEARCH/REPLACE
     # válidos contra su contenido real (o crearlo, si es un fichero
     # nuevo) en vez de tener que adivinarlo.
-    ARCHIVOS_PLAN=$(grep -oE '`[A-Za-z0-9_./-]+\.(py|yaml|yml|md)`' "docs/plans/in_progress/$PLAN_NAME.md" | tr -d '`' | sort -u)
+    # CORRECCIÓN (2026-09-02, hallazgo real del mismo intento de prueba):
+    # la extracción original ("cualquier ruta entre backticks con
+    # extensión reconocida en TODO el plan") capturaba también menciones
+    # en prosa fuera de cualquier bloque Files: (p.ej. "los cuatro puntos
+    # del motor... (`sistema_ciclo_vital.py`, ...)") -- como esas rutas no
+    # llevan el prefijo real `sistemas/`, aider con --yes-always las creó
+    # como ficheros VACÍOS en la raíz del repo. Restringido a las líneas
+    # `- Modify:`/`- Create:`/`- Test:` del bloque **Files:** de cada
+    # tarea -- la convención real que ya usa la skill writing-plans, sin
+    # falsos positivos de prosa.
+    ARCHIVOS_PLAN=$(grep -oE '\- (Modify|Create|Test): `[A-Za-z0-9_./-]+\.(py|yaml|yml|md)`' "docs/plans/in_progress/$PLAN_NAME.md" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)
     ARCHIVOS_ARGS=()
     for f in $ARCHIVOS_PLAN; do
         ARCHIVOS_ARGS+=(--file "$f")
     done
 
+    # timeout (2026-09-02, hallazgo real del mismo intento de prueba): el
+    # primer intento con deepseek-v4-flash-0731 quedó atascado en un bucle
+    # de razonamiento no convergente -- repitió el mismo párrafo cientos
+    # de veces sin producir nunca una respuesta real, sin que aider ni
+    # este script lo detectaran (nada tenía límite de tiempo). Sin esto,
+    # un modelo atascado así cuelga el intento entero indefinidamente en
+    # vez de fallar y liberar el reintento siguiente -- 8 minutos es
+    # generoso para una tarea de este tamaño (el intento que sí generaba
+    # texto tardaba bajo 1 minuto) pero corta un cuelgue real.
     set +e
-    OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy aider \
+    timeout 480 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy aider \
           --model openai/agente-obrero \
           --edit-format diff \
           --read "docs/plans/in_progress/$PLAN_NAME.md" \
@@ -97,6 +116,11 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
           --yes-always
     AIDER_EXIT_CODE=$?
     set -e
+
+    if [ $AIDER_EXIT_CODE -eq 124 ]; then
+        echo "[FALLO DE VALIDACIÓN] Aider superó el timeout de 480s (posible bucle de razonamiento no convergente del modelo, ver CLAUDE.md). Preparando reintento..."
+        continue
+    fi
 
     if [ $AIDER_EXIT_CODE -ne 0 ]; then
         echo "[ERROR DE INFRAESTRUCTURA] Fallo del proxy o Aider (Código $AIDER_EXIT_CODE)."
