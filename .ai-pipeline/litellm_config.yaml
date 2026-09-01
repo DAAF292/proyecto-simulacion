@@ -1,0 +1,61 @@
+# Config del proxy LiteLLM del pipeline autónomo (.ai-pipeline/start-pipeline.sh
+# lo arranca en el puerto 4000; .ai-pipeline/run-plan.sh llama a aider con
+# --model openai/agente-obrero contra http://0.0.0.0:4000).
+#
+# HISTORIAL (2026-09-01): este fichero nunca existió desde que se creó el
+# resto de la infraestructura del pipeline (commit fdd666c) -- litellm
+# crasheaba al arrancar con "Config file not found", así que el proxy
+# jamás llegó a escuchar en el puerto 4000. Cada llamada de aider contra
+# ese puerto fallaba con "Connection error", agotaba sus reintentos
+# internos, y aider salía con código 0 sin haber tocado ni una línea de
+# código -- el pipeline lo interpretaba como éxito (ver run-plan.sh, la
+# corrección de verificación real de cambios añadida el mismo día) y
+# terminó abriendo un PR (#1, armas-fabricadas) que no implementaba nada
+# del plan. Backend confirmado por Diego: OpenRouter, con
+# OPENROUTER_API_KEY ya presente en el entorno (~/.bashrc).
+#
+# Modelo elegido para el alias "agente-obrero": deepseek/deepseek-v4-flash-0731
+# vía OpenRouter -- decisión explícita de Diego (2026-09-01), segundo
+# cambio de modelo tras deepseek-chat (V3), que Diego consideró "no
+# pensado para estas tareas". Confirmado contra el catálogo real de
+# OpenRouter (GET https://openrouter.ai/api/v1/models): de las cuatro
+# variantes V4 disponibles (pro-0423, pro-0813, flash-0423, flash-0731),
+# flash-0731 es la ÚNICA cuya descripción menciona explícitamente estar
+# "re-post-trained" para "coding, reasoning, and agent workflows" -- el
+# resto son de propósito general. También la más barata de las cuatro
+# (~$0.065/$0.18 por millón de tokens prompt/completion) y con el
+# contexto más amplio (1.3M tokens). Para cambiarlo basta con editar la
+# línea `model:` de abajo, ningún otro fichero del pipeline conoce el
+# modelo real, solo el alias "agente-obrero".
+model_list:
+  - model_name: agente-obrero
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v4-flash-0731
+      api_key: os.environ/OPENROUTER_API_KEY
+      # GUARDAS DE PRESUPUESTO (2026-09-01, pedidas explícitamente por
+      # Diego -- ver CLAUDE.md, "Incidente del pipeline autónomo").
+      # PRECISIÓN IMPORTANTE, no cosmética: litellm NO tiene forma de
+      # rechazar una llamada individual antes de que se complete por
+      # coste ("por cada solicitud individual") -- el coste de una
+      # llamada depende de los tokens de SALIDA, que no se conocen hasta
+      # que termina de generarse, así que ningún proxy puede vetarla de
+      # antemano por precio. Lo que sí existe y es real: max_budget +
+      # budget_duration llevan la cuenta acumulada de gasto de ESTE
+      # despliegue (agente-obrero) en el periodo indicado (aquí, por
+      # día) usando una caché en memoria del propio proceso de litellm
+      # (sin necesidad de Redis/Postgres para un solo proceso siempre
+      # activo) -- al superar el tope, el router deja de enrutar
+      # llamadas a este despliegue hasta que el periodo se reinicia. Es
+      # la protección real contra un BUCLE que dispare muchas llamadas
+      # (el riesgo real de un pipeline autónomo sin supervisión), no
+      # contra una única llamada cara. 0.10 USD/día sigue siendo generoso
+      # en número de llamadas dado el coste por token de este modelo,
+      # pero es un techo duro real donde antes no había ninguno.
+      max_budget: 0.10
+      budget_duration: "1d"
+
+# drop_params (2026-09-01, pedido por Diego): descarta parámetros que el
+# proveedor de destino no soporta en vez de fallar la llamada entera --
+# ajuste global de estabilidad, no de coste.
+litellm_settings:
+  drop_params: true

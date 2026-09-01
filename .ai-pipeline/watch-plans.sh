@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
-WATCH_DIR="docs/plans"
+cd "$(dirname "$0")/.."
+
+SUPERPOWERS_PLANS="docs/superpowers/plans"
+mkdir -p "$SUPERPOWERS_PLANS"
+mkdir -p docs/plans/{in_progress,in_review,failed,done}
 
 echo "=== CENTINELA ACTIVO ==="
-echo "Vigilando la carpeta '$WATCH_DIR' en busca de nuevos planes..."
+echo "Vigilando nuevos planes en: $SUPERPOWERS_PLANS"
 
-# Usamos inotifywait para escuchar eventos de creación o archivos movidos a la carpeta
-inotifywait -m -e create -e moved_to --format "%f" "$WATCH_DIR" | while read -r filename; do
-    # Solo procesamos si es un archivo .md y está directamente en docs/plans/ (no en subcarpetas)
-    if [[ "$filename" == *.md ]]; then
-        # Esperamos un segundo para asegurar que el archivo se ha escrito por completo
-        sleep 1
+while true; do
+    # Buscar el primer archivo .md pendiente en la carpeta de superpowers
+    PLAN_FILE=$(find "$SUPERPOWERS_PLANS" -maxdepth 1 -name "*.md" | head -n 1)
+
+    if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
+        PLAN_NAME=$(basename "$PLAN_FILE")
+        echo "[*] ¡Nuevo plan detectado: $PLAN_NAME!"
         
-        TARGET_PATH="$WATCH_DIR/$filename"
-        if [ -f "$TARGET_PATH" ]; then
-            echo ">>> ¡Nuevo plan detectado por el centinela: $TARGET_PATH!"
-            # Ejecutamos nuestro orquestador pasándole el plan detectado
-            ./.ai-pipeline/run-plan.sh "$TARGET_PATH"
-        fi
+        # Ejecutar el orquestador pasándole la ruta exacta del plan
+        .ai-pipeline/run-plan.sh "$PLAN_FILE"
+        
+        # Si el plan se completó o falló, run-plan.sh ya lo mueve a su carpeta correspondiente (in_review o failed).
+        # Si por lo que sea quedó en in_progress, lo movemos a done o failed según el resultado.
     fi
+
+    sleep 5
 done
