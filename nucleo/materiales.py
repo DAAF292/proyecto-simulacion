@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import math
 import random
+from nucleo.celda import TipoTerreno
 
 
 def _celdas_filon(
@@ -237,3 +238,36 @@ def generar_vetas_minerales(
             resultado[celda] = nombre_material
 
     return resultado
+
+
+# elegir_sustrato_celda (2026-09-01, ver docs/superpowers/specs/
+# 2026-09-01-distribucion-causal-flora-design.md): qué sustrato de una
+# lista de candidatos compatibles con un bioma le toca a una celda
+# concreta -- antes de esto, sustrato_por_bioma era 1 material fijo por
+# bioma entero, sin ninguna variación interna. Determinista, sin
+# consumir rng -- mismo criterio que elevación/lluvia/temperatura, que
+# tampoco lo consumen: son funciones puras del ruido ya generado.
+_BIOMAS_PEDREGOSOS = {TipoTerreno.MONTANA, TipoTerreno.DESIERTO}
+
+
+def elegir_sustrato_celda(
+    candidatos: list[str],
+    bioma: TipoTerreno,
+    elevacion_celda: float,
+    lluvia_celda: float,
+    umbral: float,
+) -> str:
+    """Candidatos ordenados de menor a mayor fertilidad_base (convención
+    de config/materiales.yaml:sustrato_por_bioma). Con un único
+    candidato, se devuelve directo -- ningún bioma necesita más de una
+    señal para decidir lo que ya está decidido (tundra hoy). Con dos,
+    biomas 'pedregosos' (montaña, desierto) comparan elevación_celda
+    contra el umbral -- más alta empuja hacia el candidato MENOS fértil
+    (roca desnuda en las cumbres); biomas 'vegetados' (bosque, pradera)
+    comparan lluvia_celda -- más alta empuja hacia el candidato MÁS
+    fértil (mantillo donde llueve más)."""
+    if len(candidatos) == 1:
+        return candidatos[0]
+    if bioma in _BIOMAS_PEDREGOSOS:
+        return candidatos[0] if elevacion_celda >= umbral else candidatos[-1]
+    return candidatos[-1] if lluvia_celda >= umbral else candidatos[0]
