@@ -1,23 +1,19 @@
 """
 nucleo/materiales.py
 
-Colocación de vetas de mineral en la generación del mundo -- CÍRCULO
-de vetas de mineral (2026-08-30, ver config/materiales.yaml y la
-conversación de diseño con Diego). Funciones puras, reutilizables desde
-nucleo/zona_bioma.py, mismo patrón que nucleo/bioma.py y nucleo/flora.py.
+Colocación de vetas de mineral en la generación del mundo. Funciones
+puras, reutilizables desde nucleo/zona_bioma.py, mismo patrón que
+nucleo/bioma.py y nucleo/flora.py.
 
-ALCANCE explícitamente acotado (confirmado con Diego): esto coloca el
-mineral como DATO en la celda -- Celda.deposito_mineral -- con la misma
-abstracción plana que ya usa toda la flora y el agua (un recurso
-"presente" en una celda, sin geometría de profundidad real). NO resuelve
-si el motor tendrá alguna vez un eje de profundidad de verdad (cuevas,
-estructuras subterráneas de gnomo, madrigueras de conejo) -- esa es una
-decisión de arquitectura mayor, deliberadamente aparcada aparte, no
-decidida de pasada aquí.
+ALCANCE explícitamente acotado: esto coloca el mineral como DATO en la
+celda -- Celda.deposito_mineral -- con la misma abstracción plana que
+ya usa toda la flora y el agua (un recurso "presente" en una celda, sin
+geometría de profundidad real). NO resuelve si el motor tendrá alguna
+vez un eje de profundidad de verdad -- esa es una decisión de
+arquitectura mayor, deliberadamente aparcada aparte.
 
-DOS FORMAS DE VETA, elegidas al azar por veta individual (Diego: "por qué
-tenemos que utilizar un solo sistema? no podemos usar ambos
-indistintamente? eso le dará más variedad"), no una por mineral:
+DOS FORMAS DE VETA, elegidas al azar por veta individual (para más
+variedad visual), no una por mineral:
 
 - Mancha: reutiliza nucleo/zona_bioma.py:_generar_manchas tal cual (mismo
   algoritmo que ya coloca parches de flora), restringida a celdas
@@ -86,22 +82,17 @@ def _celdas_filon(
 def componentes_conexas(celdas: set) -> list[set]:
     """Agrupa un conjunto de celdas en sus componentes conexas (4-vecindad).
 
-    PROMOVIDA a nombre público (2026-08-30, Círculo 2 de profundidad):
-    dejó de ser privada de este módulo cuando nucleo/cueva.py empezó a
-    reutilizarla para quedarse solo con la componente conexa de HUECO que
-    contiene la entrada de la cueva -- mismo algoritmo genérico de
-    flood-fill por 4-vecindad, sin relación con minerales en sí, así que
-    "reutiliza antes de inventar" pedía exponerla en vez de duplicarla.
+    Función pública (también la usa nucleo/cueva.py para quedarse solo
+    con la componente conexa de HUECO que contiene la entrada de la
+    cueva) -- mismo algoritmo genérico de flood-fill, sin relación con
+    minerales en sí.
 
-    Necesario porque _generar_manchas con num_manchas=1 puede devolver un
-    resultado que en realidad son VARIOS fragmentos desconectados: si la
-    primera semilla queda boxed-in (su frontera se vacía antes de llegar
-    al tamaño objetivo, ver docstring de esa función), el bucle externo
-    prueba otra semilla y une ambos parches en un único set de retorno --
-    encontrado al re-verificar el primer intento de este círculo, que
-    filtraba por tamaño total del resultado agregado en vez de por
-    fragmento real y dejaba pasar celdas sueltas de 1x1 escondidas dentro
-    de un total que sí superaba el mínimo."""
+    Necesario porque _generar_manchas con num_manchas=1 puede devolver
+    un resultado que en realidad son VARIOS fragmentos desconectados: si
+    la primera semilla queda boxed-in (su frontera se vacía antes de
+    llegar al tamaño objetivo, ver docstring de esa función), el bucle
+    externo prueba otra semilla y une ambos parches en un único set de
+    retorno."""
     restantes = set(celdas)
     componentes = []
     while restantes:
@@ -143,8 +134,7 @@ def generar_vetas_minerales(
     no un único dict con ambos anidados: config/materiales.yaml tiene
     'materiales' y 'generacion_vetas' como dos claves de nivel superior
     DISTINTAS (mismo criterio que el resto de generar_zona_bioma, un
-    parámetro por sección de config) -- confundir esto fue un bug propio
-    encontrado antes de ejecutar nada, no una elección de diseño.
+    parámetro por sección de config).
 
     _generar_manchas se importa DENTRO de esta función (no al principio
     del módulo) para evitar un import circular: zona_bioma.py importa
@@ -166,8 +156,7 @@ def generar_vetas_minerales(
     prob_filon: float = float(config_generacion_vetas.get("prob_filon_vs_mancha", 0.5))
     longitud_filon = config_generacion_vetas.get("longitud_filon_celdas", [2, 5])
     anchura_filon = config_generacion_vetas.get("anchura_filon_celdas", [0.6, 1.1])
-    # FORMA POR ENCIMA DE EXACTITUD NUMÉRICA (2026-08-30, ver docstring de
-    # más abajo para el razonamiento completo).
+    # FORMA POR ENCIMA DE EXACTITUD NUMÉRICA -- ver docstring más abajo.
     celdas_minimas_por_veta: int = int(config_generacion_vetas.get("celdas_minimas_por_veta", 2))
 
     minerales_con_veta = [
@@ -214,20 +203,16 @@ def generar_vetas_minerales(
                     prob_expansion=0.5,
                 )
 
-            # FORMA POR ENCIMA DE EXACTITUD NUMÉRICA (2026-08-30, Diego:
-            # "esas no leen como veta de ninguna forma... es precisamente
-            # lo contrario de lo que buscabas"). Filtrado por COMPONENTE
-            # CONEXA real, no por tamaño total del resultado agregado --
-            # un primer intento de este filtro medía solo el total y
-            # dejaba pasar celdas sueltas de 1x1 escondidas dentro de un
-            # resultado de _generar_manchas que ya sumaba lo suficiente en
-            # conjunto (num_manchas=1 puede unir varias semillas
-            # desconectadas si la primera queda boxed-in, ver
-            # componentes_conexas). Cada fragmento se evalúa por
-            # separado: los que no llegan al mínimo se descartan, los que
-            # sí llegan se aceptan enteros sin truncar -- mejor pasarse un
-            # poco del objetivo total que dejar un resto de una sola
-            # celda.
+            # FORMA POR ENCIMA DE EXACTITUD NUMÉRICA: filtrado por
+            # COMPONENTE CONEXA real, no por tamaño total del resultado
+            # agregado -- num_manchas=1 puede unir varias semillas
+            # desconectadas si la primera queda boxed-in (ver
+            # componentes_conexas), dejando pasar celdas sueltas de 1x1
+            # escondidas dentro de un total que sí sumaba lo suficiente
+            # en conjunto. Cada fragmento se evalúa por separado: los que
+            # no llegan al mínimo se descartan, los que sí llegan se
+            # aceptan enteros sin truncar -- mejor pasarse un poco del
+            # objetivo total que dejar un resto de una sola celda.
             for fragmento in componentes_conexas(celdas_veta):
                 if len(fragmento) < celdas_minimas_por_veta:
                     continue
@@ -240,13 +225,10 @@ def generar_vetas_minerales(
     return resultado
 
 
-# elegir_sustrato_celda (2026-09-01, ver docs/superpowers/specs/
-# 2026-09-01-distribucion-causal-flora-design.md): qué sustrato de una
-# lista de candidatos compatibles con un bioma le toca a una celda
-# concreta -- antes de esto, sustrato_por_bioma era 1 material fijo por
-# bioma entero, sin ninguna variación interna. Determinista, sin
-# consumir rng -- mismo criterio que elevación/lluvia/temperatura, que
-# tampoco lo consumen: son funciones puras del ruido ya generado.
+# elegir_sustrato_celda: qué sustrato de una lista de candidatos
+# compatibles con un bioma le toca a una celda concreta. Determinista,
+# sin consumir rng -- mismo criterio que elevación/lluvia/temperatura,
+# que tampoco lo consumen: son funciones puras del ruido ya generado.
 _BIOMAS_PEDREGOSOS = {TipoTerreno.MONTANA, TipoTerreno.DESIERTO}
 
 

@@ -218,6 +218,76 @@ Círculo 1, acordado con Diego tras el diagnóstico visual del
 bultos de ruido, el clima ignoraba el relieve y los biomas salían en
 mosaico sin fundamento.
 
+## `asentamiento.py`
+
+FUNDAMENTO de "el germen de un asentamiento" (2026-08-30, ver
+conversación de diseño con Diego y CLAUDE.md).
+
+`Asentamiento.zona_idx` -- Círculo 3 de profundidad (2026-08-30,
+hallazgo propio al revisar el motor tras varias cuevas): un asentamiento
+no puede tener miembros en zonas distintas.
+
+`calcular_liderazgo`: conversación de diseño con Diego -- "no creamos
+leyes absolutas". Reutiliza Temperamento.dominancia, el mismo atributo
+que su propio docstring ya señalaba desde hace tiempo como "espera el
+cálculo de liderazgo de un asentamiento".
+
+`almacen_cercano` -- Círculo 3 de profundidad, hallazgo propio: sin el
+filtro por zona_idx, un almacén en una cueva y otro en superficie (o en
+otra cueva) con coordenadas numéricamente cercanas se confundían entre
+sí -- ya no es un caso hipotético con varias cuevas por mundo
+compartiendo rangos de coordenadas pequeños.
+
+`disposicion_a_aportar`: conversación de diseño con Diego -- "¿un ser
+dominante y agresivo aportaría lo mismo que uno que no lo sea?... creo
+que es la agresividad, porque puedes ser un líder dominante y empático
+que aporte" -- de ahí que dominancia quede deliberadamente fuera de
+esta fórmula (decide quién lidera, no si acapara o comparte).
+
+## `cueva.py`
+
+Círculo 2 de profundidad (2026-08-30, ver CLAUDE.md y conversación de
+diseño con Diego). El Círculo 1 probó el mecanismo multi-zona con una
+zona de PRUEBA que reutilizaba tal cual el generador orográfico causal
+de la superficie -- sustituido aquí porque una cueva no tiene sentido
+físico bajo tierra con viento dominante o lluvia propia.
+
+Algoritmo (autómata celular) confirmado con Diego sobre la alternativa
+de habitaciones+pasillos.
+
+Vetas en el suelo, no en las paredes: Diego confirmó vetas finitas
+(masa_mineral_restante).
+
+## `materiales.py`
+
+Círculo de vetas de mineral (2026-08-30, ver config/materiales.yaml y
+conversación de diseño con Diego).
+
+Dos formas de veta, elegidas al azar por veta individual -- Diego: "por
+qué tenemos que utilizar un solo sistema? no podemos usar ambos
+indistintamente? eso le dará más variedad".
+
+`componentes_conexas` promovida a nombre público el 2026-08-30 (Círculo
+2 de profundidad) cuando nucleo/cueva.py empezó a reutilizarla.
+
+Bug real, encontrado antes de ejecutar nada: catalogo_materiales y
+config_generacion_vetas se recibían en un único dict con ambos
+anidados, cuando config/materiales.yaml los declara como dos claves de
+nivel superior distintas.
+
+"FORMA POR ENCIMA DE EXACTITUD NUMÉRICA": hallazgo real de Diego --
+"esas no leen como veta de ninguna forma... es precisamente lo
+contrario de lo que buscabas". Un primer intento del filtro de tamaño
+mínimo por veta medía solo el total agregado y dejaba pasar celdas
+sueltas de 1×1 escondidas dentro de un resultado que sí sumaba lo
+suficiente en conjunto -- corregido a filtrar por componente conexa
+real, fragmento a fragmento.
+
+`elegir_sustrato_celda` -- 2026-09-01, ver docs/superpowers/specs/
+2026-09-01-distribucion-causal-flora-design.md: antes de esto,
+sustrato_por_bioma era 1 material fijo por bioma entero, sin ninguna
+variación interna.
+
 ## `celda_percibida` (ahora en `percepcion.py`)
 
 Promovida desde sistema_movimiento.py (donde nació como

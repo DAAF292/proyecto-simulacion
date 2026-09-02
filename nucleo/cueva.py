@@ -1,43 +1,39 @@
 """
 nucleo/cueva.py
 
-Generación de la geometría interior de una zona subterránea -- CÍRCULO 2
-de profundidad (2026-08-30, ver CLAUDE.md y la conversación de diseño con
-Diego). El Círculo 1 probó el mecanismo multi-zona con una zona de PRUEBA
-que reutilizaba tal cual nucleo/zona_bioma.py:generar_zona_bioma -- el
-mismo generador orográfico causal de la superficie (cordilleras, viento
-dominante, lluvia por sombra orográfica). Eso no tiene sentido físico bajo
-tierra: una cueva no tiene viento dominante ni lluvia propia. Este módulo
-es el generador dedicado que sustituye a esa zona de prueba.
+Generación de la geometría interior de una zona subterránea. No
+reutiliza nucleo/zona_bioma.py:generar_zona_bioma (el generador
+orográfico causal de la superficie -- cordilleras, viento dominante,
+lluvia por sombra orográfica): eso no tiene sentido físico bajo tierra,
+una cueva no tiene viento dominante ni lluvia propia. Este módulo es el
+generador dedicado.
 
-ALGORITMO: autómata celular de suavizado (confirmado con Diego sobre la
-alternativa de habitaciones+pasillos) -- el método estándar para cavernas
-orgánicas en generación procedimental (relleno aleatorio de roca/hueco,
-suavizado iterativo por mayoría de vecinos). Produce paredes irregulares,
-mucho más fiel a "cueva real" que una cuadrícula de habitaciones
-rectangulares, y no es más esfuerzo de implementación que la alternativa.
+ALGORITMO: autómata celular de suavizado -- el método estándar para
+cavernas orgánicas en generación procedimental (relleno aleatorio de
+roca/hueco, suavizado iterativo por mayoría de vecinos). Produce
+paredes irregulares, más fiel a "cueva real" que una cuadrícula de
+habitaciones rectangulares.
 
-PAREDES IMPASABLES SIN CAMPO NUEVO: en vez de añadir un booleano
+PAREDES IMPASABLES SIN CAMPO NUEVO: en vez de un booleano
 Celda.transitable (que exigiría enseñar a sistema_movimiento.py, al
-visor y a cualquier búsqueda de celda vecina a mirar un campo más),
-una pared es una celda con ELEVACIÓN muy alta -- reutiliza el mecanismo
-ya existente de nucleo/relieve.py:pendiente_maxima_transitable, que ya
-bloquea un paso cuya diferencia de elevación supera lo que la fuerza del
-individuo permite. Con paredes a elevación 1.0 y suelo a 0.1, la
-diferencia (0.9) supera con margen amplio cualquier pendiente_maxima_
-transitable calibrada hoy (tope real ~0.21, ver nucleo/relieve.py) --
-ninguna criatura, por fuerte que sea, puede escalar una pared de la
-cueva. "Reutiliza antes de inventar", no una regla nueva de movimiento.
+visor y a cualquier búsqueda de celda vecina a mirar un campo más), una
+pared es una celda con ELEVACIÓN muy alta -- reutiliza
+nucleo/relieve.py:pendiente_maxima_transitable, que ya bloquea un paso
+cuya diferencia de elevación supera lo que la fuerza del individuo
+permite. Con paredes a elevación 1.0 y suelo a 0.1, la diferencia (0.9)
+supera con margen amplio cualquier pendiente_maxima_transitable
+calibrada hoy (tope real ~0.21) -- ninguna criatura, por fuerte que
+sea, puede escalar una pared.
 
-VETAS EN EL SUELO, no en las paredes: Diego confirmó vetas finitas
-(masa_mineral_restante, ver nucleo/celda.py), pero minar DENTRO de una
-pared (que la excavación abra un túnel nuevo, cambiando la geometría en
-plena partida) es una pieza de complejidad aparte, no asumida aquí --
-exigiría recalcular conectividad y posiblemente el pathing cada vez que
-se agota una veta. Este círculo mantiene el suelo caminable como única
-superficie minable, exactamente el mismo criterio que ya usa la
-superficie (deposito_mineral vive en celdas de montaña caminables, no en
-un concepto de "pared" que la superficie ni siquiera tiene).
+VETAS EN EL SUELO, no en las paredes: minar DENTRO de una pared (que la
+excavación abra un túnel nuevo, cambiando la geometría en plena
+partida) exigiría recalcular conectividad y posiblemente el pathing
+cada vez que se agota una veta -- complejidad aparte, no asumida aquí.
+El suelo caminable es la única superficie minable, mismo criterio que
+la superficie (deposito_mineral vive en celdas de montaña caminables,
+no en un concepto de "pared" que la superficie ni siquiera tiene).
+
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 
 from __future__ import annotations
@@ -167,11 +163,9 @@ def generar_zona_cueva(
 
     Sin clima propio (self.clima_actual queda en Clima.DESPEJADO, valor
     por defecto de ZonaBioma, y sistema_clima.py lo sortea igual que
-    cualquier otra zona por ahora): "físicas distintas" bajo tierra
-    -- ¿sin clima en absoluto?, ¿modelo de luz/oscuridad?, ¿temperatura
-    desacoplada? -- sigue siendo una decisión abierta, no asumida aquí
-    (ver CLAUDE.md, Círculo 1). Este círculo se limita a geometría +
-    minería, tal como se acotó con Diego.
+    cualquier otra zona por ahora): "físicas distintas" bajo tierra --
+    ¿sin clima en absoluto?, ¿modelo de luz/oscuridad?, ¿temperatura
+    desacoplada? -- sigue siendo una decisión abierta, no asumida aquí.
     """
     es_pared = generar_geometria_cueva(rng, config_cueva, ancho, alto, entrada)
 
