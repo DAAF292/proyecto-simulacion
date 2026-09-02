@@ -63,8 +63,7 @@ class SistemaDesastres:
         self.tasa_putrefaccion_calcinada: float = float(
             cfg_des.get("tasa_putrefaccion_calcinada", 0.15)
         )
-        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
-        # nucleo/entidad.py:componer_necromasa): mismo reparto
+        # Ver nucleo/entidad.py:componer_necromasa: mismo reparto
         # tejido_blando/hueso que el resto de decesos, aplicado sobre la
         # masa seca calcinada -- no se modela que el fuego destruya el
         # tejido blando de forma preferencial (simplificación deliberada,
@@ -83,10 +82,8 @@ class SistemaDesastres:
         self.techo_fertilidad: float = float(
             self.config.get("abono", {}).get("techo_fertilidad", 1.0)
         )
-        # Fuego sobre construcciones (2026-08-30, "las inclemencias del
-        # clima, el fuego si es combustible... deberían degradar los
-        # materiales" -- Diego). Reutiliza dano_por_tick_en_llamas (ya
-        # calibrado como ritmo de daño por fuego) escalado por la
+        # Fuego sobre construcciones: reutiliza dano_por_tick_en_llamas
+        # (ya calibrado como ritmo de daño por fuego) escalado por la
         # combustibilidad de CADA material -- piedra/arcilla/tierra/
         # hierro/cobre tienen combustibilidad 0.0, no arden nunca; madera/
         # fibra/hierba_seca sí, más rápido cuanto más inflamable. NO es
@@ -112,13 +109,11 @@ class SistemaDesastres:
         Punto de entrada para la evaluación diaria de ignición.
         Invocado al inicio de cada día en el orquestador principal.
         """
-        # (2026-08-30, Circulo 1 de profundidad) se evalua ignicion en
-        # TODAS las zonas del territorio -- cada ZonaBioma tiene su propio
-        # clima_actual y su propio grid, la ley de ignicion no distingue
-        # superficie de subsuelo (la zona de prueba de hoy reutiliza los
-        # mismos TipoTerreno que la superficie, asi que BOSQUE ahi tambien
-        # puede arder; una zona realmente subterranea sin bosque no se ve
-        # afectada porque el filtro de tipo_terreno sigue aplicando).
+        # Se evalua ignicion en TODAS las zonas del territorio -- cada
+        # ZonaBioma tiene su propio clima_actual y su propio grid, la ley
+        # de ignicion no distingue superficie de subsuelo (una zona sin
+        # bosque no se ve afectada porque el filtro de tipo_terreno sigue
+        # aplicando).
         for zona_idx, zona in enumerate(mundo.territorio.zonas):
             clima_actual = getattr(zona, "clima_actual", None)
             nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
@@ -152,8 +147,8 @@ class SistemaDesastres:
         Propaga llamas, extingue focos y aplica daño térmico a criaturas y flora.
         Debe ejecutarse a cadencia de tick en la Fase 2 del ciclo.
 
-        (2026-08-30, Circulo 1 de profundidad) procesa TODAS las zonas del
-        territorio -- ver el mismo cambio en ejecutar() de esta clase.
+        Procesa TODAS las zonas del territorio -- ver el mismo criterio
+        en ejecutar() de esta clase.
         """
         for zona_idx, zona in enumerate(mundo.territorio.zonas):
             self._procesar_fuego_tick_zona(gestor, zona, zona_idx, reloj, bus_eventos)
@@ -204,10 +199,10 @@ class SistemaDesastres:
         for nx, ny in nuevos_focos:
             zona.obtener_celda(nx, ny).en_llamas = True
 
-        # 1. Flora en llamas -> Ceniza mineralizada. zona_idx (2026-08-30,
-        # Circulo 1 de profundidad): se descarta ANTES de indexar el grid
-        # de esta zona -- una entidad de otra zona puede tener (x, y) fuera
-        # de los limites de esta (zonas de distinto tamaño).
+        # 1. Flora en llamas -> Ceniza mineralizada. zona_idx se descarta
+        # ANTES de indexar el grid de esta zona -- una entidad de otra
+        # zona puede tener (x, y) fuera de los limites de esta (zonas de
+        # distinto tamaño).
         plantas_a_purgar: list[int] = []
         for planta_id in sorted(gestor.entidades_con(Planta, Posicion)):
             pos_p = gestor.obtener_componente(planta_id, Posicion)
@@ -288,7 +283,7 @@ class SistemaDesastres:
                     )
 
         # 3. Construcciones en llamas -> consumo de materiales por
-        # combustibilidad (2026-08-30, ver _cachear_configuracion).
+        # combustibilidad (ver _cachear_configuracion).
         masa_minima_cache: dict[str, float] = {}
         for con_id in sorted(gestor.entidades_con(Construccion, Posicion)):
             pos_co = gestor.obtener_componente(con_id, Posicion)

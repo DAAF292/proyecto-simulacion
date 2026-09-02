@@ -99,3 +99,17 @@ para defenderse, o una roca". El depósito de necromasa con hueso intacto
 tras la caza es del círculo 2 de materiales físicos (2026-08-30). El
 filtrado por zona_idx al agrupar entidades por celda es del círculo 1 de
 profundidad (2026-08-30).
+
+## `sistema_desastres.py`
+
+El fuego sobre construcciones es del 2026-08-30, de una conversación de
+diseño con Diego: "las inclemencias del clima, el fuego si es
+combustible... deberían degradar los materiales". No es el mismo
+consumidor que el comentario ya existente en config/materiales.yaml
+sobre combustibilidad ("sustituirá el hardcode... único bioma inflamable
+es Bosque") -- ese sigue pendiente, es sobre qué bioma/terreno puede
+arrancar a arder, no sobre qué le pasa a una construcción ya en llamas.
+
+El procesamiento de todas las zonas del territorio (en vez de solo
+zonas[0]) en ignición, propagación y flora/construcciones quemadas es
+del círculo 1 de profundidad (2026-08-30).
