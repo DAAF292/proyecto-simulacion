@@ -27,6 +27,7 @@ from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
+from componentes.semillas import Semillas
 from componentes.temperamento import Temperamento
 from nucleo.ciclo_vital import TICKS_POR_ANIO
 
@@ -325,6 +326,11 @@ def crear_criatura(
     # rangos_raciales[especie]['puntos_agarre'], no la presencia del
     # componente (mismo criterio que Inventario justo arriba).
     gestor.anadir_componente(entidad_id, Agarre())
+    # Semillas (2026-09-02, ver componentes/semillas.py) -- mismo
+    # criterio que Agarre: componente universal, vacío al nacer, cuánto
+    # se usa de verdad depende de con qué especies de flora zoocora
+    # coincida el individuo en su vida.
+    gestor.anadir_componente(entidad_id, Semillas())
 
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gest = _sortear_valor(rng, cfg_esp.get("duracion_gestacion_dias", [30.0, 60.0]))
@@ -505,6 +511,11 @@ def nacer_criatura(
     # sujetaban sus progenitores.
     gestor.anadir_componente(entidad_id, Inventario())
     gestor.anadir_componente(entidad_id, Agarre())
+    # Semillas (2026-09-02, ver componentes/semillas.py) -- mismo
+    # criterio que Agarre: componente universal, vacío al nacer, cuánto
+    # se usa de verdad depende de con qué especies de flora zoocora
+    # coincida el individuo en su vida.
+    gestor.anadir_componente(entidad_id, Semillas())
 
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gestacion = heredar(
