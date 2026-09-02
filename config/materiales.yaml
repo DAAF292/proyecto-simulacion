@@ -315,10 +315,33 @@ sustrato_por_bioma:
 # bioma, en la misma escala [0,1] que campo_elevacion/campo_lluvia.
 # Tundra no aparece -- un único candidato no consulta ningún umbral.
 # PROVISIONAL, sin calibrar contra el motor en marcha.
+#
+# CORRECCIÓN (2026-09-02, hallazgo real de la verificación de conjunto
+# tras mergear las 5 piezas -- no se coló a master sin arreglar): montana
+# y bosque estaban por DEBAJO del propio umbral de clasificación de ese
+# bioma (config/clima.yaml: umbral_elevacion_montana=0.6665,
+# umbral_lluvia_bosque=0.6041) -- como una celda solo se clasifica como
+# montaña/bosque cuando YA supera ese umbral, comparar otra vez contra un
+# valor más bajo (0.6/0.55) era siempre verdadero dentro de ese bioma:
+# grava y arcilla quedaban estructuralmente inalcanzables, no solo raras
+# (confirmado midiendo 3 semillas reales, 40x40: fertilidad de montana
+# siempre exactamente 0.0, de bosque siempre exactamente 0.70). Primer
+# intento de arreglo (punto medio entre el umbral de clasificación y 1.0,
+# asumiendo que campo_elevacion/campo_lluvia llegan hasta el techo real
+# dentro de cada bioma) sobrecorrigió bosque en la dirección contraria --
+# medido en 10 semillas x 40x40 reales, la lluvia real dentro de bosque
+# nunca pasa de 0.78 (rango real [0.6041, 0.7792], mediana 0.6499), muy
+# por debajo del 1.0 asumido. Recalibrado con la MEDIANA real observada
+# de cada bioma (bosque: mediana lluvia real 0.65; montana: mediana
+# elevación real 0.77, rango real [0.6667, 0.9275]) en vez de asumir el
+# techo teórico del campo -- confirma la lección de siempre del proyecto:
+# medir contra el motor real, no calcular sobre el papel. Desierto y
+# pradera no tenían este problema (sus umbrales ya caían dentro del rango
+# real alcanzable de cada uno) -- sin tocar.
 umbrales_sustrato_fertil:
-  montana: 0.6
+  montana: 0.77
   desierto: 0.5
-  bosque: 0.55
+  bosque: 0.65
   pradera: 0.45
 
 # --- Generación de vetas de mineral (2026-08-30) --------------------------
