@@ -132,76 +132,72 @@ se hace mejor a mano por ahora.
 
 ## Coste real: DeepSeek vs. Sonnet (2026-09-02)
 
-**CORRECCIÓN (mismo día, tras la pieza de zoocoria): el `instance_cost`
-que reporta `mini` NO es el coste real -- es un cálculo local usando la
-tabla de precios fija de `litellm_model_registry.json` ($0.05/$0.16 por
-millón), con independencia de a qué proveedor te haya enrutado
-OpenRouter de verdad esa llamada.** `openai/agente-obrero` tiene 29
-proveedores distintos en OpenRouter para `deepseek-v4-flash-0731`, con
-precios de $0.05/M (OpenInference, el más barato, el que asume nuestra
-tabla) hasta $0.44/M (Cloudflare/Phala/Novita/AtlasCloud) -- hasta 8.8x
-de rango. `provider: {sort: "price"}` en `litellm_config.yaml` es una
-*preferencia*, no una garantía: si el proveedor más barato no está
-disponible, OpenRouter hace fallback a otro sin avisar, y nuestro
-cálculo local sigue asumiendo el más barato de todas formas -- esto
-SÍ ocurrió de verdad (ver más abajo, fallback a Baidu), pero por sí
-solo no basta para explicar la magnitud del hueco de coste real vs.
-calculado que se midió.
+**CAUSA RAÍZ ENCONTRADA Y CONFIRMADA (misma tarde, tras dos hipótesis
+descartadas por el camino -- ver más abajo "Callejones sin salida" para
+no repetirlas): `litellm_model_registry.json` no declaraba
+`cache_read_input_token_cost`. `mini`/litellm tratan cualquier token de
+prompt marcado como `cached` por el proveedor como GRATIS cuando el
+modelo no tiene un precio de caché registrado -- y en un bucle agéntico,
+la inmensa mayoría del prompt de cada paso es el mismo contexto ya
+enviado en el paso anterior (prefijo repetido, candidato ideal a caché
+de proveedor). Medido en la trayectoria real de zoocoria: de 6.952.809
+tokens de prompt acumulados en 88 llamadas, **6.728.960 (96.8%) estaban
+marcados `cached`** -- `instance_cost` los contaba a $0, cuando el
+proveedor sí los cobra (a una tarifa reducida, pero no nula).**
 
-**Verificado de verdad, con el balance real de la cuenta (no
-`usage_daily`, que tiene caché de ~20s y además es acumulado de TODA la
-actividad del día, no aislable a una sola tarea) -- único método
-fiable: consultar `https://openrouter.ai/api/v1/credits` ANTES y
-DESPUÉS de la ejecución completa, y restar**:
+Reconstruido el cálculo exacto con la fórmula real de litellm
+(`completion_cost()`) sobre esa misma trayectoria, añadiendo
+`cache_read_input_token_cost: 0.000000013` (la tarifa de caché real de
+OpenInference/Baidu para este modelo, casi idéntica entre ambos): **da
+$0.127**, prácticamente igual al balance real medido ($0.12). Corregido
+en `litellm_model_registry.json` -- de aquí en adelante `instance_cost`
+debería ser fiable de verdad para este tipo de bucle con contexto muy
+repetido.
 
-| Pieza | `instance_cost` calculado | Coste real (balance antes/después) |
-|---|---|---|
-| Fix de flora (2 intentos) | $0.01949 | **sin verificar** -- no se hizo el chequeo de balance en su momento |
-| Zoocoria (1 intento, 88 pasos) | $0.03957 | **$0.12** (verificado: $9.24 → $9.12) |
+**Verificación independiente del propio hallazgo, no solo del cálculo:
+el balance real de la cuenta** (`https://openrouter.ai/api/v1/credits`,
+`total_credits - total_usage`, ANTES y DESPUÉS de la ejecución completa
+-- NO `usage_daily`, que tiene caché de ~20s y es acumulado de todo el
+día, no aislable a una tarea) sigue siendo el único método
+verdaderamente independiente de cualquier suposición de precio local:
 
-Para zoocoria, el coste real fue **~3x** el calculado. **Causa
-identificada solo a medias, no dejarlo pasar como resuelta**: Diego
-identificó en el panel de OpenRouter que la ejecución usó DOS
-proveedores -- OpenInference hasta las 22:06, Baidu (Qianfan) desde
-entonces. Comprobado contra el catálogo real de precios de
-`deepseek-v4-flash-0731`, Baidu NO es un proveedor caro: $0.065/M
-prompt (1.3x OpenInference) y $0.130/M completion (**más barato** que
-OpenInference, $0.160/M). Aunque el 100% de las llamadas hubiera
-corrido en Baidu, el coste no debería haber subido más de ~1.3x -- muy
-lejos del ~3x real observado. **El cambio de proveedor es un hecho
-real y confirmado, pero NO explica por sí solo la magnitud del hueco**
--- descartada la hipótesis inicial ("aterrizó en un proveedor mucho más
-caro tipo DeepSeek/Fireworks/SiliconFlow"), escrita aquí antes de
-comprobarla contra el catálogo real de precios. Hipótesis abiertas, sin
-confirmar todavía: tokens de razonamiento del modelo (`deepseek-v4-
-flash-0731` soporta `reasoning`/`include_reasoning`) facturados por el
-proveedor pero no contados por la estimación local de coste; el campo
-`discount` de la entrada de Baidu (0.536) reflejando un precio
-promocional que puede no haber aplicado en el momento real de la
-llamada; o algún otro factor no identificado. El de flora sigue como
-**dato no fiable, nunca confirmado contra balance real** -- no se puede
-afirmar con la misma confianza que antes que costó $0.0195.
+| Pieza | `instance_cost` (antes del fix) | Coste real (balance) | Recalculado con el fix (`completion_cost()` real sobre la trayectoria guardada) |
+|---|---|---|---|
+| Fix de flora (2 intentos) | $0.01949 | sin verificar contra balance | **$0.03232** (intento 1: $0.01984, intento 2: $0.01248) -- ~1.66x el original |
+| Zoocoria (1 intento, 88 pasos) | $0.03957 | **$0.12** | **$0.127** -- ~3.2x el original |
 
-**Sonnet sigue sin medirse nunca contra este pipeline.** La aproximación
-anterior (~$0.09-$0.15 por un fix de una sola pasada, ratio 5-8x más
-caro) queda en entredicho por partida doble: (1) nunca fue una medición
-real de Sonnet, y (2) el término de comparación (el coste "real" de
-DeepSeek) tampoco lo era. Con el dato real de zoocoria ($0.12), la
-ventaja económica de DeepSeek frente a la aproximación de Sonnet
-**podría ser mucho menor de la que se pensaba, o incluso desaparecer en
-un día de uso intenso** cuando los proveedores baratos se saturan --
-justo el escenario de hoy.
+**Callejones sin salida investigados y descartados, dejados aquí para
+no repetirlos**: (1) "aterrizó en un proveedor mucho más caro" --
+Diego identificó en el panel de OpenRouter que la ejecución usó
+OpenInference hasta las 22:06 y Baidu (Qianfan) después; comprobado
+contra el catálogo real de precios, Baidu cuesta $0.065/$0.130 por
+millón, casi idéntico a OpenInference ($0.05/$0.16) -- el cambio de
+proveedor es real pero no explica un hueco de 3x. (2) tokens de
+razonamiento sin contar -- medidos, solo 21.260 de 177.335 tokens de
+completion, insuficiente para explicar el hueco por sí solo. La causa
+real (caché de prompt sin tarifa registrada) sí reconcilia el número
+casi exacto, así que se da por resuelta.
 
-**Regla nueva, a partir de ahora**: verificar el balance real
-(`/api/v1/credits`, `total_credits - total_usage`) antes y después de
-CUALQUIER ejecución completa del pipeline antes de citar su coste --
-nunca fiarse solo de `instance_cost`. Es la única cifra que no depende
-de qué proveedor haya usado OpenRouter esa vez en concreto.
+**Sonnet sigue sin medirse nunca contra este pipeline.** Con el coste
+real de zoocoria ya fiable (~$0.12-0.127), la comparación pendiente
+tiene ahora una cifra sólida de un lado. La aproximación de Sonnet de
+más arriba (~$0.09-$0.15 para un fix mucho más pequeño, de una sola
+pasada) sigue siendo solo eso, una aproximación.
+
+**Regla nueva, a partir de ahora**: cualquier modelo nuevo que se
+registre en `litellm_model_registry.json` debe declarar
+`cache_read_input_token_cost` desde el principio, no solo
+`input_cost_per_token`/`output_cost_per_token` -- en un pipeline
+agéntico con contexto creciente, omitirlo no es un error pequeño, es
+la diferencia entre medir bien y medir ~3x por debajo. Verificar
+igualmente el balance real (`/api/v1/credits`) antes/después de
+ejecuciones importantes, como confirmación independiente.
 
 **Pendiente real**: medir Sonnet de verdad contra este pipeline (mismo
-fix o uno comparable), y re-medir DeepSeek en un momento con los
-proveedores baratos NO saturados, para tener una comparación limpia por
-ambos lados.
+fix o uno comparable) para tener una comparación limpia por ambos
+lados; verificar contra balance real el coste del fix de flora también
+(el $0.03232 de arriba es el cálculo corregido, no una confirmación
+independiente como sí la tiene zoocoria).
 
 ## Reglas prácticas, mientras tanto
 
