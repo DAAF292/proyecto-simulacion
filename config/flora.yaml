@@ -113,6 +113,19 @@ flora:
   # vegetación en vez de forzar una especie que no encaja. PROVISIONAL,
   # sin calibrar contra el harness completo.
   umbral_minimo_idoneidad_colonizacion: 0.2
+  # probabilidad_recogida_semilla_zoocoria / probabilidad_plantar_semilla_
+  # en_aliviarse (2026-09-02, pieza 1 de "tipos de propagación de flora"
+  # -- viento, caída, zoocoria): modelado por probabilidad, sin simular
+  # tránsito digestivo real. La primera: comer fruto de una especie
+  # zoocora deja una semilla "recogida" con esta probabilidad. La
+  # segunda: un ALIVIARSE con semilla ya recogida es el evento que la
+  # deposita con esta probabilidad (no cada ALIVIARSE disemina
+  # necesariamente la semilla concreta que se transporta). Ambas
+  # PROVISIONALES, sin calibrar. Implementado a mano (2026-09-02) tras
+  # dos fallos consecutivos del pipeline autónomo sobre este mismo plan
+  # -- ver CLAUDE.md, "tipos de propagación de flora".
+  probabilidad_recogida_semilla_zoocoria: 0.3
+  probabilidad_plantar_semilla_en_aliviarse: 0.5
   especies:
     hierba_silvestre:
       biomas: [pradera, bosque]
@@ -121,6 +134,11 @@ flora:
       preferencia_lluvia: [0.25, 0.85]
       preferencia_temperatura: [0.25, 0.85]
       preferencia_fertilidad: [0.2, 0.8]
+      # tipo_propagacion (2026-09-02): semilla ligera dispersada por el
+      # viento del mundo (zona.viento_dx/viento_dy) -- PROVISIONAL, sin
+      # calibrar. Pradera abierta: alcance mayor que liquen/musgo.
+      tipo_propagacion: viento
+      alcance_viento_celdas: [2, 6]
       recursos:
         - nombre: raices
           categoria: alimento
@@ -153,6 +171,9 @@ flora:
       preferencia_lluvia: [0.55, 1.0]
       preferencia_temperatura: [0.3, 0.75]
       preferencia_fertilidad: [0.4, 0.9]
+      # tipo_propagacion: fruto comestible -- lo dispersa un animal que
+      # se lo come (zoocoria), no el viento ni la caída directa.
+      tipo_propagacion: zoocoria
       recursos:
         - nombre: manzanas
           categoria: alimento
@@ -178,6 +199,10 @@ flora:
       preferencia_lluvia: [0.0, 0.2]
       preferencia_temperatura: [0.5, 1.0]
       preferencia_fertilidad: [0.0, 0.3]
+      # tipo_propagacion: fruto pesado, cae cerca de la base de la
+      # planta madre -- mismo mecanismo que ya tenía la propagación de
+      # hoy, solo formalizado como catálogo.
+      tipo_propagacion: caida
       recursos:
         - nombre: fruto_de_cactus
           categoria: alimento
@@ -199,6 +224,10 @@ flora:
       preferencia_lluvia: [0.1, 0.5]
       preferencia_temperatura: [0.0, 0.4]
       preferencia_fertilidad: [0.0, 0.2]
+      # tipo_propagacion: reproducción por esporas ligeras -- viento,
+      # alcance corto (superficie resguardada de montaña).
+      tipo_propagacion: viento
+      alcance_viento_celdas: [1, 3]
       recursos:
         - nombre: liquen
           categoria: alimento
@@ -213,6 +242,10 @@ flora:
       preferencia_lluvia: [0.2, 0.6]
       preferencia_temperatura: [0.0, 0.15]
       preferencia_fertilidad: [0.0, 0.3]
+      # tipo_propagacion: igual que liquen -- esporas, viento de corto
+      # alcance.
+      tipo_propagacion: viento
+      alcance_viento_celdas: [1, 3]
       recursos:
         - nombre: musgo
           categoria: alimento
