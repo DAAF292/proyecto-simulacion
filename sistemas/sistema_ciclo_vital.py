@@ -35,8 +35,7 @@ class SistemaCicloVital:
         self.exponente_curva_vejez: float = float(
             config.get("ciclo_vital", {}).get("exponente_curva_vejez", 8.0)
         )
-        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
-        # nucleo/entidad.py:componer_necromasa).
+        # Ver nucleo/entidad.py:componer_necromasa.
         cfg_desc = config.get("descomposicion", {})
         self.fraccion_masa_seca: float = float(
             cfg_desc.get("fraccion_masa_seca_por_defecto", 0.35)

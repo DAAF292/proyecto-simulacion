@@ -2,10 +2,9 @@
 sistemas/sistema_asentamiento.py
 
 Detección diaria de asentamientos (clúster de refugios individuales
-terminados) y cálculo de liderazgo -- "el germen de un asentamiento"
-(2026-08-30, ver nucleo/asentamiento.py y CLAUDE.md para el diseño
-completo). Cadencia diaria, mismo corte que clima/descomposición/flora/
-ciclo_vital/desastres (main.py:ejecutar_tick).
+terminados) y cálculo de liderazgo (ver nucleo/asentamiento.py). Cadencia
+diaria, mismo corte que clima/descomposición/flora/ciclo_vital/desastres
+(main.py:ejecutar_tick).
 
 Recalcula mundo.asentamientos ÍNTEGRO cada día -- sin identidad
 persistida entre recálculos (ver docstring de nucleo/asentamiento.py).
@@ -61,13 +60,11 @@ class SistemaAsentamiento:
     ) -> None:
         # 1. Refugios que llegaron a estar TERMINADOS alguna vez, por
         # propietario -- pertenencia usa completado_alguna_vez, no
-        # progreso (2026-08-30, corrección de Diego: "no debería salir
-        # del asentamiento a la mínima degradación, una casa dañada
-        # sigue perteneciendo a un pueblo"). Uno a medio construir por
-        # PRIMERA vez (completado_alguna_vez=False) todavía no es un
-        # lugar donde vivir y no cuenta; uno ya habitado que decayó un
-        # poco sigue contando -- necesita reparación, no deja de ser
-        # parte del pueblo mientras tanto.
+        # progreso: uno a medio construir por PRIMERA vez
+        # (completado_alguna_vez=False) todavía no es un lugar donde
+        # vivir y no cuenta; uno ya habitado que decayó un poco sigue
+        # contando -- necesita reparación, no deja de ser parte del
+        # pueblo mientras tanto.
         refugios: dict[int, tuple[int, int]] = {}
         zona_por_refugio: dict[int, int] = {}
         for cid in gestor.entidades_con(Construccion, Posicion):
@@ -85,13 +82,13 @@ class SistemaAsentamiento:
             self._miembros_vistos_ayer = set()
             return
 
-        # CÍRCULO 3 de profundidad (2026-08-30, hallazgo propio: con
-        # varias cuevas compartiendo rangos de coordenadas pequeños, dos
-        # refugios en zonas DISTINTAS podían agruparse por pura
-        # coincidencia numérica). Un asentamiento no puede tener miembros
-        # que no comparten espacio real -- se agrupa por zona primero, y
-        # agrupar_por_proximidad (genérica, sin noción de zona) se llama
-        # una vez por zona, nunca mezclando refugios de zonas distintas.
+        # Un asentamiento no puede tener miembros que no comparten
+        # espacio real (con varias cuevas compartiendo rangos de
+        # coordenadas pequeños, dos refugios en zonas DISTINTAS podrían
+        # agruparse por pura coincidencia numérica) -- se agrupa por zona
+        # primero, y agrupar_por_proximidad (genérica, sin noción de
+        # zona) se llama una vez por zona, nunca mezclando refugios de
+        # zonas distintas.
         grupos: list[set[int]] = []
         for zona_idx_actual in sorted(set(zona_por_refugio.values())):
             refugios_de_zona = {
@@ -123,10 +120,9 @@ class SistemaAsentamiento:
             nuevos[siguiente_id] = asentamiento
             siguiente_id += 1
 
-            # Memoria comunitaria (2026-08-30, ver conversación de diseño):
-            # cada miembro registra la posición del asentamiento -- mismo
-            # mecanismo genérico que refugio, tipo "asentamiento", sin
-            # tocar nucleo/memoria.py.
+            # Memoria comunitaria: cada miembro registra la posición del
+            # asentamiento -- mismo mecanismo genérico que refugio, tipo
+            # "asentamiento", sin tocar nucleo/memoria.py.
             for mid in grupo:
                 mem = gestor.obtener_componente(mid, MemoriaEspacial)
                 cap_mental = gestor.obtener_componente(mid, CapacidadMental)

@@ -1,5 +1,4 @@
-"""SistemaClima (fase terreno 1, informe tecnico 7.1 + 7.2 -- disenado
-desde el principio del proyecto, nunca implementado hasta esta pasada).
+"""SistemaClima (fase terreno 1, informe tecnico 7.1 + 7.2).
 
 Dos hechos distintos, misma cadencia de dia, mismo archivo (igual criterio
 que sistema_recursos.py: toda la mutacion de un mismo dominio vive en un
@@ -35,13 +34,11 @@ from nucleo.reloj import Reloj
 
 class SistemaClima:
     """
-    Envoltorio de clase (2026-08-23, mismo motivo que los sistemas
-    hermanos): quedó como función suelta `actualizar()`, pero main.py ya
-    instancia `SistemaClima(config, rng_juego)` y llama
-    `.ejecutar(gestor, mundo, reloj, bus_eventos)`. `actualizar()` opera
-    sobre la ZONA, no sobre el gestor de entidades (el clima es estado de
-    la zona, no de ninguna criatura) -- se deriva aquí de `mundo`, mismo
-    criterio que ya usa sistema_movimiento.py (`mundo.territorio.zonas[0]`).
+    Envoltorio de clase: main.py instancia `SistemaClima(config,
+    rng_juego)` y llama `.ejecutar(gestor, mundo, reloj, bus_eventos)`.
+    `actualizar()` opera sobre la ZONA, no sobre el gestor de entidades
+    (el clima es estado de la zona, no de ninguna criatura) -- se deriva
+    aquí de `mundo`, mismo criterio que ya usa sistema_movimiento.py.
     `gestor` se recibe y se ignora a propósito, por simetría de firma con
     el resto de sistemas de la Fase 3/corte de día.
     """
@@ -51,9 +48,8 @@ class SistemaClima:
         self.rng = rng
 
     def ejecutar(self, gestor, mundo, reloj: Reloj, bus_eventos: BusEventos) -> None:
-        # (2026-08-30, Circulo 1 de profundidad) cada ZonaBioma sortea su
-        # propio clima -- se actualizan todas las zonas del territorio,
-        # no solo zonas[0].
+        # Cada ZonaBioma sortea su propio clima -- se actualizan todas
+        # las zonas del territorio, no solo zonas[0].
         for zona in mundo.territorio.zonas:
             actualizar(zona, reloj, self.config, self.rng, bus_eventos, reloj.tick_actual)
 

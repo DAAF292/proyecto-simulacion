@@ -54,11 +54,11 @@ class SistemaCapacidadMental:
         Invocado en la Fase 3 del tick.
         """
         # Extraer posiciones de las muertes ocurridas en este tick.
-        # zona_idx (2026-08-30, Circulo 1 de profundidad): una muerte en la
-        # cueva no debe traumatizar a quien esta en superficie con el mismo
-        # (x, y) numerico -- eventos "Muerte" sin zona_idx en datos (gap
-        # preexistente de la muerte por incendio, sin x/y en absoluto)
-        # caen a zona_idx=0 por el mismo motivo que Posicion por defecto.
+        # zona_idx: una muerte en la cueva no debe traumatizar a quien
+        # esta en superficie con el mismo (x, y) numerico -- eventos
+        # "Muerte" sin zona_idx en datos (gap preexistente de la muerte
+        # por incendio, sin x/y en absoluto) caen a zona_idx=0 por el
+        # mismo motivo que Posicion por defecto.
         posiciones_muertes: list[tuple[int, int, int]] = []
         if bus_eventos is not None:
             for ev in bus_eventos.eventos_del_tick:
