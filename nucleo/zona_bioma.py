@@ -40,7 +40,7 @@ from nucleo.orografia import (
 )
 from nucleo.celda import Celda, TipoTerreno
 from nucleo.clima import Clima
-from nucleo.flora import recursos_alimento
+from nucleo.flora import colonizar_por_idoneidad, recursos_alimento
 from nucleo.materiales import elegir_sustrato_celda, generar_vetas_minerales
 
 
@@ -198,86 +198,6 @@ def generar_zona_bioma(
     # vez del viejo paseo aleatorio unico ciego al terreno.
     cuerpos_agua = generar_cuerpos_agua(campo_elevacion, rng, config_agua, ancho, alto)
 
-    # Flora (correccion posterior a fase terreno 4, discutida y
-    # confirmada con Diego): cada especie del catalogo (config/
-    # constantes.yaml, seccion flora.especies) coloniza una mancha DENTRO
-    # de los biomas donde puede crecer -- mismo _generar_manchas de
-    # siempre, ahora por especie en vez de por terreno fijo Claro/
-    # Espesura. celdas_ya_asignadas se acumula entre especies para que
-    # dos especies del MISMO bioma (hierba silvestre y manzano, ambas en
-    # Bosque) no compitan por la misma celda -- el orden del catalogo
-    # decide quien tiene primera opcion, sin ninguna razon ecologica
-    # detras del orden, solo el orden de config/constantes.yaml.
-    # CORRECCION 2026-08-20 (pedida por Diego: hierba tiene que ser "la
-    # gran mayoria de la pradera" -- ver config/constantes.yaml,
-    # flora.especies.hierba_silvestre.proporcion): antes se combinaban
-    # TODOS los biomas compatibles de una especie en un unico conjunto de
-    # candidatas y se aplicaba una sola proporcion escalar sobre ese
-    # conjunto -- con una especie en dos biomas (hierba_silvestre en
-    # pradera Y bosque), no habia forma de subir su abundancia en un
-    # bioma sin subirla tambien en el otro (hierba va primera en el
-    # catalogo, con primera opcion de celda sobre manzano en bosque).
-    # Ahora se itera especie x bioma por separado, cada bioma con su
-    # propio conjunto de candidatas y su propia proporcion -- proporcion
-    # puede seguir siendo un escalar (aplicado igual a todos los biomas
-    # de esa especie, comportamiento identico al de antes para cualquier
-    # especie de un solo bioma) o un diccionario {bioma: proporcion} para
-    # el caso -- hoy solo hierba_silvestre -- que necesita valores
-    # distintos por bioma. celdas_por_mancha_objetivo se aplica tambien
-    # POR bioma ahora, con el mismo escalar-o-diccionario que proporcion.
-    #
-    # CORRECCION 2026-08-23 (pedida por Diego, ver diagnostico de
-    # inanicion del mismo dia): num_manchas era un CONTEO fijo por
-    # especie, independiente del area del grid -- el mismo antipatron que
-    # ya se sospecho (equivocadamente, esa vez) como causa de la
-    # inanicion. Con num_manchas fijo, `objetivo` (que si escala con el
-    # area, via candidatas) se repartia entre un numero constante de
-    # manchas -- un mapa mas grande no generaba mas manchas, generaba
-    # manchas mas grandes, degenerando en un unico "supercontinente"
-    # dominante por especie (confirmado empiricamente: 500-975 de 1600
-    # celdas en una sola mancha de hierba silvestre en el mapa 40x40
-    # actual). Ahora el parametro fijo es celdas_por_mancha_objetivo (un
-    # TAMANO de mancha, no un conteo), y num_manchas se DERIVA:
-    # objetivo // celdas_por_mancha_objetivo. Es el numero de manchas el
-    # que crece con el area del mapa, no su tamano individual -- un
-    # prado mas grande tiene mas parches de hierba de tamano parecido, no
-    # un parche unico cada vez mas grande. Valores de
-    # celdas_por_mancha_objetivo calibrados para reproducir
-    # aproximadamente el num_manchas de hoy en el mapa 40x40 actual (ver
-    # config/constantes.yaml, seccion flora) -- ancla de continuidad, no
-    # una recalibracion desde cero.
-    especie_por_celda = {}
-    celdas_ya_asignadas = set()
-    for especie_key, especie_cfg in config_flora["especies"].items():
-        proporcion_cfg = especie_cfg["proporcion"]
-        celdas_por_mancha_cfg = especie_cfg["celdas_por_mancha_objetivo"]
-        for bioma_nombre in especie_cfg["biomas"]:
-            bioma = TipoTerreno(bioma_nombre)
-            candidatas = {
-                p for p in todas_las_celdas
-                if biomas[p] == bioma and p not in celdas_ya_asignadas
-            }
-            proporcion = (
-                proporcion_cfg[bioma_nombre] if isinstance(proporcion_cfg, dict) else proporcion_cfg
-            )
-            celdas_por_mancha = (
-                celdas_por_mancha_cfg[bioma_nombre]
-                if isinstance(celdas_por_mancha_cfg, dict)
-                else celdas_por_mancha_cfg
-            )
-            objetivo = int(len(candidatas) * proporcion)
-            num_manchas = max(1, round(objetivo / max(celdas_por_mancha, 1)))
-            mancha = _generar_manchas(
-                ancho, alto, rng,
-                celdas_candidatas=candidatas,
-                num_manchas=num_manchas,
-                objetivo_absoluto=objetivo,
-                prob_expansion=config_generacion["recurso_prob_expansion"],
-            )
-            for p in mancha:
-                especie_por_celda[p] = especie_key
-            celdas_ya_asignadas |= mancha
-
     # CÍRCULO 1 de materiales físicos (2026-08-30, ver config/materiales.yaml
     # y nucleo/celda.py:tipo_sustrato/humedad_subsuelo): mapeo bioma->material
     # fijo, mismo criterio de lookup determinista que biomas[(x,y)] arriba.
@@ -313,6 +233,37 @@ def generar_zona_bioma(
     # Vetas de mineral (2026-08-30, ver nucleo/materiales.py): restringidas
     # a celdas de sustrato piedra (montaña) -- coherente con que el
     # hierro/cobre real aparece sobre todo en roca ígnea/metamórfica.
+    # Humedad de subsuelo por celda (2026-09-01, ver docs/superpowers/
+    # specs/2026-09-01-distribucion-causal-flora-design.md): antes se
+    # calculaba inline dentro del bucle final de construcción de Celda --
+    # se adelanta a una pasada propia porque la colonización de flora de
+    # aquí abajo necesita esta señal ANTES de que exista ninguna Celda
+    # todavía. Mismo cálculo exacto de siempre, solo cambia el momento.
+    humedad_subsuelo_por_celda = {}
+    capacidad_retencion_por_celda = {}
+    for x in range(ancho):
+        for y in range(alto):
+            info_agua = cuerpos_agua.get((x, y))
+            tiene_agua_celda = (info_agua.tipo if info_agua else "") != ""
+            capacidad_retencion = float(
+                catalogo_materiales.get(tipo_sustrato_por_celda[(x, y)], {}).get(
+                    "capacidad_retencion", 0.0
+                )
+            )
+            capacidad_retencion_por_celda[(x, y)] = capacidad_retencion
+            humedad_subsuelo_por_celda[(x, y)] = capacidad_retencion if tiene_agua_celda else 0.0
+
+    # Colonización de flora por idoneidad (2026-09-01): sustituye al
+    # antiguo reparto por proporción/mancha -- cada celda decide qué
+    # especie (si alguna) la coloniza según sustrato/fertilidad/lluvia/
+    # temperatura reales, ya calculados arriba.
+    especie_por_celda = colonizar_por_idoneidad(
+        rng, todas_las_celdas, biomas, campo_lluvia, campo_temperatura,
+        fertilidad_por_celda, humedad_subsuelo_por_celda, capacidad_retencion_por_celda,
+        config_flora["especies"],
+        float(config_flora.get("umbral_minimo_idoneidad_colonizacion", 0.2)),
+    )
+
     celdas_piedra = {
         pos for pos, sustrato in tipo_sustrato_por_celda.items() if sustrato == "piedra"
     }
@@ -339,15 +290,7 @@ def generar_zona_bioma(
             tipo_sustrato = tipo_sustrato_por_celda[(x, y)]
             deposito_mineral = vetas_minerales.get((x, y), "")
             masa_mineral_restante = masa_inicial_veta if deposito_mineral else 0.0
-            capacidad_retencion = float(
-                catalogo_materiales.get(tipo_sustrato, {}).get("capacidad_retencion", 0.0)
-            )
-            # Una celda con agua permanente esta, por definicion fisica,
-            # empapada -- se fija al tope de su sustrato en generacion en
-            # vez de simular la infiltracion tick a tick (ver docstring de
-            # Celda.humedad_subsuelo). El mismo bono que antes daba el
-            # extinto factor_ribera sale de esto sin caso especial.
-            humedad_subsuelo = capacidad_retencion if tiene_agua else 0.0
+            humedad_subsuelo = humedad_subsuelo_por_celda[(x, y)]
 
             especie_key = especie_por_celda.get((x, y), "")
             tiene_recurso = especie_key != ""

@@ -8,6 +8,8 @@ estación del año y proximidad a cuerpos de agua superficiales (riberas).
 
 from __future__ import annotations
 
+import random
+
 from typing import Any
 
 from nucleo.celda import Celda
@@ -137,3 +139,58 @@ def idoneidad_colonizacion(
     bono_maximo = 0.2
     f_humedad = factor_humedad_subsuelo(celda, capacidad_retencion, bono_maximo) / (1.0 + bono_maximo)
     return f_lluvia * f_temp * f_fertilidad * f_humedad
+
+
+def colonizar_por_idoneidad(
+    rng: random.Random,
+    todas_las_celdas: set[tuple[int, int]],
+    biomas: dict[tuple[int, int], Any],
+    campo_lluvia: list,
+    campo_temperatura: list,
+    fertilidad_por_celda: dict[tuple[int, int], float],
+    humedad_subsuelo_por_celda: dict[tuple[int, int], float],
+    capacidad_retencion_por_celda: dict[tuple[int, int], float],
+    especies_cfg: dict[str, Any],
+    umbral_minimo: float,
+) -> dict[tuple[int, int], str]:
+    """Sustituye el reparto por proporción/mancha fijo en config
+    (2026-09-01, ver docs/superpowers/specs/
+    2026-09-01-distribucion-causal-flora-design.md): por cada celda,
+    reúne las especies cuyo bioma declarado coincide con el de la celda
+    (mismo filtro grueso de siempre), calcula su idoneidad_colonizacion y
+    descarta las que no superan umbral_minimo. Entre las que quedan,
+    sortea una ponderada por idoneidad -- no gana siempre la de mayor
+    puntuación a rajatabla, ni la primera del catálogo por orden de
+    aparición. Si ninguna especie supera el umbral, la celda no aparece
+    en el resultado -- suelo desnudo, resultado real, no forzado."""
+    especie_por_celda: dict[tuple[int, int], str] = {}
+    for x, y in todas_las_celdas:
+        bioma_celda = biomas[(x, y)]
+        candidatas = [
+            (nombre, cfg) for nombre, cfg in especies_cfg.items()
+            if bioma_celda.value in cfg.get("biomas", [])
+        ]
+        if not candidatas:
+            continue
+
+        celda_temp = Celda(
+            tipo_terreno=bioma_celda,
+            lluvia=campo_lluvia[x][y],
+            temperatura=campo_temperatura[x][y],
+            fertilidad=fertilidad_por_celda[(x, y)],
+            humedad_subsuelo=humedad_subsuelo_por_celda[(x, y)],
+        )
+        capacidad_retencion = capacidad_retencion_por_celda[(x, y)]
+
+        nombres = []
+        pesos = []
+        for nombre, cfg in candidatas:
+            idoneidad = idoneidad_colonizacion(cfg, celda_temp, capacidad_retencion)
+            if idoneidad >= umbral_minimo:
+                nombres.append(nombre)
+                pesos.append(idoneidad)
+
+        if nombres:
+            especie_por_celda[(x, y)] = rng.choices(nombres, weights=pesos, k=1)[0]
+
+    return especie_por_celda
