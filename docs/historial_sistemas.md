@@ -65,3 +65,18 @@ El filtrado por zona antes de `agrupar_por_proximidad` (círculo 3 de
 profundidad, mismo día) corrigió un hallazgo propio: con varias cuevas
 compartiendo rangos de coordenadas pequeños, dos refugios en zonas
 DISTINTAS podían agruparse por pura coincidencia numérica.
+
+## `sistema_descomposicion.py`
+
+Círculo 2 de materiales físicos (2026-08-30, ver componentes/necromasa.py
+y config/materiales.yaml): antes de esto un cadáver era una única masa
+homogénea que se mineralizaba con `descomposicion.constante_degradacion_
+base` (retirada) en vez de una tasa por material.
+
+El filtrado del factor de humedad por zona llegó con el círculo 1 de
+profundidad (2026-08-30). El criterio de "la lisis hídrica solo aporta
+charco sobre tierra firme" es del 2026-08-29, compartido con
+`_actualizar_charcos` en sistema_recursos.py.
+
+El deterioro de construcciones ("nada dura para siempre") es del
+2026-08-30, de una conversación de diseño con Diego.

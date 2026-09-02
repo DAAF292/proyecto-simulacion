@@ -5,19 +5,17 @@ Sistema de degradación pasiva de restos orgánicos (Capa 1/2: Ciclo de Materia)
 Evalúa la lisis bacteriana y descomposición de necromasa a cadencia de día,
 transfiriendo masa orgánica a la fertilidad edáfica del suelo y liberando agua tisular.
 
-CÍRCULO 2 de materiales físicos (2026-08-30, ver componentes/necromasa.py
-y config/materiales.yaml): un cadáver deja de ser una única masa
-homogénea que se mineraliza a una tasa uniforme -- cada material de
-Necromasa.masas (tejido_blando, hueso...) se descompone a SU PROPIA
-tasa_descomposicion_dia (catálogo de materiales), no a
-descomposicion.constante_degradacion_base (retirada). Consecuencia
+Un cadáver no es una única masa homogénea que se mineraliza a una tasa
+uniforme (ver componentes/necromasa.py y config/materiales.yaml): cada
+material de Necromasa.masas (tejido_blando, hueso...) se descompone a SU
+PROPIA tasa_descomposicion_dia (catálogo de materiales). Consecuencia
 directa: el hueso (0.002/día, un orden de magnitud más lento que
 tejido_blando 0.08/día) sobrevive mucho después de que la carne ya se
-mineralizó por completo -- el resto tangible que Diego pedía. La
-mineralización completa (purga de la entidad) ya no se dispara cuando
-UNA masa llega al umbral, sino cuando TODAS lo hacen -- si no, el hueso
-desaparecería en cuanto la carne terminara, exactamente lo contrario de
-lo que se pretende.
+mineralizó por completo -- el resto tangible pretendido. La
+mineralización completa (purga de la entidad) se dispara cuando TODAS
+las masas llegan al umbral, no solo una -- si no, el hueso desaparecería
+en cuanto la carne terminara, exactamente lo contrario de lo que se
+pretende.
 """
 
 from __future__ import annotations
@@ -73,19 +71,17 @@ class SistemaDescomposicion:
         self.metros_por_celda: float = float(
             self.config.get("mundo", {}).get("metros_por_celda", 10)
         )
-        # CÍRCULO 2 de materiales físicos (2026-08-30): catálogo de
-        # materiales para la tasa_descomposicion_dia propia de cada
-        # material de Necromasa.masas. Fallback (material desconocido o
-        # catálogo vacío en un test): mismo valor que tenía la antigua
-        # constante_degradacion_base, para no romper comportamiento donde
-        # el catálogo no está disponible.
+        # Catálogo de materiales para la tasa_descomposicion_dia propia
+        # de cada material de Necromasa.masas. Fallback (material
+        # desconocido o catálogo vacío en un test): tasa genérica de
+        # materia orgánica, para no romper comportamiento donde el
+        # catálogo no está disponible.
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
         self.tasa_descomposicion_por_defecto: float = 0.08
-        # Deterioro de construcciones (2026-08-30, "nada dura para
-        # siempre" -- ver conversación de diseño con Diego). A diferencia
-        # de Necromasa, SIN fallback de 0.08: piedra/arcilla/tierra/
-        # hierro/cobre no declaran tasa_descomposicion_dia en el catálogo
-        # (geológicamente estables) y deben quedarse así -- una
+        # Deterioro de construcciones -- "nada dura para siempre". A
+        # diferencia de Necromasa, SIN fallback de 0.08: piedra/arcilla/
+        # tierra/hierro/cobre no declaran tasa_descomposicion_dia en el
+        # catálogo (geológicamente estables) y deben quedarse así -- una
         # construcción de piedra no debe decaer solo porque el material
         # no tiene una tasa explícita, al contrario que un cadáver (100%
         # orgánico, ahí sí tiene sentido que "sin tasa" signifique "tasa
@@ -106,11 +102,11 @@ class SistemaDescomposicion:
         """
         self._descomponer_construcciones(gestor, mundo, reloj, bus_eventos)
 
-        # (2026-08-30, Circulo 1 de profundidad) factor de humedad
-        # calculado UNA VEZ POR ZONA (cada ZonaBioma tiene su propio
-        # clima_actual), luego aplicado a cada Necromasa segun la zona a
-        # la que pertenezca -- no una unica variable global derivada de
-        # zonas[0] aplicada por igual a toda entidad exista donde exista.
+        # Factor de humedad calculado UNA VEZ POR ZONA (cada ZonaBioma
+        # tiene su propio clima_actual), luego aplicado a cada Necromasa
+        # segun la zona a la que pertenezca -- no una unica variable
+        # global derivada de zonas[0] aplicada por igual a toda entidad
+        # exista donde exista.
         factores_humedad_por_zona: dict[int, float] = {}
         for indice_zona, zona_i in enumerate(mundo.territorio.zonas):
             clima_actual = getattr(zona_i, "clima_actual", None)
@@ -175,7 +171,7 @@ class SistemaDescomposicion:
                 nec.agua_tisular = max(0.0, nec.agua_tisular - delta_agua)
 
                 aporte_charco_m = (delta_agua * 0.001) / (self.metros_por_celda ** 2)
-                # (2026-08-29) Mismo criterio que _actualizar_charcos en
+                # Mismo criterio que _actualizar_charcos en
                 # sistema_recursos.py: la lisis hídrica solo aporta charco
                 # sobre tierra firme; el agua de un cuerpo permanente se
                 # incorpora a él, no a un campo de charco que ahí no
@@ -216,11 +212,10 @@ class SistemaDescomposicion:
     ) -> None:
         """
         Deterioro pasivo de Construccion.materiales -- "nada dura para
-        siempre" (2026-08-30, ver conversación de diseño con Diego).
-        MISMA ley que la descomposición de Necromasa (arriba): cada
-        material a SU PROPIA tasa_descomposicion_dia del catálogo, sin el
-        fallback genérico de Necromasa (ver _cachear_configuracion) --
-        piedra/arcilla/tierra/hierro/cobre no decaen por esta vía,
+        siempre". MISMA ley que la descomposición de Necromasa (arriba):
+        cada material a SU PROPIA tasa_descomposicion_dia del catálogo,
+        sin el fallback genérico de Necromasa (ver _cachear_configuracion)
+        -- piedra/arcilla/tierra/hierro/cobre no decaen por esta vía,
         madera/fibra/hierba_seca sí, honestamente, sin forzar
         uniformidad donde la física real no la tiene.
 
