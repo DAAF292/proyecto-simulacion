@@ -41,7 +41,7 @@ from nucleo.orografia import (
 from nucleo.celda import Celda, TipoTerreno
 from nucleo.clima import Clima
 from nucleo.flora import recursos_alimento
-from nucleo.materiales import generar_vetas_minerales
+from nucleo.materiales import elegir_sustrato_celda, generar_vetas_minerales
 
 
 class ZonaBioma:
@@ -157,6 +157,7 @@ def generar_zona_bioma(
     config_agua: dict,
     config_materiales: dict,
     config_sustrato_por_bioma: dict,
+    config_umbrales_sustrato_fertil: dict,
     config_generacion_vetas: dict,
     ancho: int,
     alto: int,
@@ -286,10 +287,28 @@ def generar_zona_bioma(
     # mundo antes de que exista ninguna Celda todavía.
     sustrato_por_bioma = config_sustrato_por_bioma
     catalogo_materiales = config_materiales
-    tipo_sustrato_por_celda = {
-        (x, y): sustrato_por_bioma.get(biomas[(x, y)].value, "")
-        for x in range(ancho) for y in range(alto)
-    }
+    umbrales_sustrato_fertil = config_umbrales_sustrato_fertil
+    # Sustrato variado por celda (2026-09-01, ver docs/superpowers/specs/
+    # 2026-09-01-distribucion-causal-flora-design.md): antes de esto,
+    # cada bioma tenía un único material fijo (sustrato_por_bioma.get(...)
+    # directo) -- ahora cada bioma trae una LISTA de candidatos y
+    # elegir_sustrato_celda decide cuál le toca a cada celda según
+    # elevación/lluvia ya calculadas, causal en vez de fijo. fertilidad_
+    # por_celda nace del fertilidad_base del sustrato elegido, no de 0.0.
+    tipo_sustrato_por_celda = {}
+    fertilidad_por_celda = {}
+    for x in range(ancho):
+        for y in range(alto):
+            bioma_celda = biomas[(x, y)]
+            candidatos = sustrato_por_bioma.get(bioma_celda.value, [])
+            umbral = umbrales_sustrato_fertil.get(bioma_celda.value, 0.5)
+            sustrato = elegir_sustrato_celda(
+                candidatos, bioma_celda, campo_elevacion[x][y], campo_lluvia[x][y], umbral,
+            )
+            tipo_sustrato_por_celda[(x, y)] = sustrato
+            fertilidad_por_celda[(x, y)] = float(
+                catalogo_materiales.get(sustrato, {}).get("fertilidad_base", 0.0)
+            )
 
     # Vetas de mineral (2026-08-30, ver nucleo/materiales.py): restringidas
     # a celdas de sustrato piedra (montaña) -- coherente con que el
@@ -349,6 +368,7 @@ def generar_zona_bioma(
                 profundidad_agua=profundidad_agua, tipo_sustrato=tipo_sustrato,
                 humedad_subsuelo=humedad_subsuelo, deposito_mineral=deposito_mineral,
                 masa_mineral_restante=masa_mineral_restante,
+                fertilidad=fertilidad_por_celda[(x, y)],
             )
 
     return ZonaBioma(ancho=ancho, alto=alto, grid=grid)
