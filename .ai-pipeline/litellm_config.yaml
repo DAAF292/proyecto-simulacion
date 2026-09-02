@@ -48,10 +48,19 @@ model_list:
       # llamadas a este despliegue hasta que el periodo se reinicia. Es
       # la protección real contra un BUCLE que dispare muchas llamadas
       # (el riesgo real de un pipeline autónomo sin supervisión), no
-      # contra una única llamada cara. 0.10 USD/día sigue siendo generoso
-      # en número de llamadas dado el coste por token de este modelo,
-      # pero es un techo duro real donde antes no había ninguno.
-      max_budget: 0.10
+      # contra una única llamada cara.
+      #
+      # SUBIDO (2026-09-02, pedido por Diego): 0.10 USD/día resultó corto
+      # para un día real de uso intencional -- 5 planes soltados uno a
+      # uno, cada uno con hasta 3 intentos de aider (algunos con varios
+      # reintentos internos de litellm de por medio), agotó el tope a
+      # media tarde sin que hubiera ningún bucle descontrolado, solo
+      # trabajo real. 1.00 USD/día da un margen holgado (~10x el gasto
+      # real de hoy) sin dejar de ser un techo duro real -- sigue
+      # protegiendo contra el riesgo original (un bucle que dispare
+      # muchas llamadas sin supervisión), solo que con más margen para
+      # una sesión de trabajo normal.
+      max_budget: 1.00
       budget_duration: "1d"
     # model_info (2026-09-02, hallazgo real -- tercer problema encontrado
     # durante la primera prueba real del pipeline, distinto de los dos ya

@@ -300,11 +300,26 @@ materiales:
 # aquí: no son el material BASE de ningún bioma entero, son vetas
 # localizadas dentro de piedra -- ver generacion_vetas más abajo.
 sustrato_por_bioma:
-  montana: piedra
-  bosque: arcilla
-  pradera: arcilla
-  desierto: arena
-  tundra: tierra
+  montana: [piedra, grava]
+  bosque: [arcilla, tierra_negra]
+  pradera: [marga, tierra_negra]
+  desierto: [arena, grava]
+  tundra: [tierra]
+
+# umbrales_sustrato_fertil (2026-09-01, ver docs/superpowers/specs/
+# 2026-09-01-distribucion-causal-flora-design.md): qué sustrato de la
+# lista de sustrato_por_bioma le toca a una celda concreta ya no es un
+# sorteo -- se deriva de una señal causal ya calculada en generación
+# (elevación para biomas pedregosos, lluvia para biomas vegetados, ver
+# nucleo/materiales.py:elegir_sustrato_celda). Un único float por
+# bioma, en la misma escala [0,1] que campo_elevacion/campo_lluvia.
+# Tundra no aparece -- un único candidato no consulta ningún umbral.
+# PROVISIONAL, sin calibrar contra el motor en marcha.
+umbrales_sustrato_fertil:
+  montana: 0.6
+  desierto: 0.5
+  bosque: 0.55
+  pradera: 0.45
 
 # --- Generación de vetas de mineral (2026-08-30) --------------------------
 # Coloca cada material con 'abundancia' (hoy hierro y cobre) dentro de
