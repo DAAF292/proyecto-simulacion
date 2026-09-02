@@ -5,3 +5,4 @@ venv/
 datos/*.db
 .aider*
 .ai-pipeline/proxy.log
+.ai-pipeline/run-plan.log

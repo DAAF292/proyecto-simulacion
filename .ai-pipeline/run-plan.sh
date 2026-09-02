@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# CAPTURA DE LOG + TRAZA DE LÍNEA (2026-09-02, pedido por Diego tras 3
+# incidentes reales de este mismo script desapareciendo sin terminar --
+# ni éxito ni fallo registrado, plan huérfano en docs/plans/in_progress/,
+# sin ningún rastro en journalctl (proxy de litellm sano, sin OOM) -- ver
+# la conversación de esta sesión. Hasta ahora la salida de este script
+# se perdía en el proceso de fondo de watch-plans.sh sin quedar en
+# ningún fichero -- imposible diagnosticar qué pasó de verdad, solo
+# especular (sospecha real, no confirmada: la máquina suspendida).
+# exec con tee -a vuelca TODO lo que este script (y aider dentro de él)
+# escribe a stdout/stderr también a un log persistente que sobrevive a
+# que el proceso muera sin más -- append, no overwrite, para conservar
+# el historial completo de ejecuciones. El trap ERR captura la línea y
+# el comando exacto si `set -e` aborta el script por un fallo real --
+# NO cubre una muerte por señal externa (la propia sospecha de los 3
+# incidentes), pero al menos el log deja ver hasta dónde llegó a
+# imprimir antes de callarse, que es justo lo que falta hoy.
+mkdir -p .ai-pipeline
+exec > >(tee -a .ai-pipeline/run-plan.log) 2>&1
+echo ""
+echo "########## $(date -Iseconds) -- nueva ejecución de run-plan.sh (PID $$) ##########"
+trap 'echo "[TRAP ERR] línea $LINENO, comando: \"$BASH_COMMAND\", código de salida $?"' ERR
+trap 'echo "[TRAP EXIT] run-plan.sh termina con código $? a las $(date -Iseconds)"' EXIT
+
 PLAN_PATH="${1:-}"
 
 if [ -z "$PLAN_PATH" ]; then
