@@ -121,3 +121,25 @@ def test_integracion_generacion_real_produce_celdas_vacias_y_pobladas():
             assert celda.tipo_recurso in especies_validas
             assert celda.tipo_terreno.value in config["flora"]["especies"][celda.tipo_recurso]["biomas"]
     assert hay_pobladas
+
+
+def test_ley_celda_sumergida_nunca_se_coloniza_aunque_tenga_idoneidad_alta():
+    """Ley f\u00edsica de colonizaci\u00f3n en generaci\u00f3n: una celda sumergida
+    (tiene_agua permanente) nunca se coloniza por flora, con
+    independencia de cu\u00e1nta idoneidad_colonizacion tenga -- misma ley
+    que la propagaci\u00f3n en tiempo real (ver
+    test_flora_intentar_colonizar.py). El resto de celdas del mismo lote
+    no se ven afectadas: siguen coloniz\u00e1ndose por su propia idoneidad."""
+    resultado = colonizar_por_idoneidad(
+        random.Random(1), TODAS_LAS_CELDAS, BIOMAS, CAMPO_LLUVIA, CAMPO_TEMPERATURA,
+        FERTILIDAD, HUMEDAD, CAPACIDAD_RETENCION, ESPECIES_CFG, 0.2,
+        celdas_con_agua={(0, 0), (1, 0)},
+    )
+    # (0,0) es el bosque con idoneidad alta para 'manzano', (1,0) el
+    # desierto con idoneidad alta para 'cactus' -- ambos sumergidos aqu\u00ed,
+    # ninguno debe aparecer en el resultado.
+    assert (0, 0) not in resultado
+    assert (1, 0) not in resultado
+    # (2,0) monta\u00f1a sin especies candidatas sigue vac\u00eda, sin efecto
+    # colateral del lote.
+    assert (2, 0) not in resultado

@@ -251,14 +251,24 @@ def generar_zona_bioma(
             capacidad_retencion_por_celda[(x, y)] = capacidad_retencion
             humedad_subsuelo_por_celda[(x, y)] = capacidad_retencion if tiene_agua_celda else 0.0
 
+    # Celdas con agua permanente (río/lago/poza) derivadas del campo de
+    # elevación -- información YA calculada arriba con
+    # generar_cuerpos_agua, reutilizada aquí sin recalcular ni volver a
+    # recorrer el grid. Una celda sumergida nunca es colonizada por flora,
+    # misma ley física que la propagación en tiempo real.
+    celdas_con_agua = {
+        pos for pos, info in cuerpos_agua.items() if info.tipo != ""
+    }
+
     # Colonización de flora por idoneidad: cada celda decide qué especie
     # (si alguna) la coloniza según sustrato/fertilidad/lluvia/
-    # temperatura reales, ya calculados arriba.
+    # temperatura reales, ya calculados arriba -- excluidas las sumergidas.
     especie_por_celda = colonizar_por_idoneidad(
         rng, todas_las_celdas, biomas, campo_lluvia, campo_temperatura,
         fertilidad_por_celda, humedad_subsuelo_por_celda, capacidad_retencion_por_celda,
         config_flora["especies"],
         float(config_flora.get("umbral_minimo_idoneidad_colonizacion", 0.2)),
+        celdas_con_agua=celdas_con_agua,
     )
 
     celdas_piedra = {
