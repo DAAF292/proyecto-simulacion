@@ -1830,3 +1830,105 @@ piezas 3 (cupo de espacio) y 4 (catálogo ampliado) de la cola "poblar
 más el mundo" sin empezar. Próximo paso acordado con Diego: cerrar el
 planteamiento del nuevo flujo del pipeline (sección anterior) antes de
 retomar la implementación de las piezas 2-5.
+
+**ACTUALIZACIÓN (2026-09-02, mismo día): pieza 2/5 y 3/5 ya
+implementadas -- ver la sección siguiente, sustitución real de aider
+por mini-swe-agent en el pipeline.**
+
+## Sustitución de aider por mini-swe-agent en el pipeline (2026-09-02) --
+## validado dos veces de extremo a extremo, piezas 2/5 y 3/5 de
+## propagación de flora ya mergeadas por el pipeline nuevo
+
+Diego, con el balance de la sección anterior ("aider arrastra muchos
+problemas, la solución no es solo replantear el flujo sino cambiar de
+herramienta"), aprobó investigar y probar `SWE-agent`. Verificado antes
+de instalar nada: esta máquina (WSL2) tiene Docker solo en el lado
+Windows, sin integración WSL activada -- `SWE-agent` clásico lo exige.
+Investigación (agente de búsqueda) encontró que el propio equipo del
+proyecto recomienda ahora `mini-swe-agent` ("el agente de 100 líneas")
+en vez de `SWE-agent` clásico, con un modo `local` sin Docker (ejecuta
+comandos vía `subprocess` directo en el host) pensado justo para
+desarrollo normal -- instalación aislada (`uv tool install
+mini-swe-agent`, mismo patrón que `aider`), reutiliza el proxy
+`litellm` existente sin cambios.
+
+**Mecanismo de fondo, la diferencia real frente a aider**: leyendo
+`minisweagent/models/litellm_model.py` del paquete instalado --
+`litellm.completion(..., tools=[BASH_TOOL], ...)`, tool-calling
+estructurado real (el modelo emite comandos bash -- `sed`, heredocs,
+`cat`, `git commit` -- ejecutados en un subproceso, la salida vuelve
+como observación) en vez de diffs de texto libre que un parser frágil
+tiene que interpretar. Sin ningún mecanismo de "auto-mención de
+fichero" que vigilar -- el modelo lee/escribe ficheros él mismo con
+comandos reales, no hay ninguna inyección automática de contexto que
+pueda descontrolarse.
+
+**Setup real** (dos ajustes de configuración, ninguno documentado de
+forma obvia): `MSWEA_CONFIGURED=true` en
+`~/.config/mini-swe-agent/.env` evita el asistente interactivo de
+primer uso (bloquea en modo no interactivo sin esto);
+`MSWEA_COST_TRACKING=ignore_errors` evita un `RuntimeError` real --
+litellm no tiene en su tabla de costes ningún registro para el alias
+custom `openai/agente-obrero`, y sin este flag `mini-swe-agent` aborta
+al no poder calcular el coste de una llamada que sí tuvo éxito.
+
+**Spike inicial (manual, fuera del pipeline)**: mismo modelo, mismo
+proxy, plan 2/5 de propagación de flora (`intentar_colonizar_celda`,
+dificultad comparable a los 6 fallos consecutivos de aider ese mismo
+día) -- completado en un único intento, 15 pasos, sin intervención.
+Diff idéntico byte a byte al plan, 0 corrupción, 0 duplicados, 66/66
+tests, motor real sin excepciones.
+
+**`run-plan.sh` reescrito** para invocar `mini` en vez de `aider`,
+manteniendo intacta toda la lógica agnóstica a la herramienta (gestión
+de ramas, `PLAN_START_COMMIT`/`CAMBIOS_REALES`, tests, apertura de PR).
+Retirado: el parche de `max_reflections`, `--edit-format`/
+`aider-model-settings.yml`, el incrustado manual de contenido de
+fichero en el mensaje (mini lee ficheros él mismo). Añadido:
+**commit de seguridad** -- a diferencia de `aider` (`--auto-commits`
+garantizaba que todo cambio aplicado quedaba comiteado), `mini-swe-agent`
+solo comitea si el propio modelo ejecuta `git commit` como una de sus
+acciones; si se queda sin turnos/presupuesto antes de llegar a ese
+paso, los cambios reales podrían perderse sin comitear -- se añade un
+`git add -A && git commit` de respaldo tras cada intento si queda algo
+sin comitear. Descubierto útil en la práctica: los pasos "Step N:
+Commit" del plan (con el mensaje de commit exacto, pie
+Co-Authored-By/Claude-Session incluido) SÍ son ejecutables tal cual
+para `mini-swe-agent` -- a diferencia de `aider`, que necesitaba un
+aviso explícito para ignorarlos.
+
+**Validación real de extremo a extremo, vía el centinela y `run-plan.sh`
+tal cual, no invocación manual**: pieza 3/5 (`_intentar_propagacion` vía
+el helper compartido + dispatch `_propagar_planta` por
+`tipo_propagacion`) soltada al centinela -- recogida sola, completada en
+el intento 1/3, diff idéntico al plan (0 corrupción), 70/70 tests, motor
+real sin excepciones, PR #9 abierto y mergeado. Único matiz real: el
+modelo no llegó a ejecutar su propio `git commit` final antes de
+intentar cerrar la tarea (acción `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`
+que falló) -- el commit de seguridad lo capturó correctamente sin
+perder nada, confirmando que esa red de seguridad era necesaria de
+verdad, no solo teórica.
+
+**Balance, dos intentos reales sobre el pipeline ya reescrito: 2 de 2
+éxitos en el primer intento cada vez**, frente a 0 de más de 6 intentos
+con `aider` ese mismo día. Cambia la conclusión de la sección anterior
+sobre viabilidad económica: con el mecanismo de tool-calling, el
+formato de plan actual (código completo, no blueprint) ya no es la
+única palanca posible -- pedirle al modelo más autonomía real (explorar
+el repo, decidir la implementación) ya no choca con la fragilidad
+mecánica que hundía a `aider`. **Pendiente, sin decidir**: si retomar
+la propuesta original de Diego de planes tipo blueprint (menos código
+pre-escrito por Claude, más exploración real del modelo) ahora que la
+herramienta lo permite, o seguir con el formato de código completo ya
+validado dos veces. Piezas 4/5 (viento) y 5/5 (zoocoria) de propagación
+de flora siguen aparcadas en `docs/superpowers/plans/pendientes/`,
+listas para soltar con el pipeline ya migrado.
+
+**Nota técnica sobre el propio proceso de esta migración, sin relación
+con el pipeline en sí**: al mergear el PR #9, `origin/master` había
+avanzado por el propio squash-merge de GitHub mientras el `master`
+local tenía 8 commits propios nunca empujados al remoto -- confirmado
+con `git diff` que el remoto era un superset exacto del local (mismo
+contenido, historia squasheada), resuelto con `git reset --hard
+origin/master` tras verificar que no había pérdida real de trabajo,
+solo de granularidad de commits locales.
