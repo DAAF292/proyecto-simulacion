@@ -1,116 +1,59 @@
-"""Agua: generacion de cuerpos de agua (rio, lago, poza) derivada del
-campo de elevacion continuo (fase terreno 2, nucleo/campo_continuo.py) --
-mismo patron que nucleo/bioma.py y nucleo/flora.py, funciones puras sobre
-un dominio, reutilizables desde nucleo/zona_bioma.py.
+"""Agua: generación de cuerpos de agua (río, lago, poza) derivada del
+campo de elevación continuo (nucleo/campo_continuo.py) -- mismo patrón
+que nucleo/bioma.py y nucleo/flora.py, funciones puras sobre un
+dominio, reutilizables desde nucleo/zona_bioma.py.
 
-CORRECCION de diseno (discutida y confirmada con Diego, posterior a la
-correccion biomas/especies): el generador anterior (_generar_rio, ahora
-retirado de nucleo/zona_bioma.py) trazaba un unico camino de una celda de
-ancho, de un borde del grid al opuesto, por PASEO ALEATORIO -- ciego por
-completo al terreno, no consultaba elevacion/lluvia/temperatura/bioma en
-ningun momento. Un rio podia cruzar una Montana en linea recta con la
-misma probabilidad que cruzar una Pradera. Tampoco existian lagos ni
-pozas -- un unico tipo de cuerpo de agua, siempre exactamente uno por
-mundo.
+El agua es una CONSECUENCIA del relieve, no un dibujo superpuesto:
 
-Ahora el agua es una CONSECUENCIA del relieve, no un dibujo superpuesto:
-
-- Rio: descenso de pendiente desde un nacimiento en una cumbre (pico de
-  elevacion alta) hasta que sale del mapa, se funde con agua ya trazada,
-  o llega a un minimo local.
-- Lago: la cuenca que se forma justo donde un rio termina en un minimo
-  local -- el agua "se acumula" ahi porque no puede bajar mas.
-- Poza: una cuenca pequena y aislada que ningun rio llega a alcanzar,
-  encontrada en una segunda pasada sobre minimos locales de elevacion
+- Río: descenso de pendiente desde un nacimiento en una cumbre (pico de
+  elevación alta) hasta que sale del mapa, se funde con agua ya
+  trazada, o llega a un mínimo local.
+- Lago: la cuenca que se forma justo donde un río termina en un mínimo
+  local -- el agua "se acumula" ahí porque no puede bajar más.
+- Poza: una cuenca pequeña y aislada que ningún río llega a alcanzar,
+  encontrada en una segunda pasada sobre mínimos locales de elevación
   absoluta baja -- sin cauce que la alimente, a diferencia del lago.
 
-Los tres son resultado de la MISMA regla ("el agua busca el punto mas
-bajo alcanzable y se acumula ahi"), no tres mecanismos independientes --
-coherente con "reglas, no guiones" y con no sumar mas de una fuente de
-complejidad nueva a la vez (aqui la fuente es "el agua depende del
-relieve"; rio/lago/poza son solo los resultados posibles de aplicarla).
+Los tres son resultado de la MISMA regla ("el agua busca el punto más
+bajo alcanzable y se acumula ahí"), no tres mecanismos independientes.
 
-Numero de nacimientos: DERIVADO del propio terreno, no fijado por config.
-Cada CUMBRE (componente conexa de celdas con elevacion por encima de un
-umbral) genera un unico nacimiento en su punto mas alto -- no una celda
-por cada casilla alta, o una cordillera entera generaria un rio por
-casilla. Un mundo con pocas cumbres marcadas tiene pocos rios; uno muy
-accidentado, mas -- ningun numero se decide aqui a mano.
+Número de nacimientos: DERIVADO del propio terreno, no fijado por
+config. Cada CUMBRE (componente conexa de celdas con elevación por
+encima de un umbral) genera un único nacimiento en su punto más alto --
+un mundo con pocas cumbres marcadas tiene pocos ríos; uno muy
+accidentado, más.
 
-tipo_agua declarado con intencion, sin consumidor mecanico real todavia
-(salvo el bono de produccion de flora, ver nucleo/flora.py:
-factor_humedad_subsuelo, que SI distingue "hay agua" pero no todavia DE
-QUE TIPO): Diego anticipa
-fauna futura que dependa del tipo concreto (anfibios en poza, fauna
-acuatica en rio/lago) -- mismo criterio que los recursos de categoria
-material en flora.py, se declara la distincion antes de tener quien la
-use.
+tipo_agua declarado con intención, sin consumidor mecánico real todavía
+más allá del bono de producción de flora (nucleo/flora.py:
+factor_humedad_subsuelo, que distingue "hay agua" pero no todavía DE
+QUÉ TIPO) -- pensado para fauna futura que dependa del tipo concreto
+(anfibios en poza, fauna acuática en río/lago).
 
-PROFUNDIDAD (pieza 3 de la secuencia de fisica de terreno/agua acordada
-con Diego -- "un gnomo podria entrar en un lago pero no mas que su
-altura porque se ahogaria"; pieza 4, conectar esto a
-Necesidades.oxigenacion, resuelta despues): reutiliza la MISMA geometria
-que ya calcula _flood_fill_banda para lago/poza -- el flood-fill acota la
-cuenca por "elevacion <= elevacion_del_minimo + banda"; ese mismo par
-(elevacion_del_minimo, banda) define un NIVEL DE AGUA local
-(elevacion_del_minimo + banda) del que cada celda de la cuenca esta mas
-o menos lejos. profundidad_relieve = nivel_agua - elevacion_celda cae en
-[0, banda] por construccion (banda exacto en el propio minimo, 0.0 en el
-borde de la cuenca) -- convertida a metros multiplicando por
-escala_metros_por_unidad_elevacion (seccion 'agua' de config/
-constantes.yaml), UN UNICO factor de conversion global, igual para rio,
-lago y poza.
+PROFUNDIDAD: reutiliza la MISMA geometría que ya calcula
+_flood_fill_banda para lago/poza -- el flood-fill acota la cuenca por
+"elevación <= elevación_del_mínimo + banda"; ese mismo par
+(elevación_del_mínimo, banda) define un NIVEL DE AGUA local del que
+cada celda de la cuenca está más o menos lejos. profundidad_relieve =
+nivel_agua - elevación_celda cae en [0, banda] por construcción --
+convertida a metros multiplicando por escala_metros_por_unidad_elevacion
+(sección 'agua' de config/hidrologia.yaml), UN ÚNICO factor de
+conversión global, igual para río, lago y poza -- ningún número de este
+archivo ni de su config hace referencia a ninguna especie: la
+seguridad de cada individuo frente a una celda de agua concreta emerge
+de comparar SU PROPIA altura (DimensionesFisicas.altura) contra una
+profundidad que el terreno ya tenía antes de que el individuo
+existiera.
 
-CORRECCION DE DISENO 2026-08-21 (Diego, tras el hueco senalado con
-profundidad_maxima_metros_poza -- "estas creando normas especificas
-para las razas creadas, y si anadimos animales mas pequenos aun?"):
-la version anterior de este modulo tenia un techo de metros DISTINTO
-por tipo de cuerpo de agua (profundidad_maxima_metros_lago=3.0,
-profundidad_maxima_metros_poza=0.5), cada uno "elegido por magnitud
-relativa frente a los rangos raciales de altura" de las especies que
-existian en ese momento -- una ley teleologica disfrazada de dato de
-terreno: el mapa "sabia" a quien queria ahogar. Rompio en cuanto
-aparecieron conejo/ardilla (altura por debajo del techo de poza que
-prometia "nunca ahoga a nadie"), y habria vuelto a romper con la
-proxima especie mas pequena que la anterior, sea cual sea.
+Río: cada celda del cauce (ver _trazar_rio) actúa como el mínimo de su
+PROPIA mini-cuenca -- misma mecánica exacta de _flood_fill_banda +
+profundidades por relieve que ya usan lago/poza, aplicada celda a
+celda en vez de una única vez sobre un mínimo global. La banda de cada
+mini-cuenca NO es un número fijo: es la caída real de elevación entre
+esa celda del cauce y la siguiente en el camino de descenso (ver
+_generar_riberas_rio) -- un tramo empinado da un cauce más hondo y una
+orilla más ancha, uno casi llano da apenas un hilo de agua.
 
-Ahora NINGUN numero de este archivo ni de su config hace referencia a
-ninguna especie: escala_metros_por_unidad_elevacion convierte relieve
-real (elevacion_minimo/banda, ya derivados del campo de elevacion
-generado) en metros, igual para los tres tipos de cuerpo de agua -- la
-diferencia de profundidad TIPICA entre un lago y una poza emerge sola de
-que banda_elevacion_lago (cuanto relieve puede abarcar la cuenca antes
-de dejar de contar como "la misma cuenca") ya era mayor que banda_
-elevacion_poza por razones GEOMETRICAS (un lago es una acumulacion mas
-grande que una poza, esa distincion ya existia) -- no hace falta
-inventar una segunda razon (profundidad maxima por especie) para lo que
-la geometria del terreno ya explica. La seguridad de cada individuo
-frente a una celda de agua concreta emerge de comparar SU PROPIA altura
-(DimensionesFisicas.altura) contra una profundidad que el terreno ya
-tenia antes de que el individuo existiera -- ninguna garantia de "esto
-nunca ahoga a nadie" esta escrita a mano en ningun sitio; si una especie
-diminuta futura puede ahogarse en una poza pequena, es una consecuencia
-real del terreno, no un fallo de diseno que haya que parchear cada vez
-que se anade una especie nueva.
-
-Rio: ANTES la excepcion deliberada (profundidad_metros_rio, un unico
-valor fijo para todo el cauce, sin gradiente de orilla ni variacion a lo
-largo del rio -- "un rio no es una cuenca"). CORRECCION 2026-08-21
-(Diego: "lo que hay que hacer respecto a los rios es darles un
-gradiente a las orillas, igual que a los lagos y a las pozas, la
-profundidad debera variar dependiendo del terreno"): cada celda del
-cauce (ver _trazar_rio) actua ahora como el minimo de su PROPIA
-mini-cuenca -- misma mecanica exacta de _flood_fill_banda +
-profundidades por relieve que ya usan lago/poza, aplicada celda a celda
-en vez de una unica vez sobre un minimo global. La banda de cada
-mini-cuenca NO es un numero fijo elegido a mano: es la caida real de
-elevacion entre esa celda del cauce y la siguiente en el camino de
-descenso (ver _generar_riberas_rio) -- un tramo empinado da un cauce mas
-hondo y una orilla mas ancha (mas agua, mas rapido, "se desborda mas"),
-uno casi llano da un cauce apenas mojado. La profundidad varia a lo
-largo del rio porque el terreno real por el que pasa varia, exactamente
-lo pedido -- no hay ninguna banda_elevacion_rio en la config, porque no
-hace falta inventar una: el propio camino de descenso ya la da.
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 import random
 from dataclasses import dataclass
@@ -188,12 +131,11 @@ def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, al
     el camino no puede repetir celda y esta acotado por el numero total
     de celdas del mapa.
 
-    (2026-08-28) coste_giro: INERCIA DEL CAUCE. El descenso por minimo
-    puro no tiene memoria -- cada paso reevalua desde cero -- y en un
-    valle ancho y casi plano el cauce oscila entre las paredes del valle
-    celda a celda: meandro sinusoidal artificial de periodo constante
-    ("codorniz", capturas de Diego contra el visor real). Un cauce real
-    tiende a la recta: excavo su lecho, desviar el flujo cuesta. Entre
+    coste_giro: INERCIA DEL CAUCE. El descenso por mínimo puro no tiene
+    memoria -- cada paso reevalúa desde cero -- y en un valle ancho y
+    casi plano el cauce oscila entre las paredes del valle celda a
+    celda: meandro sinusoidal artificial de periodo constante. Un cauce
+    real tiende a la recta: excavó su lecho, desviar el flujo cuesta. Entre
     los vecinos ESTRICTAMENTE menores (la fisica no cambia: el agua
     nunca sube), se penaliza el cambio de direccion: recto 0, giro de
     90 grados coste_giro, de 180 grados 2*coste_giro. Calibracion
@@ -237,16 +179,14 @@ def _trazar_rio(x: int, y: int, campo_elevacion: list, agua: set, ancho: int, al
 
 
 def _flood_fill_banda(mx: int, my: int, campo_elevacion: list, agua: set, ancho: int, alto: int, banda: float, tope_tamano: int) -> set:
-    """Cuenca alrededor de un minimo (mx, my): flood-fill con pila (LIFO,
-    expansion en profundidad -- CORRECCION de docstring 2026-08-29: decia
-    "BFS" y usaba frontera.pop(); el orden de recorrido solo decide que
-    celdas concretas entran cuando se alcanza tope_tamano, deterministic
-    en cualquier caso) que suma celdas vecinas cuya elevacion no supere la
-    del minimo mas 'banda' -- acota la extension de un lago/poza a su
-    entorno inmediato. Sin este tope, una
-    cuenca poco profunda sobre un campo de value noise podria devorar
-    facilmente cualquier ondulacion cercana (mismo riesgo senalado antes
-    de implementar: "podriamos acabar con charcos por todo el mapa")."""
+    """Cuenca alrededor de un mínimo (mx, my): flood-fill con pila (LIFO,
+    expansión en profundidad; el orden de recorrido solo decide qué
+    celdas concretas entran cuando se alcanza tope_tamano, determinista
+    en cualquier caso) que suma celdas vecinas cuya elevación no supere
+    la del mínimo más 'banda' -- acota la extensión de un lago/poza a su
+    entorno inmediato. Sin este tope, una cuenca poco profunda sobre un
+    campo de value noise podría devorar fácilmente cualquier ondulación
+    cercana."""
     elevacion_minimo = campo_elevacion[mx][my]
     resultado = {(mx, my)}
     frontera = [(mx, my)]
@@ -271,13 +211,12 @@ def _profundidades_cuenca(cuenca: set, campo_elevacion: list, elevacion_minimo: 
     respetaba. profundidad_relieve cae en [0, banda] por construccion
     (banda en el propio minimo, 0.0 en el borde de la cuenca); se acota
     de todas formas por seguridad, no por necesidad esperada (una celda
-    alcanzada por flood-fill desde OTRA celda de la cuenca podria, en
-    principio, no ser vecina directa del minimo y quedar fuera de rango
-    por redondeo de punto flotante, aunque no deberia pasar en la
-    practica). escala_metros_por_unidad_elevacion es el UNICO factor que
-    convierte relieve a metros -- igual para rio, lago y poza, sin
-    referencia a ninguna especie (ver CORRECCION DE DISENO 2026-08-21 en
-    el docstring del modulo)."""
+    alcanzada por flood-fill desde OTRA celda de la cuenca podría, en
+    principio, no ser vecina directa del mínimo y quedar fuera de rango
+    por redondeo de punto flotante, aunque no debería pasar en la
+    práctica). escala_metros_por_unidad_elevacion es el ÚNICO factor que
+    convierte relieve a metros -- igual para río, lago y poza, sin
+    referencia a ninguna especie."""
     nivel_agua = elevacion_minimo + banda
     resultado = {}
     for cx, cy in cuenca:
@@ -288,11 +227,9 @@ def _profundidades_cuenca(cuenca: set, campo_elevacion: list, elevacion_minimo: 
 
 
 def _generar_riberas_rio(camino: list, campo_elevacion: list, agua: set, ancho: int, alto: int, tope_tamano_orilla: int, piso_banda: float, techo_banda: float, escala_metros_por_unidad_elevacion: float) -> dict:
-    """Gradiente de orilla para un rio (Diego, 2026-08-21: "darles un
-    gradiente a las orillas, igual que a los lagos y a las pozas, la
-    profundidad debera variar dependiendo del terreno") -- ver CORRECCION
-    DE DISENO en el docstring del modulo para el razonamiento completo.
-    Cada celda del cauce actua como el minimo de su propia mini-cuenca;
+    """Gradiente de orilla para un río -- ver docstring del módulo para
+    el razonamiento completo. Cada celda del cauce actúa como el mínimo
+    de su propia mini-cuenca;
     la banda de esa mini-cuenca es la caida de elevacion REAL hacia la
     siguiente celda del camino de descenso (o hacia la anterior, en la
     ultima celda, que no tiene una "siguiente") -- asi que ni la
@@ -406,13 +343,11 @@ def generar_cuerpos_agua(campo_elevacion: list, rng: random.Random, config_agua:
             if previa is None:
                 resultado[celda] = InfoAgua("rio", profundidad)
             else:
-                # (2026-08-29) Celda que ya es agua de OTRO cuerpo (fundido
-                # con su cauce o su lago): se conserva su tipo y se toma la
-                # profundidad mayor -- la misma regla de maximo que
-                # _generar_riberas_rio aplica dentro de un mismo rio, ahora
-                # tambien entre cuerpos distintos. Antes se sobrescribia sin
-                # mas: la boca de un lago podia relabelarse 'rio' y una
-                # ribera somera podia RETIRAR profundidad al cuerpo ajeno.
+                # Celda que ya es agua de OTRO cuerpo (fundido con su
+                # cauce o su lago): se conserva su tipo y se toma la
+                # profundidad mayor -- la misma regla de máximo que
+                # _generar_riberas_rio aplica dentro de un mismo río,
+                # ahora también entre cuerpos distintos.
                 resultado[celda] = combinar_profundidad_cuerpos(previa, profundidad)
             agua.add(celda)
         # Cualquier celda del cauce que por lo que sea no recibiera
@@ -447,39 +382,32 @@ def generar_cuerpos_agua(campo_elevacion: list, rng: random.Random, config_agua:
     return resultado
 
 
-# --- Agua efimera (pieza 3 de la revision del sistema de agua, 2026-08-21
-# -- charcos generados por clima, ver sistemas/sistema_recursos.py). A
-# diferencia de todo lo anterior en este modulo (agua PERMANENTE,
-# geografica, derivada del relieve una vez al generar el mundo), el charco
-# es agua EFIMERA y climatica, estado mutado por la partida real (sube con
-# lluvia/tormenta, baja por evaporacion o consumo -- ver Celda.
-# profundidad_charco, nucleo/celda.py, para el detalle completo). Estas
-# dos funciones NO generan nada -- son el punto unico donde se combina
-# "agua permanente" (tiene_agua/profundidad_agua) con "agua efimera"
-# (profundidad_charco) para quien solo le importa "hay algo bebible/
-# vadeable AHORA MISMO", sin que cada consumidor (sistema_movimiento.py,
-# sistema_recursos.py, sistema_necesidades.py) tenga que repetir el
-# mismo `or`/`max` por su cuenta -- mismo motivo de existir que
-# radio_individual en nucleo/percepcion.py: una formula pequena, pero un
-# unico sitio si algun dia cambia.
+# Agua efímera: charcos generados por clima, ver
+# sistemas/sistema_recursos.py. A diferencia de todo lo anterior en este
+# módulo (agua PERMANENTE, geográfica, derivada del relieve una vez al
+# generar el mundo), el charco es agua EFÍMERA y climática, estado
+# mutado por la partida real (sube con lluvia/tormenta, baja por
+# evaporación o consumo -- ver Celda.profundidad_charco, nucleo/celda.py,
+# para el detalle completo). Estas dos funciones NO generan nada -- son
+# el punto único donde se combina "agua permanente"
+# (tiene_agua/profundidad_agua) con "agua efímera" (profundidad_charco)
+# para quien solo le importa "hay algo bebible/vadeable AHORA MISMO",
+# sin que cada consumidor tenga que repetir el mismo `or`/`max` por su
+# cuenta.
 def pendiente_local(zona, x: int, y: int) -> float:
-    """Magnitud de relieve local de una celda: media de |Δelevacion| con
+    """Magnitud de relieve local de una celda: media de |Δelevación| con
     sus vecinas cardinales existentes (borde del grid: solo las que hay).
 
-    CÍRCULO 1 de materiales físicos (2026-08-30, sistema_recursos.py:
-    _actualizar_charcos): consumidor real -- terreno inclinado escurre
-    agua en vez de encharcarla, con independencia de lo permeable que sea
-    el material (ver fraccion_escurrida_por_pendiente).
+    Consumidor real: sistema_recursos.py:_actualizar_charcos -- terreno
+    inclinado escurre agua en vez de encharcarla, con independencia de
+    lo permeable que sea el material (ver
+    fraccion_escurrida_por_pendiente).
 
-    Deliberadamente NO es un campo de Celda (Diego, 2026-08-30: "pendiente
-    local no es necesario? ese dato no es ya determinista?") -- se calcula
-    al vuelo cada vez que hace falta a partir de Celda.elevacion, que ya
-    es determinista y ya está almacenada; cachearla en un campo nuevo
-    sería estado redundante sin necesidad real. Mismo criterio que
-    nucleo/relieve.py:costo_resistencia_por_pendiente, que tampoco cachea
-    la pendiente entre dos celdas. Si el perfilado real mostrara que
-    recalcularla cada tick pesa, se cachea entonces -- no antes (orden de
-    CLAUDE.md: perfilar primero, optimizar despues).
+    Deliberadamente NO es un campo de Celda -- se calcula al vuelo cada
+    vez que hace falta a partir de Celda.elevacion, que ya es
+    determinista y ya está almacenada; cachearla en un campo nuevo sería
+    estado redundante sin necesidad real. Si el perfilado real mostrara
+    que recalcularla cada tick pesa, se cachea entonces -- no antes.
     """
     propia = zona.obtener_celda(x, y).elevacion
     diferencias = []
@@ -517,12 +445,9 @@ def profundidad_agua_potable(celda) -> float:
     return max(celda.profundidad_agua, celda.profundidad_charco)
 
 
-# --- Combinacion entre cuerpos distintos (2026-08-29). Las riberas de un
-# rio pueden alcanzar celdas que ya son agua de OTRO cuerpo (un cauce que
-# se funde con un lago o con otro rio). Antes de esta fecha el bucle de
-# generar_cuerpos_agua sobrescribia la entrada existente sin mas: la celda
-# cambiaba de tipo y podia incluso PERDER profundidad si la ribera nueva
-# era mas somera.
+# Combinación entre cuerpos distintos: las riberas de un río pueden
+# alcanzar celdas que ya son agua de OTRO cuerpo (un cauce que se funde
+# con un lago o con otro río).
 def combinar_profundidad_cuerpos(previa: InfoAgua, profundidad: float) -> InfoAgua:
     """Une la InfoAgua ya asignada a una celda con una profundidad nueva
     que le llega de otro cuerpo: conserva el tipo del cuerpo previo y se
@@ -535,11 +460,11 @@ def combinar_profundidad_cuerpos(previa: InfoAgua, profundidad: float) -> InfoAg
     return previa
 
 
-# --- Colocacion de nacimientos (2026-08-29). La altura del hijo se sortea
-# con mutacion propia (nucleo/entidad.py:nacer_criatura) y puede ser menor
-# que la de su madre, que SI vadeaba la celda del parto -- el mismo
-# invariant de profundidad que sistema_movimiento.py mantiene en cada paso
-# de movimiento, aplicado al momento de nacer.
+# Colocación de nacimientos: la altura del hijo se sortea con mutación
+# propia (nucleo/entidad.py:nacer_criatura) y puede ser menor que la de
+# su madre, que SÍ vadeaba la celda del parto -- el mismo invariante de
+# profundidad que sistema_movimiento.py mantiene en cada paso de
+# movimiento, aplicado al momento de nacer.
 def celda_nacimiento_segura(zona, pos_x: int, pos_y: int, altura: float) -> tuple[int, int]:
     """Celda donde puede colocarse un recien nacido de 'altura' metros sin
     que el motor lo coloque en agua mas honda que su propia estatura. Si la

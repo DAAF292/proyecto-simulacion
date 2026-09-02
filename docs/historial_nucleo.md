@@ -327,6 +327,56 @@ inicializados a los escalares del propio individuo en vez de a sus
 valores por defecto, Intencion con accion=DEAMBULAR explícito) para no
 reintroducir una fábrica que diverja en estilo de la que ya existe.
 
+## `agua.py`
+
+CORRECCIÓN de diseño (discutida y confirmada con Diego, posterior a la
+corrección biomas/especies): el generador anterior (`_generar_rio`,
+retirado de nucleo/zona_bioma.py) trazaba un único camino de una celda
+de ancho, de un borde del grid al opuesto, por PASEO ALEATORIO -- ciego
+por completo al terreno, no consultaba elevación/lluvia/temperatura/
+bioma en ningún momento. Un río podía cruzar una Montaña en línea recta
+con la misma probabilidad que cruzar una Pradera. Tampoco existían
+lagos ni pozas -- un único tipo de cuerpo de agua, siempre exactamente
+uno por mundo.
+
+CORRECCIÓN DE DISEÑO 2026-08-21 (Diego, tras el hueco señalado con
+`profundidad_maxima_metros_poza` -- "estás creando normas específicas
+para las razas creadas, y si añadimos animales más pequeños aún?"): la
+versión anterior de este módulo tenía un techo de metros DISTINTO por
+tipo de cuerpo de agua (profundidad_maxima_metros_lago=3.0,
+profundidad_maxima_metros_poza=0.5), cada uno "elegido por magnitud
+relativa frente a los rangos raciales de altura" de las especies que
+existían en ese momento -- una ley teleológica disfrazada de dato de
+terreno: el mapa "sabía" a quién quería ahogar. Rompió en cuanto
+aparecieron conejo/ardilla (altura por debajo del techo de poza que
+prometía "nunca ahoga a nadie"), y habría vuelto a romper con la
+próxima especie más pequeña que la anterior, sea cual sea.
+
+Río -- ANTES la excepción deliberada (profundidad_metros_rio, un único
+valor fijo para todo el cauce, sin gradiente de orilla ni variación a
+lo largo del río -- "un río no es una cuenca"). CORRECCIÓN 2026-08-21
+(Diego: "lo que hay que hacer respecto a los ríos es darles un
+gradiente a las orillas, igual que a los lagos y a las pozas, la
+profundidad deberá variar dependiendo del terreno"). No hay ninguna
+banda_elevacion_rio en la config, porque no hace falta inventar una: el
+propio camino de descenso ya la da.
+
+`_trazar_rio`, coste_giro (2026-08-28): corrige un meandro sinusoidal
+artificial ("codorniz", capturas de Diego contra el visor real) que un
+descenso por mínimo puro sin memoria producía en valles anchos y casi
+planos.
+
+`_flood_fill_banda`: corrección de docstring 2026-08-29 -- decía "BFS"
+y usaba frontera.pop(); en realidad es LIFO (expansión en profundidad).
+Sin el tope de tamaño, una cuenca poco profunda sobre un campo de value
+noise podría devorar fácilmente cualquier ondulación cercana (mismo
+riesgo señalado antes de implementar: "podríamos acabar con charcos
+por todo el mapa").
+
+`pendiente_local` -- deliberadamente NO es un campo de Celda (Diego,
+2026-08-30: "¿pendiente local no es necesario? ¿ese dato no es ya
+determinista?").
+
 ## `celda_percibida` (ahora en `percepcion.py`)
 
 Promovida desde sistema_movimiento.py (donde nació como
