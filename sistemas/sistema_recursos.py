@@ -71,37 +71,36 @@ class SistemaRecursos:
         self.tasa_agotamiento_charco: float = float(
             self.cfg_charco.get("tasa_agotamiento_charco_al_beber", 0.01)
         )
-        # CÍRCULO 1 de materiales físicos (2026-08-30, ver
-        # config/materiales.yaml y nucleo/celda.py:tipo_sustrato/
-        # humedad_subsuelo): drenaje de la reserva de humedad de subsuelo,
-        # mucho mas lento que la evaporacion de un charco a proposito --
-        # ver comentario de config/hidrologia.yaml seccion charcos.
+        # Drenaje de la reserva de humedad de subsuelo, mucho mas lento
+        # que la evaporacion de un charco a proposito -- ver
+        # config/materiales.yaml, nucleo/celda.py:tipo_sustrato/
+        # humedad_subsuelo y config/hidrologia.yaml seccion charcos.
         self.tasa_drenaje_subsuelo: float = float(
             self.cfg_charco.get("tasa_drenaje_humedad_subsuelo_por_tick", 0.001)
         )
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
-        # Refugio construido -- Pieza 2 (2026-08-30, ver nucleo/construccion.py).
+        # Refugio construido -- ver nucleo/construccion.py.
         self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
         self.tasa_aporte_construccion: float = float(
             self.config_construccion.get("tasa_aporte_construccion_kg_tick", 1.0)
         )
-        # Círculo C -- RECOLECTAR (2026-08-30, ver nucleo/construccion.py).
+        # RECOLECTAR -- ver nucleo/construccion.py.
         self.tasa_recoleccion: float = float(
             self.config_construccion.get("tasa_recoleccion_kg_tick", 1.0)
         )
         self.fraccion_carga_maxima: float = float(
             self.config.get("inventario", {}).get("fraccion_carga_maxima", 0.25)
         )
-        # Almacén de asentamiento (2026-08-30, Círculo E -- ver
-        # nucleo/asentamiento.py y nucleo/construccion.py:objetivo_construccion_actual).
+        # Almacén de asentamiento -- ver nucleo/asentamiento.py y
+        # nucleo/construccion.py:objetivo_construccion_actual.
         self.radio_cluster_asentamiento: int = int(
             self.config.get("asentamiento", {}).get("radio_cluster_celdas", 6)
         )
-        # Agarre (2026-08-31, ver componentes/agarre.py y config/poblacion.yaml
-        # seccion rangos_raciales.<especie>.puntos_agarre).
+        # Agarre -- ver componentes/agarre.py y config/poblacion.yaml
+        # seccion rangos_raciales.<especie>.puntos_agarre.
         self.rangos_raciales: dict[str, Any] = self.config.get("rangos_raciales", {})
-        # Fuego controlado (2026-08-31, ver componentes/fogata.py,
-        # nucleo/fuego.py y config/fuego.yaml).
+        # Fuego controlado -- ver componentes/fogata.py, nucleo/fuego.py
+        # y config/fuego.yaml.
         cfg_fuego = self.config.get("fuego", {})
         self.probabilidad_encender_fuego: float = float(
             cfg_fuego.get("probabilidad_encender_fuego", 0.4)
@@ -128,11 +127,8 @@ class SistemaRecursos:
             cfg_dep.get("eficiencia_biomasa_hidratacion", 0.5)
         )
 
-        # (2026-08-23) Ver config/constantes.yaml sección memoria para el
-        # razonamiento completo: probabilidad de purga por visita fallida,
-        # no purga inmediata al primer fallo -- refinamiento pedido por
-        # Diego tras observar que la purga inmediata mejoraba 4 de 5
-        # semillas de referencia pero extinguía la quinta.
+        # Ver config/constantes.yaml sección memoria: probabilidad de
+        # purga por visita fallida, no purga inmediata al primer fallo.
         cfg_mem = self.config.get("memoria", {})
         self.prob_purgar_recuerdo_agotado: float = float(
             cfg_mem.get("prob_purgar_recuerdo_agotado", 0.05)
@@ -159,10 +155,10 @@ class SistemaRecursos:
         Punto de entrada tick a tick de la Fase 3.
         Actualiza charcos ambientales y resuelve las intenciones COMER, BEBER y ALIVIARSE.
         """
-        # (2026-08-30, Circulo 1 de profundidad) charcos/humedad de
-        # subsuelo son estado POR ZONA (cada ZonaBioma es autonoma, con su
-        # propio clima_actual) -- se actualizan todas las zonas del
-        # territorio, no solo la superficie.
+        # Charcos/humedad de subsuelo son estado POR ZONA (cada
+        # ZonaBioma es autonoma, con su propio clima_actual) -- se
+        # actualizan todas las zonas del territorio, no solo la
+        # superficie.
         for zona_i in mundo.territorio.zonas:
             self._actualizar_charcos(zona_i)
 
@@ -208,31 +204,27 @@ class SistemaRecursos:
                     gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual
                 )
 
-        # Fogatas: consumo de combustible propio y extincion (2026-08-31,
-        # ver componentes/fogata.py) -- independiente de la Accion de
-        # nadie, mismo criterio que _actualizar_charcos: se procesa cada
-        # tick para TODA fogata existente, no solo para quien la encendio.
+        # Fogatas: consumo de combustible propio y extincion (ver
+        # componentes/fogata.py) -- independiente de la Accion de nadie,
+        # mismo criterio que _actualizar_charcos: se procesa cada tick
+        # para TODA fogata existente, no solo para quien la encendio.
         self._consumir_fogatas(gestor)
 
     def _actualizar_charcos(self, zona: Any) -> None:
         """Genera/evapora charco y llena/drena humedad de subsuelo según el
-        material y la pendiente local de cada celda -- CÍRCULO 1 de
-        materiales físicos (2026-08-30, ver config/materiales.yaml y el
-        docstring de Celda.tipo_sustrato/humedad_subsuelo).
+        material y la pendiente local de cada celda (ver
+        config/materiales.yaml y el docstring de
+        Celda.tipo_sustrato/humedad_subsuelo).
 
-        ANTES (hasta 2026-08-29): toda celda sin agua permanente encharcaba
-        y evaporaba con la MISMA tasa uniforme, sin relación con el
-        material del terreno ni con su pendiente -- "decreto climático"
-        señalado por Diego. Ahora la lluvia que no logra infiltrarse en el
-        sustrato (tasa_infiltracion del material, amortiguada según cuánto
-        hueco le queda a humedad_subsuelo -- terreno ya saturado encharca
-        más, no menos) ni escurre por la pendiente
+        La lluvia que no logra infiltrarse en el sustrato
+        (tasa_infiltracion del material, amortiguada según cuánto hueco
+        le queda a humedad_subsuelo -- terreno ya saturado encharca más,
+        no menos) ni escurre por la pendiente
         (nucleo/agua.py:fraccion_escurrida_por_pendiente) se queda en
         superficie como charco; la que sí se infiltra alimenta
         humedad_subsuelo, topada por la capacidad_retencion del material y
         con su propio drenaje mucho más lento que la evaporación de un
-        charco (la memoria hídrica profunda que faltaba desde el
-        principio).
+        charco.
         """
         clima_actual = getattr(zona, "clima_actual", None)
         nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
@@ -248,9 +240,9 @@ class SistemaRecursos:
         for y in range(zona.alto):
             for x in range(zona.ancho):
                 celda = zona.obtener_celda(x, y)
-                # (2026-08-29) El charco es agua EFIMERA sobre tierra firme:
-                # sobre una celda de agua permanente el campo no significa
-                # nada (hay_agua_potable/profundidad_agua_potable ya miran
+                # El charco es agua EFIMERA sobre tierra firme: sobre una
+                # celda de agua permanente el campo no significa nada
+                # (hay_agua_potable/profundidad_agua_potable ya miran
                 # ambas capas) y solo ensuciaria el estado persistido. Lo
                 # mismo aplica a humedad_subsuelo -- fijada en generacion
                 # al tope de su material (nucleo/zona_bioma.py), nunca
@@ -299,14 +291,10 @@ class SistemaRecursos:
         pos_y: int,
     ) -> None:
         """
-        (2026-08-23) Los tres puntos de esta clase que anotaban un
-        recuerdo llamaban a `mem.anadir_recuerdo(tipo, (x, y))`, un método
-        que MemoriaEspacial nunca tuvo -- es un dataclass con un único
-        campo `recuerdos: dict` (ver su docstring). La API real vive en
-        nucleo/memoria.py: registrar_recuerdo(memoria, tipo, x, y,
-        capacidad), con la capacidad derivada de CapacidadMental.memoria
-        (capacidad_memoria()). Centralizado aquí en vez de repetir las
-        mismas tres líneas en cada punto de llamada.
+        Registra un recuerdo vía nucleo/memoria.py:registrar_recuerdo
+        (memoria, tipo, x, y, capacidad), con la capacidad derivada de
+        CapacidadMental.memoria (capacidad_memoria()). Centralizado aquí
+        en vez de repetir las mismas líneas en cada punto de llamada.
         """
         if mem is None or cap_mental is None:
             return
@@ -327,15 +315,14 @@ class SistemaRecursos:
         bus_eventos: BusEventos,
     ) -> None:
         """
-        REFUGIO/ALMACÉN CONSTRUIDO -- Pieza 2 de interacción física
-        (2026-08-30, ver componentes/construccion.py, nucleo/construccion.py,
-        nucleo/asentamiento.py y la conversación de diseño con Diego).
+        REFUGIO/ALMACÉN CONSTRUIDO (ver componentes/construccion.py,
+        nucleo/construccion.py, nucleo/asentamiento.py).
         sistema_movimiento.py ya llevó a la entidad hasta su objetivo de
         construcción actual (refugio propio o, una vez resuelto, el
-        almacén del asentamiento del que sea miembro -- Círculo E,
-        2026-08-30, objetivo_construccion_actual -- creándolo si hacía
-        falta); aquí, estando en la misma celda, se transfieren
-        materiales aptos del Inventario y se actualiza progreso.
+        almacén del asentamiento del que sea miembro --
+        objetivo_construccion_actual, creándolo si hacía falta); aquí,
+        estando en la misma celda, se transfieren materiales aptos del
+        Inventario y se actualiza progreso.
 
         Al cruzar 1.0 por primera vez: para refugio, se registra la
         posición como recuerdo "refugio" -- MISMA maquinaria que el
@@ -403,70 +390,62 @@ class SistemaRecursos:
         consciente: bool = False,
     ) -> None:
         """
-        RECOLECTAR -- Círculo C de interacción física (2026-08-30, ver
-        componentes/intencion.py y nucleo/construccion.py). Convierte
-        tipo_sustrato de la celda actual (piedra/arcilla/tierra --
-        propiedad estática de la celda, siempre presente, no depletable,
-        ver nucleo/celda.py) en material del Inventario propio, topado
-        por la capacidad de carga (nucleo/inventario.py:
-        espacio_disponible_kg). Sin desplazamiento: se resuelve donde ya
-        se está, el sustrato está bajo los pies de cualquiera.
+        RECOLECTAR (ver componentes/intencion.py y nucleo/construccion.py).
+        Convierte tipo_sustrato de la celda actual (piedra/arcilla/tierra
+        -- propiedad estática de la celda, siempre presente, no
+        depletable, ver nucleo/celda.py) en material del Inventario
+        propio, topado por la capacidad de carga
+        (nucleo/inventario.py:espacio_disponible_kg). Sin desplazamiento:
+        se resuelve donde ya se está, el sustrato está bajo los pies de
+        cualquiera.
 
-        AGARRE, DOS MECANISMOS DISTINTOS (2026-08-31, ver componentes/
-        agarre.py y config/fuego.yaml para el porqué de la separación):
+        AGARRE, DOS MECANISMOS DISTINTOS (ver componentes/agarre.py y
+        config/fuego.yaml para el porqué de la separación):
 
-        1. PIEDRA_SUELTA CON CAUSA (corrección tras conversación con
-           Diego -- "la recolección de recursos es el efecto, no la
-           causa"): un individuo CONSCIENTE que todavía no tiene sus
-           piedras_necesarias_fuego (sistema_decision.py ya elevó la
-           utilidad de RECOLECTAR heredando el valor de ENCENDER_FUEGO --
-           nunca una razón propia) intenta agarrar piedra_suelta
-           ESPECÍFICAMENTE, si la celda actual la tiene. Un individuo que
-           jamás ha necesitado fuego (confort_termico siempre alto) nunca
-           llega a esta rama con utilidad real, así que nunca desarrolla
-           interés en buscar piedra tampoco -- ninguna instrucción
-           universal, la necesidad empuja la determinación.
-        2. AGARRE GENÉRICO, sin causa concreta (diseño original, sin
-           cambios -- "un palo para defenderse, o una roca"): si queda
-           algún punto de agarre libre tras lo anterior, se llena con el
-           mismo material que ya sería elegible para recolectar (flora >
-           sustrato, mismo orden que abajo, salvo mineral -- minar una
-           veta es un acto deliberado y con coste real). piedra_suelta
-           queda fuera de este segundo mecanismo a propósito (no está en
-           el catálogo de materiales, así que apto_construccion la
-           excluye sin necesidad de una comprobación aparte) -- solo se
-           agarra por la vía 1, con causa.
+        1. PIEDRA_SUELTA CON CAUSA: un individuo CONSCIENTE que todavía
+           no tiene sus piedras_necesarias_fuego (sistema_decision.py ya
+           elevó la utilidad de RECOLECTAR heredando el valor de
+           ENCENDER_FUEGO -- nunca una razón propia) intenta agarrar
+           piedra_suelta ESPECÍFICAMENTE, si la celda actual la tiene. Un
+           individuo que jamás ha necesitado fuego (confort_termico
+           siempre alto) nunca llega a esta rama con utilidad real, así
+           que nunca desarrolla interés en buscar piedra tampoco.
+        2. AGARRE GENÉRICO, sin causa concreta ("un palo para defenderse,
+           o una roca"): si queda algún punto de agarre libre tras lo
+           anterior, se llena con el mismo material que ya sería
+           elegible para recolectar (flora > sustrato, mismo orden que
+           abajo, salvo mineral -- minar una veta es un acto deliberado y
+           con coste real). piedra_suelta queda fuera de este segundo
+           mecanismo a propósito (no está en el catálogo de materiales,
+           así que apto_construccion la excluye sin necesidad de una
+           comprobación aparte) -- solo se agarra por la vía 1, con
+           causa.
 
-        Ambos deliberadamente GRATUITOS y simbólicos, sin cambios respecto
-        al diseño original: no descuentan nada del Inventario, la
-        capacidad de carga ni el recurso de la celda (ni piedra_suelta ni
-        un palo de flora se agotan por agarrar una unidad). Si se llena
-        un punto de agarre este tick, se corta aquí -- no compite con la
-        recolección normal en el mismo tick.
+        Ambos deliberadamente GRATUITOS y simbólicos: no descuentan nada
+        del Inventario, la capacidad de carga ni el recurso de la celda
+        (ni piedra_suelta ni un palo de flora se agotan por agarrar una
+        unidad). Si se llena un punto de agarre este tick, se corta aquí
+        -- no compite con la recolección normal en el mismo tick.
 
-        MADERA/FIBRA/HIERBA_SECA (2026-08-31, propuesta de Diego: "los
-        árboles dejan caer ramas que los gnomos recogen o arrancan
-        hierba directamente sin mecanismos complejos de tala y siega").
-        sistema_flora.py ya deposita estos materiales en Celda.recursos
-        con el MISMO mecanismo de producción diaria que ya usa la comida
-        (madera bajo manzano, fibra bajo cactus, hierba_seca bajo
-        hierba_silvestre) -- aquí solo hace falta recogerlos, sin ninguna
-        acción de tala/siega que destruya la Planta. Genérico por
-        catálogo, no una lista de nombres fija: cualquier clave de
-        Celda.recursos que sea un material apto_construccion cuenta,
-        igual que el resto del motor decide qué es "apto" consultando
-        config/materiales.yaml en vez de comprobar nombres a mano.
+        MADERA/FIBRA/HIERBA_SECA: sistema_flora.py ya deposita estos
+        materiales en Celda.recursos con el MISMO mecanismo de
+        producción diaria que ya usa la comida (madera bajo manzano,
+        fibra bajo cactus, hierba_seca bajo hierba_silvestre) -- aquí
+        solo hace falta recogerlos, sin ninguna acción de tala/siega que
+        destruya la Planta. Genérico por catálogo, no una lista de
+        nombres fija: cualquier clave de Celda.recursos que sea un
+        material apto_construccion cuenta.
 
-        CÍRCULO 2 de profundidad (2026-08-30, ver nucleo/cueva.py y
-        componentes/celda.py:masa_mineral_restante): si la celda actual
-        tiene una veta de mineral con masa restante, se extrae ESO en vez
-        de tipo_sustrato -- a diferencia del sustrato, la veta es finita y
-        se agota de verdad. Ningún cambio hace falta en sistema_decision.py:
-        RECOLECTAR ya gatea genéricamente por "masa apta de construcción
-        pendiente" (nucleo/construccion.py:material_suficiente_para),
-        hierro/cobre ya son apto_construccion=true en el catálogo -- para
-        la Utility AI, extraer mineral, madera o sustrato es indistinguible,
-        solo cambia qué clave del Inventario crece.
+        Si la celda actual tiene una veta de mineral con masa restante
+        (ver nucleo/cueva.py y componentes/celda.py:masa_mineral_restante),
+        se extrae ESO en vez de tipo_sustrato -- a diferencia del
+        sustrato, la veta es finita y se agota de verdad. Ningún cambio
+        hace falta en sistema_decision.py: RECOLECTAR ya gatea
+        genéricamente por "masa apta de construcción pendiente"
+        (nucleo/construccion.py:material_suficiente_para), hierro/cobre
+        ya son apto_construccion=true en el catálogo -- para la Utility
+        AI, extraer mineral, madera o sustrato es indistinguible, solo
+        cambia qué clave del Inventario crece.
 
         Orden de prioridad dentro de esta única celda -- mineral (más
         escaso y finito) > material de flora (finito por día, regenera) >
@@ -556,14 +535,12 @@ class SistemaRecursos:
         tick_actual: int,
     ) -> None:
         """
-        ENCENDER_FUEGO -- cimiento del arco de herramientas/fuego/comida
-        elaborada (2026-08-31, ver componentes/agarre.py, componentes/
-        fogata.py, nucleo/fuego.py y la conversación de diseño con Diego:
-        "usar dos rocas para hacer un fuego"). sistema_decision.py ya
-        comprobó las precondiciones (piedras en Agarre, combustible en la
-        celda, sin Fogata ya presente) antes de elegir esta Accion -- aquí
-        solo se resuelve la tirada de éxito y, si prende, se consume la
-        yesca y se crea la Fogata. Sin desplazamiento, igual que
+        ENCENDER_FUEGO (ver componentes/agarre.py, componentes/fogata.py,
+        nucleo/fuego.py). sistema_decision.py ya comprobó las
+        precondiciones (piedras en Agarre, combustible en la celda, sin
+        Fogata ya presente) antes de elegir esta Accion -- aquí solo se
+        resuelve la tirada de éxito y, si prende, se consume la yesca y
+        se crea la Fogata. Sin desplazamiento, igual que
         RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
 
         Las PIEDRAS del Agarre NO se tocan aquí -- son herramientas, se
@@ -623,9 +600,9 @@ class SistemaRecursos:
         Resuelve la ingesta de biomasa: evalúa primero necromasa presente (carroñeo)
         y posteriormente forraje vegetal compatible con la dieta de la especie.
         """
-        # 1. Evaluación de Carroñeo (Necromasa en la celda). zona_idx
-        # (2026-08-30, Circulo 1 de profundidad): "en la celda" exige
-        # tambien estar en la misma zona -- ver componentes/posicion.py.
+        # 1. Evaluación de Carroñeo (Necromasa en la celda). zona_idx:
+        # "en la celda" exige tambien estar en la misma zona -- ver
+        # componentes/posicion.py.
         candidatos_necromasa = []
         for nid in gestor.entidades_con(Necromasa, Posicion):
             pos_n = gestor.obtener_componente(nid, Posicion)
@@ -636,9 +613,9 @@ class SistemaRecursos:
             nec_id = min(candidatos_necromasa)
             nec_comp = gestor.obtener_componente(nec_id, Necromasa)
 
-            # CÍRCULO 2 de materiales físicos (2026-08-30): el carroñeo
-            # solo consume 'tejido_blando' -- un carroñero no roe el
-            # esqueleto entero. El hueso queda intacto y la entidad NUNCA
+            # El carroñeo solo consume 'tejido_blando' -- un carroñero no
+            # roe el esqueleto entero. El hueso queda intacto y la
+            # entidad NUNCA
             # se borra aquí mientras quede hueso (borrarla es
             # responsabilidad exclusiva de sistema_descomposicion.py, que
             # sí espera a que TODOS los materiales se mineralicen).
@@ -681,34 +658,24 @@ class SistemaRecursos:
 
             self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
         else:
-            # (2026-08-23, diagnóstico de extinción local semilla 1) Sin
-            # esto, un individuo que llega aquí guiado por un recuerdo de
-            # "comida" (nucleo/memoria.py:objetivo_recordado, consultado
-            # en sistema_movimiento.py:_calcular_forrajeo SOLO cuando la
-            # percepción directa no encuentra nada en el radio -- es
-            # decir, exactamente cuando el entorno inmediato ya está
-            # agotado) y encuentra la celda igual de vacía, no tenía
+            # Sin esto, un individuo que llega aquí guiado por un
+            # recuerdo de "comida" (nucleo/memoria.py:objetivo_recordado,
+            # consultado en sistema_movimiento.py:_calcular_forrajeo SOLO
+            # cuando la percepción directa no encuentra nada en el radio
+            # -- es decir, exactamente cuando el entorno inmediato ya
+            # está agotado) y encuentra la celda igual de vacía, no tiene
             # ninguna consecuencia: el recuerdo stale se queda en la cola
             # FIFO tal cual, objetivo_recordado() sigue devolviendo la
             # MISMA coordenada por ser la más cercana en la lista, y el
             # individuo puede quedar atrapado volviendo sobre el mismo
             # sitio muerto en vez de que la memoria se corrija y el
-            # próximo intento explore otra cosa. purgar_recuerdo_invalido
-            # ya existía en nucleo/memoria.py con esta finalidad exacta
-            # ("invalida de inmediato una coordenada si el recurso ya no
-            # existe al visitarlo") pero no se llamaba desde ningún sitio
-            # -- pieza diseñada, nunca conectada, misma clase de deuda que
-            # agudeza_sensorial antes de esta sesión.
-            #
-            # CORRECCION 2026-08-23: la primera versión de este cambio
-            # purgaba al primer fallo, sin excepción. Mejoraba 4 de 5
-            # semillas de referencia de forma sustancial, pero extinguía
-            # una quinta -- descartaba de golpe un recuerdo que, con
-            # margen, habría vuelto a dar fruto tras la regeneración
-            # diaria de sistema_flora.py. prob_purgar_recuerdo_agotado
+            # próximo intento explore otra cosa. Purga PROBABILÍSTICA, no
+            # inmediata al primer fallo: prob_purgar_recuerdo_agotado
             # (PROVISIONAL, ver config/constantes.yaml sección memoria)
-            # da varios reintentos esperados antes de rendirse, en vez de
-            # uno solo.
+            # da varios reintentos esperados antes de rendirse -- un
+            # recuerdo descartado de golpe podría, con margen, haber
+            # vuelto a dar fruto tras la regeneración diaria de
+            # sistema_flora.py.
             if mem is not None and self.rng.random() < self.prob_purgar_recuerdo_agotado:
                 purgar_recuerdo_invalido(mem, "comida", pos_x, pos_y)
 
@@ -727,10 +694,9 @@ class SistemaRecursos:
             # guiado por un recuerdo de "agua" que ya no es válido (charco
             # efímero evaporado, por ejemplo), purgarlo evita que
             # objetivo_recordado() lo siga devolviendo como el más cercano.
-            # Probabilística, no inmediata (ver prob_purgar_recuerdo_agotado
-            # en config/constantes.yaml y el comentario equivalente en
-            # _resolver_comer): da margen a que el agua vuelva (lluvia,
-            # charco que se rellena) antes de descartar el recuerdo.
+            # Probabilística, no inmediata: da margen a que el agua
+            # vuelva (lluvia, charco que se rellena) antes de descartar
+            # el recuerdo.
             if mem is not None and self.rng.random() < self.prob_purgar_recuerdo_agotado:
                 purgar_recuerdo_invalido(mem, "agua", pos_x, pos_y)
             return

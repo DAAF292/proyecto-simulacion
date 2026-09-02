@@ -197,3 +197,32 @@ hacer un fuego"). La corrección de que RECOLECTAR hereda la utilidad de
 ENCENDER_FUEGO en vez de tener su propia utilidad tangencial es de una
 conversación de diseño con Diego el mismo día: "la recolección de
 recursos es el efecto, no la causa".
+
+## `sistema_recursos.py`
+
+`_registrar_recuerdo_si_procede` corrigió (2026-08-23) que los tres
+puntos de esta clase que anotaban un recuerdo llamaban a
+`mem.anadir_recuerdo(tipo, (x, y))`, un método que `MemoriaEspacial`
+nunca tuvo -- es un dataclass con un único campo `recuerdos: dict`.
+
+El rediseño de `_actualizar_charcos` (generación/evaporación según
+material y pendiente, en vez de una tasa uniforme sin relación con el
+terreno -- "decreto climático" señalado por Diego) es del círculo 1 de
+materiales físicos (2026-08-30).
+
+Refugio/almacén construido (`_resolver_construir`), RECOLECTAR
+(`_resolver_recolectar`, incluida la extracción de vetas de mineral del
+círculo 2 de profundidad) y el almacén de asentamiento son todos del
+2026-08-30. Agarre, piedra_suelta con causa (corrección tras
+conversación con Diego: "la recolección de recursos es el efecto, no la
+causa"), madera/fibra/hierba_seca ("los árboles dejan caer ramas que los
+gnomos recogen... sin mecanismos complejos de tala y siega") y fuego
+controlado (`_resolver_encender_fuego`, `_consumir_fogatas`, "usar dos
+rocas para hacer un fuego") son todos del 2026-08-31.
+
+La purga probabilística de recuerdos agotados de comida (diagnóstico de
+extinción local, semilla 1) es del 2026-08-23: la primera versión
+purgaba al primer fallo sin excepción, lo que mejoraba 4 de 5 semillas
+de referencia pero extinguía la quinta -- descartaba de golpe un
+recuerdo que, con margen, habría vuelto a dar fruto tras la regeneración
+diaria de sistema_flora.py.
