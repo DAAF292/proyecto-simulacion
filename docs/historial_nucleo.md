@@ -288,6 +288,45 @@ real, fragmento a fragmento.
 sustrato_por_bioma era 1 material fijo por bioma entero, sin ninguna
 variación interna.
 
+## `entidad.py`
+
+`_sortear_edad_inicial_ticks`: diagnóstico que motivó esto (2026-08-21,
+investigación "cero adultos coexistiendo" en gnomo) -- con
+techo_fraccion=0.0 (comportamiento previo, implícito), TODOS los
+fundadores de una especie nacían en tick=0 como recién nacidos
+simultáneos. Para una especie de maduración lenta (gnomo,
+fraccion_madurez=0.1 sobre ~45 años de longevidad mínima ≈ 4.5 años ≈
+2160 ticks) eso significaba que, hasta ese primer umbral de madurez, la
+población entera era infantil a la vez -- cero parejas fértiles
+posibles durante miles de ticks, y para cuando maduraban, las pérdidas
+por depredación/inanición ya podían haber diezmado la cohorte. No era
+un fallo de la regla de madurez (es neutra, correcta); era que la
+generación de la población fundadora no reflejaba una demografía real.
+
+`componer_necromasa`: Círculo 2 de materiales físicos (2026-08-30).
+Consolida lo que antes eran CUATRO copias del mismo cálculo "peso *
+0.35 / peso * 0.65" repetidas sin config detrás en
+sistema_necesidades.py, sistema_ciclo_vital.py, sistema_depredacion.py
+y (con sus propias fracciones) sistema_desastres.py.
+
+`_heredar_valor`: recuperada de commit `249793e` ("commit 2",
+2026-08-20), perdida en el refactor posterior de necromasa/pipeline
+trifásico (`2140243`) sin que mediara ningún commit intermedio que la
+protegiera. Informe técnico, 6.3, literal: "herencia de atributos,
+promedio de progenitores + mutación, acotado al rango racial".
+
+`nacer_criatura`: RECONSTRUIDA (2026-08-23) -- existió con este mismo
+propósito en el commit `249793e`, se perdió en el mismo refactor de
+necromasa/pipeline trifásico (`2140243`) que reescribió
+nucleo/entidad.py desde una base anterior sin que hubiera un commit
+intermedio con este trabajo. Esta versión NO es una copia literal de
+aquella: se adapta a las convenciones que crear_criatura ya usa hoy
+(config con 'rangos_raciales' en vez de rangos_raciales suelto donde
+aplica, Identidad con nombre/id_madre/id_padre, PoolFisico/PoolMental
+inicializados a los escalares del propio individuo en vez de a sus
+valores por defecto, Intencion con accion=DEAMBULAR explícito) para no
+reintroducir una fábrica que diverja en estilo de la que ya existe.
+
 ## `celda_percibida` (ahora en `percepcion.py`)
 
 Promovida desde sistema_movimiento.py (donde nació como

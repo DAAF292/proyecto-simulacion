@@ -91,24 +91,13 @@ def _sortear_edad_inicial_ticks(
     """
     Sortea la edad (en ticks) con la que nace un fundador de la población
     inicial, como fracción uniforme de SU PROPIA longevidad individual
-    (ya sorteada, no el rango racial).
-
-    Diagnóstico que motiva esto (2026-08-21, investigación "cero adultos
-    coexistiendo" en gnomo): con techo_fraccion=0.0 (comportamiento previo,
-    implícito), TODOS los fundadores de una especie nacen en tick=0 como
-    recién nacidos simultáneos. Para una especie de maduración lenta
-    (gnomo, fraccion_madurez=0.1 sobre ~45 años de longevidad mínima =~
-    4.5 años =~ 2160 ticks) eso significa que, hasta ese primer umbral de
-    madurez, la población entera es infantil a la vez -- cero parejas
-    fértiles posibles durante miles de ticks, y para cuando maduran, las
-    pérdidas por depredación/inanición ya pueden haber diezmado la
-    cohorte. No es un fallo de la regla de madurez (es neutra, correcta);
-    es que la generación de la población fundadora no reflejaba una
-    demografía real, donde una población fundadora tiene edades
-    distribuidas, no una generación única sincronizada.
+    (ya sorteada, no el rango racial) -- sin esto, TODOS los fundadores
+    de una especie nacerían en tick=0 como recién nacidos simultáneos,
+    sin ninguna pareja fértil posible hasta que la especie entera
+    madurase a la vez.
 
     techo_fraccion (config: poblacion.techo_fraccion_edad_inicial_longevidad,
-    provisional=0.7): cada fundador sortea su edad como
+    PROVISIONAL=0.7): cada fundador sortea su edad como
     uniforme(0, techo_fraccion * longevidad_individual). No se usa 1.0
     para no generar fundadores a las puertas de la muerte por vejez en
     tick=0. Es una decisión de generación de la población inicial
@@ -129,16 +118,8 @@ def componer_necromasa(
 ) -> tuple[dict[str, float], float]:
     """
     Reparte el peso de un cadáver en masa seca (tejido_blando + hueso) y
-    agua tisular -- CÍRCULO 2 de materiales físicos (2026-08-30, ver
-    componentes/necromasa.py:Necromasa.masas y config/flora.yaml sección
-    descomposicion para el diseño completo).
-
-    Consolida lo que antes eran CUATRO copias del mismo cálculo
-    "peso * 0.35 / peso * 0.65" repetidas sin config detrás en
-    sistema_necesidades.py, sistema_ciclo_vital.py, sistema_depredacion.py
-    y (con sus propias fracciones) sistema_desastres.py -- encontrado al
-    tocar los cuatro sitios para añadir el reparto tejido_blando/hueso, no
-    lo que motivó este círculo por sí solo.
+    agua tisular -- ver componentes/necromasa.py:Necromasa.masas y
+    config/flora.yaml sección descomposicion para el diseño completo.
     """
     masa_seca_total = peso * fraccion_masa_seca
     masa_hueso = masa_seca_total * fraccion_hueso
@@ -163,10 +144,10 @@ def crear_necromasa(
     """
     Fábrica ECS: Instancia una entidad física inerte de restos orgánicos en el grid.
 
-    zona_idx (2026-08-30, Círculo 1 de profundidad): por defecto 0
-    (superficie) -- todo consumidor que cree necromasa donde ya murió
-    alguien pasa el zona_idx de esa víctima, para que el resto no aparezca
-    en una zona distinta a la del cadáver que lo originó.
+    zona_idx: por defecto 0 (superficie) -- todo consumidor que cree
+    necromasa donde ya murió alguien pasa el zona_idx de esa víctima,
+    para que el resto no aparezca en una zona distinta a la del cadáver
+    que lo originó.
     """
     nec_id = gestor.crear_entidad()
     gestor.anadir_componente(nec_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
@@ -198,8 +179,8 @@ def crear_construccion(
     es quien va llenando materiales/progreso tras la creación, no esta
     fábrica.
 
-    zona_idx (2026-08-30, Círculo 1 de profundidad): quien construye pasa
-    su propio zona_idx -- un refugio se crea donde el constructor ya está.
+    zona_idx: quien construye pasa su propio zona_idx -- un refugio se
+    crea donde el constructor ya está.
     """
     con_id = gestor.crear_entidad()
     gestor.anadir_componente(con_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
@@ -244,17 +225,18 @@ def crear_criatura(
     """
     Fábrica ECS: Instancia un organismo vivo completo con sus 12 componentes de datos.
 
-    zona_idx (2026-08-30, Círculo 1 de profundidad): por defecto 0
-    (superficie) -- la siembra de población fundadora (main.py) nunca lo
-    pasa a propósito, nace siempre en superficie.
+    zona_idx: por defecto 0 (superficie) -- la siembra de población
+    fundadora (main.py) nunca lo pasa a propósito, nace siempre en
+    superficie.
 
-    techo_fraccion_edad_inicial (2026-08-21, ver _sortear_edad_inicial_ticks
-    arriba): únicamente relevante para la siembra de la población fundadora
-    en tick_actual=0 (main.py la lee de poblacion.techo_fraccion_edad_inicial_longevidad
-    y la pasa explícitamente en esas llamadas). Los nacimientos normales
-    durante la simulación (sistemas/sistema_reproduccion.py) NUNCA la pasan
-    -- usan el valor por defecto 0.0, de modo que un recién nacido real
-    sigue naciendo con edad cero, como corresponde.
+    techo_fraccion_edad_inicial (ver _sortear_edad_inicial_ticks arriba):
+    únicamente relevante para la siembra de la población fundadora en
+    tick_actual=0 (main.py la lee de
+    poblacion.techo_fraccion_edad_inicial_longevidad y la pasa
+    explícitamente en esas llamadas). Los nacimientos normales durante la
+    simulación (sistemas/sistema_reproduccion.py) NUNCA la pasan -- usan
+    el valor por defecto 0.0, de modo que un recién nacido real sigue
+    naciendo con edad cero, como corresponde.
     """
     cfg_esp = config.get("rangos_raciales", {}).get(especie.value, {})
     entidad_id = gestor.crear_entidad()
@@ -333,17 +315,15 @@ def crear_criatura(
     gestor.anadir_componente(entidad_id, Intencion(accion=Accion.DEAMBULAR))
     gestor.anadir_componente(entidad_id, MemoriaEspacial())
 
-    # 7. Inventario (2026-08-30, ver componentes/inventario.py) -- se
-    # añade a toda criatura por igual, vacío; que se use de verdad depende
-    # de consciencia, no de la especie (ver docstring del componente).
+    # 7. Inventario -- se añade a toda criatura por igual, vacío; que se
+    # use de verdad depende de consciencia, no de la especie (ver
+    # docstring del componente).
     gestor.anadir_componente(entidad_id, Inventario())
 
-    # 8. Agarre (2026-08-31, ver componentes/agarre.py) -- se añade a
-    # TODA criatura por igual, vacío; cuántos puntos puede llenar de
-    # verdad lo decide rangos_raciales[especie]['puntos_agarre'], no la
-    # presencia del componente (mismo criterio que Inventario justo
-    # arriba: el componente es universal, su uso real depende de la
-    # especie).
+    # 8. Agarre -- se añade a TODA criatura por igual, vacío; cuántos
+    # puntos puede llenar de verdad lo decide
+    # rangos_raciales[especie]['puntos_agarre'], no la presencia del
+    # componente (mismo criterio que Inventario justo arriba).
     gestor.anadir_componente(entidad_id, Agarre())
 
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
@@ -383,15 +363,8 @@ def _heredar_valor(
     mutacion_fraccion: float,
 ) -> float:
     """
-    Recuperada de commit 249793e ("commit 2", 2026-08-20), perdida en el
-    refactor posterior de necromasa/pipeline trifásico (2140243) sin que
-    mediara ningún commit intermedio que la protegiera -- ver informe a
-    Diego sobre la reconstrucción de 2026-08-23.
-
     Promedio de ambos progenitores + mutación uniforme pequeña, acotado al
-    rango racial (informe técnico, 6.3, literal: "herencia de atributos,
-    promedio de progenitores + mutación, acotado al rango racial").
-    mutacion_fraccion (config: reproduccion.mutacion_fraccion) es la
+    rango racial. mutacion_fraccion (config: reproduccion.mutacion_fraccion) es la
     amplitud de la perturbación como fracción del rango racial COMPLETO,
     no del valor en sí -- así un rango racial estrecho muta poco en
     términos absolutos y uno ancho muta más, en vez de una amplitud fija
@@ -417,33 +390,21 @@ def nacer_criatura(
     zona_idx: int = 0,
 ) -> int:
     """
-    Fábrica ECS de nacimiento por reproducción (6.3, última pieza --
-    herencia de atributos y parentesco). NO se usa para la población
-    inicial (eso es crear_criatura, sin progenitores) -- llamada
-    exclusivamente desde sistemas/sistema_reproduccion.py:
-    _resolver_nacimientos, una vez por hijo de la camada.
-
-    RECONSTRUIDA (2026-08-23): existió con este mismo propósito en el
-    commit 249793e, se perdió en el refactor de necromasa/pipeline
-    trifásico (2140243) que reescribió nucleo/entidad.py desde una base
-    anterior sin que hubiera un commit intermedio con este trabajo -- ver
-    informe a Diego. Esta versión NO es una copia literal de aquella: se
-    adapta a las convenciones que crear_criatura ya usa hoy (config con
-    'rangos_raciales' en vez de rangos_raciales suelto donde aplica,
-    Identidad con nombre/id_madre/id_padre, PoolFisico/PoolMental
-    inicializados a los escalares del propio individuo en vez de a sus
-    valores por defecto, Intencion con accion=DEAMBULAR explícito) para
-    no reintroducir una fábrica que diverja en estilo de la que ya existe.
+    Fábrica ECS de nacimiento por reproducción -- herencia de atributos y
+    parentesco. NO se usa para la población inicial (eso es
+    crear_criatura, sin progenitores) -- llamada exclusivamente desde
+    sistemas/sistema_reproduccion.py: _resolver_nacimientos, una vez por
+    hijo de la camada.
 
     Lee a la madre EN VIVO (gestor.obtener_componente) y al padre desde la
     instantánea de Gestacion (que puede ya no estar vivo -- ver
     componentes/gestacion.py sobre por qué el padre necesita instantánea
     y la madre no). pos_x/pos_y: la posición de la madre en el instante
     del parto, la resuelve quien llama (_resolver_nacimientos), no esta
-    función -- misma para todos los hijos de una misma camada. zona_idx
-    (2026-08-30, Círculo 1 de profundidad): el de la madre en el instante
-    del parto -- un hijo nace en la misma zona que ella, nunca cruza de
-    superficie a cueva ni al revés por el mero hecho de nacer.
+    función -- misma para todos los hijos de una misma camada. zona_idx:
+    el de la madre en el instante del parto -- un hijo nace en la misma
+    zona que ella, nunca cruza de superficie a cueva ni al revés por el
+    mero hecho de nacer.
 
     Todo atributo heredable pasa por _heredar_valor (promedio de
     progenitores + mutación, acotado al rango racial) salvo el sexo, que
@@ -539,13 +500,10 @@ def nacer_criatura(
 
     gestor.anadir_componente(entidad_id, Intencion(accion=Accion.DEAMBULAR))
     gestor.anadir_componente(entidad_id, MemoriaEspacial())
-    # Inventario (2026-08-30, ver componentes/inventario.py) -- mismo
-    # criterio que crear_criatura: se añade vacío a todo nacimiento por
-    # igual, un recién nacido no hereda lo que cargaban sus progenitores.
-    gestor.anadir_componente(entidad_id, Inventario())
-    # Agarre (2026-08-31, ver componentes/agarre.py) -- mismo criterio:
-    # vacío para todo nacimiento, un recién nacido no hereda lo que
+    # Mismo criterio que crear_criatura: se añaden vacíos a todo
+    # nacimiento por igual, un recién nacido no hereda lo que cargaban o
     # sujetaban sus progenitores.
+    gestor.anadir_componente(entidad_id, Inventario())
     gestor.anadir_componente(entidad_id, Agarre())
 
     sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
