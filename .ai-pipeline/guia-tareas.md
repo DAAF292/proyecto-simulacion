@@ -141,11 +141,12 @@ proveedores distintos en OpenRouter para `deepseek-v4-flash-0731`, con
 precios de $0.05/M (OpenInference, el más barato, el que asume nuestra
 tabla) hasta $0.44/M (Cloudflare/Phala/Novita/AtlasCloud) -- hasta 8.8x
 de rango. `provider: {sort: "price"}` en `litellm_config.yaml` es una
-*preferencia*, no una garantía: si los proveedores baratos están
-saturados (plausible tras agotar la cuota diaria completa una vez ese
-mismo día, como pasó hoy), OpenRouter hace fallback a uno más caro sin
-avisar, y nuestro cálculo local sigue asumiendo el más barato de todas
-formas.
+*preferencia*, no una garantía: si el proveedor más barato no está
+disponible, OpenRouter hace fallback a otro sin avisar, y nuestro
+cálculo local sigue asumiendo el más barato de todas formas -- esto
+SÍ ocurrió de verdad (ver más abajo, fallback a Baidu), pero por sí
+solo no basta para explicar la magnitud del hueco de coste real vs.
+calculado que se midió.
 
 **Verificado de verdad, con el balance real de la cuenta (no
 `usage_daily`, que tiene caché de ~20s y además es acumulado de TODA la
@@ -158,11 +159,28 @@ DESPUÉS de la ejecución completa, y restar**:
 | Fix de flora (2 intentos) | $0.01949 | **sin verificar** -- no se hizo el chequeo de balance en su momento |
 | Zoocoria (1 intento, 88 pasos) | $0.03957 | **$0.12** (verificado: $9.24 → $9.12) |
 
-Para zoocoria, el coste real fue **~3x** el calculado -- coherente con
-haber aterrizado en un proveedor del rango DeepSeek/Fireworks/
-SiliconFlow ($0.22/$0.66/M) en vez de OpenInference. El de flora queda
-como **dato no fiable, nunca confirmado contra balance real** -- no se
-puede afirmar con la misma confianza que antes que costó $0.0195.
+Para zoocoria, el coste real fue **~3x** el calculado. **Causa
+identificada solo a medias, no dejarlo pasar como resuelta**: Diego
+identificó en el panel de OpenRouter que la ejecución usó DOS
+proveedores -- OpenInference hasta las 22:06, Baidu (Qianfan) desde
+entonces. Comprobado contra el catálogo real de precios de
+`deepseek-v4-flash-0731`, Baidu NO es un proveedor caro: $0.065/M
+prompt (1.3x OpenInference) y $0.130/M completion (**más barato** que
+OpenInference, $0.160/M). Aunque el 100% de las llamadas hubiera
+corrido en Baidu, el coste no debería haber subido más de ~1.3x -- muy
+lejos del ~3x real observado. **El cambio de proveedor es un hecho
+real y confirmado, pero NO explica por sí solo la magnitud del hueco**
+-- descartada la hipótesis inicial ("aterrizó en un proveedor mucho más
+caro tipo DeepSeek/Fireworks/SiliconFlow"), escrita aquí antes de
+comprobarla contra el catálogo real de precios. Hipótesis abiertas, sin
+confirmar todavía: tokens de razonamiento del modelo (`deepseek-v4-
+flash-0731` soporta `reasoning`/`include_reasoning`) facturados por el
+proveedor pero no contados por la estimación local de coste; el campo
+`discount` de la entrada de Baidu (0.536) reflejando un precio
+promocional que puede no haber aplicado en el momento real de la
+llamada; o algún otro factor no identificado. El de flora sigue como
+**dato no fiable, nunca confirmado contra balance real** -- no se puede
+afirmar con la misma confianza que antes que costó $0.0195.
 
 **Sonnet sigue sin medirse nunca contra este pipeline.** La aproximación
 anterior (~$0.09-$0.15 por un fix de una sola pasada, ratio 5-8x más
