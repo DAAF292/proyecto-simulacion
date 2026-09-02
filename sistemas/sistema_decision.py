@@ -1,16 +1,10 @@
-"""SistemaDecision (paso 7, ampliado en paso 12 con la rama del lobo y la
-huida del gnomo; migrado a la convencion unificada 1.0=pleno/0.0=crisis
-en el Bloque A del plan de adaptacion a criatura.docx): Utility AI
-minima. Calcula, cada tick, cual de las acciones candidatas de cada
-especie tiene mayor utilidad, y la guarda en su componente Intencion.
+"""SistemaDecision: Utility AI minima. Calcula, cada tick, cual de las
+acciones candidatas de cada especie tiene mayor utilidad, y la guarda en
+su componente Intencion.
 
-Utilidad v1 (deliberadamente simple, sin personalidad ni histeresis --
-ver informe de implementacion para el razonamiento de por que se dejan
-fuera de esta primera version; SUPERADO el 2026-08-29 por el COMPROMISO
-DE SATISFACCION, documentado mas abajo -- la oscilacion que la ausencia
-de histeresis predecia se manifesto como microsuenos de 1 tick). Bajo la convencion nueva la urgencia de
-una necesidad es (1.0 - valor), no el valor crudo -- una necesidad plena
-(1.0) no debe competir por atencion, una en crisis (0.0) si:
+Convencion 1.0=pleno/0.0=crisis: la urgencia de una necesidad es
+(1.0 - valor), no el valor crudo -- una necesidad plena (1.0) no debe
+competir por atencion, una en crisis (0.0) si:
   Cualquier especie: utilidad(huir)      = 1.0 - seguridad (prioridad maxima en empate)
                       utilidad(alimentarse) = 1.0 - saciedad -- Accion.CAZAR o
                         Accion.COMER segun medio_alimentacion de la raza (ver mas abajo)
@@ -22,46 +16,28 @@ una necesidad es (1.0 - valor), no el valor crudo -- una necesidad plena
                         (ver "BUSCAR_PAREJA" mas abajo)
                       utilidad(deambular) = utilidad_deambular_base (constante, config)
 
-CORRECCION 2026-08-20 (introduccion de conejo/ardilla, observacion de
-Diego): cazar y comer NO son necesidades distintas compitiendo por
-prioridad -- son el MISMO medio de satisfacer la MISMA necesidad
-(saciedad) resuelto por vias distintas segun la especie. La version
-anterior de este sistema calculaba utilidad_cazar y utilidad_comer con
-la formula identica (1.0 - saciedad) y decidia cual de las dos
-candidatas activar con un `if identidad.especie == Especie.LOBO` --
-una rama codificada a mano por especie, cuando lo que de verdad varia
-por especie es el MEDIO (cazar vs recolectar), no la necesidad ni su
-utilidad. Ahora se lee rangos_raciales[especie].medio_alimentacion
-(config/constantes.yaml) y se genera una unica candidata "alimentarse"
-con la Accion que corresponda -- gnomo/conejo/ardilla resuelven a
-Accion.COMER (con dieta restringida, ver sistema_movimiento.py y
-sistema_recursos.py), lobo a Accion.CAZAR, sin ninguna rama por especie
-en este archivo. Sienta la base para cuando existan razas conscientes
-con mas de un medio a la vez (agricultura, pastoreo, caza dirigida --
-informe tecnico, seccion 20) -- ese caso multi-medio NO esta resuelto
-aqui todavia (exigiria decidir el medio segun percepcion real, no una
-utilidad fija), queda aparcado a proposito hasta que haga falta.
+Cazar y comer NO son necesidades distintas compitiendo por prioridad --
+son el MISMO medio de satisfacer la MISMA necesidad (saciedad) resuelto
+por vias distintas segun la especie: se lee
+rangos_raciales[especie].medio_alimentacion (config/constantes.yaml) y
+se genera una unica candidata "alimentarse" con la Accion que
+corresponda -- gnomo/conejo/ardilla resuelven a Accion.COMER (con dieta
+restringida, ver sistema_movimiento.py y sistema_recursos.py), lobo a
+Accion.CAZAR, sin ninguna rama por especie en este archivo. El caso
+multi-medio (una raza consciente con mas de un medio a la vez --
+agricultura, pastoreo, caza dirigida) NO esta resuelto aqui (exigiria
+decidir el medio segun percepcion real, no una utilidad fija).
 
-Simetria lobo/gnomo (revision tras la fase de huida-de-amenazas,
-discutida y confirmada con Diego): hasta este cambio el lobo no tenia
-HUIR ni DORMIR como candidatas, solo cazar/beber/aliviarse/deambular --
-una asimetria que nadie habia decidido a proposito, solo quedo asi desde
-el paso 12 porque el lobo "no huye de nada" en un mundo sin nada mas
-grande que el. Diego senalo el criterio correcto: un depredador puede
-ser presa de algo mas grande (o de una raza consciente futura que cace),
-y dormir es una necesidad biologica de base, no algo que dependa de
-consciencia -- ninguna accion de esta lista esta gateada por consciencia
-todavia (el atributo sigue sin mecanica propia, ver
-componentes/capacidad_mental.py). El criterio general para decidir que
-va en la tupla de cada especie no es "que le pusimos ya" sino "que no
-dependa de una estrategia de alimentacion distinta" -- comer/cazar SI
-difieren a proposito (herbivoro/recolector vs. depredador), el resto
-deberia ser simetrico salvo que se demuestre lo contrario. HUIR sigue
-sin tener ningun efecto practico hoy para el lobo salvo por amenaza
-AMBIENTAL (fuego, nucleo/amenaza.py) -- la rama de amenaza por criatura
-mas grande queda inerte hasta que exista una, mismo patron de "declarado
-sin consumidor activo todavia" que ya aparece en varios sitios del
-motor.
+El criterio general para decidir que va en la tupla de cada especie no
+es "que le pusimos ya" sino "que no dependa de una estrategia de
+alimentacion distinta": comer/cazar SI difieren (herbivoro/recolector
+vs. depredador), el resto (HUIR, DORMIR, beber, aliviarse) es simetrico
+entre especies -- ninguna accion de esta lista esta gateada por
+consciencia todavia (el atributo sigue sin mecanica propia, ver
+componentes/capacidad_mental.py). HUIR sigue sin tener ningun efecto
+practico hoy para el lobo salvo por amenaza AMBIENTAL (fuego,
+nucleo/amenaza.py) -- la rama de amenaza por criatura mas grande queda
+inerte hasta que exista una.
 
 beber (Bloque D1) se coloca junto a comer en el orden de prioridad de
 empate -- ambas son necesidades de "ingesta" resueltas buscando un
@@ -84,70 +60,50 @@ la jerarquia tipo Maslow que el propio tecnico describe (las necesidades
 superiores esperan a que las fisicas criticas esten resueltas; seguridad
 es la mas fisica y urgente de las tres cuando hay una amenaza real).
 
-Agotamiento (Bloque C2 del plan de adaptacion a criatura.docx, propuesta
-discutida y confirmada con Diego): con PoolFisico.resistencia agotada
-(<= 0.0), la utilidad de CAZAR/HUIR se fuerza a 0.0 -- ambas son las
-acciones de "esfuerzo fisico sostenido" que consumen resistencia en
-sistema_capacidad_fisica.py (_ACCIONES_DE_ESFUERZO). Un cazador agotado
-(hoy, lobo) deja de poder sostener la persecucion y cae a deambular; un
-recolector agotado (gnomo/conejo/ardilla) deja de poder huir y cae a
+Agotamiento: con PoolFisico.resistencia agotada (<= 0.0), la utilidad de
+CAZAR/HUIR se fuerza a 0.0 -- ambas son las acciones de "esfuerzo fisico
+sostenido" que consumen resistencia en sistema_capacidad_fisica.py
+(_ACCIONES_DE_ESFUERZO). Un cazador agotado (hoy, lobo) deja de poder
+sostener la persecucion y cae a deambular; un recolector agotado
+(gnomo/conejo/ardilla) deja de poder huir y cae a
 alimentarse/dormir/deambular segun toque, incluso con una amenaza real
-delante -- consecuencia emergente de la competencia de utilidad, no una
-regla especial escrita para este caso. El gating por agotamiento se
-aplica a la candidata "alimentarse" SOLO si su medio es cazar (ver
-correccion 2026-08-20 arriba) -- recolectar nunca se vio afectado por
-agotamiento ni antes ni ahora, mismo comportamiento que ya tenia el
-gnomo.
+delante -- consecuencia emergente de la competencia de utilidad. El
+gating por agotamiento se aplica a la candidata "alimentarse" SOLO si su
+medio es cazar -- recolectar nunca se ve afectado por agotamiento.
 
-Crisis mental (Bloque F3, propuesta discutida y confirmada con Diego --
-criatura.docx dejaba esto como hueco de diseno explicito, "el tipo
-concreto emerge de agresividad/valentia, no escrito de antemano"): con
-PoolMental.estabilidad en crisis (<= umbral_estabilidad_crisis, mismo
-patron gated-por-pool que agotamiento, sin contador de duracion propio --
-se sale solo cuando sistema_capacidad_mental.py recupera el pool por
-encima del umbral), la Utility AI normal se anula del todo para ese
-individuo en ese tick -- no es un ajuste de una utilidad como el
-agotamiento, es un override completo: quien esta en crisis no esta
-decidiendo racionalmente.
+Crisis mental: con PoolMental.estabilidad en crisis (<= umbral_
+estabilidad_crisis, mismo patron gated-por-pool que agotamiento, sin
+contador de duracion propio -- se sale solo cuando
+sistema_capacidad_mental.py recupera el pool por encima del umbral), la
+Utility AI normal se anula del todo para ese individuo en ese tick -- no
+es un ajuste de una utilidad como el agotamiento, es un override
+completo.
 
-Tipologia (umbral sobre rasgos individuales, primera vez que valentia
-tiene CUALQUIER consumidor en todo el motor -- sin calibracion previa de
-que rango "se siente" cobarde en la practica del juego):
+Tipologia (umbral sobre rasgos individuales):
   valentia < umbral_valentia_huida_erratica         -> HUIDA_ERRATICA
   (si no) agresividad > umbral_agresividad_violenta -> CRISIS_VIOLENTA
   (si no)                                           -> CATATONIA
-Con los rangos raciales actuales esto produce una asimetria deliberada
-pero no explicitamente pedida por Diego, senalada aqui para que quede a
-la vista: el gnomo (agresividad maxima 0.4) practicamente nunca llega al
-umbral de violenta (0.6) y su crisis casi siempre es huida erratica o
-catatonia; el lobo (valentia minima 0.5) nunca cae bajo el umbral de
-huida erratica (0.3) y su crisis siempre es violenta o catatonia. Revisar
-si esto se siente como una simplificacion razonable o como un sesgo
-excesivo una vez observado el motor en marcha.
+Con los rangos raciales actuales esto produce una asimetria: el gnomo
+(agresividad maxima 0.4) practicamente nunca llega al umbral de violenta
+(0.6) y su crisis casi siempre es huida erratica o catatonia; el lobo
+(valentia minima 0.5) nunca cae bajo el umbral de huida erratica (0.3) y
+su crisis siempre es violenta o catatonia.
 
 Se emite un Evento "CrisisMental" (NOTABLE) SOLO al entrar en crisis (no
 en cada tick que dura, para no inundar la cronica) -- se detecta
 comparando la Intencion de este tick contra la del tick anterior, antes
 de sobreescribirla.
 
-COMPROMISO DE SATISFACCION (ley B, 2026-08-29, diseno conjunto con Diego
-tras el diagnostico de microsuenos de ese mismo dia): la observacion del
-motor real (arnes de diagnostico, semilla 42, 3000 ticks) mostro que el
-argmax puro sin memoria del curso de accion produce rachas de dormir de
-1.04 ticks de media (43025 rachas, 100% interrumpidas antes de llenar
-energia), un churn de 39.5 cambios de accion por 100 ticks, y ninguna
-necesidad que llegue nunca a saturarse (energia/saciedad/aliviado llenos
-el 0.18% de los ticks). La causa es estructural, no un bug: la utilidad
-de la accion que se esta ejecutando CAE mientras se ejecuta (dormir
-recupera energia; alimentarse la satura) mientras las utilidades
-competidoras SUBEN por decaimiento continuo, de modo que el argmax
-conmuta de vuelta en cuanto cualquier otra urgencia iguala a la propia --
-el 100% de interrupcion es consecuencia necesaria de la ley, no mala
-suerte. El informe de implementacion (7.4) ya lo preveia ("sin
-histeresis... una entidad puede oscilar entre dos acciones de utilidad
-casi identica tick a tick") y lo dejo aparcado a proposito.
+COMPROMISO DE SATISFACCION (ley B): el argmax puro sin memoria del curso
+de accion produce oscilacion estructural, no un bug -- la utilidad de la
+accion que se esta ejecutando CAE mientras se ejecuta (dormir recupera
+energia; alimentarse la satura) mientras las utilidades competidoras
+SUBEN por decaimiento continuo, de modo que el argmax conmuta de vuelta
+en cuanto cualquier otra urgencia iguala a la propia. Ver
+docs/historial_sistemas.md para la medicion empirica que motivo esta
+ley.
 
-La ley confirmada por Diego: una accion de SATISFACCION (dormir, comer,
+La ley: una accion de SATISFACCION (dormir, comer,
 beber, aliviarse -- las cuatro que resuelven una necesidad concreta)
 se MANTIENE mientras su necesidad objetivo no alcance la plenitud
 (1.0), salvo interrupcion por:
@@ -182,42 +138,47 @@ cazar) no tiene compromiso de alimentacion mientras gnomo/conejo/
 ardilla (medio recolectar) si -- si al observar el motor se siente como
 un hueco, extender el compromiso a CAZAR es el punto unico de cambio.
 
-PLENITUD EFECTIVA (2026-08-29, hallazgo del primer arnes de verificacion
-de la ley B): en la Fase 3 la recuperacion (sistema_recursos.py: comer,
-beber, aliviarse) y el decaimiento (sistema_necesidades.py) ocurren en
-el MISMO tick, asi que el valor registrado de una necesidad que acabo de
-tocar el techo es 1.0 - tasa_de_decay, nunca 1.0 exacto -- salvo energia,
-cuya recuperacion por sueno es excluyente con su decaimiento. Con la
-condicion ingenua ">= 1.0" el compromiso de comer/beber/aliviarse nunca
-se libera: el regimen observado fue comer-excesivo (55.1% de los ticks,
-rachas de comer de hasta 562 ticks que solo acaban cuando OTRA necesidad
-entra en crisis, 0/8969 rachas terminando en plenitud registrada) y un
-mundo forrajeado hasta el hueso. La condicion corregida compara contra el
-TECHO EFECTIVO de registro: 1.0 menos la tasa de decay de esa necesidad
-(para la especie, si la tiene en config). Es exacto por construccion
-(post-decay de un clamp a 1.0) y no anade estado; cuando el periodo de
-plenitud suprima el decay del tick de la transicion, el valor registrado
-pasara a ser 1.0 exacto y esta condicion seguira siendo cierta.
+PLENITUD EFECTIVA: en la Fase 3 la recuperacion (sistema_recursos.py:
+comer, beber, aliviarse) y el decaimiento (sistema_necesidades.py)
+ocurren en el MISMO tick, asi que el valor registrado de una necesidad
+que acabo de tocar el techo es 1.0 - tasa_de_decay, nunca 1.0 exacto --
+salvo energia, cuya recuperacion por sueno es excluyente con su
+decaimiento. Con la condicion ingenua ">= 1.0" el compromiso de
+comer/beber/aliviarse nunca se libera (ver docs/historial_sistemas.md
+para la medicion empirica del regimen de comer-excesivo que esto
+producia). La condicion correcta compara contra el TECHO EFECTIVO de
+registro: 1.0 menos la tasa de decay de esa necesidad (para la especie,
+si la tiene en config). Es exacto por construccion (post-decay de un
+clamp a 1.0) y no anade estado; cuando el periodo de plenitud suprima el
+decay del tick de la transicion, el valor registrado pasara a ser 1.0
+exacto y esta condicion seguira siendo cierta.
 
 No hay componentes nuevos: la propia Intencion es el estado del
 compromiso (comparar la accion elegida contra la accion actual). El
 umbral vive en config/constantes.yaml seccion decision, marcado
 PROVISIONAL pendiente de calibrar contra el harness completo.
 
-BUSCAR_PAREJA (2026-08-20, diseno conjunto de reproduccion tras la
-investigacion de por que la reproduccion casi nunca ocurria -- ver
-sistema_movimiento.py y sistema_reproduccion.py): utilidad = 1.0 -
-Necesidades.impulso_reproductivo, MISMO patron que el resto de
-necesidades fisicas de esta tupla -- pero con dos gates adicionales que
-la fuerzan a 0.0 (no compite, cae a otra candidata) en vez de intentar
-codificar la elegibilidad dentro de la formula de utilidad:
+BUSCAR_PAREJA (ver sistema_movimiento.py y sistema_reproduccion.py):
+utilidad = 1.0 - Necesidades.impulso_reproductivo, MISMO patron que el
+resto de necesidades fisicas de esta tupla -- pero con gates adicionales
+que la fuerzan a 0.0 (no compite, cae a otra candidata) en vez de
+intentar codificar la elegibilidad dentro de la formula de utilidad:
   1. no adulto (nucleo/ciclo_vital.py:es_adulto(), MISMO minimo racial de
      longevidad que ya usa muerte por vejez y sistema_reproduccion.py --
-     fraccion_madurez ahora vive por especie en rangos_raciales, ver
-     config/constantes.yaml, en vez de un unico valor global).
+     fraccion_madurez es por especie en rangos_raciales, config/
+     constantes.yaml).
   2. hembra ya gestando (componentes/gestacion.py) -- no tiene sentido
      buscar pareja mientras se gesta. No se comprueba en el macho porque
      Gestacion solo se anade a la hembra (ver sistema_reproduccion.py).
+  3. cualquier necesidad fisica con accion de satisfaccion (saciedad,
+     energia, hidratacion, aliviado -- el mismo universo del compromiso)
+     por debajo de decision.umbral_atencion_pareja (PROVISIONAL 0.5): sin
+     este gate, la formula 1.0 - impulso_reproductivo deja ganar a
+     buscar pareja con impulso decaido a 0.0 (utilidad maxima) SOBRE
+     cualquier necesidad fisica no en crisis exacta, incluso con
+     saciedad/energia muy bajas (ver docs/historial_sistemas.md para el
+     caso real que lo detecto). Buscar pareja queda asi reservado a
+     individuos fisicamente resueltos.
 Colocada justo antes de deambular, despues de aliviarse -- ultima entre
 las necesidades fisicas "activas": impulso_reproductivo nunca mata por
 si solo (a diferencia de saciedad/oxigenacion, ver componentes/
@@ -226,27 +187,6 @@ comer/beber/dormir/aliviarse, todas con alguna consecuencia mas
 inmediata si se ignoran. Sin gating por agotamiento (a diferencia de
 cazar) -- buscar pareja no es un esfuerzo fisico sostenido equivalente,
 es basicamente caminar, la misma accion de base que deambular.
-
-TERCER GATE DE BUSCAR_PAREJA (2026-08-29, hallazgo del arnes de
-verificacion de la ley B, confirmado por Diego): la formula
-utilidad = 1.0 - impulso_reproductivo deja ganar a buscar pareja con
-impulso decaido a 0.0 (utilidad 1.0, maxima) SOBRE cualquier necesidad
-fisica no en crisis exacta -- criaturas con saciedad 0.05 y energia 0.05
-pasando el 80% de sus ticks buscando pareja mientras mueren de
-inanicion (semilla 42, eid 6 en t=1500-1579). El regimen de
-micro-interrupciones anterior lo enmascaraba: las necesidades nunca
-llegaban a crisis real, asi que la utilidad de pareja nunca superaba a
-una fisica apurada. Esto contradecia la intencion YA documentada en esta
-misma seccion ("no tiene sentido que compita por delante de
-comer/beber/dormir/aliviarse") y la jerarquia tipo Maslow del resto del
-sistema -- era una inconsistencia entre el diseno escrito y la
-implementacion, no una decision nueva. Correccion en el mismo patron de
-los gates existentes (adulto/gestando): utilidad forzada a 0.0 mientras
-CUALQUIER necesidad fisica con accion de satisfaccion (saciedad,
-energia, hidratacion, aliviado -- el mismo universo del compromiso) este
-por debajo de decision.umbral_atencion_pareja (PROVISIONAL 0.5). Buscar
-pareja queda asi reservado a individuos fisicamente resueltos; con las
-fisicas sanas su utilidad funciona como siempre.
 """
 from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
@@ -275,9 +215,9 @@ from nucleo.inventario import espacio_disponible_kg
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
 
-# COMPROMISO DE SATISFACCION (2026-08-29, ver docstring del modulo): las
-# cuatro acciones que resuelven una necesidad concreta y la necesidad que
-# cada una satisface. Cazar NO esta: la saciedad del depredador se resuelve
+# Compromiso de satisfaccion (ver docstring del modulo): las cuatro
+# acciones que resuelven una necesidad concreta y la necesidad que cada
+# una satisface. Cazar NO esta: la saciedad del depredador se resuelve
 # en la captura (sistema_depredacion.py), no en la accion sostenida.
 _NECESIDAD_SATISFECHA = {
     Accion.DORMIR: "energia",
@@ -311,7 +251,7 @@ def _compromiso_mantiene(
 ) -> bool:
     """
     Devuelve True si el curso de accion actual debe MANTENERSE aunque el
-    argmax de este tick elija otra cosa (ley B, 2026-08-29). False cuando:
+    argmax de este tick elija otra cosa (ley B). False cuando:
     la accion actual no es de satisfaccion, su necesidad ya alcanzo el
     techo efectivo de plenitud (compromiso liberado), el argmax elegiria
     HUIR (amenaza real), o hay OTRA necesidad fisica en crisis. Levantar
@@ -342,45 +282,31 @@ def _compromiso_construir_mantiene(
     temperamento: Temperamento,
     config_asentamiento: dict,
 ) -> bool:
-    """Análogo a _compromiso_mantiene (2026-08-30, refugio construido)
-    pero CONSTRUIR no resuelve un campo de Necesidades -- se mantiene
-    mientras la construcción OBJETIVO (cid_objetivo, ya sea refugio
-    propio o almacén de asentamiento -- ver
-    nucleo/construccion.py:objetivo_construccion_actual, Círculo E)
-    siga sin terminar, no haya amenaza real (HUIR gana), ninguna
-    necesidad física esté en crisis real (mismo umbral y universo que el
-    resto del compromiso) Y siga quedando algo de material apto en el
-    Inventario para aportar.
-
-    CORRECCIÓN 1 (2026-08-30, hallazgo del arnés de verificación de
-    RECOLECTAR/CONSTRUIR encadenados, no detectado al escribir esta
-    función la primera vez): sin el chequeo de material, un gnomo que
-    vacía su Inventario aportando a la construcción se queda con
+    """Análogo a _compromiso_mantiene, pero CONSTRUIR no resuelve un
+    campo de Necesidades -- se mantiene mientras la construcción OBJETIVO
+    (cid_objetivo, ya sea refugio propio o almacén de asentamiento -- ver
+    nucleo/construccion.py:objetivo_construccion_actual) siga sin
+    terminar, no haya amenaza real (HUIR gana), ninguna necesidad física
+    esté en crisis real (mismo umbral y universo que el resto del
+    compromiso) Y siga quedando algo de material apto en el Inventario
+    para aportar -- sin este último chequeo, un gnomo que vacía su
+    Inventario aportando a la construcción se quedaría con
     Intencion.accion = CONSTRUIR para siempre (progreso < 1.0 sigue
-    siendo cierto), sin aportar nada más ni volver nunca a RECOLECTAR --
-    el compromiso nunca se libera de vuelta al argmax normal.
+    siendo cierto), sin volver nunca a RECOLECTAR.
 
-    CORRECCIÓN 2 (2026-08-30, hallazgo del arnés de verificación del
-    Círculo E -- almacén, tampoco detectado al escribir la función):
-    para ALMACÉN, el compromiso también debe re-verificar la disposición
-    a aportar (nucleo/asentamiento.py:disposicion_a_aportar) en cada
-    tick, no solo en el instante en que se eligió la acción. Sin esto, un
+    Para ALMACÉN, el compromiso también re-verifica la disposición a
+    aportar (nucleo/asentamiento.py:disposicion_a_aportar) en cada tick,
+    no solo en el instante en que se eligió la acción -- sin esto, un
     individuo fundamentalmente egoísta (agresividad alta, empatía/lealtad
-    bajas, necesidades sin excedente real) podía terminar de construir
-    TODO un almacén él solo: bastaba un pico momentáneo de saciedad justo
-    tras comer para cruzar el umbral una vez, elegir RECOLECTAR/CONSTRUIR,
-    y el compromiso lo sostenía indefinidamente aunque el excedente
-    volviera a caer por debajo del umbral en el tick siguiente -- el
-    mismo tipo de "se queda encallado" que la Corrección 1, pero sobre la
-    voluntad de ayudar en vez de sobre el material disponible. El refugio
-    propio NO exige esta re-verificación (nunca exigió disposición para
-    empezar, tampoco debe exigirla para continuar).
+    bajas, necesidades sin excedente real) podría terminar de construir
+    TODO un almacén él solo con solo un pico momentáneo de saciedad. El
+    refugio propio NO exige esta re-verificación (nunca exigió
+    disposición para empezar, tampoco debe exigirla para continuar).
 
-    Mismo principio en ambas correcciones que el techo efectivo del
-    compromiso de satisfacción (_compromiso_mantiene): se libera en
-    cuanto ya no hay nada más que hacer -- o nada más que se QUIERA
-    hacer -- con la acción actual, no solo cuando el objetivo final se
-    cumple."""
+    Mismo principio que el techo efectivo del compromiso de satisfacción
+    (_compromiso_mantiene): se libera en cuanto ya no hay nada más que
+    hacer -- o nada más que se QUIERA hacer -- con la acción actual, no
+    solo cuando el objetivo final se cumple."""
     if elegida == Accion.HUIR:
         return False
     for nombre in _NECESIDADES_FISICAS:
@@ -409,24 +335,13 @@ def _tipo_crisis(temperamento: Temperamento, config_crisis: dict) -> Accion:
 
 
 class SistemaDecision:
-    """
-    Envoltorio de clase (2026-08-23, mismo motivo que SistemaCapacidadFisica):
-    este sistema quedó como función suelta `actualizar()` sin migrar al
-    patrón de clase que main.py:instanciar_sistemas()/ejecutar_tick() ya
-    asumen para todos sus sistemas.
-
-    A diferencia del envoltorio de capacidad física (puramente mecánico),
-    aquí main.py llamaba a `sistemas["decision"].ejecutar(gestor, mundo)`
-    -- ni bus_eventos ni tick_actual, que `actualizar()` sí necesita de
-    verdad (para emitir el Evento "CrisisMental" con su tick). Se corrige
-    aquí Y en la llamada de main.py, para que la emisión de eventos de
-    crisis mental deje de perderse silenciosamente.
-
-    `mundo` SÍ tiene consumidor ahora (2026-08-30, Círculo E -- almacén
-    de asentamiento): objetivo_construccion_actual necesita consultar
+    """Envoltorio de clase: main.py instancia `SistemaDecision(config,
+    rng)` y llama `.ejecutar(gestor, mundo, reloj, bus_eventos)` -- el
+    Evento "CrisisMental" necesita bus_eventos y tick_actual, así que
+    ambos se pasan explícitamente en vez de solo gestor/mundo. `mundo` se
+    usa porque objetivo_construccion_actual consulta
     mundo.asentamientos para saber si un gnomo es miembro de alguno y
-    dónde está su almacén -- antes de esta pieza la decisión en efecto
-    no consultaba el terreno/mundo, ya no es el caso.
+    dónde está su almacén.
     """
 
     def __init__(self, config: dict, rng) -> None:
@@ -442,27 +357,26 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
     base_deambular = config["decision"]["utilidad_deambular_base"]
     config_crisis = config["crisis_mental"]
     umbral_crisis = config_crisis["umbral_estabilidad_crisis"]
-    # COMPROMISO DE SATISFACCION (2026-08-29): umbral de crisis interrumpible
-    # del compromiso, PROVISIONAL 0.2 -- ver docstring del modulo y
-    # config/constantes.yaml seccion decision.
+    # Umbral de crisis interrumpible del compromiso (ver docstring del
+    # modulo), PROVISIONAL.
     umbral_crisis_interrupcion = float(config["decision"]["umbral_crisis_interrupcion"])
-    # Tercer gate de BUSCAR_PAREJA (2026-08-29): ninguna busqueda de pareja
-    # con una necesidad fisica por debajo de este valor, PROVISIONAL 0.5.
+    # Tercer gate de BUSCAR_PAREJA: ninguna busqueda de pareja con una
+    # necesidad fisica por debajo de este valor, PROVISIONAL.
     umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
-    # CONSTRUIR (2026-08-30, ver docstring del modulo y
-    # nucleo/construccion.py): mismo umbral de agencia que ya exime del
-    # sesgo de territorio -- construir es agencia consciente, no instinto.
+    # CONSTRUIR (ver docstring del modulo y nucleo/construccion.py): mismo
+    # umbral de agencia que ya exime del sesgo de territorio -- construir
+    # es agencia consciente, no instinto.
     umbral_consciencia_agencia = float(config["decision"].get("umbral_consciencia_agencia", 0.3))
     utilidad_construir_base = float(config["decision"].get("utilidad_construir_base", 0.3))
     utilidad_recolectar_base = float(config["decision"].get("utilidad_recolectar_base", 0.35))
     catalogo_materiales = config.get("materiales", {})
     config_construccion = config.get("construccion", {})
     fraccion_carga_maxima = float(config.get("inventario", {}).get("fraccion_carga_maxima", 0.25))
-    # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py, componentes/
-    # fogata.py y nucleo/fuego.py).
+    # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/fogata.py y
+    # nucleo/fuego.py).
     piedras_necesarias_fuego = int(config.get("fuego", {}).get("piedras_necesarias", 2))
-    # Almacén de asentamiento (2026-08-30, Círculo E -- ver
-    # nucleo/asentamiento.py y nucleo/construccion.py:objetivo_construccion_actual).
+    # Almacén de asentamiento -- ver nucleo/asentamiento.py y
+    # nucleo/construccion.py:objetivo_construccion_actual.
     config_asentamiento = config.get("asentamiento", {})
     radio_cluster_asentamiento = int(config_asentamiento.get("radio_cluster_celdas", 6))
     rangos_raciales = config["rangos_raciales"]
@@ -522,12 +436,12 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
 
         utilidad_huir = 0.0 if agotado else (1.0 - necesidades.seguridad)
 
-        # Correccion 2026-08-20: el medio (cazar vs recolectar) es una
-        # propiedad de la raza en config, no una rama codificada por
-        # Especie -- ver docstring del modulo. El agotamiento solo apaga
-        # la candidata cuando el medio es cazar (esfuerzo sostenido, ver
+        # El medio (cazar vs recolectar) es una propiedad de la raza en
+        # config, no una rama codificada por Especie -- ver docstring del
+        # modulo. El agotamiento solo apaga la candidata cuando el medio
+        # es cazar (esfuerzo sostenido, ver
         # sistema_capacidad_fisica.py:_ACCIONES_DE_ESFUERZO); recolectar
-        # nunca se vio afectado.
+        # nunca se ve afectado.
         medio_alimentacion = rangos_raciales[identidad.especie.value]["medio_alimentacion"]
         accion_alimentarse = Accion.CAZAR if medio_alimentacion == "cazar" else Accion.COMER
         utilidad_alimentarse = (
@@ -535,13 +449,11 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             else (1.0 - necesidades.saciedad)
         )
 
-        # BUSCAR_PAREJA (2026-08-20, ver docstring del modulo): gateada a
-        # 0.0 si no es adulto o si ya gestando (solo la hembra puede
-        # gestar) -- fraccion_madurez es ahora por especie (rangos_
-        # raciales), no un unico valor global. Tercer gate anadido el
-        # 2026-08-29 (hallazgo del arnes post ley B, confirmado por Diego,
-        # ver docstring del modulo): ninguna busqueda de pareja con una
-        # necesidad fisica por debajo de decision.umbral_atencion_pareja.
+        # BUSCAR_PAREJA (ver docstring del modulo): gateada a 0.0 si no
+        # es adulto o si ya gestando (solo la hembra puede gestar) --
+        # fraccion_madurez es por especie (rangos_raciales). Tercer gate:
+        # ninguna busqueda de pareja con una necesidad fisica por debajo
+        # de decision.umbral_atencion_pareja.
         edad = edad_ticks(identidad.tick_nacimiento, tick_actual)
         fraccion_madurez = rangos_raciales[identidad.especie.value]["fraccion_madurez"]
         adulto = es_adulto(edad, identidad.especie.value, rangos_raciales, fraccion_madurez)
@@ -555,23 +467,22 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             else (1.0 - necesidades.impulso_reproductivo)
         )
 
-        # CONSTRUIR / RECOLECTAR (2026-08-30, ver docstring del modulo,
+        # CONSTRUIR / RECOLECTAR (ver docstring del modulo,
         # nucleo/construccion.py y nucleo/asentamiento.py): ambas gateadas
         # a consciente y a que exista un objetivo de construcción actual
         # -- el refugio propio SIEMPRE tiene prioridad mientras no esté
         # terminado (necesidad individual antes que comunal); solo una
         # vez resuelto se mira el almacén del asentamiento del que sea
-        # miembro (Círculo E, 2026-08-30). Mientras la masa apta ya
-        # invertida en el objetivo + la que se lleva encima no baste para
-        # terminarlo (y quede espacio en el Inventario), RECOLECTAR gana
-        # sobre CONSTRUIR (utilidad mayor a propósito, ver
-        # config/fisiologia.yaml) -- mejor completar la carga que ir y
-        # volver por poco. Aportar al ALMACÉN exige además disposición
-        # propia (excedente de saciedad/hidratación por encima de un
-        # umbral de carácter, nucleo/asentamiento.py:disposicion_a_aportar
-        # -- "no creamos leyes absolutas", Diego): el refugio propio no
-        # exige excedente, una necesidad de seguridad individual no
-        # espera a que sobre nada.
+        # miembro. Mientras la masa apta ya invertida en el objetivo + la
+        # que se lleva encima no baste para terminarlo (y quede espacio
+        # en el Inventario), RECOLECTAR gana sobre CONSTRUIR (utilidad
+        # mayor a propósito, ver config/fisiologia.yaml) -- mejor
+        # completar la carga que ir y volver por poco. Aportar al
+        # ALMACÉN exige además disposición propia (excedente de
+        # saciedad/hidratación por encima de un umbral de carácter,
+        # nucleo/asentamiento.py:disposicion_a_aportar): el refugio
+        # propio no exige excedente, una necesidad de seguridad
+        # individual no espera a que sobre nada.
         utilidad_construir = 0.0
         utilidad_recolectar = 0.0
         cid_objetivo = None
@@ -602,31 +513,26 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
                     if masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0:
                         utilidad_construir = utilidad_construir_base
 
-        # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py,
-        # componentes/fogata.py y nucleo/fuego.py -- "usar dos rocas para
-        # hacer un fuego"). Misma compuerta de consciencia que CONSTRUIR/
-        # RECOLECTAR. Utilidad = 1.0 - confort_termico (responde a una
-        # necesidad real, no a un objetivo administrativo como CONSTRUIR/
-        # RECOLECTAR) -- gateada a 0.0 si faltan piedras en Agarre, no hay
-        # combustible en la celda actual, o ya hay una Fogata ahí (nada
-        # que encender, beneficiarse de una ya existente no exige
-        # ninguna acción, sistema_necesidades.py la detecta pasivamente).
+        # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/
+        # fogata.py y nucleo/fuego.py). Misma compuerta de consciencia
+        # que CONSTRUIR/RECOLECTAR. Utilidad = 1.0 - confort_termico
+        # (responde a una necesidad real, no a un objetivo administrativo
+        # como CONSTRUIR/RECOLECTAR) -- gateada a 0.0 si faltan piedras
+        # en Agarre, no hay combustible en la celda actual, o ya hay una
+        # Fogata ahí (nada que encender, beneficiarse de una ya existente
+        # no exige ninguna acción, sistema_necesidades.py la detecta
+        # pasivamente).
         #
-        # CORRECCIÓN (2026-08-31, conversación de diseño con Diego --
-        # "la recolección de recursos es el efecto, no la causa"): buscar
-        # piedra_suelta para poder encender fuego NO es una utilidad
-        # independiente ("tangencial", palabra de Diego) que lea
-        # confort_termico por su cuenta -- eso sería una regla de
-        # "recoge piedras porque sí" aunque el individuo jamás haya
-        # pasado frío. La utilidad de RECOLECTAR hereda el valor que
-        # ENCENDER_FUEGO tendría SI YA tuviera las piedras (la misma
-        # fórmula, propagada hacia abajo, no recalculada desde la causa
-        # raíz por separado) -- así, un individuo que nunca ha
-        # experimentado frío real nunca desarrolla ningún interés en
-        # buscar piedra tampoco (ambos comparten la misma causa, no dos
-        # causas paralelas). Piedra_suelta ahora vive en Celda.recursos,
-        # independiente de tipo_sustrato (ver docstring de
-        # config/fuego.yaml para el error de modelo corregido).
+        # Buscar piedra_suelta para poder encender fuego NO es una
+        # utilidad independiente que lea confort_termico por su cuenta --
+        # eso sería una regla de "recoge piedras porque sí" aunque el
+        # individuo jamás haya pasado frío. La utilidad de RECOLECTAR
+        # hereda el valor que ENCENDER_FUEGO tendría SI YA tuviera las
+        # piedras (la misma fórmula, propagada hacia abajo, no
+        # recalculada desde la causa raíz por separado) -- así, un
+        # individuo que nunca ha experimentado frío real nunca desarrolla
+        # ningún interés en buscar piedra tampoco. Piedra_suelta vive en
+        # Celda.recursos, independiente de tipo_sustrato.
         utilidad_encender_fuego = 0.0
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             agarre = gestor.obtener_componente(id_entidad, Agarre)
@@ -661,13 +567,14 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         # porque conserva el primer maximo encontrado.
         _, elegida = max(candidatas, key=lambda par: par[0])
 
-        # COMPROMISO DE SATISFACCION (ley B, 2026-08-29, ver docstring del
-        # modulo y _compromiso_mantiene): si el curso de accion actual es una
-        # satisfaccion en curso y nada urgente lo interrumpe, prevalece sobre
-        # el argmax de este tick. CONSTRUIR usa su propio compromiso dedicado
-        # (2026-08-30, _compromiso_construir_mantiene): no resuelve una
-        # Necesidades, resuelve el progreso de la construccion propia. En
-        # caso contrario la accion elegida se asigna como hasta ahora.
+        # Compromiso de satisfaccion (ley B, ver docstring del modulo y
+        # _compromiso_mantiene): si el curso de accion actual es una
+        # satisfaccion en curso y nada urgente lo interrumpe, prevalece
+        # sobre el argmax de este tick. CONSTRUIR usa su propio
+        # compromiso dedicado (_compromiso_construir_mantiene): no
+        # resuelve una Necesidades, resuelve el progreso de la
+        # construccion propia. En caso contrario la accion elegida se
+        # asigna como hasta ahora.
         if intencion.accion == Accion.CONSTRUIR:
             mantiene = _compromiso_construir_mantiene(
                 gestor,

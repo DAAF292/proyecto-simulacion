@@ -145,3 +145,55 @@ docstring de sistema_movimiento.py:_calcular_dormir). Refugio/Fogata
 como fuentes de calor son del 2026-08-31, de una conversación de diseño
 con Diego: "otoño 15 grados... invierno 3 grados, ¿es suficiente, o debo
 encender un fuego?".
+
+## `sistema_decision.py`
+
+### Ley B -- compromiso de satisfacción (2026-08-29)
+
+Diseño conjunto con Diego tras el diagnóstico de microsueños del mismo
+día. La observación del motor real (arnés de diagnóstico, semilla 42,
+3000 ticks) mostró que el argmax puro sin memoria del curso de acción
+producía rachas de dormir de 1.04 ticks de media (43025 rachas, 100%
+interrumpidas antes de llenar energía), un churn de 39.5 cambios de
+acción por 100 ticks, y ninguna necesidad que llegara nunca a saturarse
+(energía/saciedad/aliviado llenos el 0.18% de los ticks). El informe de
+implementación (7.4) ya lo preveía ("sin histéresis... una entidad puede
+oscilar entre dos acciones de utilidad casi idéntica tick a tick") y lo
+dejó aparcado a propósito hasta este diagnóstico.
+
+**Plenitud efectiva** (hallazgo del primer arnés de verificación de la
+ley B): con la condición ingenua ">= 1.0" el compromiso de
+comer/beber/aliviarse nunca se liberaba -- el régimen observado fue
+comer-excesivo (55.1% de los ticks, rachas de comer de hasta 562 ticks
+que solo acababan cuando OTRA necesidad entraba en crisis, 0/8969
+rachas terminando en plenitud registrada) y un mundo forrajeado hasta el
+hueso.
+
+**Tercer gate de BUSCAR_PAREJA** (hallazgo del arnés de verificación de
+la ley B, confirmado por Diego): la fórmula utilidad = 1.0 -
+impulso_reproductivo dejaba ganar a buscar pareja con impulso decaído a
+0.0 (utilidad máxima) SOBRE cualquier necesidad física no en crisis
+exacta -- criaturas con saciedad 0.05 y energía 0.05 pasando el 80% de
+sus ticks buscando pareja mientras morían de inanición (semilla 42, eid
+6 en t=1500-1579). El régimen de micro-interrupciones anterior lo
+enmascaraba: las necesidades nunca llegaban a crisis real, así que la
+utilidad de pareja nunca superaba a una física apurada.
+
+### Otras correcciones
+
+Cazar/comer como un único medio por especie (`medio_alimentacion`) es
+del 2026-08-20, tras la introducción de conejo/ardilla -- la versión
+anterior tenía una rama `if identidad.especie == Especie.LOBO` hardcoded.
+
+La simetría lobo/gnomo (HUIR y DORMIR también para el lobo) es una
+revisión posterior a la fase de huida-de-amenazas, confirmada con Diego:
+antes el lobo no tenía esas candidatas porque "no huye de nada" en un
+mundo sin nada más grande que él -- una asimetría que nadie había
+decidido a propósito.
+
+CONSTRUIR/RECOLECTAR y el almacén de asentamiento son del círculo E
+(2026-08-30). ENCENDER_FUEGO es del 2026-08-31 ("usar dos rocas para
+hacer un fuego"). La corrección de que RECOLECTAR hereda la utilidad de
+ENCENDER_FUEGO en vez de tener su propia utilidad tangencial es de una
+conversación de diseño con Diego el mismo día: "la recolección de
+recursos es el efecto, no la causa".
