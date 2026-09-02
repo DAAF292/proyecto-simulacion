@@ -1,40 +1,32 @@
 """Componente CapacidadMental: dato puro, sin logica.
 
-Dimensiones mentales fijas con rango racial (criatura.docx, seccion 4.2):
-sorteadas al nacer dentro del rango de la especie, fijas de por vida en
-fase 0 -- mismo mecanismo comun que dimensiones fisicas y temperamento
-(informe tecnico, seccion 8.5). Distinta de Temperamento aunque comparta
-plano: no es cuanto quiere o tiende a algo un individuo, es cuan bien lo
-hace si lo intenta.
+Dimensiones mentales fijas con rango racial: sorteadas al nacer dentro
+del rango de la especie, fijas de por vida en fase 0 -- mismo mecanismo
+que dimensiones físicas y temperamento. Distinta de Temperamento aunque
+comparta plano: no es cuánto quiere o tiende a algo un individuo, es
+cuán bien lo hace si lo intenta.
 
-Bloque F1 del plan de migracion a criatura.docx -- declara las cuatro
-dimensiones y consciencia. resiliencia y estabilidad_mental_maxima SI
-tienen consumidor real (resiliencia repone el pool de estabilidad mental;
-estabilidad_mental_maxima divide la perdida bruta de estres antes de
-restarla -- correccion posterior, discutida y confirmada con Diego, mismo
-criterio que vitalidad_maxima/resistencia_maxima en DimensionesFisicas --
-ver sistemas/sistema_capacidad_mental.py). El resto:
-- inteligencia: espera aprendizaje individual, profesion emergente y
-  magia -- nada de eso existe todavia.
-- memoria: espera el hilo individual de nombres propios -- no existe.
-- voluntad: espera necesidades superiores (proposito, trabajo, pasion,
-  conocimiento) -- no existen, la jerarquia del motor hoy no pasa de las
-  necesidades fisicas.
+resiliencia y estabilidad_mental_maxima SÍ tienen consumidor real
+(resiliencia repone el pool de estabilidad mental; estabilidad_mental_maxima
+divide la pérdida bruta de estrés antes de restarla, mismo criterio que
+vitalidad_maxima/resistencia_maxima en DimensionesFisicas -- ver
+sistemas/sistema_capacidad_mental.py). Sin consumidor todavía:
+inteligencia (espera aprendizaje individual, profesión emergente y
+magia), memoria (espera el hilo individual de nombres propios),
+voluntad (espera necesidades superiores -- propósito, trabajo, pasión,
+conocimiento -- que la jerarquía del motor hoy no modela).
 
-consciencia: no es una capacidad mas, es el umbral racial que determina
-que parte del plano mental esta activa -- mismo mecanismo de sorteo que
+consciencia: no es una capacidad más, es el umbral racial que determina
+qué parte del plano mental está activa -- mismo mecanismo de sorteo que
 el resto, con un papel distinto (gating, no magnitud de una habilidad).
-Vive aqui, en el mismo componente y tabla que el resto de 4.2, porque
-comparte mecanismo y no hay ninguna razon de peso para separarla en un
-componente propio todavia; si la logica de gating (Bloque futuro, sin
-numero asignado: apaga fe/necesidades superiores en fauna, reduce
-sociabilidad/dominancia/empatia/lealtad/curiosidad/estabilidad mental a
-una version animal) llega a necesitar consultarla con mucha frecuencia
-desde muchos sistemas distintos, ese es el momento de reconsiderar un
-componente Consciencia propio -- no antes. provisional: gnomo con rango
-alto, lobo con rango bajo o en cero, sin formula ni calibracion
-(criatura.docx, seccion 4.2). Sin ninguna logica de gating implementada
-todavia -- declarada y sorteada, nada la consume.
+Vive aquí en vez de en un componente propio porque comparte mecanismo;
+reconsiderar solo si la lógica de gating llega a necesitar consultarla
+con mucha frecuencia desde muchos sistemas distintos. PROVISIONAL:
+gnomo con rango alto, lobo con rango bajo o en cero, sin fórmula ni
+calibración. Sin ninguna lógica de gating implementada todavía --
+declarada y sorteada, nada la consume.
+
+Historial de diseño y decisiones: docs/historial_componentes.md.
 """
 from dataclasses import dataclass
 

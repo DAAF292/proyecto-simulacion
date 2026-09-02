@@ -2,11 +2,10 @@
 componentes/construccion.py
 
 Componente de datos puros para una construcción física en el mundo --
-refugio individual o almacén de asentamiento. FUNDAMENTO de la pieza
-"refugio construido" (2026-08-30, ver conversación de diseño con Diego y
-CLAUDE.md): antes de esto, "refugio" era solo una coordenada en la
-memoria individual (componentes/memoria_espacial.py, tipo "refugio"), sin
-ningún objeto real en el mundo. Este componente es ese objeto.
+refugio individual o almacén de asentamiento (antes, "refugio" era solo
+una coordenada en la memoria individual, componentes/memoria_espacial.py,
+tipo "refugio", sin ningún objeto real en el mundo -- este componente es
+ese objeto).
 
 Mismo molde que Necromasa (componentes/necromasa.py): entidad física
 inerte con Posicion + este componente, sin Identidad, sin Intencion, sin
@@ -60,17 +59,12 @@ class Construccion:
             alcanzó 1.0, y se queda True aunque progreso decaiga después
             -- NUNCA se pone a False salvo que la propia entidad colapse
             y se elimine (una construcción nueva, si se reconstruye desde
-            cero, empieza en False otra vez). Corrección de diseño
-            (2026-08-30, Diego, tras ver que SistemaAsentamiento filtraba
-            por progreso>=1.0 exacto: "no debería salir del asentamiento
-            a la mínima degradación, una casa dañada sigue perteneciendo
-            a un pueblo"): pertenencia social (¿esto llegó a ser una casa
-            de verdad?) y estado de mantenimiento (¿hace falta trabajo
-            aquí ahora?) son preguntas DISTINTAS que antes compartían el
-            mismo campo (progreso) sin necesidad -- SistemaAsentamiento
-            usa completado_alguna_vez para pertenencia,
-            objetivo_construccion_actual sigue usando progreso para
-            decidir si hay que aportar más material.
+            cero, empieza en False otra vez). Pertenencia social (¿esto
+            llegó a ser una casa de verdad?) y estado de mantenimiento
+            (¿hace falta trabajo aquí ahora?) son preguntas DISTINTAS --
+            SistemaAsentamiento usa completado_alguna_vez para
+            pertenencia, objetivo_construccion_actual sigue usando
+            progreso para decidir si hay que aportar más material.
     """
 
     tipo: str

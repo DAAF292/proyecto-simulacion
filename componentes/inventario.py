@@ -12,18 +12,15 @@ from dataclasses import dataclass, field
 @dataclass
 class Inventario:
     """
-    Materiales que una criatura carga consigo -- FUNDAMENTO de la fase de
-    interacción física (2026-08-30, ver conversación de diseño con Diego
-    y nucleo/inventario.py). Mismo patrón que Necromasa.masas/
-    Celda.recursos: diccionario de cantidades, no un slot por material.
+    Materiales que una criatura carga consigo -- ver nucleo/inventario.py.
+    Mismo patrón que Necromasa.masas/Celda.recursos: diccionario de
+    cantidades, no un slot por material.
 
     Atributos:
         contenidos: {clave_material: cantidad_kg}, cualquier clave del
             catálogo de config/materiales.yaml. Sin límite de VARIEDAD --
-            solo el peso total importa (Diego: "da igual cuantos
-            materiales sean, depende de tu capacidad física de
-            portarlos") -- el límite de PESO se calcula aparte
-            (nucleo/inventario.py:capacidad_carga_kg) a partir de
+            solo el peso total importa. El límite de PESO se calcula
+            aparte (nucleo/inventario.py:capacidad_carga_kg) a partir de
             DimensionesFisicas.peso propio, no se guarda aquí.
 
     Se añade a TODA criatura por igual (mismo criterio que Necesidades/

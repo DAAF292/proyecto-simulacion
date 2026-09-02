@@ -15,52 +15,45 @@ class Accion(Enum):
     DEAMBULAR = "deambular"
     CAZAR = "cazar"   # paso 12: exclusiva de depredadores (lobo)
     HUIR = "huir"     # paso 12.4: exclusiva de quien puede ser presa (gnomo)
-    BEBER = "beber"   # Bloque D1: universal, todas las especies la necesitan
-    ALIVIARSE = "aliviarse"   # Bloque D2: universal, sin recurso en el mapa
-    # BUSCAR_PAREJA (2026-08-20, diseno conjunto de reproduccion -- ver
-    # sistema_decision.py, sistema_movimiento.py, sistema_reproduccion.py):
-    # universal para las cuatro especies, igual que BEBER/ALIVIARSE -- se
-    # activa cuando Necesidades.impulso_reproductivo baja lo bastante Y hay
-    # un conspecifico adulto de sexo opuesto elegible dentro del radio de
-    # percepcion. Mueve a distancia 0 del conspecifico elegido (a
-    # diferencia del sesgo gregario de DEAMBULAR, que se detiene a
-    # distancia 1) -- ver sistema_movimiento.py.
+    BEBER = "beber"   # universal, todas las especies la necesitan
+    ALIVIARSE = "aliviarse"   # universal, sin recurso en el mapa
+    # BUSCAR_PAREJA: universal para las cuatro especies, igual que
+    # BEBER/ALIVIARSE -- se activa cuando Necesidades.impulso_reproductivo
+    # baja lo bastante Y hay un conspecifico adulto de sexo opuesto
+    # elegible dentro del radio de percepcion. Mueve a distancia 0 del
+    # conspecifico elegido (a diferencia del sesgo gregario de DEAMBULAR,
+    # que se detiene a distancia 1) -- ver sistema_movimiento.py.
     BUSCAR_PAREJA = "buscar_pareja"
-    # CONSTRUIR (2026-08-30, refugio construido -- ver
-    # componentes/construccion.py y nucleo/construccion.py): exclusiva de
-    # quien supera decision.umbral_consciencia_agencia (gnomo hoy), mismo
-    # umbral que ya exime del sesgo de territorio y gatea el uso real de
-    # Inventario -- construir es agencia consciente, no instinto animal
-    # (conversación de diseño: "el hecho de poder construir te lo da tu
-    # consciencia"). Se resuelve en dos sistemas, mismo patrón que
+    # CONSTRUIR: exclusiva de quien supera decision.umbral_consciencia_agencia
+    # (gnomo hoy), mismo umbral que ya exime del sesgo de territorio y
+    # gatea el uso real de Inventario -- construir es agencia consciente,
+    # no instinto animal. Se resuelve en dos sistemas, mismo patrón que
     # COMER/BEBER: sistema_movimiento.py decide hacia dónde ir (crea la
     # construcción propia si no existe, navega hacia ella),
     # sistema_recursos.py transfiere materiales del Inventario una vez
     # allí.
     CONSTRUIR = "construir"
-    # RECOLECTAR (2026-08-30, Círculo C -- ver nucleo/construccion.py):
-    # convierte tipo_sustrato de la celda actual (piedra/arcilla/tierra,
-    # siempre presente, no depletable) en material de Inventario. Misma
-    # compuerta de consciencia que CONSTRUIR. Sin desplazamiento propio
-    # (se resuelve donde ya se está, como ALIVIARSE) -- el sustrato está
-    # bajo los pies de cualquiera, no hay que buscarlo.
+    # RECOLECTAR: convierte tipo_sustrato de la celda actual
+    # (piedra/arcilla/tierra, siempre presente, no depletable) en
+    # material de Inventario. Misma compuerta de consciencia que
+    # CONSTRUIR. Sin desplazamiento propio (se resuelve donde ya se
+    # está, como ALIVIARSE) -- el sustrato está bajo los pies de
+    # cualquiera, no hay que buscarlo.
     RECOLECTAR = "recolectar"
-    # ENCENDER_FUEGO (2026-08-31, ver componentes/agarre.py y
-    # componentes/fogata.py -- "usar dos rocas para hacer un fuego").
-    # Misma compuerta de consciencia que CONSTRUIR/RECOLECTAR. Utilidad =
-    # 1.0 - Necesidades.confort_termico, mismo patron que el resto de
-    # necesidades fisicas -- no una utilidad base fija como CONSTRUIR/
-    # RECOLECTAR, porque esto SI responde a una necesidad real (tener
-    # frio), no a un objetivo administrativo. Gateada a 0.0 si faltan
-    # piedras en Agarre, no hay combustible en la celda actual, o ya hay
-    # una Fogata ahi (nada que encender). Sin desplazamiento (como
-    # RECOLECTAR/ALIVIARSE) -- se resuelve donde ya se este.
+    # ENCENDER_FUEGO: misma compuerta de consciencia que
+    # CONSTRUIR/RECOLECTAR. Utilidad = 1.0 - Necesidades.confort_termico,
+    # mismo patrón que el resto de necesidades físicas -- no una utilidad
+    # base fija como CONSTRUIR/RECOLECTAR, porque esto SÍ responde a una
+    # necesidad real (tener frío). Gateada a 0.0 si faltan piedras en
+    # Agarre, no hay combustible en la celda actual, o ya hay una Fogata
+    # ahí. Sin desplazamiento (como RECOLECTAR/ALIVIARSE) -- se resuelve
+    # donde ya se esté.
     ENCENDER_FUEGO = "encender_fuego"
-    # Bloque F3 (crisis mental, discutida y confirmada con Diego): anulan
-    # la Utility AI normal mientras PoolMental.estabilidad este en crisis
-    # -- ver sistema_decision.py para el disparador y sistema_movimiento.py
-    # para la resolucion de cada una. Tipologia emergente de valentia/
-    # agresividad del individuo, no escrita de antemano por caso concreto.
+    # Crisis mental: anulan la Utility AI normal mientras
+    # PoolMental.estabilidad esté en crisis -- ver sistema_decision.py
+    # para el disparador y sistema_movimiento.py para la resolución de
+    # cada una. Tipología emergente de valentía/agresividad del
+    # individuo, no escrita de antemano por caso concreto.
     HUIDA_ERRATICA = "huida_erratica"     # valentia baja: huye de cualquiera cercano, sin amenaza real
     CRISIS_VIOLENTA = "crisis_violenta"   # agresividad alta: se acerca a cualquiera cercano -- sin mecanica de dano todavia, deliberado
     CATATONIA = "catatonia"               # ni lo uno ni lo otro: se queda quieto, sin actuar

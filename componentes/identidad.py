@@ -1,38 +1,29 @@
 """Componente Identidad: dato puro, sin logica.
 
-especie es Enum (conjunto cerrado y pequeno, a diferencia del tipo de
-evento del bus, que es texto libre porque su catalogo esta abierto).
+especie es Enum (conjunto cerrado y pequeño, a diferencia del tipo de
+evento del bus, que es texto libre porque su catálogo está abierto).
 Este componente no se persiste en componentes_estado -- su reflejo en
 SQLite vive en la tabla `entidades` (columnas especie, nombre, viva,
 tick_nacimiento).
 
-tick_nacimiento (fundamento de "6. Ciclo vital", informe tecnico --
-primer paso hacia 6.1 esperanza de vida/envejecimiento y 6.3
-reproduccion, secuencia acordada con Diego el 2026-08-19): el tick exacto
-en que la entidad fue creada. Deliberadamente NO se guarda una "edad" que
-se incremente cada tick -- mismo principio que ya aplica nucleo/reloj.py
-a si mismo ("dia, estacion y anio son unidades derivadas, no contadores
-propios"): la edad se deriva siempre bajo demanda como
-tick_actual - tick_nacimiento (en ticks; dividir por Reloj.TICKS_POR_DIA
-para dias), nunca se persiste como tal, asi que no hay ningun estado
-redundante que pueda desincronizarse del tick real.
-
-La poblacion inicial (creada en main.py antes de que corra ningun tick)
-nace con tick_nacimiento=0 -- simplificacion de modelado explicita, no un
-hecho narrativo: no "nacieron" en el tick 0, simplemente no hay otro
+tick_nacimiento: el tick exacto en que la entidad fue creada.
+Deliberadamente NO se guarda una "edad" que se incremente cada tick --
+mismo principio que nucleo/reloj.py aplica a sí mismo (día/estación/año
+son unidades derivadas, no contadores propios): la edad se deriva
+siempre bajo demanda como tick_actual - tick_nacimiento, nunca se
+persiste como tal, así que no hay ningún estado redundante que pueda
+desincronizarse del tick real. La población inicial nace con
+tick_nacimiento=0 -- simplificación de modelado explícita, no hay otro
 punto de referencia razonable para individuos sin progenitores.
 
-id_madre / id_padre (6.3 Reproduccion, ultima pieza de la secuencia --
-parentesco): saldan el PENDIENTE que el propio informe tecnico se
-autoseñalo ("ningun individuo guarda quienes son sus progenitores... sin
-parentesco registrado, ninguna cronica futura puede hablar de
-generaciones reales o linajes"). None para la poblacion inicial (sin
-progenitores reales) y para cualquier entidad creada antes de este
-bloque -- no None significa "desconocido", significa "no tiene, es de la
-generacion cero". Puestos aqui, no en un componente aparte, por el mismo
-motivo que tick_nacimiento: son dato de nacimiento inmutable, y este
-componente ya es donde vive ese tipo de dato (persistido en `entidades`,
-no en componentes_estado).
+id_madre / id_padre: None para la población inicial (sin progenitores
+reales) y para cualquier entidad creada antes de este campo -- no None
+significa "desconocido", significa "no tiene, es de la generación
+cero". Puestos aquí, no en un componente aparte: son dato de nacimiento
+inmutable, igual que tick_nacimiento (persistido en `entidades`, no en
+componentes_estado).
+
+Historial de diseño y decisiones: docs/historial_componentes.md.
 """
 from dataclasses import dataclass
 from enum import Enum
@@ -41,15 +32,13 @@ from enum import Enum
 class Especie(Enum):
     GNOMO = "gnomo"
     LOBO = "lobo"
-    # CONEJO/ARDILLA (introduccion de fauna adicional, 2026-08-20):
-    # motivacion doble -- mas presas perceptibles para lobo (ver
-    # sistema_depredacion.py, "LIMITE CONOCIDO": un lobo percibe presa en
-    # menos del 10% de los ticks con solo gnomo como objetivo) y primer
-    # caso real de mas de dos especies, lo que disparo la fusion de
-    # crear_gnomo/crear_lobo en una sola fabrica (ver nucleo/entidad.py:
-    # crear_criatura). Ninguna de las dos es consciente -- mismo patron
+    # CONEJO/ARDILLA: presas adicionales para lobo (percepción de presa
+    # era escasa con solo gnomo como objetivo, ver sistema_depredacion.py)
+    # y primer caso real de más de dos especies, lo que llevó a fusionar
+    # crear_gnomo/crear_lobo en una sola fábrica (nucleo/entidad.py:
+    # crear_criatura). Ninguna de las dos es consciente -- mismo patrón
     # de fauna que lobo (Temperamento/CapacidadMental completos pero con
-    # rango racial de consciencia bajo/cero), no una tercera categoria.
+    # rango racial de consciencia bajo/cero), no una tercera categoría.
     CONEJO = "conejo"
     ARDILLA = "ardilla"
 

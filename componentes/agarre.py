@@ -1,29 +1,28 @@
 """Componente Agarre: dato puro, sin logica.
 
-FUNDAMENTO (2026-08-31, conversacion de diseno con Diego): primera pieza
-de "capacidad de sostener/usar objetos" como cimiento de sociedad -- un
-palo o una roca para defenderse, despues fuego con dos piedras, despues
-herramientas fabricadas (hachas, utensilios). Este componente es solo el
-cimiento: la capacidad de tener objetos discretos sujetos, nada mas.
+Cimiento de "capacidad de sostener/usar objetos" -- un palo o una roca
+para defenderse, después fuego con dos piedras, después herramientas
+fabricadas. Este componente es solo eso: la capacidad de tener objetos
+discretos sujetos, nada más.
 
-Deliberadamente NO es "Empuñadura" ni nada centrado en manos -- primer
-nombre propuesto, rechazado por Diego con razon: "si creamos una raza que
-tenga 4 manos que, o una con dos manos y una cola prensil... es parte de
-la criatura, una capacidad que tiene como tiene la de andar o comer".
-Cuantos objetos puede sujetar cada individuo NO vive aqui -- vive en
+Deliberadamente NO está centrado en manos -- una ardilla sujeta con
+patas, un lobo con la boca; es parte de la criatura, una capacidad que
+tiene como tiene la de andar o comer. Cuántos objetos puede sujetar
+cada individuo NO vive aquí -- vive en
 rangos_raciales[especie]['puntos_agarre'] (config/poblacion.yaml), un
-hecho FIJO por especie (mano/boca/pata/lo que sea), no un rango sorteado
-por individuo como fuerza o agilidad -- mismo criterio que fraccion_
-madurez/factor_base_concepcion, que tampoco varian individuo a individuo.
-Se consulta por especie, no se duplica aqui.
+hecho FIJO por especie, no un rango sorteado por individuo como fuerza
+o agilidad. Se consulta por especie, no se duplica aquí.
 
-Objetos discretos, NO masa continua (a diferencia de Inventario.contenidos,
-que es kg a granel para construccion): sujetar una piedra o un palo es un
-suceso simbolico y gratuito (recoger algo que ya esta en el suelo), no
-compite con la economia de materiales de construccion ni con la
-capacidad de carga -- ver sistemas/sistema_recursos.py:_resolver_recolectar
-para el mecanismo de llenado. Nada quita un objeto todavia (sin accion de
-soltar/gastar) -- limite conocido, no resuelto en este circulo.
+Objetos discretos, NO masa continua (a diferencia de
+Inventario.contenidos, que es kg a granel para construcción): sujetar
+una piedra o un palo es un suceso simbólico y gratuito (recoger algo
+que ya está en el suelo), no compite con la economía de materiales de
+construcción ni con la capacidad de carga -- ver
+sistemas/sistema_recursos.py:_resolver_recolectar para el mecanismo de
+llenado. Nada quita un objeto todavía (sin acción de soltar/gastar) --
+límite conocido, no resuelto.
+
+Historial de diseño y decisiones: docs/historial_componentes.md.
 """
 from __future__ import annotations
 
