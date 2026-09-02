@@ -45,11 +45,30 @@ from nucleo.materiales import elegir_sustrato_celda, generar_vetas_minerales
 
 
 class ZonaBioma:
-    def __init__(self, ancho: int, alto: int, grid: list, clima_actual: Clima = Clima.DESPEJADO):
+    def __init__(
+        self,
+        ancho: int,
+        alto: int,
+        grid: list,
+        clima_actual: Clima = Clima.DESPEJADO,
+        viento_dx: int = 0,
+        viento_dy: int = 0,
+    ):
         self.ancho = ancho
         self.alto = alto
         self.grid = grid  # grid[x][y] -> Celda
         self.clima_actual = clima_actual
+        self.viento_dx = viento_dx
+        self.viento_dy = viento_dy
+        """Viento dominante fijo de la zona, sorteado una vez en la
+        generación del mundo (nucleo/orografia.py:
+        sortear_viento_dominante) y conservado como atributo de la zona --
+        consumido por SistemaFlora._propagar_viento para el vector de
+        propagación por viento (2026-09-02, ver docs/superpowers/specs/
+        2026-09-01-propagacion-flora-design.md). Uno de los cuatro rumbos
+        cardinales; (0, 0) solo como default para zonas sin viento (cuevas).
+        Determinista de la semilla, no se persiste (mismo criterio que
+        elevacion/lluvia/temperatura)."""
         """Estado de tiempo del dia actual (informe tecnico 7.2,
         sistemas/sistema_clima.py) -- mutable, sorteado a cadencia de
         dia. Vive en la zona (no en el mundo ni en el territorio) porque
@@ -314,4 +333,7 @@ def generar_zona_bioma(
                 fertilidad=fertilidad_por_celda[(x, y)],
             )
 
-    return ZonaBioma(ancho=ancho, alto=alto, grid=grid)
+    return ZonaBioma(
+        ancho=ancho, alto=alto, grid=grid,
+        viento_dx=viento_dx, viento_dy=viento_dy,
+    )

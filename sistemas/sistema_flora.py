@@ -317,6 +317,73 @@ class SistemaFlora:
                 posiciones_planta.add((nx, ny))
                 break
 
+    def _propagar_viento(
+        self,
+        gestor: GestorEntidades,
+        zona: Any,
+        origen_x: int,
+        origen_y: int,
+        especie_nombre: str,
+        especie_cfg: dict[str, Any],
+        posiciones_planta: set[tuple[int, int]],
+        zona_idx: int = 0,
+    ) -> None:
+        """Vector "viento" (2026-09-02, pieza 4/5 de "tipos de
+        propagación" -- ver docs/superpowers/specs/
+        2026-09-01-propagacion-flora-design.md): una planta madura con
+        tipo_propagacion: viento dispersa una semilla en la dirección del
+        viento dominante de su zona (zona.viento_dx/viento_dy, sorteado
+        una vez en la generación del mundo), a UNA distancia sorteada
+        dentro del rango alcance_viento_celdas declarado por la especie.
+
+        A diferencia de caída (que prueba varios vecinos contiguos), el
+        viento calcula UNA única celda candidata y no reintenta si esa
+        semilla no prende o cae fuera del grid -- un intento por planta por
+        día, mismo criterio que el resto del sistema de propagación. La
+        validación física del destino delega por completo en
+        nucleo.flora.intentar_colonizar_celda; el filtro de bioma se
+        mantiene aquí como preselección barata antes de calcular
+        idoneidad, mismo patrón que _intentar_propagacion.
+        """
+        viento_dx = getattr(zona, "viento_dx", 0)
+        viento_dy = getattr(zona, "viento_dy", 0)
+        if viento_dx == 0 and viento_dy == 0:
+            # Sin dirección de viento real (por ejemplo cuevas, que no
+            # tienen clima propio) no hay desplazamiento que dispersar.
+            return
+
+        alcance = especie_cfg.get("alcance_viento_celdas", [1, 3])
+        distancia = self.rng.randint(int(alcance[0]), int(alcance[1]))
+
+        nx = origen_x + viento_dx * distancia
+        ny = origen_y + viento_dy * distancia
+        if not (0 <= nx < zona.ancho and 0 <= ny < zona.alto):
+            # Candidata fuera del grid -- sin reintento en otra dirección.
+            return
+        if (nx, ny) in posiciones_planta:
+            return
+
+        biomas_compatibles = [
+            TipoTerreno(b.lower())
+            for b in especie_cfg.get("biomas", [])
+            if b.lower() in TipoTerreno._value2member_map_
+        ]
+        celda_dest = zona.obtener_celda(nx, ny)
+        if celda_dest.tipo_terreno not in biomas_compatibles:
+            return
+
+        umbral_minimo = float(self.cfg_flora.get("umbral_minimo_idoneidad_colonizacion", 0.2))
+        capacidad_retencion = float(
+            self.catalogo_materiales.get(celda_dest.tipo_sustrato, {}).get(
+                "capacidad_retencion", 0.0
+            )
+        )
+        if intentar_colonizar_celda(
+            gestor, celda_dest, capacidad_retencion, especie_nombre,
+            especie_cfg, umbral_minimo, nx, ny, zona_idx,
+        ):
+            posiciones_planta.add((nx, ny))
+
     def _propagar_planta(
         self,
         gestor: GestorEntidades,
@@ -336,9 +403,9 @@ class SistemaFlora:
         los planes 4 (viento) y 5 (zoocoria) añaden sus propias ramas
         aquí, sin tocar el resto de este método.
 
-        viento y zoocoria no hacen nada todavía en este plan (3/5) -- ver
-        Global Constraints del plan: regresión temporal esperada,
-        corregida por los planes 4 y 5 del mismo círculo."""
+        viento ya está conectado (plan 4/5, _propagar_viento); solo
+        zoocoria sigue como no-op -- su propagación no está gobernada
+        por el ciclo diario de la planta (plan 5/5, ver spec sección 5)."""
         tipo_prop = especie_cfg.get("tipo_propagacion", "caida")
         if tipo_prop == "caida":
             self._intentar_propagacion(
@@ -346,6 +413,9 @@ class SistemaFlora:
                 posiciones_planta, zona_idx,
             )
         elif tipo_prop == "viento":
-            pass  # plan 4/5: _propagar_viento
+            self._propagar_viento(
+                gestor, zona, origen_x, origen_y, especie_nombre, especie_cfg,
+                posiciones_planta, zona_idx,
+            )
         elif tipo_prop == "zoocoria":
             pass  # plan 5/5: no se dispara desde aquí, ver spec sección 5
