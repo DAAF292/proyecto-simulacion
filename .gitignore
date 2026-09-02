@@ -6,3 +6,5 @@ datos/*.db
 .aider*
 .ai-pipeline/proxy.log
 .ai-pipeline/run-plan.log
+.ai-pipeline/watch.log
+.ai-pipeline/trayectorias/
