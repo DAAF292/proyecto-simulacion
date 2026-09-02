@@ -13,13 +13,17 @@ agent:
     1. Analyze the codebase by finding and reading relevant files
     2. Edit the source code directly to resolve the issue -- this project has a real, passing test suite already, so there is no need for a throwaway reproduction script; the task gives you the exact pytest command that serves as your reproduction and verification.
     3. If the task asks for new or updated tests, write them now, in the style of the existing tests in the file you're editing.
-    4. Run the exact verification commands given in the task to confirm your fix works.
+    4. While developing, run only the specific test file(s) you're working on (e.g. `pytest tests/test_foo.py -v`) -- not the whole suite. Run the FULL suite exactly once, right before you're done, to confirm no regressions.
     5. Test edge cases to ensure your fix is robust.
     6. Submit your changes and finish your work by issuing the following command: `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`.
        Do not combine it with any other command. <important>After this command, you cannot continue working on this task.</important>
 
     <important>
     This codebase's Python files are full of multi-line triple-quoted docstrings. Don't write standalone .py scripts to inspect, patch, or reproduce behavior -- a throwaway script with its own triple-quoted strings is a common source of syntax errors here. Edit directly: `sed -i` for small changes, a `cat <<'EOF' > file` heredoc for a whole function or file.
+    </important>
+
+    <important>
+    Every command's output stays in your context for the rest of the run. Avoid re-running the same command more than once for the same purpose (e.g. running the full test suite repeatedly as a sanity check, or re-reading a file you've already seen) -- each repeat costs real money and doesn't teach you anything new.
     </important>
 
     ## Command Execution Rules
@@ -113,8 +117,16 @@ environment:
     PIP_PROGRESS_BAR: 'off'
     TQDM_DISABLE: '1'
 model:
+  # Umbral bajado de 10000/5000+5000 a 4000/1500+1500 (2026-09-02, ver
+  # guia-tareas.md "Coste real"): en un bucle agéntico, TODO lo que
+  # quede en una observación se resube (a precio de caché, no gratis)
+  # en cada paso siguiente -- el 96.8% del coste real medido en la
+  # pieza de zoocoria era contexto repetido. Una salida verbosa (pytest
+  # -v completo, un `cat` largo) que antes cabía entera por debajo de
+  # 10000 caracteres ahora se recorta, reduciendo directamente cuánto
+  # se re-factura en el resto de la ejecución.
   observation_template: |
-    {%- if output.output | length < 10000 -%}
+    {%- if output.output | length < 4000 -%}
     {
       "returncode": {{ output.returncode }},
       "output": {{ output.output | tojson }}
@@ -123,9 +135,9 @@ model:
     {%- else -%}
     {
       "returncode": {{ output.returncode }},
-      "output_head": {{ output.output[:5000] | tojson }},
-      "output_tail": {{ output.output[-5000:] | tojson }},
-      "elided_chars": {{ output.output | length - 10000 }},
+      "output_head": {{ output.output[:1500] | tojson }},
+      "output_tail": {{ output.output[-1500:] | tojson }},
+      "elided_chars": {{ output.output | length - 3000 }},
       "warning": "Output too long."
       {%- if output.exception_info %}, "exception_info": {{ output.exception_info | tojson }}{% endif %}
     }

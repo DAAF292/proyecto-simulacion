@@ -248,3 +248,28 @@ independiente como sí la tiene zoocoria).
   `docs/superpowers/plans/pendientes/`) y moverlo/copiarlo ahí solo
   cuando esté listo de verdad, o invocar `run-plan.sh <ruta>`
   directamente sin depender del centinela.
+- **Miga de pan en los blueprints -- vale más de lo que parecía antes
+  del hallazgo de coste real** (2026-09-02): dar la ubicación
+  aproximada de una función ("cerca del final de `nucleo/flora.py`,
+  justo debajo de `idoneidad_colonizacion`") en vez de dejar que el
+  modelo la busque con `grep`/`nl -ba | sed -n` no solo ahorra pasos --
+  cada paso de exploración evitado evita también su cuota de coste de
+  caché en TODOS los pasos siguientes de la ejecución (ver "Coste
+  real" más arriba: el 96.8% del gasto es contexto acumulado que se
+  resube). Aplicarlo por defecto en cualquier blueprint futuro.
+- **Ajustes de coste implementados el 2026-09-02, tras el hallazgo de
+  caché sin tarifa**:
+  - `mini-agente-obrero.yaml`: umbral de elisión de salidas largas
+    bajado de 10000/5000+5000 a 4000/1500+1500 -- una salida verbosa
+    (un `pytest -v` completo, un `cat` largo) que antes se quedaba
+    entera en el contexto ahora se recorta, reduciendo directamente
+    cuánto se refactura en el resto de la ejecución.
+  - `mini-agente-obrero.yaml`: instrucción explícita para correr solo
+    los ficheros de test concretos mientras se desarrolla, la suite
+    completa una única vez al terminar (antes se vio correr la suite
+    completa varias veces como autoverificación intermedia, cada
+    corrida quedándose en el contexto para siempre) + aviso genérico
+    contra repetir comandos ya ejecutados sin necesidad.
+  - `run-plan.sh`: límite de coste por intento (`-l`) bajado de 0.60 a
+    0.30 -- la pieza más cara medida hasta ahora costó $0.127 real;
+    0.30 deja ~2.4x de margen en vez de ~4.7x.
