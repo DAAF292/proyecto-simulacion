@@ -161,10 +161,24 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     mkdir -p "$TRAYECTORIA_DIR"
     TRAYECTORIA_FILE="$TRAYECTORIA_DIR/${PLAN_NAME}-intento${RETRY_COUNT}.json"
 
+    # -c .ai-pipeline/mini-agente-obrero.yaml (2026-09-02, ver
+    # guia-tareas.md): config propia y AUTOCONTENIDA (copia completa de
+    # la mini.yaml de fábrica, no un fragmento que dependa de mergear
+    # con la ruta absoluta del paquete instalado -- más portable, no se
+    # rompe si mini-swe-agent se reinstala en otro sitio). Único cambio
+    # real: agent.instance_template sustituye el paso 2 de fábrica
+    # ("Create a script to reproduce the issue") -- causa raíz
+    # confirmada del único fallo de blueprint visto hasta ahora (un
+    # script de reproducción Python con una comilla triple mal cerrada,
+    # atascado sin converger hasta agotar los 900s) -- por editar
+    # directo y verificar con la suite de tests real del proyecto, más
+    # un aviso explícito contra escribir scripts .py de parche/
+    # reproducción en un código lleno de docstrings de comilla triple.
     set +e
     timeout 900 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy \
         LITELLM_MODEL_REGISTRY_PATH=.ai-pipeline/litellm_model_registry.json \
-        mini -m openai/agente-obrero -y -l 0.60 --exit-immediately \
+        mini -m openai/agente-obrero -c .ai-pipeline/mini-agente-obrero.yaml \
+             -y -l 0.60 --exit-immediately \
              -o "$TRAYECTORIA_FILE" \
              -t "$TAREA"
     AGENTE_EXIT_CODE=$?

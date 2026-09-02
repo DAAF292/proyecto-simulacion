@@ -10,7 +10,8 @@ pipeline" para el contexto completo de cómo se llegó hasta aquí.
 
 ## Setup operativo (mecánico, no cambia por tarea)
 
-- Modo `local` (sin Docker): `mini -m openai/agente-obrero -y -l <coste> --exit-immediately -o <trayectoria.json> -t "<tarea>"`.
+- Modo `local` (sin Docker): `mini -m openai/agente-obrero -c .ai-pipeline/mini-agente-obrero.yaml -y -l <coste> --exit-immediately -o <trayectoria.json> -t "<tarea>"`.
+- `-c .ai-pipeline/mini-agente-obrero.yaml` (2026-09-02): config propia, copia AUTOCONTENIDA de la `mini.yaml` de fábrica (no depende de mergear con la ruta absoluta del paquete instalado -- portable). Único cambio real: `agent.instance_template` sustituye el paso de fábrica "Create a script to reproduce the issue" por "edita directo, verifica con la suite de tests real del proyecto" + un aviso explícito contra escribir scripts .py de parche en un código lleno de docstrings de comilla triple -- causa raíz confirmada del único fallo real visto en la prueba de blueprint (ver "Coste real" más abajo).
 - `MSWEA_CONFIGURED=true` en `~/.config/mini-swe-agent/.env` -- evita el asistente interactivo de primer uso.
 - `LITELLM_MODEL_REGISTRY_PATH=.ai-pipeline/litellm_model_registry.json` -- coste real visible (antes de esto, `MSWEA_COST_TRACKING=ignore_errors` dejaba todo en "$0.00", sin poder distinguir una tarea barata de una cara).
 - Timeout 900s como mínimo -- 480s bastaba para planes con código completo, pero cualquier tarea que exija exploración real del repo (spec-only, o el propio ejemplo de esta guía) puede necesitar más.
