@@ -1,7 +1,16 @@
 # Armas fabricadas — primer círculo del arco herramientas/utensilios/armas
 
 Fecha: 2026-09-01
-Estado: aprobado por Diego (2026-09-01), pendiente de implementación
+Estado: **SUPERSEDIDA (2026-09-03)** — ver
+`docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md`.
+Diego encontró problemas de fondo en este diseño (parche de
+`puntos_agarre`, modelo de `Inventario`/`Agarre` sin causalidad real,
+fabricar sin acceso a lo ya portado) que exigían rediseñar `Agarre`/
+`Inventario` desde su semántica, no ajustar esta spec. La rama
+`feature/2026-09-01-armas-fabricadas` (PR #1) que implementaba esto se
+descarta por completo. Conservada aquí sin cambios como registro
+histórico de qué se diseñó primero y por qué se descartó — no
+implementar nada de lo que sigue.
 
 ## Contexto y alcance
 
