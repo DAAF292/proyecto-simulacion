@@ -54,18 +54,11 @@ CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion", "deshidratacion", "ahogam
 def cargar_configuracion(ruta_config: Path) -> dict[str, Any]:
     """Carga y fusiona todos los ficheros config/*.yaml en un único diccionario.
 
-    DIVISIÓN EN MULTIPLES FICHEROS (2026-08-30, a petición de Diego --
-    "no sé si será mejor enfocar eso en un conjunto múltiple de yamls
-    separados por categorías que no una mega construcción"): hasta hoy
-    existía un único config/constantes.yaml de 814 líneas con 27
-    secciones. Se dividió por categoría (config/mundo.yaml,
-    config/hidrologia.yaml, config/materiales.yaml, etc. -- ver cada
-    fichero para su alcance) porque el coste de dividir era prácticamente
-    cero: TODO consumidor del motor (27+ sitios en sistemas/ y nucleo/)
-    lee su sección como config["seccion"] o config.get("seccion", ...)
-    contra el diccionario YA FUSIONADO, sin saber ni importarle de qué
-    fichero salió -- confirmado por grep antes de dividir. Cero cambios
-    en sistemas/*.py ni nucleo/*.py.
+    Dividido por categoría (config/mundo.yaml, config/hidrologia.yaml,
+    config/materiales.yaml, etc. -- ver cada fichero para su alcance):
+    TODO consumidor del motor lee su sección como config["seccion"] o
+    config.get("seccion", ...) contra el diccionario YA FUSIONADO, sin
+    saber ni importarle de qué fichero salió.
 
     Cada fichero .yaml de ruta_config aporta un subconjunto DISJUNTO de
     claves de nivel superior (por diseño: cada sección vive en un único
@@ -98,11 +91,11 @@ def instanciar_sistemas(
 ) -> dict[str, Any]:
     """Instancia todos los sistemas del motor inyectando configuración y generador determinista.
 
-    rng_reproduccion (2026-09-02, ver CLAUDE.md): generador PROPIO e
-    independiente de rng_juego para SistemaReproduccion -- mismo patrón
-    que rng_mapa ya usa para separar la generación de terreno del resto
-    del motor. Evita que cambiar cuántas tiradas de random() consume la
-    reproducción desplace la secuencia que consumen los demás sistemas.
+    rng_reproduccion: generador PROPIO e independiente de rng_juego para
+    SistemaReproduccion -- mismo patrón que rng_mapa ya usa para separar
+    la generación de terreno del resto del motor. Evita que cambiar
+    cuántas tiradas de random() consume la reproducción desplace la
+    secuencia que consumen los demás sistemas.
     """
     return {
         "decision": SistemaDecision(config, rng_juego),
@@ -139,25 +132,22 @@ def sembrar_poblacion_inicial(
     for y in range(zona.alto):
         for x in range(zona.ancho):
             celda = zona.obtener_celda(x, y)
-            # (2026-08-29) Ley fisica, mismo guard que la siembra de flora
-            # (2026-08-28): la poblacion fundadora no nace sumergida. Sin
-            # este filtro, un fundador que cayera en una celda con
-            # profundidad mayor que su altura arrancaba la partida drenando
-            # oxigeno -- una loteria de colocacion fijada por la semilla,
-            # no una consecuencia de decisiones en juego.
+            # Ley fisica, mismo guard que la siembra de flora: la
+            # poblacion fundadora no nace sumergida. Sin este filtro, un
+            # fundador que cayera en una celda con profundidad mayor que
+            # su altura arrancaba la partida drenando oxigeno -- una
+            # loteria de colocacion fijada por la semilla, no una
+            # consecuencia de decisiones en juego.
             if celda.tipo_terreno == TipoTerreno.BOSQUE and not celda.tiene_agua:
                 celdas_bosque.append((x, y))
             elif celda.tipo_terreno == TipoTerreno.PRADERA and not celda.tiene_agua:
                 celdas_pradera.append((x, y))
 
     # Respaldo de seguridad ante semillas con escasa generación de bosque.
-    # CONFIRMADO CON DIEGO (2026-08-23, ya no "provisional, no confirmado"
-    # como decía el informe técnico sección 20 hasta hoy): consultado
-    # explícitamente sobre la tensión con el Principio 5 (leyes neutras,
-    # nunca teleológicas) -- ¿debería una colonización fallar en vez de
-    # reasignarse a Pradera en silencio? -- Diego confirmó que este
-    # fallback le parece correcto tal cual. Pendiente trasladar esta
-    # confirmación al informe técnico cuando se actualice esa sección.
+    # Confirmado con Diego (tensión con el Principio 5, leyes neutras,
+    # nunca teleológicas -- ¿debería una colonización fallar en vez de
+    # reasignarse a Pradera en silencio?): este fallback es correcto tal
+    # cual.
     candidatas_bosque = celdas_bosque if celdas_bosque else celdas_pradera
 
     especies_spawn = [
@@ -171,7 +161,7 @@ def sembrar_poblacion_inicial(
         ),
     ]
 
-    # Edad inicial variable de la población fundadora (2026-08-21, ver
+    # Edad inicial variable de la población fundadora (ver
     # nucleo/entidad.py:_sortear_edad_inicial_ticks): solo se aplica aquí,
     # a la siembra en tick=0 -- nunca a nacimientos posteriores.
     techo_fraccion_edad_inicial = float(
@@ -193,16 +183,13 @@ def sembrar_poblacion_inicial(
                 tick_actual=0,
                 techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
             )
-            # Registro en la tabla histórica 'entidades' (2026-08-23): antes
-            # solo se registraban ahí los nacimientos en partida (evento
-            # Nacimiento, ver sistema_reproduccion.py) -- la población
-            # fundadora nunca entraba en esa tabla, así que el INNER JOIN
-            # de Persistencia.cargar_snapshot() con 'entidades' descartaba
-            # en silencio a todo fundador que siguiera vivo al guardar
-            # (comprobado con un smoke test real: de 15 criaturas vivas
-            # tras 600 ticks, solo las 5 nacidas en partida sobrevivían al
-            # roundtrip guardar/cargar). id_madre/id_padre quedan en None
-            # -- un fundador no tiene progenitores que persistir.
+            # Registro en la tabla histórica 'entidades': la población
+            # fundadora necesita entrar aquí igual que los nacimientos en
+            # partida (evento Nacimiento, ver sistema_reproduccion.py) --
+            # el INNER JOIN de Persistencia.cargar_snapshot() con
+            # 'entidades' descarta en silencio a todo fundador que no
+            # tenga fila ahí. id_madre/id_padre quedan en None -- un
+            # fundador no tiene progenitores que persistir.
             identidad_fundador = gestor.obtener_componente(eid, Identidad)
             persistencia.registrar_entidad_nueva(
                 eid,
@@ -222,31 +209,14 @@ def sembrar_flora_inicial(
     config: dict[str, Any],
     rng_juego: random.Random,
 ) -> None:
-    # (2026-08-27) Al fusionar con origin/master aparecio una SEGUNDA
-    # implementacion de esta misma funcion (sembrar_flora_inicial(gestor,
-    # mundo), sin config ni rng, sembrando el 100% de las celdas
-    # tiene_recurso=True) escrita por otra sesion que detecto el mismo
-    # hueco de forma independiente -- su rama partia de un commit anterior
-    # a 2153b20, donde este arreglo con muestreo fraccional configurable
-    # todavia no existia, asi que desde su punto de partida el hueco
-    # seguia sin resolver. Se conserva esta version (la de aqui) porque es
-    # la mas completa: respeta fraccion_siembra_inicial (global y por
-    # especie) en vez de sembrar el 100%, que es precisamente la
-    # calibracion -- PROVISIONAL, ver docstring mas abajo -- que ya se
-    # habia decidido para dar a la propagacion varios frentes en vez de un
-    # mundo ya lleno desde el tick 0. La version descartada no se pierde:
-    # sigue en el historial de origin/master y en la rama de respaldo
-    # local si hiciera falta revisarla.
     """
-    Siembra las entidades Planta fundadoras del mundo (2026-08-23,
-    diagnóstico de inanición del mismo día): sin esto, sistema_flora.py
-    nunca tiene ninguna Planta que procesar en toda la partida --
-    crear_planta solo se invocaba antes desde sistema_flora.py:
-    _intentar_propagacion, que a su vez necesita una Planta YA existente
-    para dispararse (2%-6%/día). Con cero Plantas al arrancar, esa
-    condición nunca se cumple: es un bootstrap circular imposible,
-    confirmado empíricamente corriendo el motor 3000 ticks y comprobando
-    que gestor.entidades_con(Planta) se mantiene en cero todo el tiempo.
+    Siembra las entidades Planta fundadoras del mundo: sin esto,
+    sistema_flora.py nunca tiene ninguna Planta que procesar en toda la
+    partida -- crear_planta solo se invocaba antes desde
+    sistema_flora.py:_intentar_propagacion, que a su vez necesita una
+    Planta YA existente para dispararse (2%-6%/día). Con cero Plantas al
+    arrancar, esa condición nunca se cumple: es un bootstrap circular
+    imposible.
 
     Mientras tanto, celda.recursos SÍ se rellena a capacidad_maxima para
     toda celda tiene_recurso=True en la generación del mundo (nucleo/
@@ -274,9 +244,8 @@ def sembrar_flora_inicial(
     varios frentes simultáneos por mancha en vez de uno solo que tendría
     que cubrir cientos de celdas por su cuenta.
 
-    fraccion_siembra_inicial (PROVISIONAL, ver config/flora.yaml
-    sección flora): calibración numérica sin contrastar aún contra el
-    harness -- hipótesis de partida, no cifra cerrada.
+    fraccion_siembra_inicial (PROVISIONAL, ver config/flora.yaml sección
+    flora): calibración numérica sin contrastar aún contra el harness.
     """
     zona = mundo.territorio.zonas[0]
     especies_cfg = config.get("flora", {}).get("especies", {})
@@ -284,15 +253,13 @@ def sembrar_flora_inicial(
 
     celdas_por_especie: dict[str, list[tuple[int, int]]] = {}
     for x, y, celda in zona.celdas():
-        # (2026-08-28) Ley fisica: la flora no crece sumergida. El agua es
-        # una capa independiente del bioma (la celda conserva bosque Y
-        # tipo_agua 'lago'), y sin este guard la siembra inicial ponia
-        # plantas en celdas de rio/lago/poza que el visor estampaba sobre
-        # el agua. El bono de humedad de subsuelo (nucleo/flora.py:
-        # factor_humedad_subsuelo, hasta 2026-08-30 factor_ribera) mira si
-        # la PROPIA celda tiene agua/humedad, no las vecinas pese a lo que
-        # decía este comentario hasta ahora (inexactitud encontrada de
-        # paso, no lo que motivó este cambio): no afecta a este guard.
+        # Ley fisica: la flora no crece sumergida. El agua es una capa
+        # independiente del bioma (la celda conserva bosque Y tipo_agua
+        # 'lago'), y sin este guard la siembra inicial ponia plantas en
+        # celdas de rio/lago/poza que el visor estampaba sobre el agua.
+        # El bono de humedad de subsuelo (nucleo/flora.py:
+        # factor_humedad_subsuelo) mira si la PROPIA celda tiene
+        # agua/humedad, no las vecinas -- no afecta a este guard.
         if celda.tiene_recurso and not celda.tiene_agua:
             celdas_por_especie.setdefault(celda.tipo_recurso, []).append((x, y))
 
@@ -335,19 +302,18 @@ def ejecutar_tick(
     sistemas["necesidades"].ejecutar(gestor, mundo, reloj, bus_eventos)
     sistemas["capacidad_fisica"].ejecutar(gestor)
     sistemas["capacidad_mental"].ejecutar(gestor)
-    # (2026-08-29) reproduccion recibe mundo: el nacimiento consulta la
-    # profundidad de agua de la celda del parto (celda_nacimiento_segura).
+    # reproduccion recibe mundo: el nacimiento consulta la profundidad de
+    # agua de la celda del parto (celda_nacimiento_segura).
     sistemas["reproduccion"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
     # ---------------------------------------------------------
     # CIERRE DE TICK Y CADENCIAS TEMPORALES
     # ---------------------------------------------------------
-    # (2026-08-23) Reloj (nucleo/reloj.py) solo expone avanzar() y las
-    # propiedades derivadas dia/estacion/anio -- no tiene avanzar_tick()
-    # ni es_inicio_de_dia(), que este archivo era el único en llamar.
-    # "Inicio de día" se deriva igual que ya hace sistema_clima.py
-    # internamente (tick_actual % TICKS_POR_DIA == 0), en vez de añadir un
-    # método nuevo a Reloj para una comprobación que cabe en una línea.
+    # Reloj (nucleo/reloj.py) solo expone avanzar() y las propiedades
+    # derivadas dia/estacion/anio. "Inicio de día" se deriva igual que ya
+    # hace sistema_clima.py internamente (tick_actual % TICKS_POR_DIA ==
+    # 0), en vez de un método nuevo en Reloj para una comprobación que
+    # cabe en una línea.
     reloj.avanzar()
 
     if reloj.tick_actual % Reloj.TICKS_POR_DIA == 0:
@@ -367,9 +333,9 @@ def main() -> None:
     semilla = config.get("semilla_por_defecto", 42)
     rng_mapa = random.Random(semilla)
     rng_juego = random.Random(semilla)
-    # rng_reproduccion (2026-09-02, ver CLAUDE.md): mismo patrón que
-    # rng_mapa -- generador independiente sembrado con la misma semilla,
-    # para que sistema_reproduccion.py no comparta flujo con rng_juego.
+    # rng_reproduccion: mismo patrón que rng_mapa -- generador
+    # independiente sembrado con la misma semilla, para que
+    # sistema_reproduccion.py no comparta flujo con rng_juego.
     rng_reproduccion = random.Random(semilla)
 
     reloj = Reloj()
@@ -381,16 +347,16 @@ def main() -> None:
     alto = int(config.get("mundo", {}).get("grid_alto", 40))
     mundo = Mundo(ancho, alto, config, rng_mapa)
 
-    # Carga opcional de partida guardada (2026-08-23): detrás de una
-    # variable de entorno explícita para no tocar el comportamiento por
-    # defecto (mundo fresco cada arranque) ya validado hoy. Solo el
-    # ESTADO dinámico de las celdas se restaura desde la BD (fertilidad,
-    # charcos, fuego, recursos) -- el TERRENO (tipo de celda, relieve) lo
-    # sigue generando Mundo() a partir de la semilla de config, así que
-    # continuar una partida exige no haber cambiado semilla_por_defecto
-    # entre arranques -- ahora detectado (no solo documentado): si la
-    # semilla guardada no coincide con la actual, cargar_snapshot avisa
-    # por stderr en vez de fallar en silencio (ver su propio docstring).
+    # Carga opcional de partida guardada: detrás de una variable de
+    # entorno explícita para no tocar el comportamiento por defecto
+    # (mundo fresco cada arranque). Solo el ESTADO dinámico de las
+    # celdas se restaura desde la BD (fertilidad, charcos, fuego,
+    # recursos) -- el TERRENO (tipo de celda, relieve) lo sigue generando
+    # Mundo() a partir de la semilla de config, así que continuar una
+    # partida exige no haber cambiado semilla_por_defecto entre
+    # arranques: si la semilla guardada no coincide con la actual,
+    # cargar_snapshot avisa por stderr en vez de fallar en silencio (ver
+    # su propio docstring).
     continuar_partida = os.environ.get("BOSQUE_CONTINUAR") == "1"
     partida_restaurada = False
     if continuar_partida:
@@ -403,10 +369,10 @@ def main() -> None:
     sistemas = instanciar_sistemas(config, rng_juego, rng_reproduccion)
 
     persistencia_cfg = config.get("persistencia", {})
-    # PROVISIONAL (2026-08-23): cadencia de autoguardado sin calibrar
-    # contra el coste real de guardar_snapshot a escala -- 5 días es una
-    # hipótesis de partida razonable (guardar_snapshot es una transacción
-    # con DELETE+INSERT masivo de componentes_estado, no algo a hacer cada
+    # PROVISIONAL: cadencia de autoguardado sin calibrar contra el coste
+    # real de guardar_snapshot a escala -- 5 días es una hipótesis de
+    # partida razonable (guardar_snapshot es una transacción con
+    # DELETE+INSERT masivo de componentes_estado, no algo a hacer cada
     # tick), no una cifra medida contra el motor en marcha.
     guardar_cada_ticks = Reloj.TICKS_POR_DIA * int(
         persistencia_cfg.get("guardar_cada_dias", 5)

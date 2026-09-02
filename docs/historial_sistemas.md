@@ -198,6 +198,47 @@ ENCENDER_FUEGO en vez de tener su propia utilidad tangencial es de una
 conversación de diseño con Diego el mismo día: "la recolección de
 recursos es el efecto, no la causa".
 
+## `main.py`
+
+`cargar_configuracion` divide `config/*.yaml` por categoría desde el
+2026-08-30, a petición de Diego: "no sé si será mejor enfocar eso en un
+conjunto múltiple de yamls separados por categorías que no una mega
+construcción". Hasta ese momento existía un único `config/constantes.yaml`
+de 814 líneas con 27 secciones. El coste de dividir era prácticamente
+cero: TODO consumidor del motor (27+ sitios en `sistemas/` y `nucleo/`)
+ya leía su sección como `config["seccion"]` contra el diccionario YA
+FUSIONADO, sin importarle de qué fichero salió -- confirmado por grep
+antes de dividir, cero cambios en `sistemas/*.py` ni `nucleo/*.py`.
+
+`rng_reproduccion` (generador propio para `SistemaReproduccion`,
+independiente de `rng_juego`) es del 2026-09-02, tras el hallazgo
+metodológico documentado en CLAUDE.md sobre semilla-a-semilla no fiable
+al compartir un único `rng_juego` entre sistemas.
+
+El registro de la población fundadora en la tabla histórica `entidades`
+es del 2026-08-23: antes solo se registraban ahí los nacimientos en
+partida -- el INNER JOIN de `Persistencia.cargar_snapshot()` con
+`entidades` descartaba en silencio a todo fundador que siguiera vivo al
+guardar (comprobado con un smoke test real: de 15 criaturas vivas tras
+600 ticks, solo las 5 nacidas en partida sobrevivían al roundtrip
+guardar/cargar).
+
+`sembrar_flora_inicial` es del 2026-08-23 (diagnóstico de inanición del
+mismo día, confirmado empíricamente corriendo el motor 3000 ticks y
+comprobando que `gestor.entidades_con(Planta)` se mantenía en cero todo
+el tiempo). Al fusionar con `origin/master` el 2026-08-27 apareció una
+SEGUNDA implementación de esta misma función (sin `config` ni `rng`,
+sembrando el 100% de las celdas `tiene_recurso=True`) escrita por otra
+sesión que detectó el mismo hueco de forma independiente, partiendo de
+un commit anterior donde el muestreo fraccional configurable todavía no
+existía. Se conservó la versión de `main.py` por ser la más completa
+(respeta `fraccion_siembra_inicial` en vez de sembrar el 100%); la
+versión descartada sigue en el historial de `origin/master`.
+
+El guard de "flora no crece sumergida" es del 2026-08-28. Carga opcional
+de partida guardada (`BOSQUE_CONTINUAR`) es del 2026-08-23. Cadencia de
+autoguardado (`guardar_cada_dias`) es PROVISIONAL desde el mismo día.
+
 ## `sistema_recursos.py`
 
 `_registrar_recuerdo_si_procede` corrigió (2026-08-23) que los tres
