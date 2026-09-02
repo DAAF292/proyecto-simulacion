@@ -135,6 +135,7 @@ flora:
       prob_propagacion_por_dia: 0.06
       preferencia_lluvia: [0.25, 0.85]
       preferencia_temperatura: [0.25, 0.85]
+      preferencia_fertilidad: [0.2, 0.8]
       recursos:
         - nombre: raices
           categoria: alimento
@@ -168,6 +169,7 @@ flora:
       prob_propagacion_por_dia: 0.02
       preferencia_lluvia: [0.55, 1.0]
       preferencia_temperatura: [0.3, 0.75]
+      preferencia_fertilidad: [0.4, 0.9]
       recursos:
         - nombre: manzanas
           categoria: alimento
@@ -194,6 +196,7 @@ flora:
       prob_propagacion_por_dia: 0.015
       preferencia_lluvia: [0.0, 0.2]
       preferencia_temperatura: [0.5, 1.0]
+      preferencia_fertilidad: [0.0, 0.3]
       recursos:
         - nombre: fruto_de_cactus
           categoria: alimento
@@ -216,6 +219,7 @@ flora:
       prob_propagacion_por_dia: 0.01
       preferencia_lluvia: [0.1, 0.5]
       preferencia_temperatura: [0.0, 0.4]
+      preferencia_fertilidad: [0.0, 0.2]
       recursos:
         - nombre: liquen
           categoria: alimento
@@ -231,6 +235,7 @@ flora:
       prob_propagacion_por_dia: 0.01
       preferencia_lluvia: [0.2, 0.6]
       preferencia_temperatura: [0.0, 0.15]
+      preferencia_fertilidad: [0.0, 0.3]
       recursos:
         - nombre: musgo
           categoria: alimento
