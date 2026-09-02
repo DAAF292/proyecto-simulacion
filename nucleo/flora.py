@@ -170,6 +170,7 @@ def colonizar_por_idoneidad(
     capacidad_retencion_por_celda: dict[tuple[int, int], float],
     especies_cfg: dict[str, Any],
     umbral_minimo: float,
+    celdas_con_agua: set[tuple[int, int]] | None = None,
 ) -> dict[tuple[int, int], str]:
     """Por cada celda, reúne las especies cuyo bioma declarado coincide
     con el de la celda, calcula su idoneidad_colonizacion y descarta las
@@ -177,9 +178,16 @@ def colonizar_por_idoneidad(
     ponderada por idoneidad -- no gana siempre la de mayor puntuación a
     rajatabla, ni la primera del catálogo por orden de aparición. Si
     ninguna especie supera el umbral, la celda no aparece en el
-    resultado -- suelo desnudo, resultado real, no forzado."""
+    resultado -- suelo desnudo, resultado real, no forzado.
+
+    Ley física de generación inicial: una celda sumergida
+    (celdas_con_agua) nunca es colonizada, con independencia de cuánta
+    idoneidad tenga — misma ley que intentar_colonizar_celda aplica a
+    la propagación (celda con tiene_agua nunca colonizada)."""
     especie_por_celda: dict[tuple[int, int], str] = {}
     for x, y in todas_las_celdas:
+        if celdas_con_agua is not None and (x, y) in celdas_con_agua:
+            continue
         bioma_celda = biomas[(x, y)]
         candidatas = [
             (nombre, cfg) for nombre, cfg in especies_cfg.items()

@@ -76,3 +76,20 @@ def test_regresion_humedad_subsuelo_saturada_donde_hay_agua_permanente():
         if celda.tiene_agua:
             capacidad = float(catalogo[celda.tipo_sustrato]["capacidad_retencion"])
             assert celda.humedad_subsuelo == capacidad
+
+
+def test_ley_celda_sumergida_nunca_tiene_recurso_tras_generar():
+    """Ley f\u00edsica de generaci\u00f3n del mundo: tras generar cada zona con
+    generar_zona_bioma, ninguna celda con agua permanente (tiene_agua)
+    tiene recurso de flora (tiene_recurso) -- la colonizaci\u00f3n por
+    idoneidad excluye las celdas sumergidas, misma ley que la
+    propagaci\u00f3n en tiempo real. Se prueban varias semillas para dar
+    poder estad\u00edstico real al bug (originalmente un 5%-11% de celdas
+    sumergidas sal\u00edan colonizadas)."""
+    for semilla in (1, 2, 3, 4, 5):
+        _, zona = _generar(semilla)
+        for x, y, celda in zona.celdas():
+            if celda.tiene_agua:
+                assert not celda.tiene_recurso, (
+                    f"celda sumergida ({x},{y}) colonizada en semilla {semilla}"
+                )
