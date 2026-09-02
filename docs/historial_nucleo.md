@@ -386,3 +386,39 @@ patrón de búsqueda para "celda peligrosa más cercana" y duplicarlo
 habría sido exactamente el riesgo que nucleo/disposicion.py ya señaló
 en su propio docstring -- que las distintas nociones de "qué cuenta
 como cerca" diverjan con el tiempo.
+
+## `zona_bioma.py`
+
+Corrección de diseño (pregunta directa de Diego: un bioma es una
+categorización de flora/fauna, no debería llevar implícita la presencia
+o ausencia de agua): confirmó que Celda.tiene_agua/tipo_agua debía ser
+una capa independiente del bioma, sin excluir celdas de la generación de
+flora -- decisión que hoy es simplemente el comportamiento documentado
+en el módulo.
+
+`_generar_rio()` (un único camino de un borde al opuesto por paseo
+aleatorio) fue el primer generador de agua del proyecto, retirado por
+completo de este archivo cuando nucleo/agua.py lo reemplazó (río/lago/
+poza derivados del campo de elevación, varios cuerpos posibles por
+mundo en vez de exactamente uno siempre).
+
+Círculo 1 de generación causal (2026-08-27, acordado con Diego tras el
+diagnóstico visual): la generación pasó de tres campos de value noise
+independientes a una estructura geográfica causal -- cordilleras
+sorteadas como generadores primarios de elevación, clima derivado del
+relieve. Mundos guardados con la ley anterior quedaron invalidados
+(decisión de Diego).
+
+Círculo 1 de materiales físicos (2026-08-30) introdujo el mapeo
+bioma->material y las vetas de mineral. La distribución causal de
+flora del 2026-09-01 (ver `docs/superpowers/specs/2026-09-01-
+distribucion-causal-flora-design.md`) sustituyó el reparto por
+proporción/mancha por colonización por idoneidad, y dio a cada bioma
+una lista de candidatos de sustrato en vez de uno fijo. La propagación
+por viento (2026-09-02, ver `docs/superpowers/specs/2026-09-01-
+propagacion-flora-design.md`) añadió `viento_dx`/`viento_dy` como
+atributo fijo de la zona.
+
+`piedra_suelta` (2026-08-31, ver config/fuego.yaml) se añadió como
+recurso independiente de tipo_sustrato/bioma, no depletable al agarrar
+-- mismo tratamiento en `cueva.py`.

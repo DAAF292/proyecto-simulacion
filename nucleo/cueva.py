@@ -184,9 +184,9 @@ def generar_zona_cueva(
         for y in range(alto):
             pared = es_pared[x][y]
             deposito_mineral = "" if pared else vetas_minerales.get((x, y), "")
-            # piedra_suelta (2026-08-31, ver config/fuego.yaml): tan
-            # plausible o mas en una cueva que en superficie -- solo en
-            # suelo caminable, igual que el resto de recursos.
+            # piedra_suelta (ver config/fuego.yaml): tan plausible o mas
+            # en una cueva que en superficie -- solo en suelo caminable,
+            # igual que el resto de recursos.
             recursos_iniciales: dict[str, float] = {}
             if (
                 not pared

@@ -1,31 +1,23 @@
-"""ZonaBioma: region ecologica dentro de un territorio. Fase 0: una unica
-zona (el bosque), con su propio grid de celdas.
+"""ZonaBioma: region ecologica dentro de un territorio, con su propio
+grid de celdas.
 
-Incluye tambien la generacion procedimental del terreno y los recursos
-(paso 1, ampliado tras observar que con recurso en el 95% del mapa la
-escasez era imposible de conseguir): manchas de flora por crecimiento
-probabilistico desde semillas dentro de cada bioma compatible -- igual
-que en un bosque real, no todo el suelo tiene la misma planta. Todo
-determinista a partir del generador aleatorio (rng) que se le pase --
-nunca crea su propio Random() interno, para que la generacion quede
-atada a la semilla del mundo.
+Incluye tambien la generacion procedimental del terreno y los recursos:
+manchas de flora por crecimiento probabilistico desde semillas dentro de
+cada bioma compatible -- igual que en un bosque real, no todo el suelo
+tiene la misma planta. Todo determinista a partir del generador
+aleatorio (rng) que se le pase -- nunca crea su propio Random() interno,
+para que la generacion quede atada a la semilla del mundo.
 
-Correccion de diseno (pregunta directa de Diego: un bioma es una
-categorizacion de flora/fauna, no deberia llevar implicita la presencia
-o ausencia de agua): el agua nunca excluye celdas de la generacion de
-flora -- Celda.tiene_agua/tipo_agua es una capa independiente que puede
-caer sobre cualquier bioma sin distincion. Nota deliberada, no decidida
-por peticion expresa: una celda con agua puede seguir perteneciendo a una
-mancha de recurso (tiene_agua y tiene_recurso no son excluyentes) -- no
-se anadio ninguna regla que lo impida, seria una fuente de complejidad
-mas sin que nadie la haya pedido todavia.
+El agua nunca excluye celdas de la generacion de flora -- Celda.
+tiene_agua/tipo_agua es una capa independiente que puede caer sobre
+cualquier bioma sin distincion (un bioma es una categorizacion de
+flora/fauna, no lleva implicita la presencia o ausencia de agua). Una
+celda con agua puede seguir perteneciendo a una mancha de recurso
+(tiene_agua y tiene_recurso no son excluyentes).
 
-CORRECCION de generacion de agua (discutida y confirmada con Diego,
-posterior a la correccion biomas/especies): el viejo _generar_rio() (un
-unico camino de un borde al opuesto por paseo aleatorio, retirado de este
-archivo) ya no existe -- ver nucleo/agua.py para el reemplazo completo
-(rio/lago/poza derivados del campo de elevacion, varios cuerpos posibles
-por mundo en vez de exactamente uno siempre).
+La generacion de agua (rio/lago/poza) se deriva del campo de elevacion
+-- ver nucleo/agua.py para el algoritmo completo (varios cuerpos
+posibles por mundo, no exactamente uno siempre).
 """
 import random
 
@@ -64,20 +56,18 @@ class ZonaBioma:
         generación del mundo (nucleo/orografia.py:
         sortear_viento_dominante) y conservado como atributo de la zona --
         consumido por SistemaFlora._propagar_viento para el vector de
-        propagación por viento (2026-09-02, ver docs/superpowers/specs/
-        2026-09-01-propagacion-flora-design.md). Uno de los cuatro rumbos
-        cardinales; (0, 0) solo como default para zonas sin viento (cuevas).
+        propagación por viento. Uno de los cuatro rumbos cardinales;
+        (0, 0) solo como default para zonas sin viento (cuevas).
         Determinista de la semilla, no se persiste (mismo criterio que
         elevacion/lluvia/temperatura)."""
-        """Estado de tiempo del dia actual (informe tecnico 7.2,
-        sistemas/sistema_clima.py) -- mutable, sorteado a cadencia de
-        dia. Vive en la zona (no en el mundo ni en el territorio) porque
-        el diseno original habla de "modificadores por estacion" por
-        zona de bioma, y clima es la misma idea a cadencia mas fina.
-        Decision tomada en esta pasada, no persiste entre partidas
-        (nucleo/persistencia.py no lo guarda): se resembraria en el
-        primer corte de dia tras cargar, mismo estatus de imprecision
-        aceptada que ya tiene Intencion tras una carga."""
+        """Estado de tiempo del dia actual (sistemas/sistema_clima.py) --
+        mutable, sorteado a cadencia de dia. Vive en la zona (no en el
+        mundo ni en el territorio) porque los modificadores por estacion
+        son por zona de bioma, y clima es la misma idea a cadencia mas
+        fina. No persiste entre partidas (nucleo/persistencia.py no lo
+        guarda): se resembraria en el primer corte de dia tras cargar,
+        mismo estatus de imprecision aceptada que ya tiene Intencion tras
+        una carga."""
         self.estacion_previa = None
         """Ultima Estacion vista por sistema_clima.py, para detectar el
         cambio de estacion y emitir CambioEstacion solo al entrar en una
@@ -88,12 +78,11 @@ class ZonaBioma:
     def celda(self, x: int, y: int) -> Celda:
         return self.grid[x][y]
 
-    # Alias (2026-08-23): la inmensa mayoría de sistemas consumidores
-    # (main.py, sistema_movimiento.py, sistema_recursos.py, etc.) llaman
-    # a `zona.obtener_celda(x, y)` -- solo nucleo/percepcion.py usa el
-    # nombre corto `celda`. Renombrar cualquiera de los dos rompería al
-    # otro consumidor sin necesidad; se conservan ambos nombres para el
-    # mismo método en vez de forzar una convención sobre once llamadas ya
+    # Alias: la inmensa mayoría de sistemas consumidores (main.py,
+    # sistema_movimiento.py, sistema_recursos.py, etc.) llaman a
+    # `zona.obtener_celda(x, y)` -- solo nucleo/percepcion.py usa el
+    # nombre corto `celda`. Se conservan ambos nombres para el mismo
+    # método en vez de forzar una convención sobre las llamadas ya
     # escritas.
     obtener_celda = celda
 
@@ -184,15 +173,12 @@ def generar_zona_bioma(
 ) -> ZonaBioma:
     todas_las_celdas = {(x, y) for x in range(ancho) for y in range(alto)}
 
-    # Círculo 1 (2026-08-27, acordado con Diego tras el diagnostico
-    # visual): la generacion pasa de tres campos de value noise
-    # independientes a UNA ESTRUCTURA GEOGRAFICA CAUSAL -- cordilleras
-    # sorteadas como generadores primarios de elevacion, clima derivado
-    # del relieve (gradiente termico por altitud, viento dominante con
-    # sombra orografica para la lluvia). Leyes y pruebas:
-    # tests/test_orografia.py. Mundillos guardados con la ley anterior
-    # quedan invalidados (decision de Diego). El orden de consumo del rng
-    # aqui es parte de lo que la semilla determina:
+    # Generacion geografica causal, no tres campos de ruido
+    # independientes: cordilleras sorteadas como generadores primarios de
+    # elevacion, clima derivado del relieve (gradiente termico por
+    # altitud, viento dominante con sombra orografica para la lluvia).
+    # Leyes y pruebas: tests/test_orografia.py. El orden de consumo del
+    # rng aqui es parte de lo que la semilla determina:
     # cordilleras -> elevacion -> viento -> temperatura -> lluvia.
     config_orografia = config_generacion["orografia"]
     cordilleras = generar_cordilleras(rng, config_orografia, ancho, alto)
@@ -202,35 +188,30 @@ def generar_zona_bioma(
     campo_lluvia = campo_lluvia_orografica(campo_elevacion, rng, config_viento, ancho, alto)
     campo_temperatura = campo_temperatura_orografica(campo_elevacion, rng, config_orografia, ancho, alto)
 
-    # Fase terreno 3 (nucleo/bioma.py): el bioma de cada celda se deriva
-    # de los tres campos de arriba -- SOLO el bioma, zona climatica, nada
-    # de flora todavia (correccion de diseno posterior, ver
+    # El bioma de cada celda se deriva de los tres campos de arriba --
+    # SOLO el bioma, zona climatica, nada de flora todavia (ver
     # nucleo/celda.py y componentes/planta.py).
     biomas = {
         (x, y): clasificar_bioma(campo_elevacion[x][y], campo_lluvia[x][y], campo_temperatura[x][y], config_bioma)
         for x, y in todas_las_celdas
     }
 
-    # Cuerpos de agua (correccion posterior a fase terreno 4, ver
-    # nucleo/agua.py): derivados del campo de elevacion de arriba --
-    # rio/lago/poza segun donde termine cada descenso de pendiente, en
-    # vez del viejo paseo aleatorio unico ciego al terreno.
+    # Cuerpos de agua derivados del campo de elevacion de arriba --
+    # rio/lago/poza segun donde termine cada descenso de pendiente (ver
+    # nucleo/agua.py).
     cuerpos_agua = generar_cuerpos_agua(campo_elevacion, rng, config_agua, ancho, alto)
 
-    # CÍRCULO 1 de materiales físicos (2026-08-30, ver config/materiales.yaml
-    # y nucleo/celda.py:tipo_sustrato/humedad_subsuelo): mapeo bioma->material
-    # fijo, mismo criterio de lookup determinista que biomas[(x,y)] arriba.
-    # Calculado en una pasada PREVIA a la construcción de Celda (no inline
-    # en el bucle principal, como antes) porque la colocación de vetas de
-    # mineral (más abajo) necesita conocer TODAS las celdas de piedra del
-    # mundo antes de que exista ninguna Celda todavía.
+    # Mapeo bioma->material (ver config/materiales.yaml y
+    # nucleo/celda.py:tipo_sustrato/humedad_subsuelo), mismo criterio de
+    # lookup determinista que biomas[(x,y)] arriba. Calculado en una
+    # pasada PREVIA a la construcción de Celda (no inline en el bucle
+    # principal) porque la colocación de vetas de mineral (más abajo)
+    # necesita conocer TODAS las celdas de piedra del mundo antes de que
+    # exista ninguna Celda todavía.
     sustrato_por_bioma = config_sustrato_por_bioma
     catalogo_materiales = config_materiales
     umbrales_sustrato_fertil = config_umbrales_sustrato_fertil
-    # Sustrato variado por celda (2026-09-01, ver docs/superpowers/specs/
-    # 2026-09-01-distribucion-causal-flora-design.md): antes de esto,
-    # cada bioma tenía un único material fijo (sustrato_por_bioma.get(...)
-    # directo) -- ahora cada bioma trae una LISTA de candidatos y
+    # Cada bioma trae una LISTA de candidatos de sustrato, y
     # elegir_sustrato_celda decide cuál le toca a cada celda según
     # elevación/lluvia ya calculadas, causal en vez de fijo. fertilidad_
     # por_celda nace del fertilidad_base del sustrato elegido, no de 0.0.
@@ -249,15 +230,13 @@ def generar_zona_bioma(
                 catalogo_materiales.get(sustrato, {}).get("fertilidad_base", 0.0)
             )
 
-    # Vetas de mineral (2026-08-30, ver nucleo/materiales.py): restringidas
-    # a celdas de sustrato piedra (montaña) -- coherente con que el
-    # hierro/cobre real aparece sobre todo en roca ígnea/metamórfica.
-    # Humedad de subsuelo por celda (2026-09-01, ver docs/superpowers/
-    # specs/2026-09-01-distribucion-causal-flora-design.md): antes se
-    # calculaba inline dentro del bucle final de construcción de Celda --
-    # se adelanta a una pasada propia porque la colonización de flora de
-    # aquí abajo necesita esta señal ANTES de que exista ninguna Celda
-    # todavía. Mismo cálculo exacto de siempre, solo cambia el momento.
+    # Vetas de mineral (ver nucleo/materiales.py): restringidas a celdas
+    # de sustrato piedra (montaña) -- coherente con que el hierro/cobre
+    # real aparece sobre todo en roca ígnea/metamórfica.
+    # Humedad de subsuelo por celda calculada en su propia pasada previa
+    # (no inline en el bucle final de construcción de Celda) porque la
+    # colonización de flora de aquí abajo necesita esta señal ANTES de
+    # que exista ninguna Celda todavía.
     humedad_subsuelo_por_celda = {}
     capacidad_retencion_por_celda = {}
     for x in range(ancho):
@@ -272,9 +251,8 @@ def generar_zona_bioma(
             capacidad_retencion_por_celda[(x, y)] = capacidad_retencion
             humedad_subsuelo_por_celda[(x, y)] = capacidad_retencion if tiene_agua_celda else 0.0
 
-    # Colonización de flora por idoneidad (2026-09-01): sustituye al
-    # antiguo reparto por proporción/mancha -- cada celda decide qué
-    # especie (si alguna) la coloniza según sustrato/fertilidad/lluvia/
+    # Colonización de flora por idoneidad: cada celda decide qué especie
+    # (si alguna) la coloniza según sustrato/fertilidad/lluvia/
     # temperatura reales, ya calculados arriba.
     especie_por_celda = colonizar_por_idoneidad(
         rng, todas_las_celdas, biomas, campo_lluvia, campo_temperatura,
@@ -289,10 +267,9 @@ def generar_zona_bioma(
     vetas_minerales = generar_vetas_minerales(
         rng, catalogo_materiales, config_generacion_vetas, celdas_piedra, ancho, alto
     )
-    # CÍRCULO 2 de profundidad (2026-08-30): masa inicial IGUAL para toda
-    # celda de veta -- la variación real de tamaño ya viene de cuántas
-    # celdas ocupa cada veta (mancha/filón), no hace falta variar también
-    # el kg por celda.
+    # Masa inicial IGUAL para toda celda de veta -- la variación real de
+    # tamaño ya viene de cuántas celdas ocupa cada veta (mancha/filón),
+    # no hace falta variar también el kg por celda.
     masa_inicial_veta = float(
         config_generacion_vetas.get("masa_inicial_por_celda_veta_kg", 40.0)
     )
@@ -317,9 +294,9 @@ def generar_zona_bioma(
                 {r["nombre"]: r["capacidad_maxima"] for r in recursos_alimento(config_flora["especies"][especie_key])}
                 if tiene_recurso else {}
             )
-            # piedra_suelta (2026-08-31, ver config/fuego.yaml): recurso
-            # independiente de tipo_sustrato/bioma -- puede coexistir con
-            # cualquier flora, no depletable al agarrar.
+            # piedra_suelta (ver config/fuego.yaml): recurso independiente
+            # de tipo_sustrato/bioma -- puede coexistir con cualquier
+            # flora, no depletable al agarrar.
             if probabilidad_piedra_suelta > 0.0 and rng.random() < probabilidad_piedra_suelta:
                 recursos_iniciales["piedra_suelta"] = 1.0
             grid[x][y] = Celda(
