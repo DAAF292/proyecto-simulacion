@@ -62,24 +62,35 @@ model_list:
       # una sesión de trabajo normal.
       max_budget: 1.00
       budget_duration: "1d"
-    # model_info (2026-09-02, hallazgo real -- tercer problema encontrado
-    # durante la primera prueba real del pipeline, distinto de los dos ya
-    # corregidos arriba): litellm no tiene en su tabla interna de costes
-    # ningún registro para "deepseek/deepseek-v4-flash-0731" (aviso
-    # repetido en cada llamada: "Unknown context window size and costs,
-    # using sane defaults") -- sin esto, aider tampoco sabe el
-    # max_input_tokens real del modelo. Hipótesis a probar: con ese dato
-    # ausente, aider podría estar recortando o gestionando mal el
-    # ensamblado del prompt final (el modelo, en repetidas pruebas reales,
-    # afirmaba no tener acceso al contenido de main.py/nucleo/persistencia.py
-    # pese a que aider confirmaba haberlos añadido al chat). Valores
-    # tomados del catálogo real de OpenRouter (GET
-    # https://openrouter.ai/api/v1/models), no inventados.
+      # provider.sort: price (2026-09-02, pregunta real de Diego: "¿no
+      # sería más rentable ir directo a DeepSeek?"). Verificado contra el
+      # catálogo real de OpenRouter: NO -- DeepSeek (el proveedor oficial)
+      # cuesta $0.22/$0.66 por millón de tokens prompt/completion para
+      # este modelo, 3-4x más caro que los proveedores más baratos que
+      # también lo alojan (OpenInference $0.05/$0.16, Sail Research/
+      # Relace $0.065/$0.18) -- es un modelo de pesos abiertos, y varios
+      # proveedores de inferencia compiten en precio por alojarlo por
+      # debajo de lo que cobra la propia DeepSeek. Sin este campo,
+      # OpenRouter enruta por su criterio por defecto (no
+      # necesariamente el más barato) -- extra_body.provider.sort=
+      # "price" fuerza siempre el proveedor más económico disponible en
+      # cada llamada.
+      extra_body:
+        provider:
+          sort: "price"
+    # model_info: litellm no tiene en su tabla interna de costes ningún
+    # registro para "deepseek/deepseek-v4-flash-0731" -- valores tomados
+    # del catálogo real de OpenRouter (GET
+    # https://openrouter.ai/api/v1/models). Actualizado 2026-09-02 al
+    # precio del proveedor más barato (OpenInference), coherente con
+    # provider.sort=price de arriba -- mini-swe-agent usa este mismo
+    # fichero, vía .ai-pipeline/litellm_model_registry.json, para
+    # calcular coste real por llamada en vez de reportar siempre "$0.00".
     model_info:
       max_input_tokens: 1310720
       max_output_tokens: 1310720
-      input_cost_per_token: 0.000000065
-      output_cost_per_token: 0.00000018
+      input_cost_per_token: 0.00000005
+      output_cost_per_token: 0.00000016
 
 # drop_params (2026-09-01, pedido por Diego): descarta parámetros que el
 # proveedor de destino no soporta en vez de fallar la llamada entera --
