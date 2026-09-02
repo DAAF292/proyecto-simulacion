@@ -22,13 +22,10 @@ from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposicion_por_tamano
-# NOTA (2026-08-23): la función real en nucleo/disposicion.py se llama
-# magnitud_disposicion_por_peso -- este archivo la importaba con un
-# nombre (magnitud_disposicion_por_tamano) que dejó de existir cuando
-# DimensionesFisicas.tamano se renombró a .peso (ver docstring de
-# nucleo/disposicion.py) y la función se renombró con él, sin que este
-# import se actualizara. Se alias en vez de reescribir las llamadas de
-# abajo porque no cambia ningún comportamiento, solo corrige el nombre.
+# La función real en nucleo/disposicion.py se llama
+# magnitud_disposicion_por_peso -- se importa con alias local
+# (magnitud_disposicion_por_tamano) para no reescribir las llamadas de
+# abajo, sin cambiar ningún comportamiento.
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 
@@ -52,17 +49,16 @@ class SistemaDepredacion:
         self.factor_agresividad_resistencia: float = float(
             cfg_dep.get("factor_agresividad_resistencia", 0.2)
         )
-        # Agarre -- primer efecto real (2026-08-31, ver componentes/agarre.py).
+        # Ver componentes/agarre.py.
         self.reduccion_prob_captura_por_agarre: float = float(
             cfg_dep.get("reduccion_prob_captura_por_agarre", 0.1)
         )
         self.umbral_disposicion_caza: float = float(
             cfg_dep.get("umbral_disposicion_caza", 0.5)
         )
-        # Viabilidad energética mínima (2026-08-23, ver docstring de
-        # sistema_movimiento.py:_calcular_caza para el diagnóstico
-        # completo): mismo umbral que el de movimiento, para que un
-        # cazador y una presa que coincidan en la misma celda por
+        # Viabilidad energética mínima: mismo umbral que el de
+        # movimiento (ver sistema_movimiento.py:_calcular_caza), para que
+        # un cazador y una presa que coincidan en la misma celda por
         # casualidad -- sin que el cazador haya caminado hacia ella --
         # se rijan por el mismo criterio de "vale la pena" en vez de que
         # el ataque resuelva algo que el movimiento ya habría descartado.
@@ -76,8 +72,7 @@ class SistemaDepredacion:
             cfg_dep.get("eficiencia_biomasa_hidratacion", 0.5)
         )
         self.factor_dano_base: float = float(cfg_dep.get("factor_dano_base", 0.4))
-        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
-        # nucleo/entidad.py:componer_necromasa).
+        # Ver nucleo/entidad.py:componer_necromasa.
         cfg_desc = self.config.get("descomposicion", {})
         self.fraccion_masa_seca: float = float(
             cfg_desc.get("fraccion_masa_seca_por_defecto", 0.35)
@@ -88,10 +83,8 @@ class SistemaDepredacion:
         self.fraccion_hueso: float = float(
             cfg_desc.get("fraccion_hueso_de_masa_seca", 0.15)
         )
-        # GREGARISMO -- Pieza 1, bono de caza en grupo (2026-08-30, ver
-        # nucleo/disposicion.py:contar_conspecificos_cercanos y el
-        # comentario de config/constantes.yaml seccion depredacion para
-        # el diagnostico y la motivacion completos).
+        # Bono de caza en grupo -- ver
+        # nucleo/disposicion.py:contar_conspecificos_cercanos.
         self.radio_apoyo_grupal: int = int(
             self.config.get("social", {}).get("radio_apoyo_grupal", 3)
         )
@@ -105,9 +98,9 @@ class SistemaDepredacion:
         Procesa los encuentros de depredación en el tick actual.
         Debe invocarse en la Fase 2, posterior a SistemaMovimiento.
         """
-        # (2026-08-30, Circulo 1 de profundidad) la clave de agrupacion
-        # incluye zona_idx -- dos entidades con el mismo (x, y) en zonas
-        # distintas NO comparten celda (ver componentes/posicion.py).
+        # La clave de agrupacion incluye zona_idx -- dos entidades con el
+        # mismo (x, y) en zonas distintas NO comparten celda (ver
+        # componentes/posicion.py).
         posiciones_mapa: dict[tuple[int, int, int], list[int]] = {}
         for entidad_id in sorted(gestor.entidades_con(Posicion, DimensionesFisicas)):
             pos = gestor.obtener_componente(entidad_id, Posicion)
@@ -215,12 +208,9 @@ class SistemaDepredacion:
 
         prob_exito = disp + (agr - val) * self.factor_agresividad_resistencia
 
-        # GREGARISMO -- Pieza 1, bono de caza en grupo (2026-08-30, ver
-        # docstring de config/constantes.yaml seccion depredacion). Cuenta
-        # conespecificos del propio cazador, cazando activamente, dentro
-        # del radio de apoyo grupal -- escalado por la sociabilidad DIRECTA
-        # del propio cazador, igual que el resto de bonos gregarios de este
-        # incremento.
+        # Bono de caza en grupo: cuenta conespecificos del propio
+        # cazador, cazando activamente, dentro del radio de apoyo grupal
+        # -- escalado por la sociabilidad DIRECTA del propio cazador.
         sociabilidad_cazador = temp_cazador.sociabilidad if temp_cazador else 0.0
         if sociabilidad_cazador > 0.0 and self.bono_caza_por_aliado > 0.0:
             aliados_cazando = contar_conspecificos_cercanos(
@@ -233,12 +223,10 @@ class SistemaDepredacion:
             )
             prob_exito += bono_grupo
 
-        # AGARRE -- primer efecto real (2026-08-31, ver componentes/agarre.py
-        # y conversación de diseño con Diego: "un palo para defenderse, o
-        # una roca"). Binario por ahora: tener algo sujeto reduce la
-        # probabilidad de captura, sin escalar por cuántos puntos de
-        # agarre estén llenos ni por qué material sea -- primera pasada
-        # deliberadamente simple.
+        # Agarre (ver componentes/agarre.py). Binario por ahora: tener
+        # algo sujeto reduce la probabilidad de captura, sin escalar por
+        # cuántos puntos de agarre estén llenos ni por qué material sea
+        # -- primera pasada deliberadamente simple.
         if agarre_presa is not None and len(agarre_presa.objetos) > 0:
             prob_exito -= self.reduccion_prob_captura_por_agarre
 
@@ -290,11 +278,11 @@ class SistemaDepredacion:
             aporte_hidrico = ratio_biomasa * self.eficiencia_biomasa_hidratacion * fraccion_consumida
             nec_cazador.hidratacion = min(1.0, nec_cazador.hidratacion + aporte_hidrico)
 
-        # 5. Depósito de biomasa no consumida como Necromasa. CÍRCULO 2 de
-        # materiales físicos (2026-08-30): el cazador solo come tejido
-        # blando -- un depredador no roe el esqueleto entero de su presa
-        # -- así que fraccion_consumida reduce SOLO 'tejido_blando'; el
-        # hueso queda intacto con independencia de cuánta carne se comió.
+        # 5. Depósito de biomasa no consumida como Necromasa. El cazador
+        # solo come tejido blando -- un depredador no roe el esqueleto
+        # entero de su presa -- así que fraccion_consumida reduce SOLO
+        # 'tejido_blando'; el hueso queda intacto con independencia de
+        # cuánta carne se comió.
         masas_residuales = {
             "tejido_blando": masas_totales["tejido_blando"] * (1.0 - fraccion_consumida),
             "hueso": masas_totales["hueso"],

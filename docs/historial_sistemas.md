@@ -80,3 +80,22 @@ charco sobre tierra firme" es del 2026-08-29, compartido con
 
 El deterioro de construcciones ("nada dura para siempre") es del
 2026-08-30, de una conversación de diseño con Diego.
+
+## `sistema_depredacion.py`
+
+El alias local de `magnitud_disposicion_por_peso` corrige un import que
+quedó desactualizado (2026-08-23) cuando `DimensionesFisicas.tamano` se
+renombró a `.peso` y la función de `nucleo/disposicion.py` se renombró
+con él sin que este import se actualizara -- se detectó auditando el
+código, no por una excepción real.
+
+La viabilidad energética mínima (`fraccion_minima_peso_presa`) es del
+2026-08-23: mismo umbral que `sistema_movimiento.py:_calcular_caza`.
+
+El bono de caza en grupo es la Pieza 1 de gregarismo (2026-08-30). El
+efecto real de Agarre (reducir la probabilidad de captura de la presa)
+es del 2026-08-31, de una conversación de diseño con Diego: "un palo
+para defenderse, o una roca". El depósito de necromasa con hueso intacto
+tras la caza es del círculo 2 de materiales físicos (2026-08-30). El
+filtrado por zona_idx al agrupar entidades por celda es del círculo 1 de
+profundidad (2026-08-30).
