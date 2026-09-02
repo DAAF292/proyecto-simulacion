@@ -1,13 +1,10 @@
-"""Amenaza: generaliza "de que huye un individuo" mas alla de la
-disposicion instintiva por peso (nucleo/disposicion.py), que hasta ahora
-era la unica fuente -- surgio al conectar la huida del fuego (fase
-terreno 1, sistemas/sistema_desastres.py) y detectar que hacerlo
-directamente en sistema_movimiento.py/sistema_necesidades.py habria
-duplicado, con otro nombre, exactamente el mismo patron que
-nucleo/disposicion.py ya centralizo una vez para evitar que "presa
-valida" y "amenaza valida" divergieran (ver su propio docstring).
+"""Amenaza: generaliza "de qué huye un individuo" más allá de la
+disposición instintiva por peso (nucleo/disposicion.py), que era la
+única fuente hasta que se conectó la huida del fuego -- evita duplicar,
+con otro nombre, el mismo patrón que nucleo/disposicion.py ya
+centraliza para "presa válida" (ver su propio docstring).
 
-Dos fuentes de amenaza, combinadas aqui en una sola busqueda:
+Dos fuentes de amenaza, combinadas aquí en una sola búsqueda:
 - Amenaza por CRIATURA: un individuo cuya disposicion por peso frente al
   propio supera el umbral (nucleo/disposicion.py,
   posicion_mas_cercana_por_disposicion, buscar_mayor=True) -- sin
@@ -47,14 +44,14 @@ def _es_celda_peligrosa(celda) -> bool:
 def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
                                   radio: int, peso_propio: float, umbral_disposicion: float,
                                   zona_idx: int = 0):
-    """Posicion (x, y) de la amenaza mas cercana -- por criatura o
-    ambiental -- dentro del radio de percepcion. None si no se percibe
+    """Posición (x, y) de la amenaza más cercana -- por criatura o
+    ambiental -- dentro del radio de percepción. None si no se percibe
     ninguna.
 
-    zona_idx (2026-08-30, Circulo 1 de profundidad): filtra la amenaza por
-    CRIATURA a la misma zona que id_propio -- la amenaza AMBIENTAL ya
-    viene acotada porque `zona` (el objeto ZonaBioma, distinto de este
-    indice) es la que corresponde a quien pregunta."""
+    zona_idx filtra la amenaza por CRIATURA a la misma zona que
+    id_propio -- la amenaza AMBIENTAL ya viene acotada porque `zona`
+    (el objeto ZonaBioma, distinto de este índice) es la que corresponde
+    a quien pregunta."""
     amenaza_criatura = posicion_mas_cercana_por_disposicion(
         gestor, id_propio, x, y, radio, peso_propio, umbral_disposicion, buscar_mayor=True,
         zona_idx=zona_idx,

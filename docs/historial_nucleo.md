@@ -1,0 +1,183 @@
+# Historial de diseño — `nucleo/` (módulos pequeños)
+
+Extraído de los comentarios en línea el 2026-09-02 (ver CLAUDE.md,
+sección "Comentarios técnicos vs narrativa histórica"). Catálogo de los
+módulos pequeños de `nucleo/` que no tienen su propio historial
+dedicado (flora, celda y construcción sí lo tienen aparte).
+
+## `reloj.py` — `DIAS_POR_ESTACION`
+
+Calibración 2026-08-19, investigación "qué queremos: vidas largas o
+ciclos cortos": comprimido de 20 a 5. Con este valor: TICKS_POR_ANIO =
+24×5×4 = 480 (antes 1920). Madurez de gnomo (fracción_madurez=0.2 sobre
+el mínimo racial de 45 años) pasa de 17280 a 4320 ticks; madurez de
+lobo (mínimo racial 8 años) de 3072 a 768. Sigue siendo una ventana
+grande frente a una corrida de calibración típica (600-800 ticks) pero
+ya es alcanzable en corridas largas (10000-20000 ticks), que es lo que
+esta calibración necesitaba.
+
+## `bioma.py`
+
+Fase terreno 3 del informe técnico, referencia Dwarf Fortress. Desde el
+círculo 1 de generación causal (2026-08-27), la regla "temperatura muy
+baja → Tundra" pasó a evaluarse ANTES que "elevación alta → Montaña":
+con relieve orográfico real la temperatura de las cumbres cae por el
+gradiente térmico, así que una cumbre fría es una cumbre nevada
+(tundra de altura) -- la ley vieja asumía elevación-ruido sin
+estructura y enterraba esta física. Corrección posterior, discutida y
+confirmada con Diego (ver nucleo/celda.py): esta función solo decidía
+el bioma; qué especies de flora viven dentro de cada uno es una
+decisión completamente distinta.
+
+## `fuego.py` / `componentes/fogata.py`
+
+FUNDAMENTO (2026-08-31, ver componentes/agarre.py y conversación de
+diseño con Diego: "usar dos rocas para hacer un fuego").
+
+## `amenaza.py`
+
+Surgió al conectar la huida del fuego (sistemas/sistema_desastres.py) y
+detectar que implementarlo directamente en sistema_movimiento.py/
+sistema_necesidades.py habría duplicado, con otro nombre, el mismo
+patrón que nucleo/disposicion.py ya centralizó una vez.
+
+## `campo_continuo.py`
+
+Fase terreno 2 (elevación), reutilizado en fase terreno 3 (lluvia y
+temperatura). Los algoritmos que ya existían en zona_bioma.py
+(_generar_rio: paseo aleatorio; _generar_manchas: flood-fill
+probabilístico) son ambos DISCRETOS, no sirven para una magnitud
+continua. Value noise elegido sobre Perlin/Simplex/diamond-square por
+ser la opción más simple que sigue dando resultados reales, coherente
+con "no optimices por anticipación" y con que esto es una
+implementación propia con fines de aprendizaje.
+
+## `clima.py`
+
+Informe técnico, secciones 7.1 y 7.2 -- diseñadas desde el principio
+del proyecto, nunca implementadas hasta la sesión en que se escribió
+este módulo. El efecto mecánico (estación+clima como modificador de
+regeneración y objetivo de confort_termico) fue una decisión tomada en
+esa misma pasada, no estaba en el informe técnico con este detalle --
+le da a confort_termico su primer consumidor real (componentes/
+necesidades.py lo declaraba desde su introducción explícitamente "sin
+mecánica... depende del futuro sistema de clima y estaciones").
+
+## `mundo.py` — `asentamientos`
+
+2026-08-30, "el germen de un asentamiento" (ver nucleo/asentamiento.py
+y sistemas/sistema_asentamiento.py).
+
+## `inventario.py`
+
+FUNDAMENTO de la fase de interacción física (2026-08-30, ver
+componentes/inventario.py y conversación de diseño con Diego): "creo
+que lo que importa es el peso, da igual cuantos materiales sean,
+depende de tu capacidad física de portarlos".
+
+## `relieve.py`
+
+Diego señaló directamente: "la altitud no afecta en absoluto a las
+criaturas" -- hasta esta corrección, elevación determinaba el bioma y
+modulaba producción de flora pero no tenía ningún efecto sobre el
+movimiento.
+
+**RECALIBRADO 2026-08-29** (auditoría de funcionalidades, tercera
+edición): la medición original de las pendientes (mediana ~0.032, p90
+~0.10, p99 ~0.16, máximo ~0.21, 10 semillas) era anterior al círculo de
+generación causal -- cordilleras, escorrentía, clima orográfico
+(nucleo/orografia.py, 2026-08-27) -- que sustituyó el terreno de ruido
+puro por uno estructurado. El relieve que se genera hoy es más suave de
+lo que esa medición asumía: verificado que con la calibración antigua
+un lobo (fuerza máxima) NUNCA se bloqueaba por pendiente (0% de los
+pasos cuesta arriba), muy por debajo del ~p99 pretendido. Remedido
+contra 15 semillas con el generador causal actual (mapa 40×40, 23177
+subidas positivas muestreadas): mediana 0.0111, p87 0.0517, p99 0.1426,
+máximo 0.2084 -- aproximadamente un tercio de la mediana anterior.
+Recalibrado con el MISMO criterio de anclaje (resolviendo el sistema
+lineal para que fuerza=0.2 caiga en p87 y fuerza=0.9 en p99 de la
+distribución real de hoy), no un criterio nuevo. Sigue sin validarse
+contra el harness completo -- el mismo hueco de antes, ahora sobre
+números frescos en vez de desfasados.
+
+`pendiente_maxima_transitable` (2026-08-23): firma corregida -- recibía
+un dict `config_relieve`, pero su único consumidor
+(sistema_movimiento.py) ya la llamaba con pendiente_minima/maxima_
+transitable sueltos, mismo desfase función/llamador que
+radio_individual() en nucleo/percepcion.py, mismo criterio de arreglo
+(ajustar la función al único sitio que la usa).
+
+## `ciclo_vital.py` — `probabilidad_muerte_vejez`
+
+**HUECO DETECTADO Y RELLENADO el 2026-08-23**, no recuperado de commit
+anterior: a diferencia de nacer_criatura (que sí existió y se pudo
+reconstruir desde el historial de git), esta función se referenciaba
+desde sistemas/sistema_ciclo_vital.py (import roto) sin que existiera
+en NINGÚN commit de todo el historial del proyecto -- confirmado
+buscando en `git log --all -p`. No es una pérdida por colisión de
+ediciones concurrentes como nacer_criatura: sencillamente nunca se
+escribió.
+
+**RECALIBRADA EL MISMO DÍA, más tarde**: la primera versión (techo=0.3,
+exponente=2 fijo) se probó contra el motor en marcha por primera vez al
+validar el cambio de tamaño de grid y resultó catastrófica -- 55-76% de
+TODAS las muertes en un barrido de 5 semillas × 6000 ticks,
+extinguiendo la población entera en 1000-2000 ticks, muy por delante de
+cualquier dinámica de densidad o depredación. La causa: con ratio al
+cuadrado, un individuo a mitad de su longevidad individual (ratio=0.5)
+ya cargaba una probabilidad diaria de 0.3×0.25=7.5% -- una esperanza de
+vida restante de apenas ~13 días útiles, para un individuo que en
+teoría llevaba solo la mitad de su vida. Corregido en dos frentes: el
+techo baja a un valor muy inferior (sigue PROVISIONAL) y el exponente
+sube de 2 a un valor configurable (por defecto 8) para que la curva se
+aplane mucho más tiempo y solo se dispare cerca del verdadero final de
+vida -- criterio de realismo señalado por Diego para este tipo de
+decisión. Sigue sin ser una calibración cerrada: ajustada contra un
+barrido ligero de 5 semillas, no el harness completo de 15 semillas ×
+12000 ticks.
+
+## `conflicto.py`
+
+FUNDAMENTO (2026-08-30, ver conversación de diseño con Diego: "esto
+debe ser reutilizable a futuro... que un individuo robe a otro, un
+agravio del tipo que sea").
+
+## `percepcion.py`
+
+Hasta este cambio, un único entero uniforme entre especies
+(config.percepcion.radio_celdas), consultado directamente por tres
+sistemas. componentes/dimensiones_fisicas.py ya declaraba
+agudeza_sensorial con este enganche identificado con precisión,
+deliberadamente sin conectar -- "sustituir un radio global por uno
+individual tocaría tres sistemas a la vez". Diego pidió afrontar esa
+deuda ahora en vez de dejarla acumular más tiempo.
+
+Calibración de los bordes [radio_minimo_celdas, radio_maximo_celdas]:
+un primer intento ([1, 4], punto medio 2.5, cerca del único valor ya
+calibrado antes de este cambio, 2) resultó tener un fallo real: el
+rango entero de lobo caía siempre en el mismo entero redondeado, es
+decir CERO variación individual dentro de esa especie -- justo lo que
+se quería evitar al conectar el enganche. Los bordes finales, [0, 4],
+preservan la asimetría esperada entre especies Y variación individual
+real dentro de cada una, con el promedio global todavía cerca del viejo
+valor único (2).
+
+`radio_individual` (2026-08-23): firma corregida -- recibía un dict
+`config_percepcion`, pero AMBOS consumidores (sistema_movimiento.py,
+sistema_capacidad_mental.py) la llamaban ya con radio_min/radio_max
+sueltos, mismo criterio de arreglo que pendiente_maxima_transitable.
+
+`radio_efectivo_por_peso` (2026-08-23, pregunta de Diego: "no debería
+ser igual de fácil detectar a una mosca que a un gnomo"). Verificado
+con el mismo barrido de calibración ligera que el resto de piezas de
+esa sesión.
+
+## `celda_percibida` (ahora en `percepcion.py`)
+
+Promovida desde sistema_movimiento.py (donde nació como
+`_celda_percibida`, privada, para comida y agua) a este módulo: fase
+terreno-huida-de-amenazas, cuando nucleo/amenaza.py necesitó el mismo
+patrón de búsqueda para "celda peligrosa más cercana" y duplicarlo
+habría sido exactamente el riesgo que nucleo/disposicion.py ya señaló
+en su propio docstring -- que las distintas nociones de "qué cuenta
+como cerca" diverjan con el tiempo.

@@ -1,16 +1,14 @@
 """
 nucleo/inventario.py
 
-Cálculo de capacidad de carga -- FUNDAMENTO de la fase de interacción
-física (2026-08-30, ver componentes/inventario.py y la conversación de
-diseño con Diego). Funciones puras, mismo patrón que nucleo/flora.py y
-nucleo/agua.py.
+Cálculo de capacidad de carga -- ver componentes/inventario.py.
+Funciones puras, mismo patrón que nucleo/flora.py y nucleo/agua.py.
 
-Capacidad ligada al PESO propio, no un número fijo ni ilimitada (Diego:
-"creo que lo que importa es el peso, da igual cuantos materiales sean,
-depende de tu capacidad física de portarlos") -- reutiliza
-DimensionesFisicas.peso, ya sorteado por rango racial al nacer, en vez de
-inventar una estadística nueva de "fuerza de carga".
+Capacidad ligada al PESO propio, no un número fijo ni ilimitado --
+reutiliza DimensionesFisicas.peso, ya sorteado por rango racial al
+nacer, en vez de inventar una estadística nueva de "fuerza de carga".
+
+Historial de diseño y decisiones: docs/historial_componentes.md.
 """
 
 from __future__ import annotations

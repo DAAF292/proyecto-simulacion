@@ -1,10 +1,9 @@
 """
 nucleo/conflicto.py
 
-Resolutor GENÉRICO de disputas entre dos conscientes -- FUNDAMENTO
-(2026-08-30, ver conversación de diseño con Diego: "esto debe ser
-reutilizable a futuro... que un individuo robe a otro, un agravio del
-tipo que sea"). Esta función NO sabe qué se disputa (un refugio, un
+Resolutor GENÉRICO de disputas entre dos conscientes -- pensado para ser
+reutilizable a futuro (un refugio ocupado, un robo, un agravio del tipo
+que sea). Esta función NO sabe qué se disputa (un refugio, un
 robo, un agravio cualquiera) -- solo resuelve, dados dos temperamentos y
 la urgencia de cada uno sobre lo que está en juego, quién se impone.
 Mismo principio de neutralidad que nucleo/disposicion.py:
@@ -12,10 +11,10 @@ magnitud_disposicion_por_peso no decide quién es depredador de quién,
 solo da una magnitud; aquí, resolver_disputa no decide qué significa
 "perder" en cada situación concreta -- eso lo decide quien la consume.
 
-El primer consumidor es el refugio ocupado (sistema_movimiento.py,
-Círculo "conflicto"). Robo y agravio genérico quedan como consumidores
-futuros del mismo resolutor, sin ninguna lógica nueva que escribir aquí
--- solo un disparador distinto en su propio sistema.
+El primer consumidor es el refugio ocupado (sistema_movimiento.py).
+Robo y agravio genérico quedan como consumidores futuros del mismo
+resolutor, sin ninguna lógica nueva que escribir aquí -- solo un
+disparador distinto en su propio sistema.
 
 Memoria de agravios entre individuos con nombre propio (rencor
 persistente) queda deliberadamente fuera de este módulo -- conecta con

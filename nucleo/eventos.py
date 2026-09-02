@@ -1,16 +1,15 @@
-"""BusEventos: unica via de comunicacion entre sistemas (informe tecnico,
-seccion 2.2), con severidad asignada por el emisor (paso 4).
+"""BusEventos: única vía de comunicación entre sistemas, con severidad
+asignada por el emisor.
 
-El bus no filtra nada -- ni siquiera RUIDO. Cada consumidor decide que
-le interesa: persistencia.py escribira solo NOTABLE/HISTORICO a
-cronica_eventos (RUIDO no se persiste); el narrador recibira el flujo
-completo y el filtro de severidad sera su propio primer paso de pipeline
-(informe tecnico, seccion 14). Ninguno de los dos existe todavia --
-esto solo deja el canal listo para cuando lleguen.
+El bus no filtra nada -- ni siquiera RUIDO. Cada consumidor decide qué
+le interesa: persistencia.py escribirá solo NOTABLE/HISTORICO a
+crónica_eventos (RUIDO no se persiste); un narrador futuro recibiría el
+flujo completo y el filtro de severidad sería su propio primer paso de
+pipeline. Ninguno de los dos existe todavía -- esto solo deja el canal
+listo para cuando lleguen.
 
-tipo es texto libre, no Enum: el catalogo de tipos de evento es
-calibracion numerica abierta (Bloque B), no un conjunto cerrado como
-Especie.
+tipo es texto libre, no Enum: el catálogo de tipos de evento es
+calibración numérica abierta, no un conjunto cerrado como Especie.
 """
 from dataclasses import dataclass, field
 from enum import Enum

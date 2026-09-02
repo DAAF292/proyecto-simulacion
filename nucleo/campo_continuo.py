@@ -1,31 +1,24 @@
-"""Campo continuo: primitiva generica para generar una magnitud suave y
-determinista sobre el grid (fase terreno 2, elevacion -- y reutilizada en
-fase terreno 3 para lluvia y temperatura, mismo mecanismo, tres
-instancias distintas en vez de tres tecnicas de generacion diferentes).
+"""Campo continuo: primitiva genérica para generar una magnitud suave y
+determinista sobre el grid -- usada para elevación, lluvia y
+temperatura, mismo mecanismo, tres instancias distintas en vez de tres
+técnicas de generación diferentes.
 
-Los algoritmos de generacion que ya existian en zona_bioma.py
-(_generar_rio: paseo aleatorio; _generar_manchas: flood-fill
-probabilistico) son ambos DISCRETOS -- deciden, celda a celda, si
-pertenece o no a un conjunto. Ninguno sirve para una magnitud que varia
-de forma continua y suave por el espacio (una celda de elevacion 0.52
-junto a una de 0.55, no un salto abrupto), que es justo lo que elevacion/
-lluvia/temperatura necesitan como fundamento fisico para fase 3.
+A diferencia de los algoritmos DISCRETOS de generación (paseo aleatorio,
+flood-fill probabilístico -- deciden, celda a celda, si pertenece o no
+a un conjunto), esto sirve para una magnitud que varía de forma
+continua y suave por el espacio (una celda de elevación 0.52 junto a
+una de 0.55, no un salto abrupto).
 
-Tecnica elegida: "value noise" por interpolacion bilineal de un grid
-grueso aleatorio -- no ruido Perlin/Simplex (mas suave y sin la ligera
-direccionalidad de la retícula, pero bastante mas complejo de implementar
-correctamente desde cero) ni diamond-square (exige un grid de lado
-2^n+1, no encaja con un grid arbitrario como el actual 20x20 sin recortar
-o rellenar). Value noise es la opcion mas simple que sigue dando colinas/
-zonas suaves reales, coherente con "no optimices por anticipacion" y con
-que esto es una implementacion propia con fines de aprendizaje (stack
-decidido, informe tecnico): un algoritmo simple y correcto vale mas aqui
-que uno sofisticado a medias.
+Técnica: "value noise" por interpolación bilineal de un grid grueso
+aleatorio -- más simple que Perlin/Simplex o diamond-square, sigue
+dando colinas/zonas suaves reales sin la complejidad de implementarlos
+correctamente desde cero.
 
-Determinista: recibe siempre el rng ya sembrado de quien la llama (nunca
-crea su propio Random()), mismo principio que el resto de
-nucleo/zona_bioma.py -- la generacion del mundo entero cuelga de una
-unica semilla.
+Determinista: recibe siempre el rng ya sembrado de quien la llama
+(nunca crea su propio Random()) -- la generación del mundo entero
+cuelga de una única semilla.
+
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 import random
 

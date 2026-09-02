@@ -1,16 +1,17 @@
 """
 nucleo/fuego.py
 
-Funciones puras para fuego controlado (Fogata) -- FUNDAMENTO (2026-08-31,
-ver componentes/fogata.py, componentes/agarre.py y la conversación de
-diseño con Diego: "usar dos rocas para hacer un fuego"). Mismo patrón
-que nucleo/construccion.py: funciones sin estado, cada sistema que las
-consume decide cuándo llamarlas.
+Funciones puras para fuego controlado (Fogata) -- ver
+componentes/fogata.py. Mismo patrón que nucleo/construccion.py:
+funciones sin estado, cada sistema que las consume decide cuándo
+llamarlas.
 
 DISTINTO del incendio (nucleo/celda.py:en_llamas, sistemas/
 sistema_desastres.py) -- ese es un peligro estocástico que se propaga y
 daña a quien esté encima; una Fogata es deliberada, no se propaga, no
 daña a nadie.
+
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 
 from __future__ import annotations

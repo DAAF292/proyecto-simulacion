@@ -39,10 +39,10 @@ class Mundo:
             rng=self.rng,
         )
 
-        # Asentamientos (2026-08-30, "el germen de un asentamiento" --
-        # ver nucleo/asentamiento.py y sistemas/sistema_asentamiento.py).
-        # Recalculado íntegro cada día a partir de Construccion +
-        # Temperamento -- no se persiste en SQLite (100% derivable, mismo
-        # criterio que nucleo/agua.py:pendiente_local). dict vacío hasta
-        # el primer corte de día, cuando SistemaAsentamiento lo repuebla.
+        # Asentamientos (ver nucleo/asentamiento.py y
+        # sistemas/sistema_asentamiento.py). Recalculado íntegro cada día
+        # a partir de Construccion + Temperamento -- no se persiste en
+        # SQLite (100% derivable, mismo criterio que
+        # nucleo/agua.py:pendiente_local). dict vacío hasta el primer
+        # corte de día, cuando SistemaAsentamiento lo repuebla.
         self.asentamientos: dict[int, Any] = {}

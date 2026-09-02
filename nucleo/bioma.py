@@ -1,42 +1,34 @@
-"""Clasificacion de bioma por elevacion+lluvia+temperatura (fase terreno
-3, informe tecnico -- referencia Dwarf Fortress: elevacion domina sobre
-el resto, lluvia/drenaje y temperatura deciden dentro del rango medio).
-Funcion pura, mismo patron que nucleo/ciclo_vital.py y nucleo/clima.py.
+"""Clasificación de bioma por elevación+lluvia+temperatura -- elevación
+domina sobre el resto, lluvia/drenaje y temperatura deciden dentro del
+rango medio. Función pura, mismo patrón que nucleo/ciclo_vital.py y
+nucleo/clima.py.
 
-Prioridad de reglas (arbol de decision simple, no una formula ponderada
-continua -- mas facil de razonar y de depurar visualmente, mismo criterio
-de simplicidad que llevo a nucleo/campo_continuo.py a elegir value noise
-en vez de Perlin):
+Prioridad de reglas (árbol de decisión simple, no una fórmula ponderada
+continua -- más fácil de razonar y de depurar visualmente):
 
-1. Temperatura muy baja -> Tundra. Desde el circulo 1 de generacion
-   causal (2026-08-27) esta regla manda: con relieve orografico real la
-   temperatura de las cumbres CAE por el gradiente termico, asi que una
-   cumbre fria es una cumbre nevada (tundra de altura) -- la ley vieja
-   "elevacion alta -> Montana incondicional" asumia elevacion-ruido sin
-   estructura y enterraba esta fisica; la inversion la libera (leyes y
-   pruebas: tests/test_bioma.py).
-2. Elevacion alta (pero no congelada) -> Montana.
-3. Lluvia escasa -> Desierto (arido).
+1. Temperatura muy baja -> Tundra. Con relieve orográfico real la
+   temperatura de las cumbres CAE por el gradiente térmico, así que una
+   cumbre fría es una cumbre nevada (tundra de altura) -- por eso esta
+   regla va antes que la de Montaña, no después.
+2. Elevación alta (pero no congelada) -> Montaña.
+3. Lluvia escasa -> Desierto (árido).
 4. Lluvia abundante -> Bosque (denso).
-5. Resto (elevacion/temperatura/lluvia todas moderadas) -> Pradera.
+5. Resto (elevación/temperatura/lluvia todas moderadas) -> Pradera.
 
-Umbrales calibrados por inspeccion de proporciones en varias semillas
-(ver config/constantes.yaml, seccion 'bioma') para que Pradera+Bosque
-sigan siendo mayoria del mapa (proporcion similar a la version binaria
-de antes de esta fase, ~75/25) y Montana/Desierto/Tundra queden como
-terreno minoritario en los extremos -- una decision deliberada, no viene
-de ningun dato de referencia real: el objetivo era no deshacer sin querer
-la calibracion de supervivencia ya validada, no producir un mapa
-fisicamente "correcto".
+Umbrales calibrados por inspección de proporciones en varias semillas
+(config/clima.yaml, sección 'bioma') para que Pradera+Bosque sigan
+siendo mayoría del mapa (~75/25) y Montaña/Desierto/Tundra queden como
+terreno minoritario en los extremos -- decisión deliberada para no
+deshacer la calibración de supervivencia ya validada, no para producir
+un mapa físicamente "correcto".
 
-Correccion posterior (discutida y confirmada con Diego, ver
-nucleo/celda.py): esta funcion SOLO decide el bioma -- una zona
-climatica. Que especies de flora concretas viven dentro de cada bioma (y
-si un mismo bioma aloja mas de una, como Bosque con hierba silvestre y
-manzano) es una decision completamente distinta, que vive en
-config/constantes.yaml (seccion flora) y se resuelve en
-nucleo/zona_bioma.py -- esta funcion no sabe nada de plantas, solo de
-clima.
+Esta función SOLO decide el bioma -- una zona climática. Qué especies
+de flora concretas viven dentro de cada bioma (y si un mismo bioma
+aloja más de una) es una decisión completamente distinta, que vive en
+config/flora.yaml y se resuelve en nucleo/zona_bioma.py -- esta función
+no sabe nada de plantas, solo de clima.
+
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 from nucleo.celda import TipoTerreno
 
