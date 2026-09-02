@@ -4,18 +4,18 @@
 
 **Goal:** Declarar `tipo_propagacion` (viento | caida | zoocoria) por especie y las tres constantes numéricas nuevas en `config/flora.yaml` — sin cambiar todavía ningún fichero `.py`. Pieza 1 de 5 de "tipos de propagación de flora".
 
-**Architecture:** Cambio puro de datos de configuración, igual que la pieza 1/5 de la distribución causal de flora. Ningún consumidor real todavía — los planes 2-5 los usan. Cero riesgo de romper nada existente: ningún sistema del motor lee `tipo_propagacion` hoy, así que añadirlo es inerte por construcción.
+**Architecture:** Cambio puro de datos de configuración. Ningún consumidor real todavía — piezas futuras lo usan. Cero riesgo de romper nada existente: ningún sistema del motor lee `tipo_propagacion` hoy, así que añadirlo es inerte por construcción.
 
 **Tech Stack:** YAML, pytest + PyYAML (`yaml.safe_load`).
 
-**Spec:** `docs/superpowers/specs/2026-09-01-propagacion-flora-design.md`, sección 1 ("Catálogo — `config/flora.yaml`").
+**Spec:** diseño aprobado por Diego para la propagación de flora por vectores (viento, caída, zoocoria), sección de catálogo. Este plan es autocontenido -- todo el código necesario está incluido abajo, no hace falta consultar ningún otro documento para completarlo.
 
 ## Global Constraints
 
 - No tocar ningún fichero `.py` en este plan — solo `config/flora.yaml` y un test nuevo.
-- No declarar `CLAUDE.md` como fichero a modificar.
+- No añadas, edites ni menciones ningún fichero que no sea uno de los dos listados en "Files" de la tarea de abajo. Si crees que necesitas leer o tocar otro fichero para completar esta tarea, DETENTE y no lo hagas -- este plan está diseñado para ser autosuficiente con el código ya incluido.
 - `alcance_viento_celdas` se declara SOLO en las especies con `tipo_propagacion: viento` — no añadir esa clave a `manzano` (zoocoria) ni `cactus` (caida).
-- Todos los valores numéricos nuevos son PROVISIONALES (razonados en la spec, sin calibrar contra el motor en marcha) — no los justifiques con más precisión de la que ya da la spec.
+- Todos los valores numéricos nuevos son PROVISIONALES (sin calibrar contra el motor en marcha) — no los justifiques con más precisión de la que ya se da aquí.
 - No modificar ninguna aserción de los tests ya existentes en `tests/`.
 
 ---
@@ -43,12 +43,10 @@ Crea `tests/test_flora_tipo_propagacion.py`:
 
 ```python
 """Tests del catálogo de tipos de propagación de flora (2026-09-02,
-pieza 1/5 de "tipos de propagación" -- ver docs/superpowers/specs/
-2026-09-01-propagacion-flora-design.md).
+pieza 1 de "tipos de propagación de flora" -- viento, caída, zoocoria).
 
 Valida solo la FORMA del catálogo -- ningún sistema del motor consume
-tipo_propagacion todavía (eso llega en los planes 2-5). Carga el YAML
-real, no una config recortada.
+tipo_propagacion todavía. Carga el YAML real, no una config recortada.
 """
 import yaml
 
@@ -132,10 +130,9 @@ En `config/flora.yaml`, dentro de `flora.especies`, añade la clave `tipo_propag
 
 En `hierba_silvestre` (antes de `recursos:`):
 ```yaml
-      # tipo_propagacion (2026-09-02, ver docs/superpowers/specs/
-      # 2026-09-01-propagacion-flora-design.md): semilla ligera dispersada
-      # por el viento del mundo (zona.viento_dx/viento_dy) -- PROVISIONAL,
-      # sin calibrar. Pradera abierta: alcance mayor que liquen/musgo.
+      # tipo_propagacion (2026-09-02): semilla ligera dispersada por el
+      # viento del mundo (zona.viento_dx/viento_dy) -- PROVISIONAL, sin
+      # calibrar. Pradera abierta: alcance mayor que liquen/musgo.
       tipo_propagacion: viento
       alcance_viento_celdas: [2, 6]
 ```
@@ -150,7 +147,7 @@ En `manzano` (antes de `recursos:`):
 En `cactus` (antes de `recursos:`):
 ```yaml
       # tipo_propagacion: fruto pesado, cae cerca de la base de la planta
-      # madre -- mismo mecanismo que ya tenía _intentar_propagacion hoy,
+      # madre -- mismo mecanismo que ya tenía la propagación de hoy,
       # solo formalizado como catálogo.
       tipo_propagacion: caida
 ```
@@ -177,15 +174,13 @@ En `config/flora.yaml`, dentro de la sección `flora:`, justo antes de la clave 
 
 ```yaml
   # probabilidad_recogida_semilla_zoocoria / probabilidad_plantar_semilla_
-  # en_aliviarse (2026-09-02, ver docs/superpowers/specs/
-  # 2026-09-01-propagacion-flora-design.md): modelado por probabilidad,
-  # sin simular tránsito digestivo real -- mismo estilo que
-  # probabilidad_encender_fuego (config/fuego.yaml). La primera: comer
-  # fruto de una especie zoocora deja una semilla "recogida" con esta
-  # probabilidad. La segunda: un ALIVIARSE con semilla ya recogida es el
-  # evento que la deposita con esta probabilidad (no cada ALIVIARSE
-  # disemina necesariamente la semilla concreta que se transporta).
-  # Ambas PROVISIONALES, sin calibrar.
+  # en_aliviarse (2026-09-02): modelado por probabilidad, sin simular
+  # tránsito digestivo real. La primera: comer fruto de una especie
+  # zoocora deja una semilla "recogida" con esta probabilidad. La
+  # segunda: un ALIVIARSE con semilla ya recogida es el evento que la
+  # deposita con esta probabilidad (no cada ALIVIARSE disemina
+  # necesariamente la semilla concreta que se transporta). Ambas
+  # PROVISIONALES, sin calibrar.
   probabilidad_recogida_semilla_zoocoria: 0.3
   probabilidad_plantar_semilla_en_aliviarse: 0.5
 ```
@@ -205,16 +200,5 @@ Expected: todos los tests existentes siguen en verde, más los 5 nuevos.
 ```bash
 cd /home/diego/proyecto-simulacion
 git add config/flora.yaml tests/test_flora_tipo_propagacion.py
-git commit -m "$(cat <<'EOF'
-feat: catálogo de tipos de propagación de flora (propagación 1/5)
-
-Añade tipo_propagacion (viento/caida/zoocoria) por especie y las
-constantes de zoocoria -- sin consumidor todavía, pieza 1 de 5 de
-"tipos de propagación" (docs/superpowers/specs/
-2026-09-01-propagacion-flora-design.md).
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01SqktCmrHLwNtu317aMKy29
-EOF
-)"
+git commit -m "feat: catalogo de tipos de propagacion de flora (propagacion 1/5)"
 ```
