@@ -1932,3 +1932,28 @@ con `git diff` que el remoto era un superset exacto del local (mismo
 contenido, historia squasheada), resuelto con `git reset --hard
 origin/master` tras verificar que no había pérdida real de trabajo,
 solo de granularidad de commits locales.
+
+## Comentarios técnicos vs narrativa histórica (2026-09-02)
+
+Convención nueva, decidida con Diego, aplicable a partir de ahora a
+todo el código del repositorio (no solo al que se toque por otro
+motivo -- ver `.ai-pipeline/guia-tareas.md` para cómo delegar esta
+poda, con los resultados reales de intentarlo).
+
+- **Se queda en el código, corto**: qué hace una función/campo, y el
+  "por qué" que hace falta para no romperlo al tocarlo -- invariantes
+  reales (p.ej. "NO se persiste, se regenera desde la semilla"),
+  relaciones entre campos, gotchas.
+- **Sale del código, va a `docs/historial_<módulo>.md`** (un documento
+  por módulo/área, mismo patrón que `docs/historial_capa_visual.md`
+  ya sentó de precedente): incidentes ya resueltos, calibraciones
+  descartadas, el recorrido de cómo se llegó a esta decisión frente a
+  otras, fechas, nombres de "Círculo", citas a conversaciones con
+  Diego, referencias a specs por ruta completa. Nada se pierde, solo
+  cambia de sitio.
+
+Ya aplicado a `nucleo/flora.py`, `sistemas/sistema_flora.py` y
+`nucleo/celda.py` (ver `docs/historial_flora.md`/`historial_celda.md`).
+Pendiente el resto del repositorio -- ficheros grandes como
+`sistemas/sistema_movimiento.py` (1102 líneas) y `nucleo/persistencia.py`
+(916 líneas) sin empezar.

@@ -2,11 +2,12 @@
 nucleo/construccion.py
 
 Funciones puras para el ciclo de vida de una Construccion (refugio
-individual / almacén de asentamiento) -- FUNDAMENTO de la pieza "refugio
-construido" (2026-08-30, ver componentes/construccion.py, config/
-materiales.yaml sección construccion, y la conversación de diseño con
-Diego). Mismo patrón que nucleo/inventario.py y nucleo/agua.py: funciones
-sin estado, cada sistema que las consume decide cuándo llamarlas.
+individual / almacén de asentamiento) -- ver componentes/construccion.py
+y config/materiales.yaml, sección construccion. Mismo patrón que
+nucleo/inventario.py y nucleo/agua.py: funciones sin estado, cada
+sistema que las consume decide cuándo llamarlas.
+
+Historial de diseño y decisiones: docs/historial_construccion.md.
 """
 
 from __future__ import annotations
@@ -72,12 +73,9 @@ def material_suficiente_para(
 ) -> bool:
     """True si la masa apta ya invertida en la construcción objetivo (si
     existe) más la que se lleva ahora mismo en el Inventario basta para
-    terminar -- Círculo C (2026-08-30, RECOLECTAR), generalizado en el
-    Círculo E (2026-08-30, almacén) de "el refugio propio" a "cualquier
-    Construccion objetivo, id explícito" para servir igual a refugio
-    (propietario_id=id_entidad) que a almacén (propietario_id=None,
-    compartido). Punto único que decide cuándo un gnomo deja de
-    recolectar y pasa a construir/aportar."""
+    terminar -- sirve igual a refugio (propietario_id=id_entidad) que a
+    almacén (propietario_id=None, compartido). Punto único que decide
+    cuándo un gnomo deja de recolectar y pasa a construir/aportar."""
     from componentes.construccion import Construccion
 
     ya_invertido = 0.0
@@ -106,11 +104,9 @@ def espacio_disponible_para_construir(
 ) -> float:
     """m² todavía libres para construcción en (pos_x, pos_y, zona_idx) --
     capacidad_construccion_celda_m2 menos la suma de huella_m2 de toda
-    Construccion YA presente en esa celda exacta (2026-08-31, ver
-    docstring de config/materiales.yaml sección construccion: antes de
-    esto ninguna Construccion tenía noción de área, solo de masa de
-    materiales). Búsqueda lineal O(N) sobre las construcciones del mundo,
-    mismo límite ya aceptado en construccion_propia."""
+    Construccion YA presente en esa celda exacta. Búsqueda lineal O(N)
+    sobre las construcciones del mundo, mismo límite ya aceptado en
+    construccion_propia."""
     from componentes.construccion import Construccion
     from componentes.posicion import Posicion
 
@@ -130,11 +126,11 @@ def objetivo_construccion_actual(
 ):
     """(tipo, cid_existente_o_None, posicion_de_creacion_o_None) del
     objetivo de CONSTRUIR/RECOLECTAR de este individuo ahora mismo, o
-    None si no hay ninguno -- Círculo E (2026-08-30, almacén de
-    asentamiento). El refugio propio SIEMPRE tiene prioridad mientras no
-    esté terminado (necesidad individual antes que comunal, mismo orden
-    Maslow que el resto del motor); solo una vez resuelto se mira si es
-    miembro de un asentamiento y su almacén sigue sin terminar.
+    None si no hay ninguno. El refugio propio SIEMPRE tiene prioridad
+    mientras no esté terminado (necesidad individual antes que comunal,
+    mismo orden Maslow que el resto del motor); solo una vez resuelto se
+    mira si es miembro de un asentamiento y su almacén sigue sin
+    terminar.
     posicion_de_creacion es None para refugio (se crea donde ya se está,
     ver sistema_movimiento.py) y el centro del asentamiento para almacén
     (hay que llegar hasta ahí, no se crea donde a cada gnomo le pille)."""

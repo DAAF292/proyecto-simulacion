@@ -72,15 +72,38 @@ razonable en abstracto, pero que agota el presupuesto de pasos/tiempo
 sin producir nada, incluso cuando la información que busca YA estaba en
 el prompt.
 
-**Lo que NO se ha probado todavía, candidato real para la próxima
-prueba de esta clase de tarea**: prohibir explícitamente en el prompt
-cualquier comando `git log`/`git show`/`git diff` contra otros
-commits ("confía en el ejemplo dado, no consultes el historial de git
-de ningún fichero") -- ninguno de los dos intentos incluyó esa
-prohibición explícita, solo la sugerencia de que "no debería hacer
-falta". Si se prueba y sigue fallando, sería evidencia más fuerte de
-que este tipo de tarea no es delegable todavía con el presupuesto
-actual.
+**Prohibición explícita de git, probada (intento 3, `nucleo/
+construccion.py`)**: se añadió al prompt "NO ejecutes git log/git
+show/git diff, confía en el ejemplo dado" -- **funcionó parcialmente**.
+El modelo dejó de tocar git por completo (0 comandos git en 31 pasos,
+frente a varios en los intentos 1-2), y en su lugar hizo algo más
+barato y legítimo (leer `docs/historial_celda.md`/`historial_flora.md`
+ya existentes para calibrar el formato). Aun así, **no completó la
+tarea ni con 900s ni con 1500s** -- en el segundo intento (1500s, 31
+pasos, $0.01), los últimos 4 pasos los gastó buscando con `grep` una
+cita textual ("ver CLAUDE.md, 'Comentarios técnicos vs narrativa
+histórica'") que en ese momento **no existía de verdad** en CLAUDE.md
+con ese nombre exacto -- un error real de los propios documentos
+(`historial_flora.md`/`historial_celda.md` citaban una sección que
+nunca se había escrito), no del modelo: fue a comprobar una referencia
+rota y se quedó sin margen. Corregido añadiendo esa sección de verdad a
+CLAUDE.md. **Lección nueva, sin confirmar todavía con una repetición**:
+cualquier cita a "ver X, sección Y" dentro de un prompt o de un fichero
+que el modelo pueda leer debe apuntar a algo que existe literalmente
+con ese nombre -- si no, el modelo puede ir a comprobarlo y quedarse
+atascado buscando algo que no está.
+
+**Conclusión de las tres pruebas juntas**: ninguna completó la tarea de
+principio a fin (editar el fichero + crear el historial + comitear),
+ni siquiera con la prohibición de git y 1500s de margen. La prohibición
+sí cambió el comportamiento (menos exploración destructiva, más
+verificación barata) pero no fue suficiente por sí sola. Candidatos sin
+probar todavía: (a) trocear la tarea en pasos más pequeños explícitos
+en vez de un objetivo abierto ("aplica esto a todo el fichero"); (b)
+pedirle que edite y comitee función por función en vez de todo el
+fichero de una vez, para que un corte a mitad de tarea no pierda todo
+el trabajo; (c) aceptar que este tipo de tarea, con este presupuesto,
+se hace mejor a mano por ahora.
 
 ## Reglas prácticas, mientras tanto
 
@@ -89,16 +112,17 @@ actual.
   NO tocar, y los comandos exactos de verificación. Esto ya está
   validado dos veces.
 - **Antes de soltar una tarea de calibración de estilo (poda de
-  comentarios, convenciones de documentación, etc.)**: no delegar
-  todavía sin probar primero la prohibición explícita de git de arriba.
-  Mientras tanto, hacerlo directamente es más barato en tiempo real
-  (aunque más caro en tokens de Claude) que dos intentos fallidos de
-  900s cada uno.
+  comentarios, convenciones de documentación, etc.)**: de momento,
+  hacerlo directamente -- tres intentos reales (con y sin prohibición
+  de git, con 900s y 1500s) no completaron ni uno. Revisar esta guía
+  antes de reintentarlo por si hay un hallazgo nuevo.
 - **Nunca pedirle que consulte `git log -p`/`git show` como forma de
   darle un ejemplo** -- incrustar el ejemplo directamente en el texto
-  de la tarea es más barato, y aun así el modelo puede decidir
-  consultar git de todos modos si el tipo de tarea se lo empuja a
-  querer verificar por su cuenta.
+  de la tarea es más barato. Prohibirlo explícitamente en el prompt SÍ
+  reduce el uso de git, pero no basta por sí solo.
+- **Cualquier cita a "ver X, sección Y" en un prompt o en un fichero
+  que el modelo pueda leer debe existir literalmente** -- una cita rota
+  puede hacer que el modelo se quede buscándola en vez de avanzar.
 - **Ficheros grandes** (más de ~400-500 líneas) probablemente necesiten
-  más de 900s incluso para tareas que sí funcionan bien -- no probado
-  todavía a esa escala, extrapolación razonada, no medida.
+  más de 900-1500s incluso para tareas que sí funcionan bien -- no
+  probado todavía a esa escala, extrapolación razonada, no medida.

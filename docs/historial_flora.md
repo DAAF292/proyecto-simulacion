@@ -2,8 +2,8 @@
 
 Recorrido de decisiones y hallazgos que motivaron el código actual de
 ecología vegetal, extraído de los comentarios en línea el 2026-09-02
-para aligerar el código fuente (ver CLAUDE.md, "Comentarios técnicos vs
-narrativa histórica"). El código conserva solo el "qué hace" y los
+para aligerar el código fuente (ver CLAUDE.md, sección "Comentarios
+técnicos vs narrativa histórica"). El código conserva solo el "qué hace" y los
 invariantes necesarios para tocarlo con seguridad; este documento
 conserva el "por qué llegó a ser así", para no perder la razón detrás
 de una decisión no evidente por sí sola.
