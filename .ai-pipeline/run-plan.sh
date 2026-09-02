@@ -101,7 +101,15 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # dificultad comparable a los que aider había fallado ese mismo día.
     # Corre en modo `local` (sin Docker, ejecuta en este mismo host vía
     # subprocess) -- ese es el modo por defecto del CLI `mini`.
-    ARCHIVOS_PLAN=$(grep -oE '\- (Modify|Create|Test): `[A-Za-z0-9_./-]+\.[A-Za-z0-9]+`' "docs/plans/in_progress/$PLAN_NAME.md" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)
+    # `|| true` (2026-09-02, hallazgo real: un plan tipo BLUEPRINT, sin
+    # la sección **Files:** con líneas `- Modify/Create/Test: \`ruta\``,
+    # no tiene ningún match aquí -- con `pipefail` activo, el primer
+    # grep sin coincidencias hace fallar toda la tubería con código 1, y
+    # `set -e` mata el script entero antes de que el agente llegue a
+    # ejecutarse. ARCHIVOS_PLAN queda vacío en ese caso -- ver el guard
+    # correspondiente más abajo, en el bloque de limpieza de ficheros no
+    # declarados.
+    ARCHIVOS_PLAN=$(grep -oE '\- (Modify|Create|Test): `[A-Za-z0-9_./-]+\.[A-Za-z0-9]+`' "docs/plans/in_progress/$PLAN_NAME.md" | grep -oE '`[^`]+`' | tr -d '`' | sort -u || true)
 
     # TAREA (2026-09-02): a diferencia de aider, mini-swe-agent no
     # necesita que se le incruste el contenido de cada fichero a mano --
@@ -231,22 +239,31 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # paso de limpieza no debe poder tumbar el script entero por su
     # cuenta -- un fallo real del agente seguirá capturado por el
     # chequeo de CAMBIOS_REALES/tests de más abajo, no aquí.
-    git diff -z --name-only --diff-filter=A "$PLAN_START_COMMIT" HEAD -- . ':!docs/plans' ':!.ai-pipeline' |
-    while IFS= read -r -d '' f; do
-        declarado=false
-        for d in $ARCHIVOS_PLAN; do
-            if [ "$f" = "$d" ]; then
-                declarado=true
-                break
+    # Guard de BLUEPRINT (2026-09-02): sin ARCHIVOS_PLAN (plan sin
+    # sección **Files:**), no hay whitelist contra la que comparar --
+    # tratar eso como "nada declarado, luego nada permitido" borraría
+    # cualquier fichero nuevo legítimo que el agente cree por su cuenta
+    # (tests nuevos, sobre todo), justo el punto de un blueprint. Se
+    # salta la limpieza entera en ese caso; un plan de código completo
+    # (con **Files:**) conserva la protección de siempre.
+    if [ -n "$ARCHIVOS_PLAN" ]; then
+        git diff -z --name-only --diff-filter=A "$PLAN_START_COMMIT" HEAD -- . ':!docs/plans' ':!.ai-pipeline' |
+        while IFS= read -r -d '' f; do
+            declarado=false
+            for d in $ARCHIVOS_PLAN; do
+                if [ "$f" = "$d" ]; then
+                    declarado=true
+                    break
+                fi
+            done
+            if [ "$declarado" = false ]; then
+                echo "[LIMPIEZA] Fichero nuevo no declarado por el plan: '$f' -- eliminado."
+                git rm -rq -- "$f" || true
             fi
         done
-        if [ "$declarado" = false ]; then
-            echo "[LIMPIEZA] Fichero nuevo no declarado por el plan: '$f' -- eliminado."
-            git rm -rq -- "$f" || true
+        if ! git diff --cached --quiet; then
+            git commit -q -m "chore: limpiar ficheros no declarados por el plan (intento $RETRY_COUNT)"
         fi
-    done
-    if ! git diff --cached --quiet; then
-        git commit -q -m "chore: limpiar ficheros no declarados por el plan (intento $RETRY_COUNT)"
     fi
 
     # VERIFICACIÓN REAL DE CAMBIOS (2026-09-01, ver comentario de
