@@ -359,6 +359,25 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # en 0 cambios reales y el chequeo de CAMBIOS_REALES de más abajo lo
     # trata como fallo por su propio mecanismo ya existente, sin
     # necesitar una condición de fallo aparte.
+    # CORRECCIÓN (2026-09-02, hallazgo real: un plan que no llegó a
+    # aportar ningún cambio real -- esta vez por un RateLimitError de
+    # presupuesto agotado en litellm, no por basura del modelo -- hizo
+    # que este bloque no tuviera nada que hacer (`git rm` nunca se
+    # llamó), pero `git diff-index --quiet HEAD` seguía viendo un
+    # artefacto viejo sin relación (la eliminación del plan original
+    # fuera de docs/plans/, que "chore: iniciar plan" nunca comitea --
+    # bug menor preexistente, ver comentario de ese paso) como "hay
+    # cambios" -- el `git commit` que se disparaba entonces no tenía
+    # NADA realmente staged y fallaba con "nothing to commit", matando
+    # el script entero bajo `set -e`. `git diff --cached --quiet` (en
+    # vez de `git diff-index --quiet HEAD`) solo mira el índice/staged
+    # -- exactamente lo que este paso puede haber tocado con sus propios
+    # `git rm`, sin verse afectado por ruido de fuera de este bloque.
+    # `|| true` en el propio `git rm` (hallazgo de code-review, no
+    # aplicado hasta ahora): si alguna vez falla por lo que sea, este
+    # paso de limpieza no debe poder tumbar el script entero por su
+    # cuenta -- un fallo real de aider seguirá capturado por el
+    # chequeo de CAMBIOS_REALES/tests de más abajo, no aquí.
     git diff -z --name-only --diff-filter=A "$PLAN_START_COMMIT" HEAD -- . ':!docs/plans' ':!.ai-pipeline' |
     while IFS= read -r -d '' f; do
         declarado=false
@@ -370,10 +389,10 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         done
         if [ "$declarado" = false ]; then
             echo "[LIMPIEZA] Fichero nuevo no declarado por el plan (probable ruta corrupta del parser de aider): '$f' -- eliminado."
-            git rm -rq -- "$f"
+            git rm -rq -- "$f" || true
         fi
     done
-    if ! git diff-index --quiet HEAD; then
+    if ! git diff --cached --quiet; then
         git commit -q -m "chore: limpiar ficheros no declarados por el plan (intento $RETRY_COUNT)"
     fi
 
