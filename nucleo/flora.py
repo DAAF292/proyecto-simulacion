@@ -141,6 +141,60 @@ def idoneidad_colonizacion(
     return f_lluvia * f_temp * f_fertilidad * f_humedad
 
 
+def intentar_colonizar_celda(
+    gestor: "GestorEntidades",
+    celda_dest: Celda,
+    capacidad_retencion: float,
+    especie: str,
+    especie_cfg: dict[str, Any],
+    umbral_minimo: float,
+    nx: int,
+    ny: int,
+    zona_idx: int,
+) -> bool:
+    """Intenta colonizar una celda DESTINO YA EXISTENTE con una especie --
+    distinto de idoneidad_colonizacion (generación inicial, donde la Celda
+    todavía no existe y hay que construir una parcial). Círculo de
+    "tipos de propagación de flora" (2026-09-02, ver docs/superpowers/
+    specs/2026-09-01-propagacion-flora-design.md): sustituye la
+    validación tosca "¿bioma compatible + sin agua?" que usaba
+    _intentar_propagacion, compartida ahora por los tres vectores
+    (caída, viento, zoocoria).
+
+    Ley física común a los tres vectores, no solo caída: una celda ya
+    ocupada (tiene_recurso) o sumergida (tiene_agua) nunca se coloniza,
+    con independencia de cuánta idoneidad tenga -- el guard de agua
+    corrige un bug ya documentado en sistema_flora.py (una versión previa
+    sin él dejaba que la propagación colonizara río/lago/poza), no está
+    en la redacción original de la spec pero es la misma ley física que
+    ya regía antes de esta pieza. Devuelve False sin tocar nada en
+    cualquiera de los dos casos, y también si la idoneidad no alcanza
+    umbral_minimo.
+
+    Import de crear_planta diferido (no a nivel de módulo): nucleo/
+    entidad.py no importa nucleo/flora.py hoy, así que no hay ciclo real,
+    pero mantener el import aquí evita crear uno si eso cambia."""
+    if celda_dest.tiene_recurso or celda_dest.tiene_agua:
+        return False
+
+    idoneidad = idoneidad_colonizacion(especie_cfg, celda_dest, capacidad_retencion)
+    if idoneidad < umbral_minimo:
+        return False
+
+    from nucleo.entidad import crear_planta
+
+    crear_planta(gestor, especie, nx, ny, etapa=0.1, zona_idx=zona_idx)
+    celda_dest.tiene_recurso = True
+    celda_dest.tipo_recurso = especie
+    for r_cfg in especie_cfg.get("recursos", []):
+        nombre_rec = r_cfg.get("nombre")
+        if nombre_rec and nombre_rec not in celda_dest.recursos:
+            celda_dest.recursos[nombre_rec] = 0.0
+
+    return True
+
+
+
 def colonizar_por_idoneidad(
     rng: random.Random,
     todas_las_celdas: set[tuple[int, int]],
