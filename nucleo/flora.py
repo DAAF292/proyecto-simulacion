@@ -14,6 +14,19 @@ from nucleo.celda import Celda
 from nucleo.clima import Clima, Estacion, modificador_regeneracion
 
 
+def _idoneidad_por_rango(valor: float, rango: list[float]) -> float:
+    """Nota de idoneidad [0.1, 1.0] de un valor continuo frente a un rango
+    preferido -- 1.0 dentro del rango, cae linealmente por distancia fuera
+    de él, con un suelo de 0.1 (ningún valor es una imposibilidad
+    absoluta, solo una idoneidad baja). Extraída de factor_produccion
+    (2026-09-01), que la calculaba dos veces inline -- reutilizada también
+    por idoneidad_colonizacion (fertilidad) sin triplicar la fórmula."""
+    if rango[0] <= valor <= rango[1]:
+        return 1.0
+    dist = min(abs(valor - rango[0]), abs(valor - rango[1]))
+    return max(0.1, 1.0 - (dist * 2.0))
+
+
 def factor_produccion(
     especie_cfg: dict[str, Any],
     lluvia_celda: float,
@@ -32,32 +45,14 @@ def factor_produccion(
       - Perturbación meteorológica del clima diario activo.
     """
     # 1. Idoneidad de lluvia
-    rango_lluvia = especie_cfg.get("preferencia_lluvia", [0.0, 1.0])
-    if rango_lluvia[0] <= lluvia_celda <= rango_lluvia[1]:
-        f_lluvia = 1.0
-    else:
-        dist = min(
-            abs(lluvia_celda - rango_lluvia[0]),
-            abs(lluvia_celda - rango_lluvia[1]),
-        )
-        f_lluvia = max(0.1, 1.0 - (dist * 2.0))
-
-    # 2. Idoneidad de temperatura
-    rango_temp = especie_cfg.get("preferencia_temperatura", [0.0, 1.0])
-    if rango_temp[0] <= temp_celda <= rango_temp[1]:
-        f_temp = 1.0
-    else:
-        # (2026-08-23) corregido: referenciaba una variable inexistente
-        # `temp_temp` dentro de una condición que siempre era verdadera
-        # (`"rango_temp" in locals()`, definida justo arriba sin condición)
-        # -- habría lanzado NameError la primera vez que una celda cayera
-        # fuera del rango de temperatura preferido de cualquier especie.
-        # Misma forma que el cálculo de lluvia de arriba.
-        dist = min(
-            abs(temp_celda - rango_temp[0]),
-            abs(temp_celda - rango_temp[1]),
-        )
-        f_temp = max(0.1, 1.0 - (dist * 2.0))
+    # 1-2. Idoneidad de lluvia y temperatura -- ambas comparten la misma
+    # ley (dentro del rango preferido -> 1.0, fuera -> cae linealmente
+    # con la distancia, suelo 0.1), extraída a _idoneidad_por_rango
+    # (2026-09-01, ver docs/superpowers/specs/
+    # 2026-09-01-distribucion-causal-flora-design.md) para reutilizarla
+    # también en idoneidad_colonizacion sin triplicar la fórmula.
+    f_lluvia = _idoneidad_por_rango(lluvia_celda, especie_cfg.get("preferencia_lluvia", [0.0, 1.0]))
+    f_temp = _idoneidad_por_rango(temp_celda, especie_cfg.get("preferencia_temperatura", [0.0, 1.0]))
 
     # 3-4. Modificador de estacion x modificador de clima diario.
     # (2026-08-29, fix de auditoria) Llama a la funcion centralizada de
@@ -118,3 +113,27 @@ def factor_humedad_subsuelo(
 
 # Alias para preservar compatibilidad con código histórico
 calcular_factor_produccion = factor_produccion
+
+
+def idoneidad_colonizacion(
+    especie_cfg: dict[str, Any], celda: Celda, capacidad_retencion: float,
+) -> float:
+    """Idoneidad de una especie para COLONIZAR una celda -- distinto de
+    factor_produccion (que mide cuánto RINDE una planta ya colocada).
+    Círculo de distribución causal de flora (2026-09-01, ver
+    docs/superpowers/specs/2026-09-01-distribucion-causal-flora-design.md):
+    sustituye el reparto por proporción/mancha fijo en config -- una
+    especie coloniza donde su idoneidad real (lluvia, temperatura,
+    fertilidad del sustrato, humedad de subsuelo) lo permite, no donde un
+    porcentaje impuesto de antemano dice que debe haber tanta hierba.
+
+    factor_humedad_subsuelo devuelve un multiplicador en [1.0, 1+bono] --
+    pensado para producción, no como nota de idoneidad en [0,1] como los
+    demás factores de aquí -- se normaliza dividiendo por (1+bono) para
+    que se comporte igual que f_lluvia/f_temp/f_fertilidad."""
+    f_lluvia = _idoneidad_por_rango(celda.lluvia, especie_cfg.get("preferencia_lluvia", [0.0, 1.0]))
+    f_temp = _idoneidad_por_rango(celda.temperatura, especie_cfg.get("preferencia_temperatura", [0.0, 1.0]))
+    f_fertilidad = _idoneidad_por_rango(celda.fertilidad, especie_cfg.get("preferencia_fertilidad", [0.0, 1.0]))
+    bono_maximo = 0.2
+    f_humedad = factor_humedad_subsuelo(celda, capacidad_retencion, bono_maximo) / (1.0 + bono_maximo)
+    return f_lluvia * f_temp * f_fertilidad * f_humedad
