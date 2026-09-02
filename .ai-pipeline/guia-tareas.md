@@ -35,6 +35,30 @@ de spec -- sin plan con código ya escrito:
   manual): plan 3/5 de propagación (caída + dispatch), con código
   completo en el plan. Completado en el intento 1/3, diff idéntico al
   plan, PR abierto y mergeado.
+- **Prueba real de BLUEPRINT puro** (2026-09-02, primera vez que se
+  prueba de verdad esta vía, pedida explícitamente por Diego: "lo
+  óptimo de este flujo es que Claude haga lo mínimo indispensable"):
+  fix de un bug real (`colonizar_por_idoneidad` no excluía celdas con
+  agua en la generación del mundo). El documento entregado NO tenía
+  ningún diff ni sección `**Files:**` -- solo el bug, el invariante a
+  cumplir, qué ficheros mirar y qué debían verificar los tests, dejando
+  nombres de parámetros/tests al criterio del modelo. **Intento 1/2:
+  timeout a los 900s** sin converger -- la trayectoria muestra que se
+  atascó escribiendo un script Python de parcheo (`/tmp/patch_flora.py`)
+  con una cadena triple-comilla mal cerrada, y se quedó reintentando esa
+  vía en vez de editar directo. **Intento 2/2: éxito limpio en 26
+  pasos** (menos de los 30 que había necesitado la versión CON código
+  completo para el mismo bug) -- localizó las dos funciones correctas,
+  eligió su propia forma de la firma (`celdas_con_agua: set | None =
+  None`, distinta pero equivalente a la propuesta original), escribió
+  dos tests con nombres/docstrings que siguen el estilo real del
+  proyecto, 78/78 tests, smoke test limpio, commit con el trailer
+  correcto, PR real abierto y con diff de calidad -- ver PR #10.
+  **Conclusión**: blueprint es viable con `mini-swe-agent`, pero NO es
+  todavía tan fiable en el primer intento como el código completo (2/2
+  vs 1/2 en primer intento) -- el disyuntor de 3 reintentos absorbió el
+  fallo sin intervención humana, así que el coste real de esto es solo
+  tiempo/dinero de un intento extra, no fiabilidad del resultado final.
 
 **Denominador común de lo que funciona**: la tarea tiene un criterio de
 éxito verificable mecánicamente (los tests pasan o no), y "hacerlo bien"
@@ -126,3 +150,31 @@ se hace mejor a mano por ahora.
 - **Ficheros grandes** (más de ~400-500 líneas) probablemente necesiten
   más de 900-1500s incluso para tareas que sí funcionan bien -- no
   probado todavía a esa escala, extrapolación razonada, no medida.
+- **Un plan tipo BLUEPRINT (sin sección `**Files:**` con líneas
+  `- Modify/Create/Test: \`ruta\``) hacía fallar `run-plan.sh` antes de
+  que el agente llegara a ejecutarse** (2026-09-02, encontrado en la
+  primera prueba real de blueprint): `ARCHIVOS_PLAN` se construye con un
+  `grep` que, sin ninguna coincidencia, devuelve código 1 -- con
+  `pipefail` activo eso abortaba el script entero. Además, el bloque de
+  "limpieza de ficheros no declarados" habría borrado cualquier fichero
+  nuevo legítimo del agente (tests incluidos) al no tener ninguna
+  whitelist contra la que comparar. Corregido en el propio
+  `run-plan.sh`: `ARCHIVOS_PLAN` ya no aborta el script si queda vacío,
+  y el bloque de limpieza se salta entero en ese caso (sin whitelist, no
+  se puede distinguir "declarado" de "no declarado" con seguridad).
+- **El mensaje de fallo por timeout todavía dice "480s" aunque el valor
+  real configurado es 900s** -- cosmético, viene de cuando se subió el
+  timeout sin actualizar el texto del mensaje, no afecta al
+  comportamiento real. Pendiente de limpiar si se retoma este fichero.
+- **El centinela (`watch-plans.sh`) puede llevar corriendo en segundo
+  plano desde una sesión anterior sin que la sesión actual lo sepa** --
+  vigila `docs/superpowers/plans/*.md` cada 5s y dispara `run-plan.sh`
+  en cuanto aparece un fichero nuevo ahí, aunque nadie lo haya invocado
+  esta sesión. Comprobar `ps aux | grep watch-plans` antes de escribir o
+  reescribir un plan directamente en esa carpeta -- si está vivo, un
+  borrador a medio escribir puede dispararse antes de terminarlo de
+  corregir (pasó exactamente esto la primera vez que se probó
+  blueprint). Más seguro: redactar el plan fuera de esa carpeta (o en
+  `docs/superpowers/plans/pendientes/`) y moverlo/copiarlo ahí solo
+  cuando esté listo de verdad, o invocar `run-plan.sh <ruta>`
+  directamente sin depender del centinela.
