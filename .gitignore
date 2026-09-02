@@ -8,3 +8,4 @@ datos/*.db
 .ai-pipeline/run-plan.log
 .ai-pipeline/watch.log
 .ai-pipeline/trayectorias/
+.ai-pipeline/costes/

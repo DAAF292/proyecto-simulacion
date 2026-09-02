@@ -22,7 +22,71 @@ exec > >(tee -a .ai-pipeline/run-plan.log) 2>&1
 echo ""
 echo "########## $(date -Iseconds) -- nueva ejecución de run-plan.sh (PID $$) ##########"
 trap 'echo "[TRAP ERR] línea $LINENO, comando: \"$BASH_COMMAND\", código de salida $?"' ERR
-trap 'echo "[TRAP EXIT] run-plan.sh termina con código $? a las $(date -Iseconds)"' EXIT
+
+# COSTE REAL (2026-09-02, ver guia-tareas.md "Coste real"): el
+# instance_cost que reporta mini es un cálculo local con una tarifa fija
+# de litellm_model_registry.json -- no refleja qué proveedor usó
+# OpenRouter de verdad ni, hasta el fix de esa tabla, el coste de los
+# tokens de caché. El balance real de la cuenta
+# (total_credits - total_usage, vía /api/v1/credits) es la única cifra
+# independiente de esas suposiciones. Se consulta antes del primer
+# intento y de nuevo al salir (éxito o fallo, vía el trap EXIT) para
+# dejar un registro real por ejecución en .ai-pipeline/costes/costes.jsonl
+# -- sin esto, saber el coste real de una pieza exigía hacerlo a mano
+# cada vez, como se hizo para el fix de flora y zoocoria. Best-effort:
+# si OPENROUTER_API_KEY no está disponible o la API no responde, no deja
+# registro pero nunca debe tumbar el pipeline por esto.
+consultar_balance_real() {
+    if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+        return 1
+    fi
+    curl -s --max-time 10 https://openrouter.ai/api/v1/credits \
+        -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+        | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)['data']
+    print(d['total_credits'] - d['total_usage'])
+except Exception:
+    sys.exit(1)
+" 2>/dev/null
+}
+
+_al_salir() {
+    local codigo=$?
+    echo "[TRAP EXIT] run-plan.sh termina con código $codigo a las $(date -Iseconds)"
+    if [ -n "${BALANCE_ANTES:-}" ]; then
+        local balance_despues
+        balance_despues=$(consultar_balance_real || echo "")
+        if [ -n "$balance_despues" ]; then
+            local coste_real
+            coste_real=$(python3 - "$BALANCE_ANTES" "$balance_despues" <<'PYEOF' 2>/dev/null || echo ""
+import sys
+antes, despues = float(sys.argv[1]), float(sys.argv[2])
+print(round(antes - despues, 6))
+PYEOF
+)
+            if [ -n "$coste_real" ]; then
+                mkdir -p .ai-pipeline/costes
+                python3 - "${PLAN_NAME:-desconocido}" "$(date -Iseconds)" "${RETRY_COUNT:-0}" "$codigo" "$coste_real" <<'PYEOF'
+import json, sys
+plan, ts, intentos, exit_code, coste = sys.argv[1:6]
+registro = {
+    "plan": plan,
+    "timestamp": ts,
+    "intentos": int(intentos),
+    "exit_code": int(exit_code),
+    "coste_real_usd": float(coste),
+}
+with open(".ai-pipeline/costes/costes.jsonl", "a") as f:
+    f.write(json.dumps(registro) + "\n")
+PYEOF
+                echo "[COSTE REAL] \$$coste_real (balance antes=\$${BALANCE_ANTES}, después=\$${balance_despues})"
+            fi
+        fi
+    fi
+}
+trap '_al_salir' EXIT
 
 PLAN_PATH="${1:-}"
 
@@ -79,6 +143,11 @@ fi
 # trivialmente cierto si nada se tocó. Se usa como referencia para medir
 # si el agente tocó algún fichero de código de verdad en este intento.
 PLAN_START_COMMIT=$(git rev-parse HEAD)
+
+# Balance real ANTES del primer intento -- ver consultar_balance_real()
+# más arriba. Si falla, BALANCE_ANTES queda vacío y _al_salir() no deja
+# registro para esta ejecución (best-effort, no fatal).
+BALANCE_ANTES=$(consultar_balance_real || echo "")
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     RETRY_COUNT=$((RETRY_COUNT + 1))

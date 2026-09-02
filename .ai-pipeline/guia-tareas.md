@@ -189,15 +189,28 @@ registre en `litellm_model_registry.json` debe declarar
 `cache_read_input_token_cost` desde el principio, no solo
 `input_cost_per_token`/`output_cost_per_token` -- en un pipeline
 agéntico con contexto creciente, omitirlo no es un error pequeño, es
-la diferencia entre medir bien y medir ~3x por debajo. Verificar
-igualmente el balance real (`/api/v1/credits`) antes/después de
-ejecuciones importantes, como confirmación independiente.
+la diferencia entre medir bien y medir ~3x por debajo.
+
+**Instrumentado en `run-plan.sh` (2026-09-02), ya no hay que hacerlo a
+mano**: el script consulta el balance real de OpenRouter
+(`/api/v1/credits`) justo antes del primer intento y de nuevo al salir
+(éxito o fallo, vía el `trap EXIT` ya existente), y deja un registro por
+ejecución en `.ai-pipeline/costes/costes.jsonl` (plan, timestamp,
+intentos, código de salida, coste real en $) -- gitignored, igual que
+`trayectorias/`, para no comitear automáticamente desde un trap.
+Best-effort: si `OPENROUTER_API_KEY` no está disponible o la API no
+responde, no deja registro pero nunca tumba el pipeline por esto.
+Verificado en aislado (función extraída y ejecutada a mano) antes de
+darlo por bueno, pendiente de ver su primer registro real en la próxima
+pieza que pase por el pipeline.
 
 **Pendiente real**: medir Sonnet de verdad contra este pipeline (mismo
 fix o uno comparable) para tener una comparación limpia por ambos
 lados; verificar contra balance real el coste del fix de flora también
 (el $0.03232 de arriba es el cálculo corregido, no una confirmación
-independiente como sí la tiene zoocoria).
+independiente como sí la tiene zoocoria); una vez se acumulen varios
+registros en `costes.jsonl`, extrapolar coste medio por pieza y por
+número de intentos.
 
 ## Reglas prácticas, mientras tanto
 
