@@ -113,6 +113,13 @@ flora:
   # vegetación en vez de forzar una especie que no encaja. PROVISIONAL,
   # sin calibrar contra el harness completo.
   umbral_minimo_idoneidad_colonizacion: 0.2
+  # umbral_minimo_idoneidad_colonizacion (2026-09-01, ver docs/superpowers/
+  # specs/2026-09-01-distribucion-causal-flora-design.md): idoneidad
+  # mínima (nucleo/flora.py:idoneidad_colonizacion) que una especie debe
+  # superar para colonizar una celda -- por debajo, la celda se queda sin
+  # vegetación en vez de forzar una especie que no encaja. PROVISIONAL,
+  # sin calibrar contra el harness completo.
+  umbral_minimo_idoneidad_colonizacion: 0.2
   especies:
     hierba_silvestre:
       biomas: [pradera, bosque]
