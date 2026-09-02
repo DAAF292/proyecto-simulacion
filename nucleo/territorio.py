@@ -1,21 +1,13 @@
-"""Territorio: unidad geografica neutra, unidad de viaje y de asignacion
-de nivel de detalle (informe tecnico, seccion 2.1). En fase 0 contiene una
-unica ZonaBioma (el bosque); el contenedor existe igualmente completo
-porque asi lo pide la arquitectura ya decidida, no porque haga falta hoy.
-
-RECONSTRUIDO (2026-08-23): esta clase se quedó congelada en su forma de
-Fase 0 (`__init__(nombre, zonas_bioma)`, recibiendo una lista de zonas ya
-construidas por quien la llamaba) mientras nucleo/mundo.py evolucionó para
-llamarla con `Territorio(ancho, alto, config, rng)`, esperando que fuera
-ELLA quien generase su propia zona -- ningún commit del historial actualizó
-territorio.py para seguirle el paso a mundo.py. Todos los sistemas
-consumidores (sistema_movimiento.py, sistema_clima.py, sistema_recursos.py,
-etc., ver `mundo.territorio.zonas[0]`) ya esperaban un atributo `zonas`
-(lista), no el `zonas_bioma` original -- se corrige aquí también.
+"""Territorio: unidad geográfica neutra, unidad de viaje y de asignación
+de nivel de detalle. En fase 0 contiene una única ZonaBioma (el
+bosque); el contenedor existe igualmente completo porque así lo pide la
+arquitectura ya decidida, no porque haga falta hoy.
 
 No se inventa generación nueva: se reutiliza tal cual
 nucleo/zona_bioma.py:generar_zona_bioma, que ya existe y ya es lo que
 todo el resto del motor asume que puebla `zonas[0]`.
+
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 from __future__ import annotations
 
@@ -30,9 +22,8 @@ from nucleo.zona_bioma import generar_zona_bioma
 @dataclass(frozen=True)
 class AccesoSubterraneo:
     """Un punto de paso entre la superficie y UNA zona subterránea
-    concreta -- CÍRCULO 3 de profundidad (2026-08-30, ver CLAUDE.md):
-    generaliza el par único acceso_subterraneo/entrada_cueva del Círculo
-    1/2 a una lista, para soportar varias cuevas por mundo."""
+    concreta -- generaliza un par único acceso/entrada a una lista, para
+    soportar varias cuevas por mundo."""
     superficie: tuple[int, int]
     """Celda de zonas[0] donde está el acceso."""
     zona_idx: int
@@ -70,28 +61,18 @@ class Territorio:
                 config.get("fuego", {}).get("probabilidad_piedra_suelta_por_celda", 0.0)
             ),
         )
-        # Fase 0: un único territorio -- este atributo `zonas` ya era una
-        # lista a propósito desde antes de que hubiera una segunda zona,
-        # precisamente para este momento (ver docstring de más abajo):
-        # zonas[0] sigue siendo válido para todo consumidor que no sepa
-        # nada de zonas adicionales.
+        # `zonas` ya era una lista a propósito desde antes de que hubiera
+        # una segunda zona -- zonas[0] sigue siendo válido para todo
+        # consumidor que no sepa nada de zonas adicionales.
         self.zonas: list = [zona]
 
-        # CÍRCULO 1-2 de profundidad (2026-08-30): nacieron con una única
-        # zona subterránea anclada bajo montaña con depósito mineral.
-        # CÍRCULO 3 (2026-08-30, corrección de diseño de Diego: "las
-        # cuevas no deberían aparecer solo en un bioma, son formaciones
-        # naturales que no siguen esas normas... deberían generarse por
-        # todo el mapa" y "para que se use la cueva no es algo que
-        # debamos definir nosotros" -- leyes neutras, principio 5, nunca
-        # un guion de "esta cueva es para lobos, esta para gnomos"):
-        # varias cuevas por mundo, tamaño sorteado dentro de un rango
-        # continuo (sin categorías con propósito adjunto), acceso en
-        # CUALQUIER celda de tierra firme con independencia de su bioma
-        # de superficie -- las cuevas son geología, no clima. Quién las
-        # usa y para qué emerge de la Utility AI de siempre (un lobo que
-        # busca refugio recuerda cualquier acceso que encuentre; un gnomo
-        # mina donde haya veta), no de una regla de generación.
+        # Varias cuevas por mundo, tamaño sorteado dentro de un rango
+        # continuo (sin categorías discretas con propósito adjunto),
+        # acceso en CUALQUIER celda de tierra firme con independencia de
+        # su bioma de superficie -- las cuevas son geología, no clima.
+        # Quién las usa y para qué emerge de la Utility AI de siempre (un
+        # lobo que busca refugio recuerda cualquier acceso que encuentre;
+        # un gnomo mina donde haya veta), no de una regla de generación.
         self.accesos_subterraneos: list[AccesoSubterraneo] = []
         """Un elemento por cueva generada -- ver AccesoSubterraneo. Lista
         vacía si no se generó ninguna cueva (mapas muy pequeños sin
@@ -128,11 +109,10 @@ class Territorio:
         alto_max = min(alto, int(cfg_cueva.get("alto_max_celdas", 22)))
 
         for celda_acceso in accesos_elegidos:
-            # Rango + sorteo individual (2026-08-30, mismo patrón que ya
-            # usa el motor para cualquier atributo con variación
-            # individual, ver CLAUDE.md "mecanismos genéricos ya
-            # construidos") -- cada cueva sortea su propio tamaño dentro
-            # del rango, sin categorías discretas con propósito adjunto.
+            # Rango + sorteo individual, mismo patrón que ya usa el motor
+            # para cualquier atributo con variación individual -- cada
+            # cueva sortea su propio tamaño dentro del rango, sin
+            # categorías discretas con propósito adjunto.
             ancho_cueva = rng.randint(ancho_min, ancho_max) if ancho_max >= ancho_min else ancho_min
             alto_cueva = rng.randint(alto_min, alto_max) if alto_max >= alto_min else alto_min
             entrada_cueva = (ancho_cueva // 2, alto_cueva // 2)
@@ -158,8 +138,7 @@ class Territorio:
     @staticmethod
     def _candidatos_acceso_subterraneo(zona) -> list[tuple[int, int]]:
         """Toda celda de tierra firme (sin agua ni fuego -- salvaguardas
-        físicas correctas por sí mismas, ver conversación de diseño con
-        Diego), de CUALQUIER bioma: las cuevas son formaciones
+        físicas reales), de CUALQUIER bioma: las cuevas son formaciones
         geológicas, no una propiedad del clima de superficie, así que no
         se filtra por TipoTerreno."""
         return [

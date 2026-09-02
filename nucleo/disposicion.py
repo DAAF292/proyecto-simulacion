@@ -1,44 +1,36 @@
-"""Disposicion instintiva derivada de peso (informe tecnico, seccion 8.1
-y 8.2 -- capa racial fija del modelo de disposicion en tres capas).
+"""Disposición instintiva derivada de peso -- capa racial fija del
+modelo de disposición en tres capas (racial / histórica / situacional).
 
-El tecnico fija el criterio pero no la formula: "peso, valor sin techo
-fijo, comparado por razon logaritmica, curva de disposicion no lineal".
-Esta es la primera vez que se implementa -- hasta el paso 12 ninguna
-formula consumia Categoria.tamano todavia (el campo se llamaba tamano en
-el prototipo original; renombrado a DimensionesFisicas.peso en el
-Bloque B del plan de migracion a criatura.docx, sin cambiar la formula ni
-los rangos numericos -- ver componentes/dimensiones_fisicas.py). Se aisla
-aqui, fuera de sistemas/, porque el propio informe reutiliza el modelo de
-disposicion en tres capas en varias escalas (entre categorias de
+Se aísla aquí, fuera de sistemas/, porque el modelo de disposición en
+tres capas se reutiliza en varias escalas (entre categorías de
 criatura, entre asentamientos, entre dos individuos con nombre): esta
-funcion es la parte generica y reutilizable, no algo especifico de
-depredacion.
+función es la parte genérica y reutilizable, no algo específico de
+depredación.
 
-Decision de diseno deliberada: esta funcion NO decide quien es depredador
-de quien. Devuelve solo una magnitud (cuanto pesa la diferencia de peso
-en la disposicion instintiva entre dos individuos cualesquiera), sin
-signo ni direccion. Cada sistema que la consuma la combina con sus propios
-atributos -- saciedad y agresividad del mas grande para decidir si caza,
-valentia del mas pequeno para decidir si huye -- en vez de que la ley
-general ya presuponga "los lobos cazan gnomos". Es lo que pide el
-principio de leyes neutras: el peso es un hecho fisico, no una sentencia
-sobre el rol ecologico de una especie.
+Decisión de diseño deliberada: esta función NO decide quién es
+depredador de quién. Devuelve solo una magnitud (cuánto pesa la
+diferencia de peso en la disposición instintiva entre dos individuos
+cualesquiera), sin signo ni dirección. Cada sistema que la consuma la
+combina con sus propios atributos -- saciedad y agresividad del más
+grande para decidir si caza, valentía del más pequeño para decidir si
+huye -- en vez de que la ley general ya presuponga "los lobos cazan
+gnomos". Es lo que pide el principio de leyes neutras: el peso es un
+hecho físico, no una sentencia sobre el rol ecológico de una especie.
 
-provisional: la curva exacta (log_ratio / (1 + log_ratio), saturando
-hacia 1 sin techo) es una hipotesis de partida razonable -- crece rapido
-al principio y se aplana para diferencias extremas -- pero no esta
-calibrada contra el motor en marcha. Revisar en el Bloque de calibracion
-numerica si el comportamiento resultante (paso 12.2 en adelante) no se
-siente bien.
+PROVISIONAL: la curva exacta (log_ratio / (1 + log_ratio), saturando
+hacia 1 sin techo) es una hipótesis de partida razonable -- crece
+rápido al principio y se aplana para diferencias extremas -- pero no
+está calibrada contra el motor en marcha.
 
-Las dos funciones de busqueda de abajo (paso 12.4) centralizan un patron
-que antes estaba duplicado en sistema_movimiento.py (deteccion de presa)
-y sistema_depredacion.py (contacto con presa), justo el riesgo que se
-queria evitar de que las distintas nociones de "presa valida" divergieran
-con el tiempo -- y que ahora necesitaba una tercera variante (deteccion
-de amenaza, para la huida). Ambas funciones son simetricas en
-buscar_mayor: True busca amenazas (alguien mas grande que percibiria al
-propio como presa), False busca presas (alguien mas pequeno).
+Las tres funciones de búsqueda de abajo centralizan un patrón que antes
+estaba duplicado en sistema_movimiento.py (detección de presa) y
+sistema_depredacion.py (contacto con presa) -- un único patrón, en vez
+de que las distintas nociones de "presa válida" diverjan con el
+tiempo. Las dos primeras son simétricas en buscar_mayor: True busca
+amenazas (alguien más grande que percibiría al propio como presa),
+False busca presas (alguien más pequeño).
+
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 import math
 
@@ -84,10 +76,9 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
     supera el umbral -- mas grande si buscar_mayor, mas pequeno si no.
     None si no percibe ninguno.
 
-    zona_idx (2026-08-30, Circulo 1 de profundidad): un candidato en otra
-    zona nunca cuenta, con independencia de que (x, y) coincida --
-    distancia Manhattan infinita entre zonas distintas (ver docstring de
-    componentes/posicion.py)."""
+    zona_idx: un candidato en otra zona nunca cuenta, con independencia
+    de que (x, y) coincida -- distancia Manhattan infinita entre zonas
+    distintas (ver docstring de componentes/posicion.py)."""
     mejor = None
     mejor_dist = None
     for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
@@ -114,34 +105,26 @@ def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: in
     """Cuenta individuos de la MISMA especie (Identidad.especie) dentro del
     radio Manhattan indicado, excluyendo al propio individuo.
 
-    GREGARISMO -- Pieza 1 (2026-08-30, confirmado por Diego: "me parece
-    bien si", tras plantear la preocupacion de que el lobo necesitaba
-    comportamiento de manada real). Version minima explicitamente acotada:
-    un bono emergente sobre mecanicas YA existentes (probabilidad de caza,
-    drenaje de seguridad), sin crear ningun objeto Manada/Grupo, sin capa
-    fisica de recursos, inventario ni materiales -- todo eso queda aparte,
-    fuera de esta pieza (informe tecnico, seccion 20, "manada/asentamiento
-    como concepto generico" sigue parada). Deliberadamente GENERICA por
-    especie, no especifica de lobo: Diego fue explicito en que cualquier
-    especie con sociabilidad suficiente deberia beneficiarse igual --
-    lobo no es siquiera la especie mas sociable (rango racial lobo
-    0.3-0.7, conejo 0.5-0.9) asi que restringir esto a lobo habria sido
-    autoria de guion, no ley (principio 1 y 5 de CLAUDE.md).
+    GREGARISMO: bono emergente sobre mecánicas ya existentes
+    (probabilidad de caza, drenaje de seguridad), sin crear ningún
+    objeto Manada/Grupo, sin capa física de recursos, inventario ni
+    materiales. Deliberadamente GENÉRICA por especie, no específica de
+    lobo -- cualquier especie con sociabilidad suficiente se beneficia
+    igual (lobo no es siquiera la especie más sociable, rango racial
+    lobo 0.3-0.7 frente a conejo 0.5-0.9).
 
-    solo_cazando=True filtra ademas por Intencion.accion == Accion.CAZAR --
-    usado por el bono de caza en grupo (sistema_depredacion.py): lo que
-    cuenta ahi es cuantos conespecificos estan cazando activamente cerca
-    (senal de cooperacion real), no cuantos hay sin mas (que incluiria
-    crias o parejas sin relacion con el ataque en curso). Con
-    solo_cazando=False (por defecto) cuenta cualquier conespecifico
+    solo_cazando=True filtra además por Intencion.accion == Accion.CAZAR
+    -- usado por el bono de caza en grupo (sistema_depredacion.py): lo
+    que cuenta ahí es cuántos conespecíficos están cazando activamente
+    cerca (señal de cooperación real), no cuántos hay sin más (que
+    incluiría crías o parejas sin relación con el ataque en curso). Con
+    solo_cazando=False (por defecto) cuenta cualquier conespecífico
     perceptible -- usado por el bono de defensa en grupo
-    (sistema_necesidades.py): seguridad en numeros no exige que los
-    demas esten haciendo nada en concreto, solo estar cerca.
+    (sistema_necesidades.py): seguridad en números no exige que los
+    demás estén haciendo nada en concreto, solo estar cerca.
 
-    Reutiliza el mismo patron de busqueda lineal O(N) que el resto de este
-    modulo y de _buscar_conspecifico_mas_cercano
-    (sistema_movimiento.py) -- mismo limite de escalabilidad conocido y
-    aceptado, no una regresion nueva.
+    Reutiliza el mismo patrón de búsqueda lineal O(N) que el resto de
+    este módulo -- mismo límite de escalabilidad conocido y aceptado.
     """
     total = 0
     for id_c in gestor.entidades_con(Identidad, Posicion):
@@ -171,9 +154,9 @@ def id_en_contacto_por_disposicion(gestor, id_propio: int, x: int, y: int,
     queda con el primero que entidades_con() devuelve (orden ascendente
     de id -- mismo criterio de determinismo del resto del motor).
 
-    zona_idx (2026-08-30, Circulo 1 de profundidad): "compartir celda"
-    exige tambien compartir zona -- dos zonas distintas pueden coincidir
-    en (x, y) sin estar en el mismo sitio (ver componentes/posicion.py)."""
+    zona_idx: "compartir celda" exige también compartir zona -- dos
+    zonas distintas pueden coincidir en (x, y) sin estar en el mismo
+    sitio (ver componentes/posicion.py)."""
     for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
         if id_candidato == id_propio:
             continue

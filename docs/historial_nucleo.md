@@ -172,6 +172,52 @@ ser igual de fácil detectar a una mosca que a un gnomo"). Verificado
 con el mismo barrido de calibración ligera que el resto de piezas de
 esa sesión.
 
+## `disposicion.py`
+
+Informe técnico, secciones 8.1 y 8.2 -- capa racial fija del modelo de
+disposición en tres capas. El campo se llamaba `tamano` en el
+prototipo original; renombrado a DimensionesFisicas.peso en el Bloque B
+del plan de migración a criatura.docx, sin cambiar la fórmula ni los
+rangos numéricos.
+
+`contar_conspecificos_cercanos` -- GREGARISMO, Pieza 1 (2026-08-30,
+confirmado por Diego: "me parece bien si", tras plantear la
+preocupación de que el lobo necesitaba comportamiento de manada real).
+Diego fue explícito en que cualquier especie con sociabilidad
+suficiente debería beneficiarse igual -- restringir esto a lobo habría
+sido autoría de guion, no ley (principios 1 y 5 de CLAUDE.md).
+
+## `territorio.py`
+
+RECONSTRUIDO (2026-08-23): esta clase se quedó congelada en su forma de
+Fase 0 (`__init__(nombre, zonas_bioma)`, recibiendo una lista de zonas
+ya construidas por quien la llamaba) mientras nucleo/mundo.py
+evolucionó para llamarla con `Territorio(ancho, alto, config, rng)`,
+esperando que fuera ELLA quien generase su propia zona -- ningún commit
+del historial actualizó territorio.py para seguirle el paso a mundo.py.
+Todos los sistemas consumidores ya esperaban un atributo `zonas`
+(lista), no el `zonas_bioma` original -- se corrigió ahí también.
+
+`AccesoSubterraneo` -- Círculo 3 de profundidad (2026-08-30, ver
+CLAUDE.md): generaliza el par único acceso_subterraneo/entrada_cueva
+del Círculo 1/2 a una lista, para soportar varias cuevas por mundo.
+
+Varias cuevas por mundo -- corrección de diseño de Diego sobre el
+diseño original de Círculo 1-2 (una única zona subterránea anclada bajo
+montaña con depósito mineral): "las cuevas no deberían aparecer solo en
+un bioma, son formaciones naturales que no siguen esas normas...
+deberían generarse por todo el mapa" y "para que se use la cueva no es
+algo que debamos definir nosotros" -- leyes neutras, principio 5, nunca
+un guion de "esta cueva es para lobos, esta para gnomos".
+
+## `orografia.py`
+
+Círculo 1, acordado con Diego tras el diagnóstico visual del
+2026-08-27. Antes: tres campos de value noise independientes
+(elevación, lluvia, temperatura) sin relación causal -- ríos nacían en
+bultos de ruido, el clima ignoraba el relieve y los biomas salían en
+mosaico sin fundamento.
+
 ## `celda_percibida` (ahora en `percepcion.py`)
 
 Promovida desde sistema_movimiento.py (donde nació como

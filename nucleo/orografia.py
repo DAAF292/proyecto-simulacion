@@ -1,28 +1,24 @@
-﻿"""Orografia: estructura geografica del relieve y el clima (circulo 1,
-acordado con Diego tras el diagnostico visual del 2026-08-27).
-
-Antes: tres campos de value noise independientes (elevacion, lluvia,
-temperatura) sin relacion causal -- rios nacian en bultos de ruido, el
-clima ignoraba el relieve y los biomas salian en mosaico sin fundamento.
-Ahora la elevacion tiene GEOLOGIA y el clima se deriva de ella:
+"""Orografía: estructura geográfica del relieve y el clima -- la
+elevación tiene GEOLOGÍA y el clima se deriva de ella, en vez de tres
+campos de value noise independientes sin relación causal:
 
 1. Cordilleras como generadores primarios: la semilla sortea ejes
-   orograficos (origen, direccion, longitud, anchura, altura de cresta) y
-   la elevacion se construye como crestas con decaimiento perpendicular
-   sobre colinas de fondo. La montana deja de ser "donde el ruido supera
-   un umbral" y pasa a ser una cordillera con cresta y estribaciones
-   reales -- nucleo/agua.py ya hace escorrentia por gradiente, asi que los
-   rios ahora nacen en crestas de cordillera de verdad.
-2. Gradiente termico: la temperatura cae con la altitud (menos ruido
+   orográficos (origen, dirección, longitud, anchura, altura de
+   cresta) y la elevación se construye como crestas con decaimiento
+   perpendicular sobre colinas de fondo. nucleo/agua.py hace
+   escorrentía por gradiente, así que los ríos nacen en crestas de
+   cordillera reales.
+2. Gradiente térmico: la temperatura cae con la altitud (menos ruido
    propio).
-3. Sombra orografica: un viento dominante sorteado por semilla (ley
-   fisica neutra, decision de Diego) cruza el mapa; el terreno elevado
-   que el aire ya cruzo le roba humedad -- barlovento humedo, sotavento
-   arido.
+3. Sombra orográfica: un viento dominante sorteado por semilla (ley
+   física neutra) cruza el mapa; el terreno elevado que el aire ya
+   cruzó le roba humedad -- barlovento húmedo, sotavento árido.
 
-Todo determinista: cuelga del rng que recibe, nunca crea Random() propio
-(mismo principio que nucleo/campo_continuo.py). El orden de consumo del
-rng es parte de lo que la semilla determina.
+Todo determinista: cuelga del rng que recibe, nunca crea Random()
+propio (mismo principio que nucleo/campo_continuo.py). El orden de
+consumo del rng es parte de lo que la semilla determina.
+
+Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 import math
 import random
@@ -167,9 +163,8 @@ def campo_lluvia_orografica(
 
 
 def sortear_viento_dominante(rng: random.Random) -> tuple[int, int]:
-    """Ley fisica neutra (aprobada por Diego): el mundo tiene un viento
-    dominante fijo, sorteado de la semilla entre los cuatro rumbos
-    cardinales. Diagonales excluidas a proposito: el paseo de sombra por
-    celdas es axis-aligned y una direccion diagonal mezclaria ejes."""
+    """Ley física neutra: el mundo tiene un viento dominante fijo,
+    sorteado de la semilla entre los cuatro rumbos cardinales.
+    Diagonales excluidas a propósito: el paseo de sombra por celdas es
+    axis-aligned y una dirección diagonal mezclaría ejes."""
     return rng.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
-
