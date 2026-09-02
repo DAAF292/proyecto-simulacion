@@ -24,6 +24,7 @@ from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.posicion import Posicion
+from componentes.semillas import Semillas
 from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
 from nucleo.celda import Celda
 from nucleo.construccion import (
@@ -35,6 +36,7 @@ from nucleo.construccion import (
 from nucleo.entidad import GestorEntidades, crear_fogata
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
+from nucleo.flora import intentar_colonizar_celda
 from nucleo.inventario import espacio_disponible_kg
 from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
@@ -135,14 +137,27 @@ class SistemaRecursos:
         )
 
         # Mapa de valores nutricionales e hídricos por recurso vegetal
+        self.especies_flora: dict[str, Any] = self.config.get("flora", {}).get("especies", {})
         self.nutricion_flora: dict[str, float] = {}
         self.hidratacion_flora: dict[str, float] = {}
-        for esp_data in self.config.get("flora", {}).get("especies", {}).values():
+        for esp_data in self.especies_flora.values():
             for rec in esp_data.get("recursos", []):
                 nom = rec.get("nombre")
                 if nom:
                     self.nutricion_flora[nom] = float(rec.get("valor_nutricional", 0.2))
                     self.hidratacion_flora[nom] = float(rec.get("valor_hidratacion", 0.05))
+
+        # Zoocoria (2026-09-02, ver componentes/semillas.py y
+        # docs/superpowers/specs/2026-09-01-propagacion-flora-design.md).
+        self.umbral_minimo_idoneidad_colonizacion: float = float(
+            self.config.get("flora", {}).get("umbral_minimo_idoneidad_colonizacion", 0.2)
+        )
+        self.probabilidad_recogida_semilla_zoocoria: float = float(
+            self.config.get("flora", {}).get("probabilidad_recogida_semilla_zoocoria", 0.3)
+        )
+        self.probabilidad_plantar_semilla_en_aliviarse: float = float(
+            self.config.get("flora", {}).get("probabilidad_plantar_semilla_en_aliviarse", 0.5)
+        )
 
     def ejecutar(
         self,
@@ -185,7 +200,7 @@ class SistemaRecursos:
             elif intencion.accion == Accion.BEBER:
                 self._resolver_beber(nec, mem, cap_mental, celda, pos.x, pos.y)
             elif intencion.accion == Accion.ALIVIARSE:
-                self._resolver_aliviarse(nec, celda)
+                self._resolver_aliviarse(gestor, eid, nec, celda, pos.x, pos.y, pos.zona_idx)
             elif intencion.accion == Accion.CONSTRUIR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 self._resolver_construir(
@@ -657,6 +672,24 @@ class SistemaRecursos:
             nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
 
             self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
+
+            # Zoocoria (2026-09-02, pieza 5/5 de "tipos de propagación"
+            # -- ver docs/superpowers/specs/
+            # 2026-09-01-propagacion-flora-design.md): comer fruto de una
+            # especie zoocora puede dejar una semilla "recogida" -- se
+            # planta más tarde, en otro sitio, al ALIVIARSE (ver
+            # _resolver_aliviarse). celda.tipo_recurso ya ES la especie
+            # que produce este recurso (nucleo/celda.py), no hace falta
+            # buscarla por nombre_rec.
+            especie_cfg_comida = self.especies_flora.get(celda.tipo_recurso, {})
+            if especie_cfg_comida.get("tipo_propagacion") == "zoocoria":
+                semillas = gestor.obtener_componente(entidad_id, Semillas)
+                if (
+                    semillas is not None
+                    and semillas.especie_transportada == ""
+                    and self.rng.random() < self.probabilidad_recogida_semilla_zoocoria
+                ):
+                    semillas.especie_transportada = celda.tipo_recurso
         else:
             # Sin esto, un individuo que llega aquí guiado por un
             # recuerdo de "comida" (nucleo/memoria.py:objetivo_recordado,
@@ -709,8 +742,42 @@ class SistemaRecursos:
 
         self._registrar_recuerdo_si_procede(mem, cap_mental, "agua", pos_x, pos_y)
 
-    def _resolver_aliviarse(self, nec: Necesidades, celda: Celda) -> None:
-        """Evacua residuos orgánicos corporales incrementando la fertilidad del suelo."""
+    def _resolver_aliviarse(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        nec: Necesidades,
+        celda: Celda,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+    ) -> None:
+        """Evacua residuos orgánicos corporales incrementando la fertilidad del suelo.
+
+        Zoocoria (2026-09-02, pieza 5/5 de "tipos de propagación" -- ver
+        docs/superpowers/specs/2026-09-01-propagacion-flora-design.md):
+        si el individuo lleva una semilla recogida (Semillas.especie_
+        transportada, ver _resolver_comer), este es también el evento
+        que puede depositarla -- desacoplado del ciclo diario de
+        SistemaFlora, lo dispara el comportamiento del animal (COMER,
+        luego ALIVIARSE en otro momento y lugar), no la planta. La
+        semilla se limpia SIEMPRE (éxito o fallo de idoneidad) -- se
+        deposita igual, prenda o no.
+        """
         tasa_alivio = float(self.config.get("necesidades", {}).get("defecto", {}).get("tasa_alivio_al_aliviarse", 0.5))
         nec.aliviado = min(1.0, nec.aliviado + tasa_alivio)
         celda.fertilidad = min(self.techo_fertilidad, celda.fertilidad + self.incremento_fertilidad)
+
+        semillas = gestor.obtener_componente(entidad_id, Semillas)
+        if semillas is not None and semillas.especie_transportada != "":
+            especie = semillas.especie_transportada
+            if self.rng.random() < self.probabilidad_plantar_semilla_en_aliviarse:
+                especie_cfg = self.especies_flora.get(especie, {})
+                capacidad_retencion = float(
+                    self.catalogo_materiales.get(celda.tipo_sustrato, {}).get("capacidad_retencion", 0.0)
+                )
+                intentar_colonizar_celda(
+                    gestor, celda, capacidad_retencion, especie, especie_cfg,
+                    self.umbral_minimo_idoneidad_colonizacion, pos_x, pos_y, zona_idx,
+                )
+            semillas.especie_transportada = ""
