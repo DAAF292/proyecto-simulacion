@@ -62,6 +62,7 @@ class Territorio:
             config["agua"],
             config["materiales"],
             config["sustrato_por_bioma"],
+    config["umbrales_sustrato_fertil"],
             config["umbrales_sustrato_fertil"],
             config["generacion_vetas"],
             ancho,
