@@ -79,3 +79,64 @@ ese círculo — sigue pendiente.
 **`colonizar_por_idoneidad`**: mismo círculo que `idoneidad_colonizacion`
 arriba — por cada celda, sortea una especie ponderada por idoneidad
 entre las candidatas de su bioma, en vez de forzar una proporción fija.
+
+## `sistemas/sistema_flora.py`
+
+**`bono_humedad_subsuelo`** (Círculo 1 de materiales físicos,
+2026-08-30): sustituye al antiguo `bono_produccion_ribera`/
+`factor_ribera` (retirado) — ver la entrada de
+`nucleo/flora.py:factor_humedad_subsuelo` arriba para el razonamiento
+completo.
+
+**`decaimiento_fertilidad`** (2026-08-29, fix de auditoría): la clave
+`decaimiento_fertilidad_por_dia` estaba declarada desde el principio en
+config pero ningún código la leía — la fertilidad solo podía subir,
+nunca bajar. Corregido para aplicarse de verdad, una vez al día, antes
+de calcular la producción de ese día.
+
+**`_ejecutar_zona`, ejecución por zona** (Círculo 1 de profundidad,
+2026-08-30): antes de que existieran varias zonas por territorio
+(superficie + cuevas), este método no distinguía entre ellas.
+
+**`_ejecutar_zona`, conversión de `Reloj.estacion`** (2026-08-23):
+`Reloj.estacion` es un int creciente, no el `Enum Estacion` que
+`factor_produccion()` necesita — pasar el int en crudo era el mismo bug
+ya encontrado (y corregido) en `sistema_necesidades.py`.
+
+**`_ejecutar_zona`, `posiciones_planta` como set precalculado**
+(2026-08-23, perfilado tras el arreglo de siembra inicial del mismo
+día): antes, cada intento de colonización comprobaba "¿hay ya una
+Planta en (nx,ny)?" con un `any(...)` que recorría TODAS las entidades
+Planta del mundo — barato con 0-2 Plantas antes de la siembra inicial,
+pero un escaneo O(N) por intento con cientos-miles ya sembradas.
+Perfilado con `cProfile` sobre 600 ticks a ~1100 Plantas/~200 fauna:
+`sistema_flora.ejecutar` + `_intentar_propagacion` sumaban el 23% del
+tiempo de esa ventana, con el propio `any(...)` como mayor responsable
+individual (2.86M llamadas al generador). Sustituido por un set
+calculado una vez por día, sin cambiar ningún resultado (no consume
+rng) — verificado con el mismo harness de calibración, misma
+trayectoria de población por semilla.
+
+**Recolección de madera/fibra/hierba_seca** (2026-08-31, propuesta de
+Diego: "los árboles dejan caer ramas que los gnomos recogen o arrancan
+hierba directamente, sin mecanismos complejos de tala y siega"): antes,
+el bucle de producción diaria solo generaba recursos de categoría
+"alimento" — categoría "material" (madera en manzano, fibra en cactus,
+ya declaradas en `config/flora.yaml` desde el círculo de materiales
+físicos) se ignoraba por completo, "sin consumidor mecánico" pese a
+estar en el catálogo. Corregido reutilizando la misma fórmula de
+producción que ya usa el alimento, sin inventar un mecanismo de
+tala/siega separado.
+
+**`_intentar_propagacion`/`_propagar_viento`/`_propagar_planta`**
+(Círculo de "tipos de propagación de flora", 2026-09-02, ver
+`docs/superpowers/specs/2026-09-01-propagacion-flora-design.md`):
+sustituyen el mecanismo único de propagación (un vecino contiguo al
+azar, sin relación con cómo se dispersa de verdad una semilla) por tres
+vectores reales -- caída (el mecanismo de antes, refinado), viento
+(dirección global del mundo) y zoocoria (comportamiento animal, ver
+`sistemas/sistema_recursos.py`). `_propagar_planta` es el punto único
+de dispatch por `tipo_propagacion`, construido incrementalmente en tres
+piezas separadas (caída primero, con las otras dos ramas como no-op
+temporal documentado; viento después; zoocoria queda fuera del ciclo
+diario por diseño, no por estar incompleto).

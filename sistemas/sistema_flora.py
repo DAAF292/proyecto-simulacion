@@ -37,12 +37,9 @@ class SistemaFlora:
         """Extrae el catálogo de especies de flora y coeficientes de abono y mantillo."""
         self.cfg_flora = self.config.get("flora", {})
         self.especies_cfg: dict[str, Any] = self.cfg_flora.get("especies", {})
-        # CÍRCULO 1 de materiales físicos (2026-08-30): sustituye al
-        # antiguo bono_produccion_ribera / factor_ribera (retirado) -- ver
-        # nucleo/flora.py:factor_humedad_subsuelo para el razonamiento
-        # completo de por qué una celda con agua permanente sigue dando el
-        # mismo bono de siempre, ahora como consecuencia de una ley
-        # general en vez de un caso especial hardcodeado.
+        # Ver nucleo/flora.py:factor_humedad_subsuelo -- una celda con
+        # agua permanente ya da este mismo bono de forma general, sin
+        # caso especial aparte.
         self.bono_humedad_subsuelo: float = float(
             self.cfg_flora.get("bono_produccion_humedad_subsuelo", 0.2)
         )
@@ -53,14 +50,12 @@ class SistemaFlora:
 
         cfg_abono = self.config.get("abono", {})
         self.techo_fertilidad: float = float(cfg_abono.get("techo_fertilidad", 1.0))
-        # (2026-08-29, fix de auditoria) Declarada desde siempre, nunca
-        # leida hasta hoy -- ver comentario en config/constantes.yaml.
         self.decaimiento_fertilidad: float = float(
             cfg_abono.get("decaimiento_fertilidad_por_dia", 0.1)
         )
 
-        # SOBREFORRAJEO (2026-08-29, ver config/constantes.yaml seccion
-        # flora para el diagnostico completo).
+        # SOBREFORRAJEO: umbral y valor de regresión a brote cuando una
+        # planta madura no logra regenerar su alimento (ver _ejecutar_zona).
         self.dias_agotada_para_regresion: int = int(
             self.cfg_flora.get("dias_agotada_para_regresion", 2)
         )
@@ -78,17 +73,15 @@ class SistemaFlora:
         """
         Ejecuta el ciclo biológico de la flora al inicio de cada día.
 
-        (2026-08-30, Circulo 1 de profundidad) se ejecuta UNA VEZ POR ZONA
-        del territorio -- cada ZonaBioma tiene su propio grid y su propio
-        clima_actual, y las Plantas de una zona no deben colonizar ni
-        compararse contra posiciones de otra zona (ver componentes/
-        posicion.py:zona_idx).
+        Se ejecuta UNA VEZ POR ZONA del territorio -- cada ZonaBioma tiene
+        su propio grid y su propio clima_actual, y las Plantas de una zona
+        no deben colonizar ni compararse contra posiciones de otra zona
+        (ver componentes/posicion.py:zona_idx).
         """
-        # (2026-08-23) Reloj.estacion es un int creciente, no el Enum
-        # Estacion que factor_produccion() necesita (llama a .value sobre
-        # él) -- este código pasaba el int en crudo, mismo bug que se
-        # encontró en sistema_necesidades.py. Renombrada la variable local
-        # para no sombrear la función importada de nucleo.clima.
+        # Reloj.estacion es un int, no el Enum Estacion que
+        # factor_produccion() necesita -- se convierte aquí. Variable
+        # local renombrada para no sombrear la función importada de
+        # nucleo.clima.
         estacion_hoy = _estacion_actual_desde_indice(reloj.estacion)
 
         todas_las_plantas = sorted(gestor.entidades_con(Planta, Posicion))
@@ -111,28 +104,10 @@ class SistemaFlora:
             if gestor.obtener_componente(pid, Posicion).zona_idx == zona_idx
         ]
 
-        # Índice de posiciones ocupadas (2026-08-23, perfilado tras el
-        # arreglo de siembra inicial del mismo día): _intentar_propagacion
-        # comprobaba "¿hay ya una Planta en (nx, ny)?" con un
-        # any(...) que recorría TODAS las entidades Planta del mundo en
-        # cada intento de colonización -- barato con las 0-2 Plantas de
-        # antes de la siembra inicial, pero con cientos-miles de Plantas
-        # ya sembradas (ver sembrar_flora_inicial en main.py) es un
-        # escaneo O(N) por intento, y empeora con el tiempo según la
-        # población de Plantas crece. Perfilado con cProfile sobre 600
-        # ticks a ~1100 Plantas / ~200 fauna: sistema_flora.ejecutar +
-        # _intentar_propagacion sumaban el 23% del tiempo de esa ventana,
-        # con el propio any(...) como mayor responsable individual
-        # (2.86M llamadas al generador en esa ventana). Se sustituye por
-        # un set de posiciones, calculado una vez por día a partir de la
-        # misma lista de entidades que ya se recorre aquí abajo, y
-        # actualizado en el propio _intentar_propagacion cuando coloniza
-        # una celda nueva -- para que dos colonizaciones del MISMO día no
-        # se pisen entre sí, exactamente el mismo comportamiento que tenía
-        # el any() en vivo sobre entidades_con(). No cambia ningún
-        # resultado (no consume el rng, es una comprobación determinista),
-        # solo el coste de calcularla -- verificado con el mismo harness
-        # de calibración, misma trayectoria de población por semilla.
+        # Set de posiciones ya ocupadas por Planta -- calculado una vez
+        # por día, actualizado por cada colonización (_intentar_propagacion
+        # y demás vectores) para que dos colonizaciones del mismo día no
+        # se pisen entre sí. Determinista, no consume rng.
         posiciones_planta = {
             (gestor.obtener_componente(pid, Posicion).x, gestor.obtener_componente(pid, Posicion).y)
             for pid in plantas_entidades
@@ -157,11 +132,9 @@ class SistemaFlora:
                 planta.etapa = min(1.0, planta.etapa + tasa_crec)
                 continue
 
-            # (2026-08-29, fix de auditoria) Decaimiento de fertilidad --
-            # declarado desde siempre, nunca aplicado hasta hoy. Se aplica
-            # aqui, una vez por dia por cada celda con una planta madura
-            # que se procesa, ANTES de calcular la produccion de hoy (asi
-            # que la produccion de hoy ya refleja la fertilidad decaida).
+            # Decaimiento de fertilidad, ANTES de calcular la producción
+            # de hoy -- la producción de hoy ya refleja la fertilidad
+            # decaída, no la de ayer.
             celda.fertilidad = max(0.0, celda.fertilidad - self.decaimiento_fertilidad)
 
             # 2. Producción de biomasa (Planta Madura)
@@ -183,34 +156,18 @@ class SistemaFlora:
             )
             eficiencia_total = f_prod * f_humedad * (1.0 + celda.fertilidad)
 
-            # SOBREFORRAJEO (2026-08-29, ver config/constantes.yaml seccion
-            # flora): agotada_hoy marca si CUALQUIER recurso de alimento de
-            # esta planta amanecio en 0.0 -- consumido por completo desde
-            # el corte de dia anterior, antes de que este bloque pudiera
-            # regenerar nada.
+            # agotada_hoy: CUALQUIER recurso de alimento de esta planta
+            # amaneció en 0.0 -- consumido por completo desde el corte de
+            # día anterior, antes de que este bloque pudiera regenerar
+            # nada.
             agotada_hoy = False
             recursos_catalogo = cfg_esp.get("recursos", [])
             for rec in recursos_catalogo:
                 categoria = rec.get("categoria")
-                # RECOLECCIÓN DE MADERA/FIBRA/HIERBA_SECA (2026-08-31,
-                # propuesta de Diego: "los árboles dejan caer ramas que
-                # los gnomos recogen o arrancan hierba directamente, sin
-                # mecanismos complejos de tala y siega"). Antes este
-                # bucle solo producía "alimento" -- categoria "material"
-                # (madera en manzano, fibra en cactus, ya declaradas en
-                # config/flora.yaml desde el círculo de materiales
-                # físicos, "sin consumidor mecánico" hasta hoy) se
-                # ignoraba por completo. MISMA fórmula de producción que
-                # ya usa el alimento (tasa_regeneracion * eficiencia_total,
-                # mismo desbordamiento a mantillo al llenarse) -- una
-                # rama caída o hierba seca es tan "biomasa producida por
-                # la planta" como una manzana, no hace falta un mecanismo
-                # de tala/siega separado. La única diferencia real: el
-                # material NO cuenta para el chequeo de sobreforrajeo
-                # (agotada_hoy, más abajo) -- ese concepto mide presión de
-                # SUBSISTENCIA (comida), quedarse sin ramas que recoger no
-                # es hambre y no debería hacer retroceder la planta a
-                # brote.
+                # Alimento y material (madera, fibra, hierba_seca) comparten
+                # la misma fórmula de producción -- material NO cuenta para
+                # el chequeo de sobreforrajeo (agotada_hoy mide subsistencia,
+                # no material recolectable).
                 if categoria not in ("alimento", "material"):
                     continue
 
@@ -270,18 +227,15 @@ class SistemaFlora:
         zona_idx: int = 0,
     ) -> None:
         """Vector "caída" -- coloniza una celda adyacente compatible.
-        Antes tenía su propia validación inline ("bioma compatible + sin
-        agua"); ahora delega en nucleo.flora.intentar_colonizar_celda
-        (2026-09-02, pieza 3/5 de "tipos de propagación" -- ver
-        docs/superpowers/specs/2026-09-01-propagacion-flora-design.md),
-        compartido con viento (plan 4) y zoocoria (plan 5). El filtro de
-        bioma se mantiene aquí como preselección barata antes de calcular
+        Delega la validación física en nucleo.flora.intentar_colonizar_celda,
+        compartido con los vectores viento y zoocoria. El filtro de bioma
+        se mantiene aquí como preselección barata antes de calcular
         idoneidad -- sin él, cualquier celda vecina de bioma incompatible
         pasaría igualmente por el cálculo completo de idoneidad.
 
-        posiciones_planta (2026-08-23, ver comentario en ejecutar()): set
-        de posiciones ocupadas por Planta, mantenido por el llamador y
-        actualizado aquí mismo tras cada colonización.
+        posiciones_planta: set de posiciones ocupadas por Planta (ver
+        _ejecutar_zona), mantenido por el llamador y actualizado aquí
+        mismo tras cada colonización.
         """
         vecinos = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         self.rng.shuffle(vecinos)
@@ -328,9 +282,7 @@ class SistemaFlora:
         posiciones_planta: set[tuple[int, int]],
         zona_idx: int = 0,
     ) -> None:
-        """Vector "viento" (2026-09-02, pieza 4/5 de "tipos de
-        propagación" -- ver docs/superpowers/specs/
-        2026-09-01-propagacion-flora-design.md): una planta madura con
+        """Vector "viento": una planta madura con
         tipo_propagacion: viento dispersa una semilla en la dirección del
         viento dominante de su zona (zona.viento_dx/viento_dy, sorteado
         una vez en la generación del mundo), a UNA distancia sorteada
@@ -395,17 +347,13 @@ class SistemaFlora:
         posiciones_planta: set[tuple[int, int]],
         zona_idx: int,
     ) -> None:
-        """Dispatch por tipo_propagacion -- CÍRCULO de "tipos de
-        propagación de flora" (2026-09-02, pieza 3/5, ver docs/
-        superpowers/specs/2026-09-01-propagacion-flora-design.md).
-        Sustituye la llamada incondicional a _intentar_propagacion que
-        regía por igual para las 5 especies. Único punto de dispatch --
-        los planes 4 (viento) y 5 (zoocoria) añaden sus propias ramas
-        aquí, sin tocar el resto de este método.
+        """Dispatch por tipo_propagacion -- único punto que decide qué
+        vector usar (caída, viento, zoocoria) según especie_cfg.
 
-        viento ya está conectado (plan 4/5, _propagar_viento); solo
-        zoocoria sigue como no-op -- su propagación no está gobernada
-        por el ciclo diario de la planta (plan 5/5, ver spec sección 5)."""
+        zoocoria es un no-op aquí a propósito: su propagación no está
+        gobernada por el ciclo diario de la planta, la dispara el
+        comportamiento del animal (COMER, luego ALIVIARSE en otro sitio
+        -- ver sistemas/sistema_recursos.py)."""
         tipo_prop = especie_cfg.get("tipo_propagacion", "caida")
         if tipo_prop == "caida":
             self._intentar_propagacion(
