@@ -127,17 +127,35 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # mini-swe-agent pregunta interactivamente al terminar la tarea; en
     # un pipeline desatendido no hay nadie para responder. -y: equivalente
     # a --yes-always de aider, sin confirmación por acción.
-    # MSWEA_COST_TRACKING=ignore_errors (hallazgo real del spike):
-    # litellm no tiene en su tabla de costes ningún registro para
-    # "openai/agente-obrero" (alias custom) -- sin esto, mini-swe-agent
-    # aborta con RuntimeError al no poder calcular el coste de la
-    # llamada, incluso cuando la llamada en sí tuvo éxito.
+    # LITELLM_MODEL_REGISTRY_PATH (2026-09-02, corrige el hallazgo del
+    # spike -- antes se usaba MSWEA_COST_TRACKING=ignore_errors, que
+    # evitaba el RuntimeError pero dejaba el coste real invisible
+    # (siempre "$0.00", sin poder distinguir una tarea barata de una
+    # cara): .ai-pipeline/litellm_model_registry.json declara el pricing
+    # real de "openai/agente-obrero" (deepseek-v4-flash-0731, tomado del
+    # catálogo de OpenRouter) para que litellm calcule el coste de
+    # verdad en vez de fallar o silenciarlo. Verificado con una tarea de
+    # control: coste real ~$0.00014 para 2 pasos triviales, confirmado
+    # en el propio fichero de trayectoria (más precisión que los 2
+    # decimales que muestra la consola).
+    #
+    # timeout 900 (2026-09-02, subido de 480): con planes de código
+    # completo 480s bastaba, pero una tarea que solo recibe la spec (sin
+    # plan con código ya escrito) necesita explorar el repo por su
+    # cuenta -- confirmado en la prueba real de "viento" (spec-only): el
+    # primer intento con 480s se cortó a mitad de una exploración
+    # legítima (sin bucle, solo más lenta), el segundo con 900s sí
+    # terminó con éxito, 64 pasos. Con este proyecto en concreto
+    # (ficheros con mucha documentación histórica en línea, en vías de
+    # reducirse -- ver docs/historial_*.md) la exploración es más cara
+    # que en un repo típico.
     TRAYECTORIA_DIR=".ai-pipeline/trayectorias"
     mkdir -p "$TRAYECTORIA_DIR"
     TRAYECTORIA_FILE="$TRAYECTORIA_DIR/${PLAN_NAME}-intento${RETRY_COUNT}.json"
 
     set +e
-    timeout 480 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy MSWEA_COST_TRACKING=ignore_errors \
+    timeout 900 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy \
+        LITELLM_MODEL_REGISTRY_PATH=.ai-pipeline/litellm_model_registry.json \
         mini -m openai/agente-obrero -y -l 0.60 --exit-immediately \
              -o "$TRAYECTORIA_FILE" \
              -t "$TAREA"

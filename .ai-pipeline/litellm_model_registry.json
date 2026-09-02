@@ -1,0 +1,11 @@
+{
+  "openai/agente-obrero": {
+    "max_tokens": 1310720,
+    "max_input_tokens": 1310720,
+    "max_output_tokens": 1310720,
+    "input_cost_per_token": 0.000000065,
+    "output_cost_per_token": 0.00000018,
+    "litellm_provider": "openai",
+    "mode": "chat"
+  }
+}
