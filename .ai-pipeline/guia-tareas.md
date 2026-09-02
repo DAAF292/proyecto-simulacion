@@ -130,45 +130,60 @@ fichero de una vez, para que un corte a mitad de tarea no pierda todo
 el trabajo; (c) aceptar que este tipo de tarea, con este presupuesto,
 se hace mejor a mano por ahora.
 
-## Coste real: DeepSeek vs. Sonnet (2026-09-02, primera medición real)
+## Coste real: DeepSeek vs. Sonnet (2026-09-02)
 
-Datos reales del fix de blueprint de arriba (litellm calcula el coste
-real por tokens consumidos, no una estimación -- campo `instance_cost`
-de cada trayectoria):
+**CORRECCIÓN (mismo día, tras la pieza de zoocoria): el `instance_cost`
+que reporta `mini` NO es el coste real -- es un cálculo local usando la
+tabla de precios fija de `litellm_model_registry.json` ($0.05/$0.16 por
+millón), con independencia de a qué proveedor te haya enrutado
+OpenRouter de verdad esa llamada.** `openai/agente-obrero` tiene 29
+proveedores distintos en OpenRouter para `deepseek-v4-flash-0731`, con
+precios de $0.05/M (OpenInference, el más barato, el que asume nuestra
+tabla) hasta $0.44/M (Cloudflare/Phala/Novita/AtlasCloud) -- hasta 8.8x
+de rango. `provider: {sort: "price"}` en `litellm_config.yaml` es una
+*preferencia*, no una garantía: si los proveedores baratos están
+saturados (plausible tras agotar la cuota diaria completa una vez ese
+mismo día, como pasó hoy), OpenRouter hace fallback a uno más caro sin
+avisar, y nuestro cálculo local sigue asumiendo el más barato de todas
+formas.
 
-| | Intento 1 (falló, timeout) | Intento 2 (éxito) | **Total real** |
-|---|---|---|---|
-| Coste | $0.01116 | $0.00833 | **$0.01949** |
-| Llamadas API | 31 | 26 | 57 |
+**Verificado de verdad, con el balance real de la cuenta (no
+`usage_daily`, que tiene caché de ~20s y además es acumulado de TODA la
+actividad del día, no aislable a una sola tarea) -- único método
+fiable: consultar `https://openrouter.ai/api/v1/credits` ANTES y
+DESPUÉS de la ejecución completa, y restar**:
 
-Tarifa de `openai/agente-obrero` (`litellm_model_registry.json`):
-$0.05/$0.16 por millón de tokens input/output.
+| Pieza | `instance_cost` calculado | Coste real (balance antes/después) |
+|---|---|---|
+| Fix de flora (2 intentos) | $0.01949 | **sin verificar** -- no se hizo el chequeo de balance en su momento |
+| Zoocoria (1 intento, 88 pasos) | $0.03957 | **$0.12** (verificado: $9.24 → $9.12) |
 
-**Sonnet no se ha medido nunca contra este pipeline** -- lo siguiente es
-una aproximación razonada, no un dato real, y debe tratarse como tal la
-próxima vez que se cite:
+Para zoocoria, el coste real fue **~3x** el calculado -- coherente con
+haber aterrizado en un proveedor del rango DeepSeek/Fireworks/
+SiliconFlow ($0.22/$0.66/M) en vez de OpenInference. El de flora queda
+como **dato no fiable, nunca confirmado contra balance real** -- no se
+puede afirmar con la misma confianza que antes que costó $0.0195.
 
-- Tarifa asumida para Sonnet: ~$3/$15 por millón input/output (la que ha
-  sido consistente en la gama Sonnet) -- ~60x más cara que DeepSeek en
-  input, ~94x en output, por token.
-- Un intento directo de una sola pasada (sin el tanteo agéntico que
-  necesitó DeepSeek), leyendo los ficheros relevantes de este mismo fix
-  (~700 líneas en 4 ficheros) y escribiendo el diff + tests completos,
-  ronda los 15.000-25.000 tokens de input y 2.000-4.000 de output --
-  **~$0.09-$0.15**.
-- **Ratio real aproximado: 5-8x más caro con Sonnet**, no el 60-94x que
-  sugeriría la tarifa por token -- DeepSeek compensa buena parte de esa
-  diferencia necesitando más pasos/reintentos para llegar al mismo
-  resultado. La ventaja económica real depende de cuánto escale el
-  tanteo de DeepSeek con el tamaño de la tarea: para un fix aislado de
-  dos funciones (esta prueba) la ventaja es real pero moderada; para
-  tareas más grandes debería crecer, porque el coste de Sonnet escala
-  con el contexto tan rápido como el de DeepSeek, pero un fallo/reintento
-  de DeepSeek no depende tanto del tamaño del fix en sí.
+**Sonnet sigue sin medirse nunca contra este pipeline.** La aproximación
+anterior (~$0.09-$0.15 por un fix de una sola pasada, ratio 5-8x más
+caro) queda en entredicho por partida doble: (1) nunca fue una medición
+real de Sonnet, y (2) el término de comparación (el coste "real" de
+DeepSeek) tampoco lo era. Con el dato real de zoocoria ($0.12), la
+ventaja económica de DeepSeek frente a la aproximación de Sonnet
+**podría ser mucho menor de la que se pensaba, o incluso desaparecer en
+un día de uso intenso** cuando los proveedores baratos se saturan --
+justo el escenario de hoy.
 
-**Pendiente real**: medir Sonnet contra este mismo pipeline de verdad
-(mismo fix o uno comparable) en vez de aproximar -- ninguna sesión lo ha
-hecho todavía.
+**Regla nueva, a partir de ahora**: verificar el balance real
+(`/api/v1/credits`, `total_credits - total_usage`) antes y después de
+CUALQUIER ejecución completa del pipeline antes de citar su coste --
+nunca fiarse solo de `instance_cost`. Es la única cifra que no depende
+de qué proveedor haya usado OpenRouter esa vez en concreto.
+
+**Pendiente real**: medir Sonnet de verdad contra este pipeline (mismo
+fix o uno comparable), y re-medir DeepSeek en un momento con los
+proveedores baratos NO saturados, para tener una comparación limpia por
+ambos lados.
 
 ## Reglas prácticas, mientras tanto
 
