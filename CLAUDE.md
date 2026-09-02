@@ -1651,3 +1651,182 @@ de extremo a extremo en una sesión anterior, aunque nunca probado dentro
 de una sesión real de `aider`); (c) otra opción. No decidido
 unilateralmente por Claude -- el patrón de esta sesión (Diego elige el
 modelo, Claude prueba y reporta con evidencia) se mantiene.
+
+## Prueba de control del pipeline (2026-09-02, misma tarde) -- dos fallos
+## más, causa raíz real del Hallazgo 3 identificada, `aider` descartado
+## como herramienta, pieza 1 de propagación de flora resuelta a mano
+
+Diego, tras revisar el balance de la sección anterior, preguntó
+directamente "¿hemos ahorrado? ¿la mejora justifica el flujo?" -- en vez
+de responder en abstracto, se hizo la prueba real que faltaba: trocear
+la pieza 2 de "poblar más el mundo" (tipos de propagación de flora, ver
+más abajo) en 5 planes con el mismo formato que ya había funcionado en
+la distribución causal de flora, y soltar el más simple al pipeline ya
+endurecido para medir cuánta supervisión hacía falta.
+
+**Primer intento: falló los 3 reintentos** -- dos silenciosos ("el
+agente no modificó ningún fichero") y uno por timeout con el mismo
+bucle de repetición no convergente que las correcciones de
+temperatura/`examples_as_sys_msg` debían haber resuelto. Investigado
+antes de aceptarlo como "el modelo es poco fiable, sin más" (mismo
+criterio que el resto de esta sección): la causa real, verificada
+leyendo `aider/coders/base_coder.py:get_file_mentions`/
+`check_for_file_mentions` del paquete instalado, no supuesta -- **cualquier
+palabra suelta del mensaje (nuestro plan, O la propia respuesta del
+modelo) que coincida con el nombre de un fichero del repo dispara un
+auto-añadido al chat, sin ningún flag de CLI para desactivarlo**, y con
+`--yes-always` se acepta siempre sin preguntar. El plan de prueba
+mencionaba `CLAUDE.md` una sola vez, en prosa, para decir "no lo
+toques" -- bastó para arrastrarlo entero al contexto, y el propio
+contenido de `CLAUDE.md` menciona decenas de otros ficheros del
+proyecto (`componentes/necromasa.py`, `sistema_ciclo_vital.py`,
+`sistema_depredacion.py`...), que se auto-añadieron en cascada.
+Resultado: 66k tokens enviados para una tarea de 2 ficheros.
+
+**CORRECCIÓN sobre la mitigación de la sección anterior**: "evitar
+declarar `CLAUDE.md` como fichero a modificar" (ver arriba, "Lección
+aparte") **no basta** -- el disparador no es declararlo modificable, es
+nombrarlo en cualquier parte del texto, entre backticks o no. La
+mitigación real es no mencionar NINGÚN fichero fuera de los que el
+plan declara en `Modify/Create/Test`, en ningún punto de la prosa ni de
+los comentarios de código de ejemplo.
+
+**Segundo intento, con esa corrección aplicada**: se reescribió el
+mismo plan sin una sola mención de fichero fuera de los dos objetivo,
+verificado antes de soltarlo con un script que replica la lógica exacta
+de `get_file_mentions` contra la lista real de ficheros del repo (`git
+ls-files`) -- 0 menciones inesperadas confirmadas. **Volvió a fallar los
+3 intentos** -- mismo patrón de dos fallos silenciosos, pero el tercero
+esta vez por un motivo distinto y más revelador: el modelo entró en un
+bucle de autoargumentación contando espacios de indentación del formato
+`udiff` ("¿son 2 espacios o 3 para una línea de contexto?"), sin
+converger nunca, hasta el timeout de 480s.
+
+**Conclusión, con las dos pruebas juntas (6 fallos consecutivos sobre la
+tarea más simple posible, dos veces 3/3)**: la contaminación de contexto
+era real y se corrigió, pero NO era la única causa. Con contexto
+limpio, el modelo sigue bloqueado por la fragilidad mecánica del propio
+formato de diff de texto libre (`SEARCH/REPLACE` o `udiff`, probados
+ambos en esta sesión y en la anterior) -- un requisito de precisión
+sintáctica sin relación con su capacidad real de razonar sobre el
+código. Investigación en paralelo (agente de búsqueda, no implementado
+nada) sobre alternativas confirma que esto es un problema conocido de
+`aider` frente a modelos no-frontier: **`SWE-agent`** (Princeton,
+SWE-bench) usa tool-calling estructurado (comandos JSON tipo
+`str_replace_editor`) en vez de diffs de texto libre, corre headless
+por diseño, acepta cualquier endpoint OpenAI-compatible (nuestro proxy
+`litellm` sin cambios), y DeepSeek sí soporta function-calling real vía
+OpenRouter -- viable con el modelo actual, sin cambiar de modelo.
+`OpenHands` quedó descartado como primera opción: su propia
+documentación pide un modelo "potente", lo contrario de la premisa
+económica de este pipeline.
+
+**Decisión de Diego sobre el enfoque de fondo**: ante la propuesta
+externa de pasar de "Claude escribe el código completo en el plan" a
+"Claude escribe solo un blueprint, el modelo investiga el repo y escribe
+el código él mismo" (más fiel al ahorro económico real), Diego coincidió
+en que el diagnóstico económico es correcto en teoría, pero señaló que
+"la herramienta aider no me está gustando nada, arrastra muchos
+problemas" -- la solución no es solo replantear el formato del plan,
+también hace falta valorar cambiar de herramienta. Confirmado con
+evidencia propia: un blueprint exige que el modelo **explore y narre
+más ficheros por su cuenta**, justo el mecanismo que dispara la cascada
+de auto-mención -- con `aider` como está, más autonomía real empeoraría
+el problema, no lo mejoraría. **Pendiente, sin decidir todavía**: si
+seguir con `aider` (mínimo, ya no parece razonable tras dos 3/3
+consecutivos con causas distintas), probar `SWE-agent` con el mismo
+modelo, o replantear el flujo de planes (blueprint vs. código completo)
+una vez resuelta la herramienta. Explícitamente aplazado por Diego
+("cuando eso esté nos pondremos a plantear el nuevo flujo") hasta cerrar
+primero la pieza 1 de propagación de flora, más abajo.
+
+**Pieza 1 de propagación de flora, implementada a mano**: tras el
+segundo fallo, Diego pidió implementar directamente el plan que había
+fallado (sin pipeline) y documentar el estado de la funcionalidad --
+ver la sección siguiente. Los planes 2-5, ya escritos con el mismo
+formato completo (código real, no blueprint) por si se retoma el
+pipeline más adelante, quedaron aparcados en
+`docs/superpowers/plans/pendientes/` (fuera del directorio que vigila
+el centinela), sin implementar.
+
+## Tipos de propagación de flora (2026-09-02) -- pieza 2 de la cola
+## "poblar más el mundo", pieza 1/5 implementada, 2-5 pendientes
+
+Segunda pieza de la cola acordada en brainstorming el mismo día que la
+distribución causal de flora (1. distribución causal, ya cerrada -- ver
+más arriba; **2. este círculo**; 3. cupo de espacio compartido por
+celda; 4. catálogo ampliado de especies). Spec completa ya escrita y
+aprobada por Diego en
+`docs/superpowers/specs/2026-09-01-propagacion-flora-design.md`:
+sustituye el mecanismo ciego actual (una planta madura intenta
+colonizar un vecino contiguo al azar, sin relación con cómo se dispersa
+de verdad una semilla) por tres vectores reales -- viento (reutiliza la
+dirección global ya sorteada por mundo), caída (el mecanismo de hoy,
+refinado) y zoocoria (un animal come el fruto, dispersa la semilla al
+`ALIVIARSE` en otro sitio) -- validados todos contra
+`idoneidad_colonizacion` (pieza 1 de la distribución causal), no contra
+el chequeo tosco de bioma+agua actual.
+
+Troceada en 5 planes con el mismo formato que ya había funcionado en la
+distribución causal (código completo, no blueprint):
+
+1. **Catálogo `tipo_propagacion` -- IMPLEMENTADO** (2026-09-02, a mano,
+   tras dos fallos consecutivos del pipeline autónomo sobre este mismo
+   plan -- ver sección anterior). `config/flora.yaml`: cada especie
+   lleva ahora `tipo_propagacion: viento | caida | zoocoria`
+   (`hierba_silvestre`/`liquen`/`musgo` -> viento con
+   `alcance_viento_celdas` propio; `manzano` -> zoocoria; `cactus` ->
+   caida -- asignación PROVISIONAL, razonada, sin calibrar); más
+   `probabilidad_recogida_semilla_zoocoria`/
+   `probabilidad_plantar_semilla_en_aliviarse` (también PROVISIONALES).
+   Sin ningún consumidor todavía -- ningún sistema del motor lee
+   `tipo_propagacion` hasta la pieza 3. `tests/test_flora_tipo_propagacion.py`
+   (5 tests), 61/61 en verde, `BOSQUE_AUTO_TICKS=800` sin excepciones.
+
+2-5. **Planes escritos, NO implementados**, aparcados en
+   `docs/superpowers/plans/pendientes/` (código completo ya redactado,
+   listos para ejecutar a mano o por pipeline cuando se decida la
+   herramienta):
+   - **2/5**: `nucleo.flora.intentar_colonizar_celda` -- helper
+     compartido por los tres vectores, sustituye la validación de
+     destino que hoy vive solo dentro de `_intentar_propagacion`.
+     **Desviación deliberada de la spec original, encontrada al
+     diseñar este plan**: la spec no incluía ningún guard de agua en
+     el helper; se añadió uno (`if celda_dest.tiene_agua: return
+     False`) porque `sistema_flora.py` ya tenía ese guard con un
+     comentario documentando que fue un bug real ya corregido una vez
+     ("la propagación colonizaba celdas de río/lago/poza"). **Hallazgo
+     colateral real, verificado contra el motor, NO corregido**: la
+     generación inicial (pieza 1 de la distribución causal, ya
+     mergeada) tiene exactamente este mismo bug sin el guard --
+     `colonizar_por_idoneidad` nunca excluye celdas sumergidas, medido
+     en 3 semillas (40x40): entre el 5% y el 11% de las celdas
+     colonizadas con flora en generación están también sobre agua.
+     Fuera de alcance corregirlo ahora (círculo ya cerrado), señalado
+     aquí para no perderlo.
+   - **3/5**: integra el helper en `_intentar_propagacion` (vector
+     caída) y añade `SistemaFlora._propagar_planta`, el punto único de
+     dispatch por `tipo_propagacion` que sustituirá la llamada
+     incondicional actual -- con las ramas `viento`/`zoocoria` como
+     no-op documentado hasta los planes 4 y 5 (regresión temporal
+     deliberada dentro del mismo círculo de trabajo).
+   - **4/5**: `ZonaBioma` gana `viento_dx`/`viento_dy` (hoy variables
+     locales de `generar_zona_bioma` que se pierden al terminar la
+     generación) y `SistemaFlora._propagar_viento` -- sortea distancia
+     dentro de `alcance_viento_celdas`, prueba una única celda en la
+     dirección del viento dominante ya sorteado por el mundo.
+   - **5/5**: componente `Semillas.especie_transportada` (mismo molde
+     que `Agarre`, añadido a las 4 especies en `crear_criatura` Y
+     `nacer_criatura` -- dos fábricas ECS separadas, mismo hallazgo ya
+     documentado para `Agarre`); hooks en
+     `_resolver_comer`/`_resolver_aliviarse` de `sistema_recursos.py`;
+     persistencia (`VERSION_ESQUEMA` a `0.31-fase0`).
+
+**Pendiente real, explícito**: pieza 2/5 a 5/5 sin implementar (planes
+ya escritos, ver arriba); asignación de vector por especie y las
+constantes numéricas nuevas, todas PROVISIONALES sin calibrar; el bug
+de flora-sobre-agua en generación inicial, señalado y no corregido;
+piezas 3 (cupo de espacio) y 4 (catálogo ampliado) de la cola "poblar
+más el mundo" sin empezar. Próximo paso acordado con Diego: cerrar el
+planteamiento del nuevo flujo del pipeline (sección anterior) antes de
+retomar la implementación de las piezas 2-5.

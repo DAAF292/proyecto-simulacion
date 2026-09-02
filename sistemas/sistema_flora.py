@@ -18,7 +18,7 @@ from nucleo.bioma import TipoTerreno
 from nucleo.clima import estacion_actual as _estacion_actual_desde_indice
 from nucleo.entidad import GestorEntidades, crear_planta
 from nucleo.eventos import BusEventos
-from nucleo.flora import factor_humedad_subsuelo, factor_produccion
+from nucleo.flora import factor_humedad_subsuelo, factor_produccion, intentar_colonizar_celda
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 
@@ -253,7 +253,7 @@ class SistemaFlora:
             if planta.etapa >= 1.0:
                 prob_prop = float(cfg_esp.get("prob_propagacion_por_dia", 0.02))
                 if self.rng.random() < prob_prop:
-                    self._intentar_propagacion(
+                    self._propagar_planta(
                         gestor, zona, pos.x, pos.y, planta.especie, cfg_esp,
                         posiciones_planta, zona_idx,
                     )
@@ -269,13 +269,19 @@ class SistemaFlora:
         posiciones_planta: set[tuple[int, int]],
         zona_idx: int = 0,
     ) -> None:
-        """Coloniza una celda adyacente compatible inicializando sus recursos en 0.0.
+        """Vector "caída" -- coloniza una celda adyacente compatible.
+        Antes tenía su propia validación inline ("bioma compatible + sin
+        agua"); ahora delega en nucleo.flora.intentar_colonizar_celda
+        (2026-09-02, pieza 3/5 de "tipos de propagación" -- ver
+        docs/superpowers/specs/2026-09-01-propagacion-flora-design.md),
+        compartido con viento (plan 4) y zoocoria (plan 5). El filtro de
+        bioma se mantiene aquí como preselección barata antes de calcular
+        idoneidad -- sin él, cualquier celda vecina de bioma incompatible
+        pasaría igualmente por el cálculo completo de idoneidad.
 
         posiciones_planta (2026-08-23, ver comentario en ejecutar()): set
         de posiciones ocupadas por Planta, mantenido por el llamador y
-        actualizado aquí mismo tras cada colonización -- sustituye a un
-        any(...) que escaneaba todas las entidades Planta del mundo en
-        cada intento, mismo resultado, sin el coste O(N) por intento.
+        actualizado aquí mismo tras cada colonización.
         """
         vecinos = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         self.rng.shuffle(vecinos)
@@ -286,21 +292,60 @@ class SistemaFlora:
             if b.lower() in TipoTerreno._value2member_map_
         ]
 
+        umbral_minimo = float(self.cfg_flora.get("umbral_minimo_idoneidad_colonizacion", 0.2))
+
         for dx, dy in vecinos:
             nx, ny = origen_x + dx, origen_y + dy
-            if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
-                celda_dest = zona.obtener_celda(nx, ny)
-                # (2026-08-28) Ley fisica: la flora no crece sumergida --
-                # mismo guard que sembrar_flora_inicial (main.py). El agua
-                # es capa independiente del bioma: sin esto, la propagacion
-                # colonizaba celdas de rio/lago/poza de su mismo bioma.
-                if celda_dest.tipo_terreno in biomas_compatibles and not celda_dest.tiene_agua:
-                    if (nx, ny) not in posiciones_planta:
-                        crear_planta(gestor, especie_nombre, nx, ny, etapa=0.1, zona_idx=zona_idx)
-                        posiciones_planta.add((nx, ny))
-                        # Inicialización explícita del diccionario de recursos de la celda
-                        for r_cfg in especie_cfg.get("recursos", []):
-                            nom = r_cfg.get("nombre")
-                            if nom and nom not in celda_dest.recursos:
-                                celda_dest.recursos[nom] = 0.0
-                        break
+            if not (0 <= nx < zona.ancho and 0 <= ny < zona.alto):
+                continue
+            if (nx, ny) in posiciones_planta:
+                continue
+
+            celda_dest = zona.obtener_celda(nx, ny)
+            if celda_dest.tipo_terreno not in biomas_compatibles:
+                continue
+
+            capacidad_retencion = float(
+                self.catalogo_materiales.get(celda_dest.tipo_sustrato, {}).get(
+                    "capacidad_retencion", 0.0
+                )
+            )
+            if intentar_colonizar_celda(
+                gestor, celda_dest, capacidad_retencion, especie_nombre,
+                especie_cfg, umbral_minimo, nx, ny, zona_idx,
+            ):
+                posiciones_planta.add((nx, ny))
+                break
+
+    def _propagar_planta(
+        self,
+        gestor: GestorEntidades,
+        zona: Any,
+        origen_x: int,
+        origen_y: int,
+        especie_nombre: str,
+        especie_cfg: dict[str, Any],
+        posiciones_planta: set[tuple[int, int]],
+        zona_idx: int,
+    ) -> None:
+        """Dispatch por tipo_propagacion -- CÍRCULO de "tipos de
+        propagación de flora" (2026-09-02, pieza 3/5, ver docs/
+        superpowers/specs/2026-09-01-propagacion-flora-design.md).
+        Sustituye la llamada incondicional a _intentar_propagacion que
+        regía por igual para las 5 especies. Único punto de dispatch --
+        los planes 4 (viento) y 5 (zoocoria) añaden sus propias ramas
+        aquí, sin tocar el resto de este método.
+
+        viento y zoocoria no hacen nada todavía en este plan (3/5) -- ver
+        Global Constraints del plan: regresión temporal esperada,
+        corregida por los planes 4 y 5 del mismo círculo."""
+        tipo_prop = especie_cfg.get("tipo_propagacion", "caida")
+        if tipo_prop == "caida":
+            self._intentar_propagacion(
+                gestor, zona, origen_x, origen_y, especie_nombre, especie_cfg,
+                posiciones_planta, zona_idx,
+            )
+        elif tipo_prop == "viento":
+            pass  # plan 4/5: _propagar_viento
+        elif tipo_prop == "zoocoria":
+            pass  # plan 5/5: no se dispara desde aquí, ver spec sección 5
