@@ -45,14 +45,12 @@ def test_ley_los_tres_sustratos_nuevos_existen_con_esquema_completo():
         )
         assert catalogo[nombre]["forma_en_mundo"] == "sustrato"
 
-
-def test_ley_sustrato_por_bioma_no_cambia_de_forma_todavia():
-    """Este plan NO toca sustrato_por_bioma -- sigue siendo un mapeo
-    escalar bioma->material, exactamente como antes. El cambio a lista
-    llega en el plan 4, junto con su único consumidor real."""
-    datos = _cargar_materiales()
-    mapeo = datos["sustrato_por_bioma"]
-    for bioma, material in mapeo.items():
-        assert isinstance(material, str), (
-            f"sustrato_por_bioma[{bioma}] ya no es un string -- este plan no debía tocar esto"
-        )
+# test_ley_sustrato_por_bioma_no_cambia_de_forma_todavia (2026-09-01,
+# pieza 1/5) retirado el 2026-09-02: documentaba una restricción
+# deliberada de ESE plan concreto ("esta pieza no toca sustrato_por_
+# bioma"), no una ley permanente del motor -- la pieza 4/5 cambia esa
+# forma a lista por diseño (ver tests/test_zona_bioma_fertilidad.py),
+# así que la aserción quedó obsoleta y contradicha a propósito, no rota
+# por error. Hallazgo real de revisión de plan, no del pipeline: la
+# pieza 4 nunca instruyó actualizar/retirar este test heredado de la
+# pieza 1.
