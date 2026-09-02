@@ -129,6 +129,46 @@ fichero de una vez, para que un corte a mitad de tarea no pierda todo
 el trabajo; (c) aceptar que este tipo de tarea, con este presupuesto,
 se hace mejor a mano por ahora.
 
+## Coste real: DeepSeek vs. Sonnet (2026-09-02, primera medición real)
+
+Datos reales del fix de blueprint de arriba (litellm calcula el coste
+real por tokens consumidos, no una estimación -- campo `instance_cost`
+de cada trayectoria):
+
+| | Intento 1 (falló, timeout) | Intento 2 (éxito) | **Total real** |
+|---|---|---|---|
+| Coste | $0.01116 | $0.00833 | **$0.01949** |
+| Llamadas API | 31 | 26 | 57 |
+
+Tarifa de `openai/agente-obrero` (`litellm_model_registry.json`):
+$0.05/$0.16 por millón de tokens input/output.
+
+**Sonnet no se ha medido nunca contra este pipeline** -- lo siguiente es
+una aproximación razonada, no un dato real, y debe tratarse como tal la
+próxima vez que se cite:
+
+- Tarifa asumida para Sonnet: ~$3/$15 por millón input/output (la que ha
+  sido consistente en la gama Sonnet) -- ~60x más cara que DeepSeek en
+  input, ~94x en output, por token.
+- Un intento directo de una sola pasada (sin el tanteo agéntico que
+  necesitó DeepSeek), leyendo los ficheros relevantes de este mismo fix
+  (~700 líneas en 4 ficheros) y escribiendo el diff + tests completos,
+  ronda los 15.000-25.000 tokens de input y 2.000-4.000 de output --
+  **~$0.09-$0.15**.
+- **Ratio real aproximado: 5-8x más caro con Sonnet**, no el 60-94x que
+  sugeriría la tarifa por token -- DeepSeek compensa buena parte de esa
+  diferencia necesitando más pasos/reintentos para llegar al mismo
+  resultado. La ventaja económica real depende de cuánto escale el
+  tanteo de DeepSeek con el tamaño de la tarea: para un fix aislado de
+  dos funciones (esta prueba) la ventaja es real pero moderada; para
+  tareas más grandes debería crecer, porque el coste de Sonnet escala
+  con el contexto tan rápido como el de DeepSeek, pero un fallo/reintento
+  de DeepSeek no depende tanto del tamaño del fix en sí.
+
+**Pendiente real**: medir Sonnet contra este mismo pipeline de verdad
+(mismo fix o uno comparable) en vez de aproximar -- ninguna sesión lo ha
+hecho todavía.
+
 ## Reglas prácticas, mientras tanto
 
 - **Antes de soltar una tarea de implementación**: dale spec (no
