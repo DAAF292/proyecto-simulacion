@@ -48,19 +48,9 @@ def _serializar_snapshot_padre(gest: Gestacion | None) -> dict[str, Any]:
     """
     Convierte la instantánea del padre guardada en Gestacion (dimensiones_
     padre, temperamento_padre, capacidad_mental_padre, duracion_gestacion_
-    padre, tamano_camada) en un dict serializable a JSON.
-
-    CORRECCIÓN (2026-08-23): esta función y su inversa (_reconstruir_
-    gestacion, más abajo) reemplazan un guardado/carga que leía/escribía
-    gest.padre_id y gest.padre_snapshot -- campos que Gestacion nunca tuvo
-    en su forma actual (ver componentes/gestacion.py: es id_padre, y en
-    vez de un único snapshot genérico tiene cuatro campos tipados más
-    tamano_camada). Nunca se detectó en producción porque main.py no
-    invoca guardar_snapshot/cargar_snapshot -- se encontró auditando el
-    código, no por una excepción real. tick_inicio e id_padre SÍ tienen
-    sus propias columnas (no van aquí); todo lo demás de la instantánea
-    del padre se empaqueta en un único blob JSON, igual que antes,
-    evitando así añadir columnas nuevas.
+    padre, tamano_camada) en un dict serializable a JSON. tick_inicio e
+    id_padre SÍ tienen sus propias columnas (no van aquí); todo lo demás
+    de la instantánea del padre se empaqueta en un único blob JSON.
     """
     if gest is None:
         return {}
@@ -104,12 +94,8 @@ _TABLAS_APP = (
 class Persistencia:
     """Gestiona la base de datos SQLite para snapshots y crónica histórica.
 
-    Versionado de esquema (2026-08-23, feedback ya registrado en memoria del
-    proyecto: "cambio de esquema exige DROP TABLE, no DELETE FROM"):
-    `CREATE TABLE IF NOT EXISTS` nunca migra columnas -- si el código cambia
-    la forma de una tabla (como pasó hoy con componentes_estado y
-    configuracion_ejecucion, verificado con PRAGMA table_info contra un
-    datos/bosque.db real que llevaba varios días de desfase), una base de
+    Versionado de esquema: `CREATE TABLE IF NOT EXISTS` nunca migra
+    columnas -- si el código cambia la forma de una tabla, una base de
     datos ya existente se queda con el esquema VIEJO para siempre, y
     cualquier INSERT/SELECT contra las columnas nuevas falla en tiempo de
     ejecución. Antes de crear las tablas, se compara VERSION_ESQUEMA contra
@@ -244,13 +230,9 @@ class Persistencia:
                 """
             )
 
-            # 4. Snapshot de necromasa. masas (2026-08-30, CÍRCULO 2 de
-            # materiales físicos): antes columna masa_organica REAL única;
-            # ahora JSON de {material: kg} -- mismo patrón que
-            # celdas_estado.recursos mas abajo (dict serializado, no una
-            # columna por material). VERSION_ESQUEMA subida para que un
-            # esquema anterior se purgue y recree en vez de fallar leyendo
-            # una columna que ya no existe.
+            # 4. Snapshot de necromasa. masas: JSON de {material: kg} --
+            # mismo patrón que celdas_estado.recursos mas abajo (dict
+            # serializado, no una columna por material).
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS necromasa_estado (
@@ -285,9 +267,9 @@ class Persistencia:
                 """
             )
 
-            # 4c. Snapshot de fogatas (2026-08-31, ver componentes/fogata.py).
-            # Mismo molde que construccion_estado: entidad física sin fila
-            # en `entidades` (no tiene Identidad).
+            # 4c. Snapshot de fogatas (ver componentes/fogata.py). Mismo
+            # molde que construccion_estado: entidad física sin fila en
+            # `entidades` (no tiene Identidad).
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS fogata_estado (
@@ -376,15 +358,9 @@ class Persistencia:
 
     def marcar_entidad_muerta(self, entidad_id: int) -> None:
         """Actualiza el registro histórico de una entidad para reflejar
-        que ha muerto (2026-09-02, fix aislado -- ver CLAUDE.md,
-        'entidades.viva nunca se actualizaba'). Antes de este fix, toda
-        entidad quedaba marcada viva=True para siempre en la tabla
-        histórica una vez creada -- el snapshot en vivo
-        (componentes_estado) sí reflejaba correctamente quién seguía
-        vivo, pero el registro histórico permanente mentía. Se llama
-        desde main.py al procesar cualquier Evento con tipo == "Muerte",
-        el mismo patrón que ya usa registrar_entidad_nueva para
-        "Nacimiento"."""
+        que ha muerto. Se llama desde main.py al procesar cualquier
+        Evento con tipo == "Muerte", el mismo patrón que ya usa
+        registrar_entidad_nueva para "Nacimiento"."""
         with self._conectar() as con:
             cur = con.cursor()
             cur.execute(
@@ -430,15 +406,13 @@ class Persistencia:
     ) -> None:
         """Serializa el estado completo en una transacción atómica.
 
-        semilla (2026-08-23): la semilla de generación de mundo NUNCA se
-        persistía -- cargar_snapshot solo restaura el estado DINÁMICO de
-        celda (fertilidad, charcos, fuego, recursos); el TERRENO en sí
-        (tipo de bioma, elevación) lo regenera Mundo() a partir de la
-        semilla de config en cada arranque. Si esa semilla cambia entre
-        guardar y cargar, el terreno regenerado no coincide con el que
-        produjo el estado dinámico guardado, y hasta ahora eso pasaba en
-        silencio. Guardarla aquí permite que cargar_snapshot lo detecte y
-        avise -- ver su propio docstring."""
+        semilla: la semilla de generación de mundo se guarda aquí, no
+        solo el estado DINÁMICO de celda (fertilidad, charcos, fuego,
+        recursos) -- el TERRENO en sí (tipo de bioma, elevación) lo
+        regenera Mundo() a partir de la semilla de config en cada
+        arranque, así que guardar la semilla usada permite a
+        cargar_snapshot detectar y avisar si no coincide con la actual
+        (ver su propio docstring)."""
         with self._conectar() as con:
             cur = con.cursor()
 
@@ -581,7 +555,7 @@ class Persistencia:
                 "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
             )
 
-            # C3. Fogatas (2026-08-31, ver componentes/fogata.py)
+            # C3. Fogatas (ver componentes/fogata.py)
             cur.execute("DELETE FROM fogata_estado")
             filas_fogata = []
             for fid in sorted(gestor.entidades_con(Fogata, Posicion)):
@@ -593,8 +567,8 @@ class Persistencia:
                     )
             cur.executemany("INSERT INTO fogata_estado VALUES (?, ?, ?, ?, ?)", filas_fogata)
 
-            # D. Celdas dinámicas -- TODAS las zonas del territorio
-            # (2026-08-30, Circulo 1 de profundidad), no solo zonas[0].
+            # D. Celdas dinámicas -- TODAS las zonas del territorio, no
+            # solo zonas[0].
             cur.execute("DELETE FROM celdas_estado")
             filas_celdas = []
             for zona_idx, zona in enumerate(mundo.territorio.zonas):
@@ -646,15 +620,15 @@ class Persistencia:
     ) -> bool:
         """Restaura el estado completo desde la base de datos.
 
-        semilla (2026-08-23, ver docstring de guardar_snapshot): se
-        compara contra la guardada en la propia partida. El terreno
-        (bioma, elevación, ríos) NO se persiste -- lo regenera Mundo() a
-        partir de la semilla de config en cada arranque, antes de que se
-        llame a esta función. Si la semilla actual no coincide con la que
-        generó el terreno sobre el que se guardó el estado dinámico de
-        celda, el mundo resultante mezcla un terreno nuevo con recursos/
-        fertilidad/charcos de otro terreno -- inconsistente, aunque no
-        impide cargar. Se avisa por stderr en vez de fallar en silencio o
+        semilla (ver docstring de guardar_snapshot): se compara contra la
+        guardada en la propia partida. El terreno (bioma, elevación,
+        ríos) NO se persiste -- lo regenera Mundo() a partir de la
+        semilla de config en cada arranque, antes de que se llame a esta
+        función. Si la semilla actual no coincide con la que generó el
+        terreno sobre el que se guardó el estado dinámico de celda, el
+        mundo resultante mezcla un terreno nuevo con recursos/fertilidad/
+        charcos de otro terreno -- inconsistente, aunque no impide
+        cargar. Se avisa por stderr en vez de fallar en silencio o
         bloquear la carga: no hay overhead de UI de por medio (nucleo/ no
         importa nada de presentacion/) y un guardado antiguo sigue siendo
         mejor que ninguno, incluso si el terreno ya no encaja."""
@@ -679,15 +653,11 @@ class Persistencia:
                     f"inconsistente.",
                     file=sys.stderr,
                 )
-            # CORRECCIÓN (2026-08-23): Reloj.tick_actual es un atributo de
-            # instancia plano fijado en __init__ (nucleo/reloj.py), NO una
-            # property respaldada por _tick_actual -- escribir en
-            # reloj._tick_actual creaba un atributo nuevo sin efecto real,
-            # dejando el reloj congelado en tick 0 tras cada carga aunque
-            # cargar_snapshot devolviera True. Bug preexistente, no
-            # introducido en la reescritura de hoy; detectado al probar el
-            # roundtrip guardar/cargar por primera vez (nunca se había
-            # ejecutado antes porque main.py no llamaba a cargar_snapshot).
+            # Reloj.tick_actual es un atributo de instancia plano fijado
+            # en __init__ (nucleo/reloj.py), NO una property respaldada
+            # por _tick_actual -- escribir en reloj._tick_actual crearía
+            # un atributo nuevo sin efecto real, dejando el reloj
+            # congelado en tick 0 tras cada carga.
             reloj.tick_actual = int(fila_tick[0])
 
             cur.execute("SELECT valor FROM configuracion_ejecucion WHERE clave = 'rng_juego_state'")
@@ -704,12 +674,11 @@ class Persistencia:
             for eid in list(gestor.entidades_con(Posicion)):
                 gestor.eliminar_entidad(eid)
 
-            # 1. Cargar celdas -- TODAS las zonas (2026-08-30, Circulo 1 de
-            # profundidad). Una fila cuyo zona_idx ya no existe en el
-            # territorio recien generado (semilla distinta, o menos zonas
-            # que cuando se guardo) se descarta con un aviso en vez de
-            # reventar -- mismo criterio defensivo que el aviso de semilla
-            # de mas arriba.
+            # 1. Cargar celdas -- TODAS las zonas. Una fila cuyo zona_idx
+            # ya no existe en el territorio recien generado (semilla
+            # distinta, o menos zonas que cuando se guardo) se descarta
+            # sin reventar -- mismo criterio defensivo que el aviso de
+            # semilla de mas arriba.
             cur.execute(
                 "SELECT x, y, fertilidad, profundidad_charco, en_llamas, recursos, "
                 "tiene_recurso, tipo_recurso, zona_idx, deposito_mineral, "
@@ -726,34 +695,22 @@ class Persistencia:
                 celda.profundidad_charco = float(prof_ch)
                 celda.en_llamas = bool(fuego)
                 celda.recursos = json.loads(rec_json)
-                # CÍRCULO 2 de profundidad (2026-08-30): deposito_mineral/
-                # masa_mineral_restante son ahora estado mutable de la
-                # partida (una veta agotada por Accion.RECOLECTAR), no
-                # puramente derivable de la semilla -- se restauran igual
-                # que fertilidad/profundidad_charco.
+                # deposito_mineral/masa_mineral_restante son estado
+                # mutable de la partida (una veta agotada por
+                # Accion.RECOLECTAR), no puramente derivable de la
+                # semilla -- se restauran igual que fertilidad/
+                # profundidad_charco.
                 celda.deposito_mineral = str(dep_mineral)
                 celda.masa_mineral_restante = float(masa_mineral)
-                # CORRECCIÓN (2026-08-23): tiene_recurso/tipo_recurso tienen
-                # su propio docstring en nucleo/celda.py afirmando "SI se
-                # persiste" -- hasta ahora no había columnas para ellos y se
-                # perdían en cada carga, quedando siempre en su valor por
-                # defecto (False/""), inconsistente con celda.recursos ya
-                # restaurado. Sin consumidor real todavía (ningún sistema
-                # los lee), así que esto no cambiaba el comportamiento
-                # observable hoy -- pero es la promesa documentada la que
-                # ahora se cumple.
                 celda.tiene_recurso = bool(tiene_rec)
                 celda.tipo_recurso = str(tipo_rec)
 
-            # 2. Cargar entidades biológicas. zona_idx (2026-08-30, Circulo
-            # 1 de profundidad) se añadió como ÚLTIMA columna de
-            # componentes_estado en su momento -- fila[47]. agarre
-            # (2026-08-31, ver componentes/agarre.py) se añadió DESPUÉS de
-            # zona_idx, como fila[48] -- desplaza en +1 los índices
-            # e.especie..e.id_padre de más abajo (antes fila[48]..fila[52],
-            # ahora fila[49]..fila[53]), pero ninguno de los índices
-            # anteriores (0..47, incluida la instantánea de gestación)
-            # cambia.
+            # 2. Cargar entidades biológicas. zona_idx es la ÚLTIMA
+            # columna de componentes_estado -- fila[47]. agarre se añadió
+            # DESPUÉS de zona_idx, como fila[48] -- desplaza en +1 los
+            # índices e.especie..e.id_padre de más abajo (fila[49]..
+            # fila[53]); ninguno de los índices anteriores (0..47,
+            # incluida la instantánea de gestación) cambia.
             cur.execute(
                 """
                 SELECT c.*, e.especie, e.nombre, e.tick_nacimiento, e.id_madre, e.id_padre
