@@ -113,3 +113,35 @@ arrancar a arder, no sobre qué le pasa a una construcción ya en llamas.
 El procesamiento de todas las zonas del territorio (en vez de solo
 zonas[0]) en ignición, propagación y flora/construcciones quemadas es
 del círculo 1 de profundidad (2026-08-30).
+
+## `sistema_necesidades.py`
+
+El periodo de plenitud es el incremento 2 del diseño de microsueños
+(2026-08-29), confirmado por Diego junto con la ley B de compromiso de
+satisfacción de sistema_decision.py -- es la saciedad post-ingesta
+biológica: "como algo y estoy lleno durante un tiempo y luego empieza un
+hambre gradual" (Diego, sesión de diseño).
+
+El drenaje real de seguridad por amenaza fue un fix de auditoría
+(2026-08-29): `Necesidades.seguridad` se inicializaba a 1.0 y la función
+solo la subía -- ninguna línea de todo el repositorio la bajaba nunca,
+pese a que `config/constantes.yaml` ya declaraba la tasa sin que nadie
+la leyera. Consecuencia en cascada antes del fix: `utilidad_huir = 1.0 -
+seguridad` (sistema_decision.py) era 0.0 SIEMPRE, por debajo de la
+utilidad fija de deambular -- HUIR no podía ganar el argmax nunca, y el
+drenaje de estabilidad mental "por amenaza sostenida"
+(sistema_capacidad_mental.py) tampoco tenía jamás efecto real.
+
+La deriva de confort térmico por clima del día fue otro fix de
+auditoría del mismo 2026-08-29: `nucleo.clima.objetivo_confort_termico()`
+ya combinaba estación + clima del día, pero este código solo leía la
+base estacional, ignorando el clima por completo. En el mismo fix se
+corrigió que `Reloj.estacion` es un int CRECIENTE, no cíclico, y el
+código le pedía `.value` directamente a un int sin reducirlo antes.
+
+El bono de defensa en grupo es la Pieza 1 de gregarismo (2026-08-30). El
+refugio instintivo es la Pieza 1 de interacción física (2026-08-30, ver
+docstring de sistema_movimiento.py:_calcular_dormir). Refugio/Fogata
+como fuentes de calor son del 2026-08-31, de una conversación de diseño
+con Diego: "otoño 15 grados... invierno 3 grados, ¿es suficiente, o debo
+encender un fuego?".

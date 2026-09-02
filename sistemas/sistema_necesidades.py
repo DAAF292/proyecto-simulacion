@@ -6,14 +6,11 @@ Gestiona el decaimiento de necesidades básicas, la recuperación por sueño,
 la deriva térmica ambiental, la asfixia por inmersión y la mortalidad metabólica
 con depósito de necromasa y emisión de eventos espaciales.
 
-PERIODO DE PLENITUD (2026-08-29, incremento 2 del diseño de microsueños,
-confirmado por Diego junto con la ley B de compromiso de satisfaccion de
-sistema_decision.py): una necesidad que alcanza la plenitud (1.0) no decae
-durante necesidades.defecto.ticks_plenitud ticks; pasado el periodo, decae
-con su tasa lineal de siempre. Es la saciedad post-ingesta biologica: el
-estomago lleno suprime la señal de hambre un tiempo, y el hambre emerge
-despues gradualmente -- "como algo y estoy lleno durante un tiempo y luego
-empieza un hambre gradual" (Diego, sesion de diseño). Sin este periodo el
+PERIODO DE PLENITUD: una necesidad que alcanza la plenitud (1.0) no
+decae durante necesidades.defecto.ticks_plenitud ticks; pasado el
+periodo, decae con su tasa lineal de siempre. Es la saciedad
+post-ingesta biologica: el estomago lleno suprime la señal de hambre un
+tiempo, y el hambre emerge despues gradualmente. Sin este periodo el
 decay arrancaba el tick siguiente a la plenitud, y la urgencia volvia a
 manifestarse de inmediato.
 
@@ -44,27 +41,14 @@ Decisiones de diseño de la pieza:
     lo que permite comparar ley B sola contra ley B + plenitud con el
     arnes de diagnostico.
 
-DRENAJE REAL DE SEGURIDAD POR AMENAZA (2026-08-29, fix de auditoria):
-Necesidades.seguridad se inicializaba a 1.0 y esta funcion solo la subia
-(recuperacion pasiva, paso 5 mas abajo) -- ninguna linea de todo el
-repositorio la bajaba nunca, pese a que config/constantes.yaml ya
-declaraba necesidades.defecto.tasa_perdida_seguridad_por_amenaza=0.3 sin
-que nadie la leyera, y pese a que el propio docstring de
-nucleo/amenaza.py listaba a este modulo como consumidor del drenaje.
-Consecuencia en cascada (antes de este fix): utilidad_huir = 1.0 -
-seguridad (sistema_decision.py) era 0.0 SIEMPRE, por debajo de la
-utilidad fija de deambular -- HUIR no podia ganar el argmax nunca, y el
-drenaje de estabilidad mental "por amenaza sostenida"
-(sistema_capacidad_mental.py) tampoco tenia jamas efecto real. Corregido
-aqui: cada tick se busca la amenaza mas cercana (misma funcion que ya
-usa HUIR en sistema_movimiento.py, nucleo.amenaza.
-posicion_amenaza_mas_cercana, criatura mayor o celda en llamas dentro
-del radio de percepcion) -- si hay alguna, seguridad drena
-tasa_perdida_seguridad_por_amenaza; si no, se recupera pasivamente como
-ya hacia. PROVISIONAL: la tasa de drenaje (0.3) estaba declarada de
-antemano en config pero nunca se habia calibrado contra el motor en
-marcha porque nunca se habia ejecutado -- pendiente de observar contra
-el harness completo si produce huidas razonables o excesivas.
+DRENAJE REAL DE SEGURIDAD POR AMENAZA: cada tick se busca la amenaza mas
+cercana (misma funcion que ya usa HUIR en sistema_movimiento.py,
+nucleo.amenaza.posicion_amenaza_mas_cercana, criatura mayor o celda en
+llamas dentro del radio de percepcion) -- si hay alguna, seguridad drena
+tasa_perdida_seguridad_por_amenaza; si no, se recupera pasivamente.
+PROVISIONAL: la tasa de drenaje (0.3) sin calibrar contra el motor en
+marcha, pendiente de observar contra el harness completo si produce
+huidas razonables o excesivas.
 """
 
 from __future__ import annotations
@@ -101,7 +85,7 @@ class SistemaNecesidades:
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
         self.config = config
         self.rng = rng
-        # PERIODO DE PLENITUD (2026-08-29, ver docstring del modulo): estado
+        # Periodo de plenitud (ver docstring del modulo): estado
         # transitorio del sistema, NO persistido -- tras cargar una partida,
         # las necesidades reanudan su decay normal hasta la proxima saciedad
         # (misma clase que oxigenacion: se recalcula a partir del estado vivo).
@@ -126,36 +110,33 @@ class SistemaNecesidades:
         self.tasa_deriva_termica: float = float(
             self.defecto.get("tasa_deriva_confort_termico", 0.03)
         )
-        # Refugio/Fogata como fuentes de calor (2026-08-31, ver
-        # nucleo/fuego.py y config/fisiologia.yaml -- suman al objetivo
-        # ambiental, no lo sustituyen).
+        # Refugio/Fogata como fuentes de calor (ver nucleo/fuego.py y
+        # config/fisiologia.yaml -- suman al objetivo ambiental, no lo
+        # sustituyen).
         self.bono_confort_refugio: float = float(self.defecto.get("bono_confort_refugio", 0.3))
         self.bono_confort_fogata: float = float(self.defecto.get("bono_confort_fogata", 0.3))
         self.tasa_recup_seguridad: float = float(
             self.defecto.get("tasa_recuperacion_seguridad", 0.05)
         )
-        # DRENAJE REAL DE SEGURIDAD POR AMENAZA (2026-08-29, ver docstring
-        # del modulo): tasa ya declarada en config, nunca leida hasta este
-        # fix.
+        # Ver DRENAJE REAL DE SEGURIDAD POR AMENAZA en el docstring del
+        # modulo.
         self.tasa_drenaje_seguridad: float = float(
             self.defecto.get("tasa_perdida_seguridad_por_amenaza", 0.3)
         )
         cfg_per = self.config.get("percepcion", {})
         self.radio_min: int = int(cfg_per.get("radio_minimo_celdas", 0))
         self.radio_max: int = int(cfg_per.get("radio_maximo_celdas", 4))
-        # Mismo umbral de disposicion que usa HUIR en sistema_movimiento.py
-        # (ver su comentario de fix hermano): se reutiliza
-        # depredacion.umbral_disposicion_caza en vez de inventar una
-        # constante nueva -- misma magnitud (disposicion logaritmica por
-        # peso), aplicada en sentido contrario.
+        # Mismo umbral de disposicion que usa HUIR en sistema_movimiento.py:
+        # se reutiliza depredacion.umbral_disposicion_caza en vez de
+        # inventar una constante nueva -- misma magnitud (disposicion
+        # logaritmica por peso), aplicada en sentido contrario.
         self.umbral_disposicion_amenaza: float = float(
             self.config.get("depredacion", {}).get("umbral_disposicion_caza", 0.5)
         )
 
-        # GREGARISMO -- Pieza 1, bono de defensa en grupo (2026-08-30, ver
-        # nucleo/disposicion.py:contar_conspecificos_cercanos y el
-        # comentario de config/constantes.yaml seccion social para el
-        # diseno completo). Generico para las 4 especies, no solo lobo.
+        # Bono de defensa en grupo -- ver
+        # nucleo/disposicion.py:contar_conspecificos_cercanos. Generico
+        # para las 4 especies, no solo lobo.
         cfg_social = self.config.get("social", {})
         self.radio_apoyo_grupal: int = int(cfg_social.get("radio_apoyo_grupal", 3))
         self.bono_defensa_por_aliado: float = float(
@@ -165,9 +146,8 @@ class SistemaNecesidades:
             cfg_social.get("bono_defensa_maximo", 0.0)
         )
 
-        # CÍRCULO 2 de materiales físicos (2026-08-30, ver
-        # nucleo/entidad.py:componer_necromasa y config/flora.yaml sección
-        # descomposicion).
+        # Ver nucleo/entidad.py:componer_necromasa y config/flora.yaml
+        # sección descomposicion.
         cfg_desc = self.config.get("descomposicion", {})
         self.fraccion_masa_seca: float = float(
             cfg_desc.get("fraccion_masa_seca_por_defecto", 0.35)
@@ -189,9 +169,8 @@ class SistemaNecesidades:
             self.defecto.get("probabilidad_muerte_ahogamiento", 0.5)
         )
 
-        # PERIODO DE PLENITUD (2026-08-29, diseno con Diego tras el
-        # diagnostico de microsuenos): ticks sin decay tras alcanzar la
-        # plenitud. 0 lo desactiva. PROVISIONAL, ver config/constantes.yaml.
+        # Ticks sin decay tras alcanzar la plenitud. 0 lo desactiva.
+        # PROVISIONAL, ver config/constantes.yaml.
         self.ticks_plenitud: int = int(self.defecto.get("ticks_plenitud", 0))
 
     def _registrar_plenitud(self, eid: int, nombre: str, valor_actual: float) -> None:
@@ -209,8 +188,8 @@ class SistemaNecesidades:
 
     def _decay_con_plenitud(self, eid: int, nombre: str, valor_actual: float, tasa: float) -> float:
         """
-        Decaimiento de una necesidad con periodo de plenitud (2026-08-29,
-        ver docstring del modulo): si el periodo esta activo, el valor se
+        Decaimiento de una necesidad con periodo de plenitud (ver
+        docstring del modulo): si el periodo esta activo, el valor se
         mantiene sin decay un tick y el contador corre; si no, decae con su
         tasa. La transicion a plenitud se evalua sobre el valor PRE-decay de
         este tick (post-recuperacion de sistema_recursos.py, que corre antes
@@ -254,8 +233,8 @@ class SistemaNecesidades:
             if nec is None or pos is None or dims is None or ident is None:
                 continue
 
-            # (2026-08-30, Circulo 1 de profundidad) zona resuelta POR
-            # ENTIDAD -- ver mismo cambio en sistema_movimiento.py.
+            # Zona resuelta POR ENTIDAD -- ver mismo criterio en
+            # sistema_movimiento.py.
             zona = mundo.territorio.zonas[pos.zona_idx]
             celda = zona.obtener_celda(pos.x, pos.y)
             cfg_esp = self.cfg_nec.get(ident.especie.value, self.defecto)
@@ -287,7 +266,7 @@ class SistemaNecesidades:
             )
 
             # 1. Decaimiento continuo de Saciedad, Hidratación y Aliviado,
-            #    cada uno con su PERIODO DE PLENITUD (2026-08-29, ver
+            #    cada uno con su PERIODO DE PLENITUD (ver
             #    _decay_con_plenitud y docstring del modulo).
             nec.saciedad = self._decay_con_plenitud(eid, "saciedad", nec.saciedad, tasa_hambre)
             nec.hidratacion = self._decay_con_plenitud(
@@ -313,34 +292,26 @@ class SistemaNecesidades:
             else:
                 nec.oxigenacion = min(1.0, nec.oxigenacion + self.tasa_recup_oxigeno)
 
-            # 4. Deriva de Confort Térmico estacional + clima del día
-            # (2026-08-23) Reloj.estacion es un int CRECIENTE, no cíclico
-            # (informe de diseño en nucleo/reloj.py: "dia/estacion/anio son
-            # unidades derivadas") -- hay que reducirlo al ciclo de 4 y
-            # convertirlo al Enum Estacion vía nucleo.clima.estacion_actual()
-            # antes de poder leer .value; este código le pedía .value
-            # directamente a un int.
-            # (2026-08-29, fix de auditoria) nucleo.clima.objetivo_confort_termico()
-            # ya combina estación (base) + clima del día (ajuste_confort) --
-            # decisión de diseño ya documentada en su propio docstring
-            # ("confort_termico sigue MISMO estatus que seguridad al
-            # introducirse"), nunca conectada: este código solo leía la
-            # base estacional, ignorando el clima por completo pese a que
-            # config ya trae ajuste_confort para los tres climas. Mismo
-            # patrón defensivo que sistema_recursos.py/sistema_flora.py
-            # para leer zona.clima_actual (puede no existir en un mundo
-            # recién creado antes del primer sorteo de clima).
+            # 4. Deriva de Confort Térmico estacional + clima del día.
+            # Reloj.estacion es un int CRECIENTE, no cíclico (nucleo/
+            # reloj.py: "dia/estacion/anio son unidades derivadas") --
+            # hay que reducirlo al ciclo de 4 y convertirlo al Enum
+            # Estacion vía nucleo.clima.estacion_actual() antes de poder
+            # leer .value. nucleo.clima.objetivo_confort_termico() ya
+            # combina estación (base) + clima del día (ajuste_confort).
+            # Mismo patrón defensivo que sistema_recursos.py/
+            # sistema_flora.py para leer zona.clima_actual (puede no
+            # existir en un mundo recién creado antes del primer sorteo
+            # de clima).
             clima_actual = getattr(zona, "clima_actual", None) or Clima.DESPEJADO
             obj_termico = objetivo_confort_termico(
                 estacion_actual(reloj.estacion), clima_actual,
                 self.config.get("estaciones", {}), self.config.get("clima", {}),
             )
-            # Refugio/Fogata (2026-08-31, ver nucleo/fuego.py): SUMAN al
-            # objetivo ambiental, no lo sustituyen -- la severidad real
-            # del frío importa (conversación de diseño con Diego: "otoño
-            # 15 grados... invierno 3 grados, ¿es suficiente, o debo
-            # encender un fuego?"). Ambos pueden coincidir en la misma
-            # celda y se acumulan.
+            # Refugio/Fogata (ver nucleo/fuego.py): SUMAN al objetivo
+            # ambiental, no lo sustituyen -- la severidad real del frío
+            # importa. Ambos pueden coincidir en la misma celda y se
+            # acumulan.
             if hay_refugio_en(gestor, pos.x, pos.y, pos.zona_idx):
                 obj_termico += self.bono_confort_refugio
             if fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
@@ -355,26 +326,23 @@ class SistemaNecesidades:
                     obj_termico, nec.confort_termico - self.tasa_deriva_termica
                 )
 
-            # 5. Seguridad: drena si hay amenaza percibida, se recupera si no
-            #    (2026-08-29, ver DRENAJE REAL DE SEGURIDAD POR AMENAZA en el
-            #    docstring del modulo -- antes de este fix solo se recuperaba,
-            #    nunca drenaba).
+            # 5. Seguridad: drena si hay amenaza percibida, se recupera si
+            #    no (ver DRENAJE REAL DE SEGURIDAD POR AMENAZA en el
+            #    docstring del modulo).
             radio_amenaza = radio_individual(dims.agudeza_sensorial, self.radio_min, self.radio_max)
             amenaza_pos = posicion_amenaza_mas_cercana(
                 gestor, zona, eid, pos.x, pos.y, radio_amenaza,
                 dims.peso, self.umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
             )
             if amenaza_pos is not None:
-                # GREGARISMO -- Pieza 1, bono de defensa en grupo
-                # (2026-08-30, ver docstring del modulo y comentario de
-                # config/constantes.yaml seccion social): seguridad en
-                # numeros -- conespecificos cercanos (cualquiera, no solo
-                # cazando) reducen el drenaje, escalados por la
-                # sociabilidad DIRECTA del propio individuo amenazado.
-                # Nunca anula el drenaje por completo (bono_defensa_maximo
-                # topa la reduccion): seguir habiendo una amenaza real es
-                # una amenaza real, con independencia de cuantos aliados
-                # haya alrededor.
+                # Bono de defensa en grupo: seguridad en numeros --
+                # conespecificos cercanos (cualquiera, no solo cazando)
+                # reducen el drenaje, escalados por la sociabilidad
+                # DIRECTA del propio individuo amenazado. Nunca anula el
+                # drenaje por completo (bono_defensa_maximo topa la
+                # reduccion): seguir habiendo una amenaza real es una
+                # amenaza real, con independencia de cuantos aliados haya
+                # alrededor.
                 sociabilidad_propia = temperamento.sociabilidad if temperamento else 0.0
                 drenaje_efectivo = self.tasa_drenaje_seguridad
                 if sociabilidad_propia > 0.0 and self.bono_defensa_por_aliado > 0.0:
@@ -391,18 +359,17 @@ class SistemaNecesidades:
             elif nec.seguridad < 1.0:
                 nec.seguridad = min(1.0, nec.seguridad + self.tasa_recup_seguridad)
 
-            # REFUGIO INSTINTIVO -- Pieza 1 de interacción física
-            # (2026-08-30, ver docstring de
-            # sistema_movimiento.py:_calcular_dormir para el diseño
-            # completo). Se registra la posición como "refugio" cada tick
-            # que la criatura duerme SIN amenaza cerca -- amenaza_pos ya
-            # se acaba de calcular arriba mismo para el drenaje de
-            # seguridad, se reutiliza aquí en vez de recalcularla. Sin
-            # bono numérico nuevo: el beneficio es puramente conductual
-            # (volver a un sitio que ya demostró ser seguro).
-            # registrar_recuerdo ya deduplica -- dormir varias noches
-            # seguidas en el mismo sitio no lo repite, solo lo mantiene
-            # como el más reciente de la cola FIFO.
+            # Refugio instintivo (ver docstring de
+            # sistema_movimiento.py:_calcular_dormir). Se registra la
+            # posición como "refugio" cada tick que la criatura duerme
+            # SIN amenaza cerca -- amenaza_pos ya se acaba de calcular
+            # arriba mismo para el drenaje de seguridad, se reutiliza
+            # aquí en vez de recalcularla. Sin bono numérico nuevo: el
+            # beneficio es puramente conductual (volver a un sitio que ya
+            # demostró ser seguro). registrar_recuerdo ya deduplica --
+            # dormir varias noches seguidas en el mismo sitio no lo
+            # repite, solo lo mantiene como el más reciente de la cola
+            # FIFO.
             if (
                 intencion is not None
                 and intencion.accion == Accion.DORMIR
