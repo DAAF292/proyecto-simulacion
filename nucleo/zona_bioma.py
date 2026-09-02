@@ -264,37 +264,6 @@ def generar_zona_bioma(
         float(config_flora.get("umbral_minimo_idoneidad_colonizacion", 0.2)),
     )
 
-    # Humedad de subsuelo por celda (2026-09-01, ver docs/superpowers/
-    # specs/2026-09-01-distribucion-causal-flora-design.md): antes se
-    # calculaba inline dentro del bucle final de construcción de Celda --
-    # se adelanta a una pasada propia porque la colonización de flora de
-    # aquí abajo necesita esta señal ANTES de que exista ninguna Celda
-    # todavía. Mismo cálculo exacto de siempre, solo cambia el momento.
-    humedad_subsuelo_por_celda = {}
-    capacidad_retencion_por_celda = {}
-    for x in range(ancho):
-        for y in range(alto):
-            info_agua = cuerpos_agua.get((x, y))
-            tiene_agua_celda = (info_agua.tipo if info_agua else "") != ""
-            capacidad_retencion = float(
-                catalogo_materiales.get(tipo_sustrato_por_celda[(x, y)], {}).get(
-                    "capacidad_retencion", 0.0
-                )
-            )
-            capacidad_retencion_por_celda[(x, y)] = capacidad_retencion
-            humedad_subsuelo_por_celda[(x, y)] = capacidad_retencion if tiene_agua_celda else 0.0
-
-    # Colonización de flora por idoneidad (2026-09-01): sustituye al
-    # antiguo reparto por proporción/mancha -- cada celda decide qué
-    # especie (si alguna) la coloniza según sustrato/fertilidad/lluvia/
-    # temperatura reales, ya calculados arriba.
-    especie_por_celda = colonizar_por_idoneidad(
-        rng, todas_las_celdas, biomas, campo_lluvia, campo_temperatura,
-        fertilidad_por_celda, humedad_subsuelo_por_celda, capacidad_retencion_por_celda,
-        config_flora["especies"],
-        float(config_flora.get("umbral_minimo_idoneidad_colonizacion", 0.2)),
-    )
-
     celdas_piedra = {
         pos for pos, sustrato in tipo_sustrato_por_celda.items() if sustrato == "piedra"
     }
