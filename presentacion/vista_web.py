@@ -537,6 +537,22 @@ HTML_VISOR = """<!DOCTYPE html>
       return { wx, wy };
     }
 
+    // Proyeccion Caballera completa (circulo 2026-09-03): remapea las
+    // coordenadas del mundo segun la rotacion de camara, y proyecta con
+    // desplazamiento en X por profundidad + desplazamiento en Y por
+    // elevacion real (alzadoY, ya construido, se reutiliza tal cual como
+    // el termino vertical). PROVISIONAL: 45 grados / 0.5 son los valores
+    // "estandar" citados en la propuesta original de Diego -- a validar
+    // visualmente contra el visor real, no medidos contra el motor.
+    const ALPHA_CABALLERA = 45 * Math.PI / 180;
+    const K_CABALLERA = 0.5;
+    function celdaAPantallaCompleta(wx, wy, elevacion, tam, n, rotacion) {
+      const { px, py } = rotarCoordenadas(wx, wy, n, rotacion);
+      const cx = (px + py * Math.cos(ALPHA_CABALLERA) * K_CABALLERA) * tam;
+      const cy = (py * Math.sin(ALPHA_CABALLERA) * K_CABALLERA) * tam - alzadoY(elevacion, tam);
+      return { cx, cy };
+    }
+
     async function cargarBibliotecaAssets() {
       try {
         const resp = await fetch('/assets_manifest.json');

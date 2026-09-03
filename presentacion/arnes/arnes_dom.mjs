@@ -128,6 +128,9 @@ const FRAGMENTO_EXPORT = `
   establecerTam0: typeof tam0 !== 'undefined' ? (v) => { tam0 = v; } : undefined,
   rotarCoordenadas: typeof rotarCoordenadas !== 'undefined' ? rotarCoordenadas : undefined,
   invertirRotacion: typeof invertirRotacion !== 'undefined' ? invertirRotacion : undefined,
+  celdaAPantallaCompleta: typeof celdaAPantallaCompleta !== 'undefined' ? celdaAPantallaCompleta : undefined,
+  ALPHA_CABALLERA: typeof ALPHA_CABALLERA !== 'undefined' ? ALPHA_CABALLERA : undefined,
+  K_CABALLERA: typeof K_CABALLERA !== 'undefined' ? K_CABALLERA : undefined,
 });
 `;
 
