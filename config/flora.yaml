@@ -129,6 +129,12 @@ flora:
   especies:
     hierba_silvestre:
       biomas: [pradera, bosque]
+      # compite_espacio_fisico (2026-09-03, pieza 3 -- cupo de espacio
+      # compartido por celda, ver docs/superpowers/specs/
+      # 2026-09-03-cupo-espacio-celda-design.md): cobertura de suelo sin
+      # obstáculo físico real — NO compite por espacio con
+      # Construccion y sigue usando la pista Celda.tiene_recurso.
+      compite_espacio_fisico: false
       tasa_crecimiento_por_dia: 0.25
       prob_propagacion_por_dia: 0.06
       preferencia_lluvia: [0.25, 0.85]
@@ -166,6 +172,15 @@ flora:
           tasa_regeneracion: 0.15
     manzano:
       biomas: [bosque]
+      # compite_espacio_fisico/huella_m2 (2026-09-03, pieza 3 -- cupo de
+      # espacio compartido por celda): estructura física real (tronco).
+      # Comparte el cupo capacidad_construccion_celda_m2 con
+      # Construccion; la pista competidora vive SOLO en la entidad
+      # Planta (no en Celda.tipo_recurso). huella_m2 PROVISIONAL, sin
+      # calibrar contra el harness completo (mismo criterio que el resto
+      # de constantes del proyecto).
+      compite_espacio_fisico: true
+      huella_m2: 4.0
       tasa_crecimiento_por_dia: 0.08
       prob_propagacion_por_dia: 0.02
       preferencia_lluvia: [0.55, 1.0]
@@ -194,6 +209,12 @@ flora:
           tasa_regeneracion: 0.1
     cactus:
       biomas: [desierto]
+      # compite_espacio_fisico/huella_m2 (2026-09-03, pieza 3 -- misma
+      # decisión que manzano: tallo rígido que ocupa espacio físico
+      # real; comparte el cupo con Construccion via la entidad Planta.
+      # huella_m2 PROVISIONAL, sin calibrar.
+      compite_espacio_fisico: true
+      huella_m2: 1.5
       tasa_crecimiento_por_dia: 0.05
       prob_propagacion_por_dia: 0.015
       preferencia_lluvia: [0.0, 0.2]
@@ -219,6 +240,9 @@ flora:
           tasa_regeneracion: 0.1
     liquen:
       biomas: [montana]
+      # compite_espacio_fisico (2026-09-03, pieza 3): cobertura de
+      # superficie, sin obstáculo físico — no compite por espacio.
+      compite_espacio_fisico: false
       tasa_crecimiento_por_dia: 0.03
       prob_propagacion_por_dia: 0.01
       preferencia_lluvia: [0.1, 0.5]
@@ -237,6 +261,9 @@ flora:
           valor_hidratacion: 0.03
     musgo:
       biomas: [tundra]
+      # compite_espacio_fisico (2026-09-03, pieza 3): cobertura de
+      # superficie, sin obstáculo físico — no compite por espacio.
+      compite_espacio_fisico: false
       tasa_crecimiento_por_dia: 0.03
       prob_propagacion_por_dia: 0.01
       preferencia_lluvia: [0.2, 0.6]

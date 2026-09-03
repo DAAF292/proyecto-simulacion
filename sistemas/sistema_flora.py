@@ -104,14 +104,22 @@ class SistemaFlora:
             if gestor.obtener_componente(pid, Posicion).zona_idx == zona_idx
         ]
 
-        # Set de posiciones ya ocupadas por Planta -- calculado una vez
-        # por día, actualizado por cada colonización (_intentar_propagacion
-        # y demás vectores) para que dos colonizaciones del mismo día no
-        # se pisen entre sí. Determinista, no consume rng.
-        posiciones_planta = {
-            (gestor.obtener_componente(pid, Posicion).x, gestor.obtener_componente(pid, Posicion).y)
-            for pid in plantas_entidades
-        }
+        # Set de posiciones colonizadas HOY -- vacío al arrancar el día y
+        # actualizado por cada colonización (_intentar_propagacion y demás
+        # vectores) para que dos colonizaciones del mismo día no se pisen
+        # entre sí. DETERMINISTA, no consume rng.
+        #
+        # Antes de la pieza 3 (2026-09-03, cupo de espacio compartido por
+        # celda) se inicializaba con TODAS las posiciones ocupadas por
+        # Planta, lo que equivalía a un límite duro de 1 Planta por celda
+        # para cualquier vector de propagación. Desde la pieza 3 eso es
+        # físicamente incorrecto: una celda puede albergar varias Plantas
+        # competidoras (cupo por huella_m2) y una no-competidora que no
+        # bloquea a las competidoras ni viceversa. El veto de celda ya
+        # ocupada lo hace intentar_colonizar_celda por pista (tiene_recurso
+        # para no-competidoras, espacio disponible para competidoras), no
+        # este set.
+        posiciones_planta: set[tuple[int, int]] = set()
 
         for planta_id in plantas_entidades:
             planta = gestor.obtener_componente(planta_id, Planta)
@@ -266,7 +274,7 @@ class SistemaFlora:
             )
             if intentar_colonizar_celda(
                 gestor, celda_dest, capacidad_retencion, especie_nombre,
-                especie_cfg, umbral_minimo, nx, ny, zona_idx,
+                especie_cfg, umbral_minimo, nx, ny, zona_idx, config=self.config,
             ):
                 posiciones_planta.add((nx, ny))
                 break
@@ -332,7 +340,7 @@ class SistemaFlora:
         )
         if intentar_colonizar_celda(
             gestor, celda_dest, capacidad_retencion, especie_nombre,
-            especie_cfg, umbral_minimo, nx, ny, zona_idx,
+            especie_cfg, umbral_minimo, nx, ny, zona_idx, config=self.config,
         ):
             posiciones_planta.add((nx, ny))
 

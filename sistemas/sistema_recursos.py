@@ -23,6 +23,7 @@ from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
+from componentes.planta import Planta
 from componentes.posicion import Posicion
 from componentes.semillas import Semillas
 from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
@@ -41,6 +42,7 @@ from nucleo.construccion import (
     transferir_a_construccion,
 )
 from nucleo.entidad import GestorEntidades, crear_fogata
+from nucleo.espacio import plantas_competidoras_en
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.flora import intentar_colonizar_celda
@@ -154,6 +156,20 @@ class SistemaRecursos:
                     self.nutricion_flora[nom] = float(rec.get("valor_nutricional", 0.2))
                     self.hidratacion_flora[nom] = float(rec.get("valor_hidratacion", 0.05))
 
+        # especie_por_recurso: {nombre_recurso: especie_que_lo_produce}
+        # (2026-09-03, pieza 3 -- cupo de espacio compartido por celda).
+        # La pista competidora no escribe Celda.tipo_recurso, así que
+        # COMER/RECOLECTAR no pueden saber qué especie produce un recurso
+        # mirando solo la celda: este mapa permite (a) exigir una entidad
+        # Planta competidora real en la posición para recursos competidores,
+        # y (b) recuperar la especie para el hook de zoocoria.
+        self.especie_por_recurso: dict[str, str] = {}
+        for especie, esp_data in self.especies_flora.items():
+            for rec in esp_data.get("recursos", []):
+                nom = rec.get("nombre")
+                if nom and nom not in self.especie_por_recurso:
+                    self.especie_por_recurso[nom] = especie
+
         # Zoocoria (2026-09-02, ver componentes/semillas.py y
         # docs/superpowers/specs/2026-09-01-propagacion-flora-design.md).
         self.umbral_minimo_idoneidad_colonizacion: float = float(
@@ -231,6 +247,7 @@ class SistemaRecursos:
                 self._resolver_recolectar(
                     inv, dims, celda, agarre, ident.especie.value, consciente,
                     recolectar_arma=intencion.recolectar_motivo_arma,
+                    gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
                 )
             elif intencion.accion == Accion.ENCENDER_FUEGO:
                 inv_fuego = gestor.obtener_componente(eid, Inventario)
@@ -432,6 +449,10 @@ class SistemaRecursos:
         especie: str | None = None,
         consciente: bool = False,
         recolectar_arma: bool = False,
+        gestor: GestorEntidades | None = None,
+        pos_x: int = 0,
+        pos_y: int = 0,
+        zona_idx: int = 0,
     ) -> None:
         """
         RECOLECTAR (ver componentes/intencion.py y nucleo/construccion.py).
@@ -550,6 +571,14 @@ class SistemaRecursos:
             ):
                 material = recolectar_material_arma_de_celda(celda, self.catalogo_materiales)
                 if material is not None:
+                    # Pista competidora (2026-09-03): el crudo apto_arma de
+                    # una especie competidora solo existe si hay una Planta
+                    # real de esa especie en la celda -- mismo criterio que
+                    # el bucle de materiales de abajo.
+                    if gestor is not None and not self._hay_recurso_competidor_disponible(
+                        gestor, pos_x, pos_y, zona_idx, material
+                    ):
+                        return
                     peso_objeto = float(self.peso_objeto_kg.get(material, 0.0))
                     espacio = espacio_disponible_kg(
                         inv.contenidos, dims.peso, self.fraccion_carga_maxima,
@@ -581,6 +610,14 @@ class SistemaRecursos:
             info = self.catalogo_materiales.get(nombre, {})
             if not info.get("apto_construccion", False):
                 continue
+            # Pista competidora (2026-09-03): un material producido por una
+            # especie competidora solo se recolecta si hay una Planta real
+            # de esa especie en esta celda+zona (la fuente de verdad de la
+            # pista competidora es la entidad Planta, no Celda.recursos).
+            if not self._hay_recurso_competidor_disponible(
+                gestor, pos_x, pos_y, zona_idx, nombre
+            ):
+                continue
             cantidad = min(self.tasa_recoleccion, espacio, cantidad_disponible)
             inv.contenidos[nombre] = inv.contenidos.get(nombre, 0.0) + cantidad
             celda.recursos[nombre] = cantidad_disponible - cantidad
@@ -594,6 +631,40 @@ class SistemaRecursos:
             return
         cantidad = min(self.tasa_recoleccion, espacio)
         inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
+
+    def _hay_recurso_competidor_disponible(
+        self,
+        gestor: GestorEntidades | None,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+        nombre_rec: str,
+    ) -> bool:
+        """True si el recurso `nombre_rec` puede consumirse en (pos_x, pos_y,
+        zona_idx) seg\u00fan la pista en la que viva su especie productora.
+
+        - Recurso que no produce ninguna especie competidora (o sin gestor
+          que consultar): True -- comportamiento hist\u00f3rico sin cambios.
+        - Recurso de una especie con compite_espacio_fisico=true: True solo
+          si hay al menos una entidad Planta de esa especie en esa
+          celda+zona. Si hay varias, basta la primera por orden de
+          iteraci\u00f3n (sin l\u00f3gica de selecci\u00f3n "\u00f3ptima", coherente con el
+          resto del motor) -- el consumo va contra el pool compartido
+          Celda.recursos, as\u00ed que el id concreto no cambia el mecanismo.
+        """
+        if gestor is None:
+            return True
+        especie_origen = self.especie_por_recurso.get(nombre_rec)
+        if especie_origen is None:
+            return True
+        cfg_esp = self.especies_flora.get(especie_origen, {})
+        if not cfg_esp.get("compite_espacio_fisico", False):
+            return True
+        for pid in plantas_competidoras_en(gestor, pos_x, pos_y, zona_idx, self.especies_flora):
+            planta = gestor.obtener_componente(pid, Planta)
+            if planta is not None and planta.especie == especie_origen:
+                return True
+        return False
 
     def _resolver_encender_fuego(
         self,
@@ -788,10 +859,17 @@ class SistemaRecursos:
         cfg_esp = self.config.get("rangos_raciales", {}).get(identidad.especie.value, {})
         dieta = cfg_esp.get("dieta", [])
 
-        recursos_disponibles = [
-            r for r, cant in celda.recursos.items()
-            if cant > 0.0 and (not dieta or r in dieta)
-        ]
+        recursos_disponibles = []
+        for r, cant in celda.recursos.items():
+            if cant <= 0.0 or (dieta and r not in dieta):
+                continue
+            # Pista competidora (2026-09-03): el recurso de una especie que
+            # compite por espacio solo es comestible si hay una Planta real
+            # de esa especie en esta celda+zona -- la fuente de verdad de
+            # esa pista es la entidad Planta, no Celda.recursos.
+            if not self._hay_recurso_competidor_disponible(gestor, pos_x, pos_y, zona_idx, r):
+                continue
+            recursos_disponibles.append(r)
 
         if recursos_disponibles:
             nombre_rec = recursos_disponibles[0]
@@ -812,10 +890,19 @@ class SistemaRecursos:
             # 2026-09-01-propagacion-flora-design.md): comer fruto de una
             # especie zoocora puede dejar una semilla "recogida" -- se
             # planta más tarde, en otro sitio, al ALIVIARSE (ver
-            # _resolver_aliviarse). celda.tipo_recurso ya ES la especie
-            # que produce este recurso (nucleo/celda.py), no hace falta
-            # buscarla por nombre_rec.
-            especie_cfg_comida = self.especies_flora.get(celda.tipo_recurso, {})
+            # _resolver_aliviarse). Para especies no-competidoras
+            # celda.tipo_recurso ya ES la especie (comportamiento sin
+            # cambios); para la pista competidora celda.tipo_recurso ya no
+            # se escribe, así que la especie se recupera del mapa
+            # recurso->especie sólo cuando esa especie compite por espacio.
+            especie_origen = self.especie_por_recurso.get(nombre_rec)
+            especie_para_semilla = celda.tipo_recurso
+            if (
+                especie_origen is not None
+                and self.especies_flora.get(especie_origen, {}).get("compite_espacio_fisico", False)
+            ):
+                especie_para_semilla = especie_origen
+            especie_cfg_comida = self.especies_flora.get(especie_para_semilla, {})
             if especie_cfg_comida.get("tipo_propagacion") == "zoocoria":
                 semillas = gestor.obtener_componente(entidad_id, Semillas)
                 if (
@@ -823,7 +910,7 @@ class SistemaRecursos:
                     and semillas.especie_transportada == ""
                     and self.rng.random() < self.probabilidad_recogida_semilla_zoocoria
                 ):
-                    semillas.especie_transportada = celda.tipo_recurso
+                    semillas.especie_transportada = especie_para_semilla
         else:
             # Sin esto, un individuo que llega aquí guiado por un
             # recuerdo de "comida" (nucleo/memoria.py:objetivo_recordado,
@@ -913,5 +1000,6 @@ class SistemaRecursos:
                 intentar_colonizar_celda(
                     gestor, celda, capacidad_retencion, especie, especie_cfg,
                     self.umbral_minimo_idoneidad_colonizacion, pos_x, pos_y, zona_idx,
+                    config=self.config,
                 )
             semillas.especie_transportada = ""

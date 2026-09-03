@@ -45,8 +45,8 @@ def _colonizar(umbral):
 
 def test_ley_celda_apta_es_colonizada_por_la_especie_de_su_bioma():
     resultado = _colonizar(umbral=0.2)
-    assert resultado[(0, 0)] == "manzano"
-    assert resultado[(1, 0)] == "cactus"
+    assert resultado[(0, 0)] == ["manzano"]
+    assert resultado[(1, 0)] == ["cactus"]
 
 
 def test_ley_celda_sin_ninguna_especie_candidata_de_su_bioma_queda_vacia():
@@ -82,7 +82,7 @@ def test_ley_dos_candidatas_parejas_se_reparten_por_muestreo_ponderado():
         random.Random(7), todas, biomas_bosque, lluvia, temperatura,
         fertilidad, humedad, capacidad, especies, 0.2,
     )
-    especies_vistas = set(resultado.values())
+    especies_vistas = set(e for lista in resultado.values() for e in lista)
     assert especies_vistas == {"a", "b"}
 
 
