@@ -18,6 +18,20 @@ de flora (`config/constantes.yaml`, secciÃ³n `flora.especies`):
 - `cactus`
 - `liquen`
 - `musgo`
+- `pino`, `roble` (arboles), `arbusto_espinoso`, `arbusto_desertico`,
+  `arbusto_montano`, `arbusto_artico` (arbustos), `flor_silvestre`,
+  `hierba_desertica`, `hierba_artica` (cobertura de suelo) -- 2026-09-03,
+  pieza "catalogo ampliado de especies" (10 especies nuevas en
+  config/flora.yaml). Recortadas de presentacion/nuevosAssets/ (los 4
+  sheets Gemini_Generated_Image_*.jpeg -- flora/rocas/arbustos, arboles)
+  el mismo dia tras confirmar con Diego que las manchas vectoriales
+  genericas no eran aceptables como solucion definitiva. Solo existen en
+  `flora_color/` (igual que liquen/musgo ya hacian) -- sin gemela en
+  tinta todavia, mismo hueco honesto que esas dos especies ya tenian.
+  **`helecho` sigue sin sprite real** -- ningun sheet fuente tenia una
+  forma de helecho de verdad, se dejo deliberadamente en el
+  vectorial en vez de forzar una aproximacion mala (una ramita generica
+  no se lee como helecho).
 
 `<n>` es un nÃºmero de variante empezando en 1 (`manzano_1.png`,
 `manzano_2.png`, `manzano_3.png`, ...). El visor elige una variante por
