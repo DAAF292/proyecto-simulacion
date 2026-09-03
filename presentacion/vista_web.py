@@ -2267,10 +2267,23 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.translate(camara.offsetX, camara.offsetY);
       ctx.scale(camara.zoom, camara.zoom);
 
-      const frustum = calcularFrustum(data);
       // El nivel de zoom decide TODO el camino de render (lavado, sellos,
-      // formaciones, criaturas) -- se calcula antes que nada.
-      const nivel = camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
+      // formaciones, criaturas) -- se calcula antes que nada. Reutiliza
+      // nivelActual() (antes duplicaba la formula inline) para que solo
+      // haya una fuente de verdad del umbral 0.8/2.0.
+      const nivel = nivelActual();
+      // (2026-09-03) Con la proyeccion Caballera activa (medio/micro),
+      // calcularFrustum ya no es valido: asume x*escala+offsetX sin
+      // sesgo, y el termino de profundidad de Caballera acopla X a la
+      // fila (wy) incluso sin rotar -- un rango estrecho de wy puede
+      // desplazar wx fuera de lo que calcularFrustum calcularia. El
+      // mundo es pequeno (40x40, 1600 celdas) y el propio calculo
+      // estrecho ya se documentaba como "ahorro modesto" a esta escala
+      // -- se itera la cuadricula completa en medio/micro. Macro sigue
+      // usando el calculo estrecho, sin cambios (cenital, sin sesgo).
+      const frustum = nivel === 'macro'
+        ? calcularFrustum(data)
+        : { xMin: 0, xMax: data.ancho, yMin: 0, yMax: data.alto };
       ctx.drawImage(pergaminoCache, 0, 0, data.ancho * tam, data.alto * tam);
       // Circulo 2: a zoom macro el mapa es PERGAMINO PURO -- sin lavado
       // de color de biomas en modo codice (los sellos de formacion
