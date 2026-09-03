@@ -10,6 +10,7 @@ agent:
 
     This workflow should be done step-by-step so that you can iterate on your changes and any possible problems.
 
+    0. ANTES de tocar cualquier fichero de código: escribe tu plan real de implementación (qué ficheros vas a tocar, qué cambia en cada uno, en qué orden) sobrescribiendo el contenido de `docs/plans/in_progress/<nombre-de-esta-tarea>.md` -- ese fichero ya existe con el encargo original (puedes confirmar su nombre exacto con `ls docs/plans/in_progress/`); tu plan lo sustituye por completo. Comitéalo con su propio mensaje (`plan: <resumen>`) ANTES de escribir código. Este paso es obligatorio incluso para tareas pequeñas.
     1. Analyze the codebase by finding and reading relevant files
     2. Edit the source code directly to resolve the issue -- this project has a real, passing test suite already, so there is no need for a throwaway reproduction script; the task gives you the exact pytest command that serves as your reproduction and verification.
     3. If the task asks for new or updated tests, write them now, in the style of the existing tests in the file you're editing.
