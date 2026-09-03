@@ -108,6 +108,23 @@ BRANCH="feature/$PLAN_NAME"
 MAX_RETRIES=3
 RETRY_COUNT=0
 TEST_PASSED=false
+# TIMEOUT_SEGUNDOS (2026-09-03, ver CLAUDE.md "esto está fatal" -- hallazgo
+# real de Diego sobre armas-primitivas-v2): los 3 intentos de esa tarea
+# fallaron los tres por timeout puro (código 124), nunca por "sin cambios"
+# ni por tests en rojo. Reiniciar el CONTEXTO de razonamiento desde cero en
+# cada intento (mini-swe-agent no tiene --resume, verificado con `mini
+# --help`) hace que el intento 2 y el 3 vuelvan a explorar/verificar lo que
+# el intento anterior ya sabía -- coste triplicado sin ganar nada, porque
+# "se acabó el reloj" no es mala suerte que un reinicio arregle, es
+# simplemente falta de presupuesto de tiempo en el MISMO intento. 2700 = la
+# suma de los 3×900s que antes se repartían en 3 reinicios, dado ahora de
+# una vez a un único intento sin reiniciar -- ver el bloque de más abajo
+# donde el timeout ya NO cuenta como motivo de reintento. "Sin cambios
+# reales" y "tests en rojo" sí siguen reintentando con MAX_RETRIES=3 sin
+# cambios -- ahí un reinicio de contexto sí compensa (un fallo silencioso
+# de proxy no se arregla con más tiempo en el mismo intento; un test en
+# rojo necesita que el modelo intente algo distinto).
+TIMEOUT_SEGUNDOS=2700
 
 mkdir -p docs/plans/{in_progress,in_review,failed,done}
 
@@ -198,11 +215,15 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # aider.
     TAREA=$(grep -v '^> \*\*For agentic workers:\*\*' "docs/plans/in_progress/$PLAN_NAME.md")
 
-    # -l 0.30 (2026-09-02, bajado de 0.60 tras medir coste real contra
-    # balance: la pieza más cara vista hasta ahora costó $0.127 -- 0.30
-    # deja ~2.4x de margen sobre eso en vez de ~4.7x, capa de seguridad
-    # adicional sobre el tope diario ya existente de litellm_config.yaml,
-    # max_budget). --exit-immediately: sin esto,
+    # -l 0.90 (2026-09-03, subido de 0.30 EN PROPORCIÓN al timeout --
+    # ver TIMEOUT_SEGUNDOS más arriba: 0.30 se calibró contra un intento
+    # de 900s (pieza más cara vista, $0.127, ~2.4x de margen). Con
+    # TIMEOUT_SEGUNDOS ahora en 2700s (3x), dejar el mismo tope de coste
+    # habría recortado el intento por presupuesto antes de aprovechar el
+    # tiempo extra -- justo el problema que se acaba de corregir, solo
+    # que por coste en vez de por reloj. 0.90 = mismo margen ~2.4x sobre
+    # 3x$0.127, capa de seguridad adicional sobre el tope diario ya
+    # existente de litellm_config.yaml, max_budget). --exit-immediately: sin esto,
     # mini-swe-agent pregunta interactivamente al terminar la tarea; en
     # un pipeline desatendido no hay nadie para responder. -y: equivalente
     # a --yes-always de aider, sin confirmación por acción.
@@ -218,16 +239,14 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # en el propio fichero de trayectoria (más precisión que los 2
     # decimales que muestra la consola).
     #
-    # timeout 900 (2026-09-02, subido de 480): con planes de código
-    # completo 480s bastaba, pero una tarea que solo recibe la spec (sin
-    # plan con código ya escrito) necesita explorar el repo por su
-    # cuenta -- confirmado en la prueba real de "viento" (spec-only): el
-    # primer intento con 480s se cortó a mitad de una exploración
-    # legítima (sin bucle, solo más lenta), el segundo con 900s sí
-    # terminó con éxito, 64 pasos. Con este proyecto en concreto
-    # (ficheros con mucha documentación histórica en línea, en vías de
-    # reducirse -- ver docs/historial_*.md) la exploración es más cara
-    # que en un repo típico.
+    # TIMEOUT_SEGUNDOS=2700 (2026-09-03, subido de 900 -- ver comentario
+    # junto a su definición más arriba): un único intento largo en vez de
+    # 3 reinicios de contexto de 900s cada uno para el caso de timeout.
+    # Con este proyecto en concreto (ficheros con mucha documentación
+    # histórica en línea, en vías de reducirse -- ver docs/historial_*.md)
+    # la exploración es más cara que en un repo típico, y una tarea que
+    # solo recibe la spec (sin plan con código ya escrito) necesita
+    # explorar el repo por su cuenta antes de poder tocar nada.
     TRAYECTORIA_DIR=".ai-pipeline/trayectorias"
     mkdir -p "$TRAYECTORIA_DIR"
     TRAYECTORIA_FILE="$TRAYECTORIA_DIR/${PLAN_NAME}-intento${RETRY_COUNT}.json"
@@ -246,10 +265,10 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # un aviso explícito contra escribir scripts .py de parche/
     # reproducción en un código lleno de docstrings de comilla triple.
     set +e
-    timeout 900 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy \
+    timeout "$TIMEOUT_SEGUNDOS" env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy \
         LITELLM_MODEL_REGISTRY_PATH=.ai-pipeline/litellm_model_registry.json \
         mini -m openai/agente-obrero -c .ai-pipeline/mini-agente-obrero.yaml \
-             -y -l 0.30 --exit-immediately \
+             -y -l 0.90 --exit-immediately \
              -o "$TRAYECTORIA_FILE" \
              -t "$TAREA"
     AGENTE_EXIT_CODE=$?
@@ -274,8 +293,17 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     fi
 
     if [ $AGENTE_EXIT_CODE -eq 124 ]; then
-        echo "[FALLO DE VALIDACIÓN] mini-swe-agent superó el timeout de 480s (posible bucle sin converger del modelo). Preparando reintento..."
-        continue
+        # SIN REINTENTO en timeout (2026-09-03, ver comentario junto a
+        # TIMEOUT_SEGUNDOS más arriba): a diferencia de "sin cambios" o
+        # "tests en rojo", un timeout no es un motivo que un reinicio de
+        # contexto arregle -- ya se le dio el presupuesto agregado de los
+        # 3 intentos anteriores en uno solo. `break` en vez de `continue`:
+        # sale del bucle sin gastar los intentos que queden, TEST_PASSED
+        # sigue en false y el bloque de después del bucle lo trata igual
+        # que agotar MAX_RETRIES.
+        echo "[FALLO FATAL] mini-swe-agent superó el timeout de ${TIMEOUT_SEGUNDOS}s sin converger a un commit final. Sin reintento -- ver run-plan.sh junto a TIMEOUT_SEGUNDOS."
+        TIMEOUT_FATAL=true
+        break
     fi
 
     if [ $AGENTE_EXIT_CODE -ne 0 ]; then
@@ -401,7 +429,11 @@ if [ "$TEST_PASSED" = true ]; then
     
     echo "=== TAREA COMPLETADA, PUSH REALIZADO Y MR CREADO ==="
 else
-    echo "=== DISYUNTOR: Superado límite de $MAX_RETRIES intentos ==="
+    if [ "${TIMEOUT_FATAL:-false}" = true ]; then
+        echo "=== DISYUNTOR: timeout de ${TIMEOUT_SEGUNDOS}s agotado en intento $RETRY_COUNT/$MAX_RETRIES, sin más reintentos ==="
+    else
+        echo "=== DISYUNTOR: Superado límite de $MAX_RETRIES intentos ==="
+    fi
     mv "docs/plans/in_progress/$PLAN_NAME.md" "docs/plans/failed/$PLAN_NAME.md"
     exit 1
 fi
