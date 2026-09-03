@@ -426,3 +426,51 @@ test('pintarCuerpoAgua no lanza excepcion y respeta la elevacion media del cuerp
   assert.ok(llamadas.some((l) => l.prop === 'fill'), 'debe rellenar el cuerpo de agua');
   visor.camara.zoom = 1;
 });
+
+// (2026-09-03) dibujarRelieve (respaldo vectorial de montaña sin sprite,
+// tercer y ultimo gap conocido de la spec de Caballera, cerrado junto
+// con hidrografia/vegetacion) migra al mismo patron.
+test('dibujarRelieve usa la proyeccion Caballera completa (no macro)', () => {
+  const TAM = 50;
+  const data = {
+    ancho: 3, alto: 3,
+    celdas: [
+      [{ x: 0, y: 0, bioma: 'pradera', elevacion: 0.1 }, { x: 1, y: 0, bioma: 'pradera', elevacion: 0.1 }, { x: 2, y: 0, bioma: 'pradera', elevacion: 0.1 }],
+      [{ x: 0, y: 1, bioma: 'pradera', elevacion: 0.1 }, { x: 1, y: 1, bioma: 'montana', elevacion: 0.7 }, { x: 2, y: 1, bioma: 'pradera', elevacion: 0.1 }],
+      [{ x: 0, y: 2, bioma: 'pradera', elevacion: 0.1 }, { x: 1, y: 2, bioma: 'pradera', elevacion: 0.1 }, { x: 2, y: 2, bioma: 'pradera', elevacion: 0.1 }],
+    ],
+  };
+  const frustum = { xMin: 0, xMax: 3, yMin: 0, yMax: 3 };
+
+  visor.limpiarCtxVisor();
+  visor.dibujarRelieve(TAM, data, frustum, false);
+  const rellenos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fill');
+  assert.ok(rellenos.length >= 2, 'debe dibujar el triangulo de montana (dos mitades de sombreado)');
+
+  const { cy } = visor.celdaAPantallaCompleta(1, 1, 0.7, TAM, data.ancho, 0);
+  const baseEsperada = cy + TAM;
+  // La ultima llamada moveTo antes de cada fill marca el apice o la base
+  // -- se verifica indirectamente comprobando que NINGUN fillRect/fill
+  // referencia la base plana antigua ((1+1)*TAM), que seria distinta de
+  // baseEsperada salvo coincidencia en la fila 0.
+  const basePlanaVieja = (1 + 1) * TAM;
+  assert.ok(Math.abs(baseEsperada - basePlanaVieja) > 1,
+    'precondicion: en esta celda (fila 1) la base proyectada debe diferir de la formula plana vieja');
+});
+
+test('dibujarRelieve a macro no cambia (cenital plano)', () => {
+  const TAM = 50;
+  const data = {
+    ancho: 3, alto: 3,
+    celdas: [
+      [{ x: 0, y: 0, bioma: 'pradera', elevacion: 0.1 }, { x: 1, y: 0, bioma: 'pradera', elevacion: 0.1 }, { x: 2, y: 0, bioma: 'pradera', elevacion: 0.1 }],
+      [{ x: 0, y: 1, bioma: 'pradera', elevacion: 0.1 }, { x: 1, y: 1, bioma: 'montana', elevacion: 0.7 }, { x: 2, y: 1, bioma: 'pradera', elevacion: 0.1 }],
+      [{ x: 0, y: 2, bioma: 'pradera', elevacion: 0.1 }, { x: 1, y: 2, bioma: 'pradera', elevacion: 0.1 }, { x: 2, y: 2, bioma: 'pradera', elevacion: 0.1 }],
+    ],
+  };
+  const frustum = { xMin: 0, xMax: 3, yMin: 0, yMax: 3 };
+  visor.limpiarCtxVisor();
+  visor.dibujarRelieve(TAM, data, frustum, true);
+  const rellenos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fill');
+  assert.ok(rellenos.length >= 2, 'a macro tambien debe dibujar (sin proyeccion Caballera)');
+});

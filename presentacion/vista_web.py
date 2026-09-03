@@ -1361,7 +1361,7 @@ HTML_VISOR = """<!DOCTYPE html>
 
     // Paso 2: relieve, hidrografia vectorial y vegetacion --------------
 
-    function dibujarRelieve(tam, data, frustum) {
+    function dibujarRelieve(tam, data, frustum, esMacro) {
       // Silueta triangular con sombreado este por celda de bioma Montana
       // (LOD macro de la propuesta).
       // (2026-08-28, v3) Historial: v1 = triangulo identico por celda en
@@ -1386,8 +1386,20 @@ HTML_VISOR = """<!DOCTYPE html>
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           if (c.bioma !== 'montana') continue;
-          const cx = x * tam + tam * (0.5 + (hash2(x, y, 102) - 0.5) * 0.3);
-          const base = (y + 1) * tam;
+          // (2026-09-03, correccion real -- gap conocido de la spec de
+          // Caballera, cerrado junto con hidrografia/vegetacion) mismo
+          // patron que el resto: proyectar (x,y) y sumar el offset
+          // dentro de la celda en pixeles ya proyectados.
+          let cxBase, base;
+          if (esMacro) {
+            cxBase = x * tam + tam / 2;
+            base = (y + 1) * tam;
+          } else {
+            const proyeccion = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
+            cxBase = proyeccion.cx + tam / 2;
+            base = proyeccion.cy + tam;
+          }
+          const cx = cxBase + (hash2(x, y, 102) - 0.5) * tam * 0.3;
           const apice = base - alturaDe(x, y);
           const semiancho = tam * (0.62 + 0.23 * hash2(x, y, 104));
           const izq = cx - semiancho, der = cx + semiancho;
@@ -2522,7 +2534,7 @@ HTML_VISOR = """<!DOCTYPE html>
       // biblioteca (Diego: "no un conjunto de triangulos" cuando hay
       // formaciones de imagen): con formaciones activas formaciones.
       // relieve lo suprime, con por-celda de color lo cubre montanaUsoAssets.
-      if (!montanaUsoAssets && !(formaciones && formaciones.relieve)) dibujarRelieve(tam, data, frustum);
+      if (!montanaUsoAssets && !(formaciones && formaciones.relieve)) dibujarRelieve(tam, data, frustum, esMacro);
       dibujarVegetacion(tam, data, frustum);
       // Circulo 4: a macro el marco es el de codice (reticula de atlas con
       // coordenadas); a medio/micro, el perimetral clasico sin rejilla.

@@ -136,6 +136,7 @@ const FRAGMENTO_EXPORT = `
   centrarCamara: typeof centrarCamara !== 'undefined' ? centrarCamara : undefined,
   dibujarVegetacion: typeof dibujarVegetacion !== 'undefined' ? dibujarVegetacion : undefined,
   dibujarHidrografia: typeof dibujarHidrografia !== 'undefined' ? dibujarHidrografia : undefined,
+  dibujarRelieve: typeof dibujarRelieve !== 'undefined' ? dibujarRelieve : undefined,
   contornoDeCluster: typeof contornoDeCluster !== 'undefined' ? contornoDeCluster : undefined,
   pintarCuerpoAgua: typeof pintarCuerpoAgua !== 'undefined' ? pintarCuerpoAgua : undefined,
   canvas: typeof canvas !== 'undefined' ? canvas : undefined,
