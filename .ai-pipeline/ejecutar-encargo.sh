@@ -409,13 +409,20 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # tocado ni una línea si el backend/proxy falló en cada reintento
     # interno de litellm -- exit 0 NO implica que se haya implementado
     # nada. Se exige que el diff acumulado desde el commit de arranque de
-    # esta tarea toque al menos un fichero fuera de docs/plans/ y
-    # .ai-pipeline/ (infraestructura propia del pipeline, no código del
-    # motor) antes de gastar un ciclo de tests -- si no hay ningún cambio
-    # real, este intento se trata como fallido y se reintenta, en vez de
-    # dejar que "los tests siguen en verde" (trivialmente cierto si nada
-    # se tocó) lo cuele como éxito.
-    CAMBIOS_REALES=$(git diff --name-only "$PLAN_START_COMMIT" HEAD -- . ':!docs/plans' ':!.ai-pipeline' | wc -l)
+    # esta tarea toque al menos un fichero fuera de docs/plans/,
+    # docs/superpowers/ (encargos y specs, bookkeeping del propio
+    # pipeline -- 2026-09-03, hallazgo real: sin excluir esto, el simple
+    # borrado administrativo del fichero de encargo al arrancar la tarea
+    # ya contaba como "1 cambio real", dejando pasar una implementación
+    # completamente vacía como éxito -- el modelo exploró 66 pasos, dejó
+    # de emitir tool calls, y cerró la tarea sin tocar ni un fichero de
+    # código; los tests "pasaron" trivialmente porque nada había
+    # cambiado) y .ai-pipeline/ (infraestructura propia del pipeline, no
+    # código del motor) antes de gastar un ciclo de tests -- si no hay
+    # ningún cambio real, este intento se trata como fallido y se
+    # reintenta, en vez de dejar que "los tests siguen en verde"
+    # (trivialmente cierto si nada se tocó) lo cuele como éxito.
+    CAMBIOS_REALES=$(git diff --name-only "$PLAN_START_COMMIT" HEAD -- . ':!docs/plans' ':!docs/superpowers' ':!.ai-pipeline' | wc -l)
     if [ "$CAMBIOS_REALES" -eq 0 ]; then
         echo "[FALLO DE VALIDACIÓN] El agente no modificó ningún fichero de código (posible fallo silencioso del proxy/modelo). Preparando reintento..."
         continue
