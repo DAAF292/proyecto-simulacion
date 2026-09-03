@@ -438,14 +438,54 @@ HTML_VISOR = """<!DOCTYPE html>
                    'muerto': 0.899 },
     };
 
-    // Color por especie de planta (config/constantes.yaml, flora.especies --
-    // exactamente estas cinco existen hoy en el catalogo, ninguna inventada).
+    // Color por especie de planta (config/constantes.yaml, flora.especies) --
+    // solo cubre las especies que todavia pueden caer en el vectorial de
+    // dibujarVegetacion() (sin sprite propio, hoy solo helecho); el resto
+    // ya tiene sprite real (ver presentacion/assets/README.md) y nunca
+    // llega a leer esta tabla. Sin entrada, cae al gris-verde por defecto
+    // ([90,110,70]) -- no hace falta una entrada por cada una de las 15
+    // especies del catalogo, solo por las que de verdad pueden usarla.
     const COLOR_ESPECIE = {
       'manzano':          [61, 92, 46],
       'hierba_silvestre': [107, 138, 66],
       'cactus':           [92, 122, 72],
       'liquen':           [138, 148, 108],
       'musgo':            [58, 84, 56],
+    };
+
+    // (2026-09-03, correccion real -- Diego con capturas: "los arboles
+    // tienen el mismo tamano que los arbustos") -- BASE_FLORA_POR_ESPECIE
+    // desacopla el tamano de render de la etapa de crecimiento (que ya
+    // aporta su propio factor 0.4-1.0 en escala, ver mas abajo). Antes
+    // TODA la flora compartia base:1.4 -- funcionaba mientras "flora" solo
+    // eran manzano/cactus (ambos de porte similar); con el catalogo
+    // ampliado (10 especies nuevas, 2026-09-03) un pino maduro y un
+    // arbusto_artico maduro salian identicos de grandes. Tres categorias,
+    // reutilizando la MISMA distincion que ya hace config/flora.yaml para
+    // el espacio fisico (compite_espacio_fisico + huella_m2 por especie) --
+    // no una escala inventada de cero: arbol (huella_m2 grande, 4-5) >
+    // arbusto (huella_m2 pequena, 1-2.2, o cactus sin huella pero con
+    // porte real) > cobertura de suelo (sin huella_m2, compite_espacio_
+    // fisico:false). PROVISIONAL, sin calibrar contra el harness completo.
+    const BASE_FLORA_ARBOL = 1.4;
+    const BASE_FLORA_ARBUSTO = 0.75;
+    const BASE_FLORA_COBERTURA = 0.45;
+    const BASE_FLORA_POR_ESPECIE = {
+      manzano: BASE_FLORA_ARBOL,
+      roble: BASE_FLORA_ARBOL,
+      pino: BASE_FLORA_ARBOL,
+      cactus: BASE_FLORA_ARBUSTO,
+      arbusto_espinoso: BASE_FLORA_ARBUSTO,
+      arbusto_desertico: BASE_FLORA_ARBUSTO,
+      arbusto_montano: BASE_FLORA_ARBUSTO,
+      arbusto_artico: BASE_FLORA_ARBUSTO,
+      hierba_silvestre: BASE_FLORA_COBERTURA,
+      liquen: BASE_FLORA_COBERTURA,
+      musgo: BASE_FLORA_COBERTURA,
+      flor_silvestre: BASE_FLORA_COBERTURA,
+      hierba_desertica: BASE_FLORA_COBERTURA,
+      hierba_artica: BASE_FLORA_COBERTURA,
+      helecho: BASE_FLORA_COBERTURA,
     };
 
     let pergaminoCache = null;   // canvas offscreen con grano, cacheado por semilla+tamano
@@ -1063,17 +1103,22 @@ HTML_VISOR = """<!DOCTYPE html>
                 img, ordenY: baseY,
                 cx: cxBase + (hash2(x, y, 94) - 0.5) * tam * 0.5,
                 baseY,
-                // (2026-09-03) base 1.0 -> 1.4 -- feedback real de Diego:
-                // un arbol maduro debe verse claramente mas grande que un
-                // lobo (el mayor de los depredadores). Con base 1.0 un
-                // arbol maduro ya salia ~1.9x un lobo en idle (1.0*tam
-                // vs ~0.52*tam), pero un arbol JOVEN (etapa baja, escala
-                // hasta 0.4) se quedaba mas pequeno que el propio lobo --
-                // con base 1.4, un brote (escala 0.4) sale ~0.56*tam
-                // (similar a un lobo adulto) y un arbol maduro (escala
-                // 1.0) sale 1.4*tam (~2.7x un lobo) -- jerarquia
+                // (2026-09-03) base 1.0 -> 1.4 para arbol -- feedback real
+                // de Diego: un arbol maduro debe verse claramente mas
+                // grande que un lobo (el mayor de los depredadores). Con
+                // base 1.0 un arbol maduro ya salia ~1.9x un lobo en idle
+                // (1.0*tam vs ~0.52*tam), pero un arbol JOVEN (etapa baja,
+                // escala hasta 0.4) se quedaba mas pequeno que el propio
+                // lobo -- con base 1.4, un brote (escala 0.4) sale
+                // ~0.56*tam (similar a un lobo adulto) y un arbol maduro
+                // (escala 1.0) sale 1.4*tam (~2.7x un lobo) -- jerarquia
                 // razonada, PROVISIONAL, sin calibrar contra el harness.
-                escala: 0.4 + c.planta.etapa * 0.6, base: 1.4,
+                // (2026-09-03, segunda correccion -- Diego con capturas:
+                // "los arboles tienen el mismo tamano que los arbustos")
+                // BASE_FLORA_POR_ESPECIE reemplaza el 1.4 fijo -- ver su
+                // comentario mas arriba para la jerarquia completa.
+                escala: 0.4 + c.planta.etapa * 0.6,
+                base: BASE_FLORA_POR_ESPECIE[claveEspecie.replace(/_fruto$|_brote$|_seco$/, '')] || BASE_FLORA_ARBUSTO,
               });
             }
           }
