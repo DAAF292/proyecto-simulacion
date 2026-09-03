@@ -554,6 +554,44 @@ HTML_VISOR = """<!DOCTYPE html>
       return { cx, cy };
     }
 
+    // Hachurado de relieve (circulo 2026-09-03, spec en
+    // docs/superpowers/specs/2026-09-03-hachura-relieve-design.md):
+    // constantes puramente de presentacion (mismo precedente que
+    // ALPHA_CABALLERA/K_CABALLERA) -- estetica de renderizado, sin
+    // ningun efecto sobre la simulacion, por eso viven aqui y no en
+    // config/*.yaml. Todas PROVISIONAL, a calibrar contra un render
+    // real, no contra el harness completo.
+    const UMBRAL_PENDIENTE_VISIBLE = 0.02;
+    const PENDIENTE_SATURACION = 0.12;
+    const TRAZOS_MIN = 2;
+    const TRAZOS_MAX = 6;
+    const AZIMUT_LUZ_RELIEVE = 315 * Math.PI / 180;
+
+    // Pendiente real por diferencias centrales de Celda.elevacion contra
+    // los vecinos N/S/E/O en coordenadas de mundo. En el borde del grid
+    // (sin vecino en un lado de un eje) se usa diferencia simple hacia
+    // el unico vecino disponible -- sin vecino en NINGUN lado (grid de
+    // longitud 1 en ese eje) da pendiente 0 en ese eje, caso degenerado
+    // que no ocurre en la practica (el mundo es siempre 40x40) pero no
+    // debe reventar si se prueba aislado.
+    function calcularPendiente(data, x, y) {
+      const n = data.ancho;
+      const alto = data.alto;
+      const elevEn = (xx, yy) => data.celdas[yy][xx].elevacion || 0;
+      let dzdx;
+      if (x > 0 && x < n - 1) dzdx = (elevEn(x + 1, y) - elevEn(x - 1, y)) / 2;
+      else if (x < n - 1) dzdx = elevEn(x + 1, y) - elevEn(x, y);
+      else if (x > 0) dzdx = elevEn(x, y) - elevEn(x - 1, y);
+      else dzdx = 0;
+      let dzdy;
+      if (y > 0 && y < alto - 1) dzdy = (elevEn(x, y + 1) - elevEn(x, y - 1)) / 2;
+      else if (y < alto - 1) dzdy = elevEn(x, y + 1) - elevEn(x, y);
+      else if (y > 0) dzdy = elevEn(x, y) - elevEn(x, y - 1);
+      else dzdy = 0;
+      const magnitud = Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+      return { dzdx, dzdy, magnitud };
+    }
+
     async function cargarBibliotecaAssets() {
       try {
         const resp = await fetch('/assets_manifest.json');
