@@ -73,3 +73,66 @@ test('dibujarLavadoContinuo dibuja una cara de risco cuando el vecino sur es mas
   const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
   assert.ok(rects.length > 2, `se esperaba una cara de risco extra, hubo ${rects.length} fillRect`);
 });
+
+// Grid 6x6 de montana (no 1x1): dibujarStampsRelieveYFlora gatea cada
+// celda de montana con hash2(x,y,99) < 0.5 (~50% de las celdas llevan
+// sello). Con una sola celda candidata, si su hash concreto cae del lado
+// que NO dibuja, el test fallaria por una razon ajena a lo que prueba.
+// Con 36 celdas identicas siempre hay varias que pasan el gate, y como
+// ambas llamadas (medio/macro) iteran el MISMO grid en el MISMO orden,
+// "el primer drawImage de cada llamada" corresponde siempre a la misma
+// celda real en ambas.
+function gridMontana(n, elevacion) {
+  const celdas = [];
+  for (let y = 0; y < n; y++) {
+    const fila = [];
+    for (let x = 0; x < n; x++) fila.push({ x, y, bioma: 'montana', elevacion, planta: null, tipo_agua: null });
+    celdas.push(fila);
+  }
+  return { ancho: n, alto: n, celdas };
+}
+
+test('dibujarStampsRelieveYFlora alza un sello de montana en nivel medio/micro', () => {
+  const TAM = 50;
+  visor.catalogoAssets.relieve = { montana: ['pico.png'], montana_color: [] };
+  visor.imagenesCache['relieve/pico.png'] = { naturalWidth: 40, naturalHeight: 40 };
+  visor.camara.zoom = 1.5;
+  const data = gridMontana(6, 0.9);
+  const frustum = { xMin: 0, xMax: 6, yMin: 0, yMax: 6 };
+
+  visor.limpiarCtxVisor();
+  visor.dibujarStampsRelieveYFlora(TAM, data, frustum, [], null, 'medio');
+  const dibujos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'drawImage');
+  assert.ok(dibujos.length >= 1, 'debe dibujar el sello de montana');
+
+  visor.limpiarCtxVisor();
+  visor.dibujarStampsRelieveYFlora(TAM, data, frustum, [], null, 'macro');
+  const dibujosMacro = visor.llamadasCtxUltimas().filter((l) => l.prop === 'drawImage');
+  assert.ok(dibujosMacro.length >= 1, 'a macro tambien dibuja el sello (sin alzado)');
+
+  visor.camara.zoom = 1;
+});
+
+test('dibujarStampsRelieveYFlora alza el baseY de un sello de montana proporcionalmente a su elevacion', () => {
+  const TAM = 50;
+  visor.catalogoAssets.relieve = { montana: ['pico.png'], montana_color: [] };
+  visor.imagenesCache['relieve/pico.png'] = { naturalWidth: 40, naturalHeight: 40 };
+  visor.camara.zoom = 1.5;
+  const data = gridMontana(6, 0.9);
+  const frustum = { xMin: 0, xMax: 6, yMin: 0, yMax: 6 };
+
+  visor.limpiarCtxVisor();
+  visor.dibujarStampsRelieveYFlora(TAM, data, frustum, [], null, 'medio');
+  const dibujoMedio = visor.llamadasCtxUltimas().filter((l) => l.prop === 'drawImage')[0];
+
+  visor.limpiarCtxVisor();
+  visor.dibujarStampsRelieveYFlora(TAM, data, frustum, [], null, 'macro');
+  const dibujoMacro = visor.llamadasCtxUltimas().filter((l) => l.prop === 'drawImage')[0];
+
+  // drawImage(img, dx, dy, dw, dh) -- dy es args[2]. El de macro (sin
+  // alzado) debe tener una dy MAYOR (mas abajo) que el de medio (alzado).
+  assert.ok(dibujoMacro.args[2] > dibujoMedio.args[2],
+    `macro (dy=${dibujoMacro.args[2]}) debe quedar mas abajo que medio con alzado (dy=${dibujoMedio.args[2]})`);
+
+  visor.camara.zoom = 1;
+});

@@ -818,7 +818,8 @@ HTML_VISOR = """<!DOCTYPE html>
             const nombre = elegirVariante(poolMontana.lista, x, y, 91);
             const img = imagenesCache[poolMontana.prefijo + nombre];
             if (img) {
-              const baseY = (y + 1) * tam;
+              const alzado = nivel === 'macro' ? 0 : alzadoY(c.elevacion, tam);
+              const baseY = (y + 1) * tam - alzado;
               elementos.push({
                 img, ordenY: baseY,
                 cx: x * tam + tam / 2 + (hash2(x, y, 92) - 0.5) * tam * 0.3,
@@ -863,7 +864,8 @@ HTML_VISOR = """<!DOCTYPE html>
             const nombre = elegirVariante(poolPlanta.lista, x, y, 93);
             const img = nombre ? imagenesCache[poolPlanta.prefijo + nombre] : null;
             if (img) {
-              const baseY = y * tam + tam * 0.85 + (hash2(x, y, 95) - 0.5) * tam * 0.3;
+              const alzadoFlora = nivel === 'macro' ? 0 : alzadoY(c.elevacion, tam);
+              const baseY = y * tam + tam * 0.85 - alzadoFlora + (hash2(x, y, 95) - 0.5) * tam * 0.3;
               elementos.push({
                 img, ordenY: baseY,
                 cx: x * tam + tam / 2 + (hash2(x, y, 94) - 0.5) * tam * 0.5,
