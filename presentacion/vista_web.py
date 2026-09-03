@@ -520,9 +520,9 @@ HTML_VISOR = """<!DOCTYPE html>
     // verificado contra generar_zona_bioma -- un unico parametro, no dos).
     function rotarCoordenadas(wx, wy, n, rotacion) {
       switch (rotacion) {
-        case 90:  return { px: wy, py: n - wx };
-        case 180: return { px: n - wx, py: n - wy };
-        case 270: return { px: n - wy, py: wx };
+        case 90:  return { px: wy, py: n - 1 - wx };
+        case 180: return { px: n - 1 - wx, py: n - 1 - wy };
+        case 270: return { px: n - 1 - wy, py: wx };
         default:  return { px: wx, py: wy };
       }
     }
@@ -1553,20 +1553,24 @@ HTML_VISOR = """<!DOCTYPE html>
       return [color[0], color[1], color[2], 90];
     }
 
-    // Cara de risco: rellena el hueco vertical entre el borde inferior de
-    // una celda alzada y el borde superior de su vecino SUR cuando este
-    // ultimo tiene menor elevacion (la celda "sobresale" sobre el). Sin
-    // vecino sur mas bajo (llanura, o borde de mapa), no dibuja nada.
-    // Reutilizada por dibujarLavadoContinuo/dibujarLavadoModo -- mismo
-    // relleno oscurecido, misma geometria.
-    function dibujarCaraDeRisco(tam, data, x, y, r, g, b, alfaTexto, y0, alzado) {
-      if (y + 1 >= data.alto) return;
-      const vecinoSur = data.celdas[y + 1][x];
-      const alzadoVecino = alzadoY(vecinoSur.elevacion || 0, tam);
+    // Cara de risco (generalizada, circulo 2026-09-03): rellena el hueco
+    // vertical entre el borde inferior de una celda alzada y el borde
+    // superior de su vecino "siguiente en profundidad de PANTALLA" --
+    // que ya no es necesariamente el sur del mundo tras rotar. Dada la
+    // celda actual (wx,wy), su remapeo (px,py), el vecino de pantalla es
+    // (px,py+1); invertirRotacion lo devuelve a coordenadas de MUNDO para
+    // leer su elevacion real.
+    function dibujarCaraDeRisco(tam, data, wx, wy, r, g, b, alfaTexto, cxCelda, cyCelda, alzado) {
+      const n = data.ancho;
+      const { px, py } = rotarCoordenadas(wx, wy, n, camara.rotacion);
+      const { wx: vx, wy: vy } = invertirRotacion(px, py + 1, n, camara.rotacion);
+      if (vx < 0 || vy < 0 || vx >= data.ancho || vy >= data.alto) return;
+      const vecino = data.celdas[vy][vx];
+      const alzadoVecino = alzadoY(vecino.elevacion || 0, tam);
       if (alzado <= alzadoVecino) return;
       const altoRisco = alzado - alzadoVecino;
       ctx.fillStyle = `rgba(${Math.round(r * 0.7)}, ${Math.round(g * 0.7)}, ${Math.round(b * 0.7)}, ${alfaTexto})`;
-      ctx.fillRect(x * tam, y0 + tam, tam, altoRisco);
+      ctx.fillRect(cxCelda, cyCelda + tam, tam, altoRisco);
     }
 
     function dibujarLavadoContinuo(tam, data, frustum) {
@@ -1574,12 +1578,12 @@ HTML_VISOR = """<!DOCTYPE html>
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           const [r, g, b, a] = colorLavadoContinuo(c);
-          const alzado = alzadoY(c.elevacion, tam);
-          const y0 = y * tam - alzado;
+          const { cx, cy } = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
           const alfaTexto = (a / 255).toFixed(3);
           ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alfaTexto})`;
-          ctx.fillRect(x * tam, y0, tam, tam);
-          dibujarCaraDeRisco(tam, data, x, y, r, g, b, alfaTexto, y0, alzado);
+          ctx.fillRect(cx, cy, tam, tam);
+          const alzado = alzadoY(c.elevacion, tam);
+          dibujarCaraDeRisco(tam, data, x, y, r, g, b, alfaTexto, cx, cy, alzado);
         }
       }
     }
@@ -1590,11 +1594,11 @@ HTML_VISOR = """<!DOCTYPE html>
           const c = data.celdas[y][x];
           const lavado = lavadoDeCelda(c);
           if (!lavado) continue;
-          const alzado = alzadoY(c.elevacion, tam);
-          const y0 = y * tam - alzado;
+          const { cx, cy } = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
           ctx.fillStyle = lavado.relleno;
-          ctx.fillRect(x * tam, y0, tam, tam);
-          dibujarCaraDeRisco(tam, data, x, y, lavado.r, lavado.g, lavado.b, lavado.alfa, y0, alzado);
+          ctx.fillRect(cx, cy, tam, tam);
+          const alzado = alzadoY(c.elevacion, tam);
+          dibujarCaraDeRisco(tam, data, x, y, lavado.r, lavado.g, lavado.b, lavado.alfa, cx, cy, alzado);
         }
       }
     }
