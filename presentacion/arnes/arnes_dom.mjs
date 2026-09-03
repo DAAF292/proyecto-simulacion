@@ -147,6 +147,7 @@ const FRAGMENTO_EXPORT = `
     : undefined,
   calcularPendiente: typeof calcularPendiente !== 'undefined' ? calcularPendiente : undefined,
   direccionTrazoPantalla: typeof direccionTrazoPantalla !== 'undefined' ? direccionTrazoPantalla : undefined,
+  alfaPorLuz: typeof alfaPorLuz !== 'undefined' ? alfaPorLuz : undefined,
   UMBRAL_PENDIENTE_VISIBLE: typeof UMBRAL_PENDIENTE_VISIBLE !== 'undefined' ? UMBRAL_PENDIENTE_VISIBLE : undefined,
   PENDIENTE_SATURACION: typeof PENDIENTE_SATURACION !== 'undefined' ? PENDIENTE_SATURACION : undefined,
   TRAZOS_MIN: typeof TRAZOS_MIN !== 'undefined' ? TRAZOS_MIN : undefined,

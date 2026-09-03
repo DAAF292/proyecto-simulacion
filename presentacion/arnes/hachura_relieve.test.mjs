@@ -103,6 +103,29 @@ for (const rotacion of [0, 90, 180, 270]) {
   });
 }
 
+test('alfaPorLuz: pendiente cero da multiplicador neutro 1.0 sin dividir por cero', () => {
+  assert.equal(visor.alfaPorLuz(0, 0), 1.0);
+});
+
+test('alfaPorLuz: ladera que mira hacia la luz da el multiplicador minimo', () => {
+  const lx = Math.cos(visor.AZIMUT_LUZ_RELIEVE), ly = Math.sin(visor.AZIMUT_LUZ_RELIEVE);
+  const alfa = visor.alfaPorLuz(-lx, -ly);
+  assert.ok(Math.abs(alfa - 0.6) < 1e-6, `esperado ~0.6 (ALFA_LUZ_MIN), fue ${alfa}`);
+});
+
+test('alfaPorLuz: ladera que da la espalda a la luz da el multiplicador maximo', () => {
+  const lx = Math.cos(visor.AZIMUT_LUZ_RELIEVE), ly = Math.sin(visor.AZIMUT_LUZ_RELIEVE);
+  const alfa = visor.alfaPorLuz(lx, ly);
+  assert.ok(Math.abs(alfa - 1.3) < 1e-6, `esperado ~1.3 (ALFA_LUZ_MAX), fue ${alfa}`);
+});
+
+test('alfaPorLuz: siempre dentro de [0.6, 1.3] para cualquier orientacion', () => {
+  for (let angulo = 0; angulo < Math.PI * 2; angulo += 0.3) {
+    const alfa = visor.alfaPorLuz(Math.cos(angulo) * 0.1, Math.sin(angulo) * 0.1);
+    assert.ok(alfa >= 0.6 - 1e-9 && alfa <= 1.3 + 1e-9, `alfa ${alfa} fuera de rango en angulo ${angulo}`);
+  }
+});
+
 test('constantes de hachurado de relieve existen con los valores PROVISIONAL documentados', () => {
   assert.equal(visor.UMBRAL_PENDIENTE_VISIBLE, 0.02);
   assert.equal(visor.PENDIENTE_SATURACION, 0.12);

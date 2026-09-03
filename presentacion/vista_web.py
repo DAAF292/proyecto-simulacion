@@ -617,6 +617,31 @@ HTML_VISOR = """<!DOCTYPE html>
       return { dx: dx / magPantalla, dy: dy / magPantalla };
     }
 
+    // Modula la intensidad de tinta del hachurado por orientacion de la
+    // ladera respecto a una luz fija en el MUNDO (315/NW, decision ya
+    // tomada por Diego para el circulo anterior de este mismo arco).
+    // Producto escalar 2D del vector unitario cuesta-abajo con la
+    // direccion de la luz -- sin componente de altitud, no hace falta
+    // un vector 3D completo para esto. Ladera que mira hacia la luz
+    // (producto escalar alto) -> trazo mas tenue (ALFA_LUZ_MIN); ladera
+    // que da la espalda (producto escalar bajo) -> trazo mas marcado
+    // (ALFA_LUZ_MAX). Acotado, nunca apaga ni satura del todo un trazo
+    // por la luz sola -- la densidad sigue siendo la senal principal de
+    // "cuanta pendiente hay".
+    const ALFA_LUZ_MIN = 0.6;
+    const ALFA_LUZ_MAX = 1.3;
+    function alfaPorLuz(dzdx, dzdy) {
+      const mag = Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+      if (mag < 1e-9) return 1.0;
+      const wdx = -dzdx / mag;
+      const wdy = -dzdy / mag;
+      const lx = Math.cos(AZIMUT_LUZ_RELIEVE);
+      const ly = Math.sin(AZIMUT_LUZ_RELIEVE);
+      const dot = wdx * lx + wdy * ly; // [-1, 1]
+      const t = (dot + 1) / 2; // [0, 1], 1 = mirando a la luz
+      return ALFA_LUZ_MAX - t * (ALFA_LUZ_MAX - ALFA_LUZ_MIN);
+    }
+
     async function cargarBibliotecaAssets() {
       try {
         const resp = await fetch('/assets_manifest.json');
