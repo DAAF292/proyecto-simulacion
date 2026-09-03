@@ -166,42 +166,54 @@ infraestructura del propio pipeline, ver excepciones abajo):
 1. Claude diseña la pieza en conversación (skill `superpowers:brainstorming`)
    y escribe el spec a `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
    (ubicación por defecto de la propia skill).
-2. Claude trocea el spec en uno o varios ficheros de plan -- código
-   completo, o blueprint puro (solo la spec, sin diff pre-escrito): ambos
-   formatos ya probados con éxito con `mini-swe-agent`, ver
-   `.ai-pipeline/guia-tareas.md` para cuál conviene según el tipo de
-   tarea -- y los COMITEA directamente dentro de `docs/superpowers/plans/`.
-   Ese commit ES la entrega real, no una llamada a ninguna skill de
+2. Claude escribe un ENCARGO mínimo -- ruta a la spec completa más las
+   restricciones específicas de esa tarea ("qué NO tocar"), sin
+   boilerplate genérico (tests/smoke test/formato de commit ya viven en
+   el `instance_template` de `mini-agente-obrero.yaml`, ver más abajo) --
+   y lo COMITEA directamente dentro de `docs/superpowers/encargos/`. Ese
+   commit ES la entrega real, no una llamada a ninguna skill de
    implementación. Patrón real en el log de git: `d982056`/`f884483`/
    `8696c91`/`cbd16bc`/`91bf85d`, todos titulados "chore: soltar plan X al
-   centinela del pipeline".
-3. El centinela (`.ai-pipeline/watch-plans.sh`, proceso en segundo plano,
-   sondea `docs/superpowers/plans/` cada 5s) recoge el primer `.md` que
-   encuentra y lo pasa a `.ai-pipeline/run-plan.sh`, que ejecuta
-   `mini-swe-agent` (modelo barato, alias `agente-obrero`) contra él,
-   mueve el plan a través de `docs/plans/{in_progress,in_review,failed,done}`,
-   corre la suite de tests real, y abre el PR si pasa.
+   centinela del pipeline" (commits históricos anteriores al reenfoque de
+   nombres del 2026-09-03 -- en su momento la carpeta se llamaba
+   `docs/superpowers/plans/`, ver la spec de ese reenfoque para el
+   detalle completo:
+   `docs/superpowers/specs/2026-09-03-reenfoque-pipeline-spec-no-plan-design.md`).
+3. El centinela (`.ai-pipeline/centinela.sh`, proceso en segundo plano,
+   sondea `docs/superpowers/encargos/` cada 5s) recoge el primer `.md`
+   que encuentra y lo pasa a `.ai-pipeline/ejecutar-encargo.sh`, que
+   invoca `mini-swe-agent` (modelo barato, alias `agente-obrero`) contra
+   él. **El modelo, antes de tocar código, sobrescribe el propio fichero
+   de encargo (ya movido a `docs/plans/in_progress/<nombre>.md`) con su
+   plan real de implementación y lo comitea aparte** (paso 0 del
+   `instance_template`, 2026-09-03) -- el encargo se convierte en un plan
+   real en ese momento, no antes. `ejecutar-encargo.sh` mueve el fichero
+   a través de `docs/plans/{in_progress,in_review,failed,done}`, corre la
+   suite de tests real, y abre el PR si pasa.
 4. Una vez recogido por el centinela, Claude retira el fichero de
-   `docs/superpowers/plans/` con un commit "chore: retirar plan X de la
-   cola tras ser recogido" (limpieza -- el contenido ya vive duplicado en
-   `docs/plans/in_progress/`). Patrón real: `e3c3745`, `34087d4`, `040d298`.
+   `docs/superpowers/encargos/` con un commit "chore: retirar plan X de
+   la cola tras ser recogido" (limpieza -- el contenido ya vive duplicado
+   en `docs/plans/in_progress/`). Patrón real: `e3c3745`, `34087d4`,
+   `040d298`.
 5. Claude revisa el PR resultante cuando el pipeline lo abre (o audita
    manualmente si el disyuntor de 3 intentos salta sin converger, como en
-   armas primitivas v2) -- pero el CÓDIGO lo escribe el pipeline, no
-   Claude en la sesión de diseño.
+   armas primitivas v2) -- pero el CÓDIGO (y ahora también el PLAN de
+   implementación) lo escribe el pipeline, no Claude en la sesión de
+   diseño.
 
 **Requisito operativo, comprobar SIEMPRE antes de dar la entrega por
 hecha**: el centinela debe estar corriendo de verdad
-(`ps aux | grep watch-plans`) para que soltar un plan en la carpeta tenga
-efecto -- si no está activo, el fichero se queda ahí sin que nadie lo
-recoja hasta que alguien arranque `.ai-pipeline/start-pipeline.sh` (o
-`watch-plans.sh` directamente).
+(`ps aux | grep centinela`) para que soltar un encargo en la carpeta
+tenga efecto -- si no está activo, el fichero se queda ahí sin que nadie
+lo recoja hasta que alguien arranque `.ai-pipeline/start-pipeline.sh` (o
+`centinela.sh` directamente).
 
 **Excepciones reales, ya confirmadas por la práctica -- aquí Claude SÍ
 implementa directamente, sin pasar por el pipeline**:
 - **Infraestructura del propio pipeline** (scripts de `.ai-pipeline/`,
-  como el fix de timeout/reintentos de `run-plan.sh` del 2026-09-03) --
-  el pipeline no se arregla a sí mismo.
+  como el fix de timeout/reintentos de `ejecutar-encargo.sh` del
+  2026-09-03, o el propio reenfoque de nombres de esta sección) -- el
+  pipeline no se arregla a sí mismo.
 - **Tareas de calibración de juicio/estilo sin criterio de éxito
   verificable mecánicamente** (p.ej. podar comentarios narrativos de
   docstrings) -- confirmado 2/2 fallos reales con `mini-swe-agent`, ver

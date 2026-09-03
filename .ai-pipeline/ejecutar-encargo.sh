@@ -20,7 +20,7 @@ set -euo pipefail
 mkdir -p .ai-pipeline
 exec > >(tee -a .ai-pipeline/run-plan.log) 2>&1
 echo ""
-echo "########## $(date -Iseconds) -- nueva ejecución de run-plan.sh (PID $$) ##########"
+echo "########## $(date -Iseconds) -- nueva ejecución de ejecutar-encargo.sh (PID $$) ##########"
 trap 'echo "[TRAP ERR] línea $LINENO, comando: \"$BASH_COMMAND\", código de salida $?"' ERR
 
 # COSTE REAL (2026-09-02, ver guia-tareas.md "Coste real"): el
@@ -54,7 +54,7 @@ except Exception:
 
 _al_salir() {
     local codigo=$?
-    echo "[TRAP EXIT] run-plan.sh termina con código $codigo a las $(date -Iseconds)"
+    echo "[TRAP EXIT] ejecutar-encargo.sh termina con código $codigo a las $(date -Iseconds)"
     if [ -n "${BALANCE_ANTES:-}" ]; then
         local balance_despues
         balance_despues=$(consultar_balance_real || echo "")
@@ -95,11 +95,11 @@ if [ -z "$PLAN_PATH" ]; then
     if [ -z "$PLAN_PATH" ]; then
         exit 0
     fi
-    echo "=== AUTO-DETECTADO PLAN: $PLAN_PATH ==="
+    echo "=== AUTO-DETECTADO ENCARGO: $PLAN_PATH ==="
 fi
 
 if [ ! -f "$PLAN_PATH" ]; then
-    echo "Error: El archivo de plan especificado no existe: $PLAN_PATH"
+    echo "Error: El archivo de encargo especificado no existe: $PLAN_PATH"
     exit 1
 fi
 
@@ -128,7 +128,7 @@ TIMEOUT_SEGUNDOS=2700
 
 mkdir -p docs/plans/{in_progress,in_review,failed,done}
 
-echo "=== INICIANDO TAREA: $PLAN_NAME ==="
+echo "=== INICIANDO ENCARGO: $PLAN_NAME ==="
 git checkout master || git checkout main
 # git pull --ff-only (2026-09-01, pedido por Diego antes de soltar el
 # primer plan de la distribución causal de flora): la rama nueva nace de
@@ -301,7 +301,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         # sale del bucle sin gastar los intentos que queden, TEST_PASSED
         # sigue en false y el bloque de después del bucle lo trata igual
         # que agotar MAX_RETRIES.
-        echo "[FALLO FATAL] mini-swe-agent superó el timeout de ${TIMEOUT_SEGUNDOS}s sin converger a un commit final. Sin reintento -- ver run-plan.sh junto a TIMEOUT_SEGUNDOS."
+        echo "[FALLO FATAL] mini-swe-agent superó el timeout de ${TIMEOUT_SEGUNDOS}s sin converger a un commit final. Sin reintento -- ver ejecutar-encargo.sh junto a TIMEOUT_SEGUNDOS."
         TIMEOUT_FATAL=true
         break
     fi
@@ -309,8 +309,24 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     if [ $AGENTE_EXIT_CODE -ne 0 ]; then
         echo "[ERROR DE INFRAESTRUCTURA] Fallo del proxy o de mini-swe-agent (Código $AGENTE_EXIT_CODE)."
         mv "docs/plans/in_progress/$PLAN_NAME.md" "docs/plans/failed/$PLAN_NAME.md"
-        git checkout master || git checkout main
-        git branch -D "$BRANCH"
+        # NO borrar la rama si ya tiene trabajo real comiteado (2026-09-03,
+        # incidente real: un límite diario de la API de OpenRouter -- fallo
+        # de infraestructura EXTERNA, no del código -- hizo que este mismo
+        # bloque borrara con `git branch -D` un commit de seguridad con 864
+        # líneas de implementación real, tres veces seguidas, porque el
+        # centinela reintentaba sin pausa contra un límite que no se
+        # resetea hasta el día siguiente. PLAN_START_COMMIT es el commit
+        # justo después de "chore: iniciar plan" -- si HEAD sigue siendo
+        # ese mismo commit, no hay nada que perder y se borra como antes;
+        # si HEAD avanzó (el agente o el commit de seguridad añadieron
+        # algo), la rama se conserva para revisión manual.
+        if [ "$(git rev-parse HEAD)" = "$PLAN_START_COMMIT" ]; then
+            git checkout master || git checkout main
+            git branch -D "$BRANCH"
+        else
+            echo "[AVISO] La rama '$BRANCH' tiene trabajo real comiteado -- NO se borra. Revisar manualmente antes de reintentar este encargo."
+            git checkout master || git checkout main
+        fi
         exit 2
     fi
 

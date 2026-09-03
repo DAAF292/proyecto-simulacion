@@ -14,8 +14,26 @@ pipeline" para el contexto completo de cómo se llegó hasta aquí.
 - `-c .ai-pipeline/mini-agente-obrero.yaml` (2026-09-02): config propia, copia AUTOCONTENIDA de la `mini.yaml` de fábrica (no depende de mergear con la ruta absoluta del paquete instalado -- portable). Único cambio real: `agent.instance_template` sustituye el paso de fábrica "Create a script to reproduce the issue" por "edita directo, verifica con la suite de tests real del proyecto" + un aviso explícito contra escribir scripts .py de parche en un código lleno de docstrings de comilla triple -- causa raíz confirmada del único fallo real visto en la prueba de blueprint (ver "Coste real" más abajo).
 - `MSWEA_CONFIGURED=true` en `~/.config/mini-swe-agent/.env` -- evita el asistente interactivo de primer uso.
 - `LITELLM_MODEL_REGISTRY_PATH=.ai-pipeline/litellm_model_registry.json` -- coste real visible (antes de esto, `MSWEA_COST_TRACKING=ignore_errors` dejaba todo en "$0.00", sin poder distinguir una tarea barata de una cara).
-- Timeout 900s como mínimo -- 480s bastaba para planes con código completo, pero cualquier tarea que exija exploración real del repo (spec-only, o el propio ejemplo de esta guía) puede necesitar más.
-- El proceso corre en segundo plano (`nohup ... &`, o `run_in_background` desde Claude Code) -- 900s excede el límite de foreground de las herramientas de shell.
+- Timeout único de 2700s (2026-09-03, subido de 900s -- ver CLAUDE.md, "esto está fatal"): sin reintento en caso de timeout, ese único intento recibe todo el presupuesto de tiempo de una vez en vez de repartirse en 3 reinicios de contexto.
+- El proceso corre en segundo plano (`nohup ... &`, o `run_in_background` desde Claude Code) -- excede el límite de foreground de las herramientas de shell.
+
+## Plantilla de encargo (lo que Claude deja en docs/superpowers/encargos/)
+
+Desde el reenfoque de 2026-09-03 (ver
+`docs/superpowers/specs/2026-09-03-reenfoque-pipeline-spec-no-plan-design.md`),
+el encargo que Claude comitea en la cola YA NO repite tests/smoke
+test/formato de commit -- eso vive en el `instance_template` de
+`mini-agente-obrero.yaml` (paso 0 en adelante), aplicado a toda tarea sin
+tener que repetirlo. El encargo se reduce a:
+
+1. Ruta a la spec completa (`docs/superpowers/specs/...`) -- la única
+   fuente de verdad de qué construir.
+2. "Qué NO tocar" específico de ESTA tarea (ficheros/sistemas sin
+   relación, fuera de alcance según la spec).
+
+Nada más. Ver `docs/plans/in_progress/` una vez el centinela recoja el
+encargo -- el propio modelo sobrescribe ese fichero con su plan real
+como primer paso (obligatorio, ver `instance_template`).
 
 ## Qué SÍ funciona, confirmado con éxitos reales
 
@@ -191,7 +209,7 @@ registre en `litellm_model_registry.json` debe declarar
 agéntico con contexto creciente, omitirlo no es un error pequeño, es
 la diferencia entre medir bien y medir ~3x por debajo.
 
-**Instrumentado en `run-plan.sh` (2026-09-02), ya no hay que hacerlo a
+**Instrumentado en `ejecutar-encargo.sh` (2026-09-02), ya no hay que hacerlo a
 mano**: el script consulta el balance real de OpenRouter
 (`/api/v1/credits`) justo antes del primer intento y de nuevo al salir
 (éxito o fallo, vía el `trap EXIT` ya existente), y deja un registro por
@@ -234,7 +252,7 @@ número de intentos.
   más de 900-1500s incluso para tareas que sí funcionan bien -- no
   probado todavía a esa escala, extrapolación razonada, no medida.
 - **Un plan tipo BLUEPRINT (sin sección `**Files:**` con líneas
-  `- Modify/Create/Test: \`ruta\``) hacía fallar `run-plan.sh` antes de
+  `- Modify/Create/Test: \`ruta\``) hacía fallar `ejecutar-encargo.sh` antes de
   que el agente llegara a ejecutarse** (2026-09-02, encontrado en la
   primera prueba real de blueprint): `ARCHIVOS_PLAN` se construye con un
   `grep` que, sin ninguna coincidencia, devuelve código 1 -- con
@@ -242,24 +260,21 @@ número de intentos.
   "limpieza de ficheros no declarados" habría borrado cualquier fichero
   nuevo legítimo del agente (tests incluidos) al no tener ninguna
   whitelist contra la que comparar. Corregido en el propio
-  `run-plan.sh`: `ARCHIVOS_PLAN` ya no aborta el script si queda vacío,
-  y el bloque de limpieza se salta entero en ese caso (sin whitelist, no
-  se puede distinguir "declarado" de "no declarado" con seguridad).
-- **El mensaje de fallo por timeout todavía dice "480s" aunque el valor
-  real configurado es 900s** -- cosmético, viene de cuando se subió el
-  timeout sin actualizar el texto del mensaje, no afecta al
-  comportamiento real. Pendiente de limpiar si se retoma este fichero.
-- **El centinela (`watch-plans.sh`) puede llevar corriendo en segundo
+  `ejecutar-encargo.sh`: `ARCHIVOS_PLAN` ya no aborta el script si queda
+  vacío, y el bloque de limpieza se salta entero en ese caso (sin
+  whitelist, no se puede distinguir "declarado" de "no declarado" con
+  seguridad).
+- **El centinela (`centinela.sh`) puede llevar corriendo en segundo
   plano desde una sesión anterior sin que la sesión actual lo sepa** --
-  vigila `docs/superpowers/plans/*.md` cada 5s y dispara `run-plan.sh`
+  vigila `docs/superpowers/encargos/*.md` cada 5s y dispara `ejecutar-encargo.sh`
   en cuanto aparece un fichero nuevo ahí, aunque nadie lo haya invocado
-  esta sesión. Comprobar `ps aux | grep watch-plans` antes de escribir o
+  esta sesión. Comprobar `ps aux | grep centinela` antes de escribir o
   reescribir un plan directamente en esa carpeta -- si está vivo, un
   borrador a medio escribir puede dispararse antes de terminarlo de
   corregir (pasó exactamente esto la primera vez que se probó
   blueprint). Más seguro: redactar el plan fuera de esa carpeta (o en
-  `docs/superpowers/plans/pendientes/`) y moverlo/copiarlo ahí solo
-  cuando esté listo de verdad, o invocar `run-plan.sh <ruta>`
+  `docs/superpowers/encargos/pendientes/`) y moverlo/copiarlo ahí solo
+  cuando esté listo de verdad, o invocar `ejecutar-encargo.sh <ruta>`
   directamente sin depender del centinela.
 - **Miga de pan en los blueprints -- vale más de lo que parecía antes
   del hallazgo de coste real** (2026-09-02): dar la ubicación
@@ -283,6 +298,8 @@ número de intentos.
     completa varias veces como autoverificación intermedia, cada
     corrida quedándose en el contexto para siempre) + aviso genérico
     contra repetir comandos ya ejecutados sin necesidad.
-  - `run-plan.sh`: límite de coste por intento (`-l`) bajado de 0.60 a
-    0.30 -- la pieza más cara medida hasta ahora costó $0.127 real;
-    0.30 deja ~2.4x de margen en vez de ~4.7x.
+  - `ejecutar-encargo.sh`: límite de coste por intento (`-l`) bajado de
+    0.60 a 0.30 (después subido a 0.90 el 2026-09-03, en proporción al
+    timeout único de 2700s -- ver CLAUDE.md) -- la pieza más cara medida
+    hasta ahora costó $0.127 real; 0.30 dejaba ~2.4x de margen sobre eso
+    en vez de ~4.7x.
