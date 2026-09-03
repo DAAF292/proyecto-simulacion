@@ -95,11 +95,11 @@ if [ -z "$PLAN_PATH" ]; then
     if [ -z "$PLAN_PATH" ]; then
         exit 0
     fi
-    echo "=== AUTO-DETECTADO PLAN: $PLAN_PATH ==="
+    echo "=== AUTO-DETECTADO ENCARGO: $PLAN_PATH ==="
 fi
 
 if [ ! -f "$PLAN_PATH" ]; then
-    echo "Error: El archivo de plan especificado no existe: $PLAN_PATH"
+    echo "Error: El archivo de encargo especificado no existe: $PLAN_PATH"
     exit 1
 fi
 
@@ -128,7 +128,7 @@ TIMEOUT_SEGUNDOS=2700
 
 mkdir -p docs/plans/{in_progress,in_review,failed,done}
 
-echo "=== INICIANDO TAREA: $PLAN_NAME ==="
+echo "=== INICIANDO ENCARGO: $PLAN_NAME ==="
 git checkout master || git checkout main
 # git pull --ff-only (2026-09-01, pedido por Diego antes de soltar el
 # primer plan de la distribución causal de flora): la rama nueva nace de
