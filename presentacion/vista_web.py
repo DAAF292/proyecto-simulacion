@@ -680,7 +680,7 @@ HTML_VISOR = """<!DOCTYPE html>
       return { pose: (enMarcha ? 'andar_' : 'idle_') + dir, dir };
     }
 
-    function construirElementoCriatura(e, tam) {
+    function construirElementoCriatura(e, tam, elevacion = 0) {
       const resuelta = resolverPose(e);
       let imgCriatura = null;
       let poseResuelta = null;
@@ -696,11 +696,23 @@ HTML_VISOR = """<!DOCTYPE html>
         const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
         imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
       }
-      const baseY = (e.y + 1) * tam;
+      // baseYSuelo: posicion real en el suelo de la celda, SIN alzar --
+      // ancla de la sombra. baseY: con el alzado por elevacion, ancla del
+      // sprite/halo y del ordenamiento Y-sorted.
+      const alzado = alzadoY(elevacion, tam);
+      const baseYSuelo = (e.y + 1) * tam;
+      const baseY = baseYSuelo - alzado;
       const ordenY = baseY + tam * 0.01;
       const cx = (e.x + 0.5) * tam;
       const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
       const runa = RUNAS[e.tipo] || '?';
+
+      function dibujarSombra(radio) {
+        ctx.beginPath();
+        ctx.ellipse(cx, baseYSuelo, radio, radio * 0.35, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(40,30,18,0.28)';
+        ctx.fill();
+      }
 
       if (imgCriatura) {
         const especiePose = e.tipo === 'necromasa' ? e.origen : e.tipo;
@@ -714,6 +726,7 @@ HTML_VISOR = """<!DOCTYPE html>
           ordenY,
           alturaVisual: alturaImg / 2,
           dibujar: () => {
+            dibujarSombra(anchoImg * 0.35);
             if (espejar) {
               ctx.save();
               ctx.translate(cx, 0);
@@ -732,6 +745,7 @@ HTML_VISOR = """<!DOCTYPE html>
         ordenY,
         alturaVisual: radioHalo,
         dibujar: () => {
+          dibujarSombra(radioHalo * 0.8);
           ctx.beginPath();
           ctx.arc(cx, baseY - radioHalo, radioHalo, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(230,216,184,0.88)';
@@ -2234,7 +2248,10 @@ HTML_VISOR = """<!DOCTYPE html>
           .filter((e) => e.x > frustum.xMin - margenCeldas && e.x < frustum.xMax + margenCeldas &&
                          e.y > frustum.yMin - margenCeldas && e.y < frustum.yMax + margenCeldas)
           .map((e) => {
-            const el = construirElementoCriatura(e, tam);
+            const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
+            const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
+            const elevacionEntidad = data.celdas[cyCelda][cxCelda].elevacion || 0;
+            const el = construirElementoCriatura(e, tam, elevacionEntidad);
             visualesPorId.set(e.id, el.alturaVisual);
             return el;
           });

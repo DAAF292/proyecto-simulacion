@@ -136,3 +136,32 @@ test('dibujarStampsRelieveYFlora alza el baseY de un sello de montana proporcion
 
   visor.camara.zoom = 1;
 });
+
+// Nota: construirElementoCriatura(e, tam, elevacion = 0) usa un parametro
+// por defecto -- las 8 llamadas ya existentes en criaturas_ysort.test.mjs
+// (todas de 2 argumentos, sin pasar elevacion) siguen recibiendo
+// elevacion=0 exactamente como antes, sin ningun cambio necesario ahi.
+// Este test cubre el comportamiento NUEVO: pasar una elevacion real.
+test('construirElementoCriatura alza el baseY (ordenY) segun la elevacion de la celda que pisa', () => {
+  const TAM = 50;
+  const el0 = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0);
+  const elAlta = visor.construirElementoCriatura({ id: 2, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0.8);
+  assert.ok(elAlta.ordenY < el0.ordenY,
+    `una criatura en celda de elevacion 0.8 debe dibujarse mas arriba (ordenY ${elAlta.ordenY}) que en elevacion 0 (ordenY ${el0.ordenY})`);
+  const alzadoEsperado = visor.alzadoY(0.8, TAM);
+  assert.ok(Math.abs((el0.ordenY - elAlta.ordenY) - alzadoEsperado) < 0.001,
+    'la diferencia exacta debe ser el alzado calculado por alzadoY');
+});
+
+test('construirElementoCriatura dibuja la sombra de anclaje en el suelo SIN alzar, no en la posicion alzada', () => {
+  const TAM = 50;
+  const el = visor.construirElementoCriatura({ id: 1, tipo: 'lobo', x: 1, y: 1 }, TAM, 0.8);
+  visor.limpiarCtxVisor();
+  el.dibujar();
+  const llamadas = visor.llamadasCtxUltimas();
+  const elipses = llamadas.filter((l) => l.prop === 'ellipse');
+  assert.ok(elipses.length >= 1, 'debe dibujar al menos una elipse de sombra');
+  const baseYSueloEsperado = (1 + 1) * TAM; // SIN restar alzadoY
+  assert.ok(Math.abs(elipses[0].args[1] - baseYSueloEsperado) < 0.001,
+    `la sombra debe anclarse en baseYSuelo=${baseYSueloEsperado} (sin alzar), fue ${elipses[0].args[1]}`);
+});
