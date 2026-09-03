@@ -14,8 +14,26 @@ pipeline" para el contexto completo de cómo se llegó hasta aquí.
 - `-c .ai-pipeline/mini-agente-obrero.yaml` (2026-09-02): config propia, copia AUTOCONTENIDA de la `mini.yaml` de fábrica (no depende de mergear con la ruta absoluta del paquete instalado -- portable). Único cambio real: `agent.instance_template` sustituye el paso de fábrica "Create a script to reproduce the issue" por "edita directo, verifica con la suite de tests real del proyecto" + un aviso explícito contra escribir scripts .py de parche en un código lleno de docstrings de comilla triple -- causa raíz confirmada del único fallo real visto en la prueba de blueprint (ver "Coste real" más abajo).
 - `MSWEA_CONFIGURED=true` en `~/.config/mini-swe-agent/.env` -- evita el asistente interactivo de primer uso.
 - `LITELLM_MODEL_REGISTRY_PATH=.ai-pipeline/litellm_model_registry.json` -- coste real visible (antes de esto, `MSWEA_COST_TRACKING=ignore_errors` dejaba todo en "$0.00", sin poder distinguir una tarea barata de una cara).
-- Timeout 900s como mínimo -- 480s bastaba para planes con código completo, pero cualquier tarea que exija exploración real del repo (spec-only, o el propio ejemplo de esta guía) puede necesitar más.
-- El proceso corre en segundo plano (`nohup ... &`, o `run_in_background` desde Claude Code) -- 900s excede el límite de foreground de las herramientas de shell.
+- Timeout único de 2700s (2026-09-03, subido de 900s -- ver CLAUDE.md, "esto está fatal"): sin reintento en caso de timeout, ese único intento recibe todo el presupuesto de tiempo de una vez en vez de repartirse en 3 reinicios de contexto.
+- El proceso corre en segundo plano (`nohup ... &`, o `run_in_background` desde Claude Code) -- excede el límite de foreground de las herramientas de shell.
+
+## Plantilla de encargo (lo que Claude deja en docs/superpowers/encargos/)
+
+Desde el reenfoque de 2026-09-03 (ver
+`docs/superpowers/specs/2026-09-03-reenfoque-pipeline-spec-no-plan-design.md`),
+el encargo que Claude comitea en la cola YA NO repite tests/smoke
+test/formato de commit -- eso vive en el `instance_template` de
+`mini-agente-obrero.yaml` (paso 0 en adelante), aplicado a toda tarea sin
+tener que repetirlo. El encargo se reduce a:
+
+1. Ruta a la spec completa (`docs/superpowers/specs/...`) -- la única
+   fuente de verdad de qué construir.
+2. "Qué NO tocar" específico de ESTA tarea (ficheros/sistemas sin
+   relación, fuera de alcance según la spec).
+
+Nada más. Ver `docs/plans/in_progress/` una vez el centinela recoja el
+encargo -- el propio modelo sobrescribe ese fichero con su plan real
+como primer paso (obligatorio, ver `instance_template`).
 
 ## Qué SÍ funciona, confirmado con éxitos reales
 
