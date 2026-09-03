@@ -1056,36 +1056,49 @@ HTML_VISOR = """<!DOCTYPE html>
             }
           }
 
-          if (c.planta && !c.tipo_agua && !(formaciones && formaciones.flora && c.bioma === 'bosque')) {
-            // Pieza nuevosAssetsDefinitivos (2026-08-27): el estado de la
-            // planta elige el pool cuando existen sellos para el -- fruto
-            // si la celda conserva recurso (manzanas / fruto_de_cactus) y
-            // brote si la etapa es baja. Solo a zoom de color: los sellos
-            // de estado existen solo en acuarela; a tinta (lejos) el genero
-            // base manda, igual que los estados finos de criaturas no se
-            // leen a zoom macro.
-            let claveEspecie = c.planta.especie;
-            if (estiloColorActivo()) {
-              const recursos = c.recursos || {};
-              if (c.planta.especie === 'manzano') {
-                if ((recursos.manzanas || 0) > 0 && (catalogoAssets.flora_color.manzano_fruto || []).length > 0) {
-                  claveEspecie = 'manzano_fruto';
-                } else if (c.planta.etapa < 0.35 && (catalogoAssets.flora_color.manzano_brote || []).length > 0) {
-                  claveEspecie = 'manzano_brote';
-                }
-              } else if (c.planta.especie === 'cactus') {
-                if ((recursos.fruto_de_cactus || 0) > 0 && (catalogoAssets.flora_color.cactus_fruto || []).length > 0) {
-                  claveEspecie = 'cactus_fruto';
+          // (2026-09-04, correccion de bug real) c.plantas es una LISTA:
+          // desde "cupo de espacio compartido por celda" una especie de
+          // cobertura (hierba_silvestre, flor_silvestre, liquen, musgo...)
+          // cohabita la celda con una especie competidora (arbol/arbusto).
+          // Antes esta celda solo leia c.planta (singular, la ultima que
+          // sobrescribia la clave (x,y) en el DTO) -- la cobertura quedaba
+          // invisible en cualquier celda ya ocupada por otra planta. Cada
+          // planta de la lista se dibuja por separado, con su propia
+          // variante/offset (la sal de hash incluye el indice para que dos
+          // plantas de la misma celda no caigan exactamente en el mismo
+          // pixel).
+          if (!c.tipo_agua && !(formaciones && formaciones.flora && c.bioma === 'bosque')) {
+            (c.plantas || []).forEach((planta, indicePlanta) => {
+              // Pieza nuevosAssetsDefinitivos (2026-08-27): el estado de la
+              // planta elige el pool cuando existen sellos para el -- fruto
+              // si la celda conserva recurso (manzanas / fruto_de_cactus) y
+              // brote si la etapa es baja. Solo a zoom de color: los sellos
+              // de estado existen solo en acuarela; a tinta (lejos) el genero
+              // base manda, igual que los estados finos de criaturas no se
+              // leen a zoom macro.
+              let claveEspecie = planta.especie;
+              if (estiloColorActivo()) {
+                const recursos = c.recursos || {};
+                if (planta.especie === 'manzano') {
+                  if ((recursos.manzanas || 0) > 0 && (catalogoAssets.flora_color.manzano_fruto || []).length > 0) {
+                    claveEspecie = 'manzano_fruto';
+                  } else if (planta.etapa < 0.35 && (catalogoAssets.flora_color.manzano_brote || []).length > 0) {
+                    claveEspecie = 'manzano_brote';
+                  }
+                } else if (planta.especie === 'cactus') {
+                  if ((recursos.fruto_de_cactus || 0) > 0 && (catalogoAssets.flora_color.cactus_fruto || []).length > 0) {
+                    claveEspecie = 'cactus_fruto';
+                  }
                 }
               }
-            }
-            const poolPlanta = poolTerreno(
-              catalogoAssets.flora_color[claveEspecie], 'flora_color/',
-              catalogoAssets.flora[claveEspecie], 'flora/',
-            );
-            const nombre = elegirVariante(poolPlanta.lista, x, y, 93);
-            const img = nombre ? imagenesCache[poolPlanta.prefijo + nombre] : null;
-            if (img) {
+              const sal = 93 + indicePlanta * 7;
+              const poolPlanta = poolTerreno(
+                catalogoAssets.flora_color[claveEspecie], 'flora_color/',
+                catalogoAssets.flora[claveEspecie], 'flora/',
+              );
+              const nombre = elegirVariante(poolPlanta.lista, x, y, sal);
+              const img = nombre ? imagenesCache[poolPlanta.prefijo + nombre] : null;
+              if (!img) return;
               let cxBase, baseYBase;
               if (nivel === 'macro') {
                 cxBase = x * tam + tam / 2;
@@ -1098,10 +1111,10 @@ HTML_VISOR = """<!DOCTYPE html>
                 cxBase = proyeccion.cx;
                 baseYBase = proyeccion.cy;
               }
-              const baseY = baseYBase + (hash2(x, y, 95) - 0.5) * tam * 0.3;
+              const baseY = baseYBase + (hash2(x, y, sal + 2) - 0.5) * tam * 0.3;
               elementos.push({
                 img, ordenY: baseY,
-                cx: cxBase + (hash2(x, y, 94) - 0.5) * tam * 0.5,
+                cx: cxBase + (hash2(x, y, sal + 1) - 0.5) * tam * 0.5,
                 baseY,
                 // (2026-09-03) base 1.0 -> 1.4 para arbol -- feedback real
                 // de Diego: un arbol maduro debe verse claramente mas
@@ -1117,10 +1130,10 @@ HTML_VISOR = """<!DOCTYPE html>
                 // "los arboles tienen el mismo tamano que los arbustos")
                 // BASE_FLORA_POR_ESPECIE reemplaza el 1.4 fijo -- ver su
                 // comentario mas arriba para la jerarquia completa.
-                escala: 0.4 + c.planta.etapa * 0.6,
+                escala: 0.4 + planta.etapa * 0.6,
                 base: BASE_FLORA_POR_ESPECIE[claveEspecie.replace(/_fruto$|_brote$|_seco$/, '')] || BASE_FLORA_ARBUSTO,
               });
-            }
+            });
           }
         }
       }
@@ -1156,7 +1169,16 @@ HTML_VISOR = """<!DOCTYPE html>
     // ~0.09-0.16*tam) quedaban demasiado pequenas para verlas/clicarlas
     // bien. PROVISIONAL, sin medir el efecto sobre rendimiento a esa
     // profundidad de zoom contra el motor real.
-    const ZOOM_MINIMO = 0.4, ZOOM_MAXIMO = 8.0;
+    // (2026-09-04) 8.0 -> 20.0, mismo motivo, feedback real de Diego otra
+    // vez tras la extraccion de sprites reales: a 8.0 un conejo (peso real
+    // ~1.5kg, escalaPorPeso ~0.26 contra el lobo de 90kg como referencia)
+    // sigue midiendo ~14px de alto en pantalla, casi invisible. Subir el
+    // techo de zoom es la palanca inmediata que pidio Diego; el fondo real
+    // -- si ademas conviene imponer un TAMANO MINIMO en pantalla
+    // independiente del zoom para que ninguna criatura caiga por debajo de
+    // cierto umbral legible -- queda pendiente de decidir con el, no
+    // resuelto aqui.
+    const ZOOM_MINIMO = 0.4, ZOOM_MAXIMO = 20.0;
     let tam0 = null;
     const camara = { zoom: 1, offsetX: 0, offsetY: 0, rotacion: 0 };
 
@@ -1253,6 +1275,10 @@ HTML_VISOR = """<!DOCTYPE html>
     let entidadSeleccionadaId = null;
     let modoSeguimiento = false;
     let ultimoDataConocido = null;   // ultima instantanea recibida, para hit-test e informes por id
+    let camaraCentradaInicial = false;   // centrarCamara() solo se disparaba desde el boton -- al
+    // cargar la pagina la camara se quedaba en offset (0,0)/zoom 1, mostrando la esquina superior
+    // izquierda del mundo en vez del mundo centrado (reportado por Diego). Se dispara UNA vez, la
+    // primera vez que hay datos reales con los que centrar -- despues el usuario manda (pan/zoom).
 
     // (2026-08-27, pieza 1 del plan visual aprobado por Diego) Las
     // entidades saltaban de celda en celda a cada instantanea de 250ms:
@@ -1458,18 +1484,6 @@ HTML_VISOR = """<!DOCTYPE html>
       octx.fillRect(0, 0, off.width, off.height);
 
       return off;
-    }
-
-    function dibujarMarco(tam, ancho, alto) {
-      // Diego pidio quitar la reticula (2026-08-27): el mapa no debe leerse
-      // como celdas a nivel visual, aunque la simulacion siga siendo un
-      // grid por dentro. Se queda solo el marco perimetral -- sin lineas
-      // internas ni numeracion de coordenadas (esta ultima solo tenia
-      // sentido como referencia de esa reticula que ya no esta).
-      const compensa = 1 / camara.zoom;
-      ctx.strokeStyle = 'rgba(36,26,15,0.85)';
-      ctx.lineWidth = compensa * 3;
-      ctx.strokeRect(0.75 * compensa, 0.75 * compensa, ancho * tam - 1.5 * compensa, alto * tam - 1.5 * compensa);
     }
 
 ﻿    // Circulo 4 v2 (2026-08-27, feedback de Diego: numeros y reticula eran
@@ -2347,7 +2361,12 @@ HTML_VISOR = """<!DOCTYPE html>
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
-          if (!c.planta) continue;
+          // (2026-09-04) c.plantas es una LISTA -- ver el comentario del
+          // bucle de estampado real mas arriba. Cada planta de la celda
+          // se evalua por separado contra su propio guard de "ya tiene
+          // asset real", en vez de un unico c.planta que solo miraba la
+          // ultima planta sobrescrita en el DTO.
+          (c.plantas || []).forEach((planta) => {
           // Esta especie ya tiene assets reales cargados -- la dibuja
           // dibujarStampsRelieveYFlora() como sello, no como vectorial.
           // (2026-08-29, fix de auditoria) Antes solo miraba
@@ -2361,16 +2380,16 @@ HTML_VISOR = """<!DOCTYPE html>
           // poolTerreno() que usa el estampado real, para que este guard
           // decida exactamente lo mismo que decide si habra un sello.
           const poolExistente = poolTerreno(
-            catalogoAssets.flora_color[c.planta.especie], 'flora_color/',
-            catalogoAssets.flora[c.planta.especie], 'flora/',
+            catalogoAssets.flora_color[planta.especie], 'flora_color/',
+            catalogoAssets.flora[planta.especie], 'flora/',
           );
-          if ((poolExistente.lista || []).length > 0) continue;
+          if ((poolExistente.lista || []).length > 0) return;
           // Diego pidio quitar el tapiz vectorial de hierba silvestre por
           // ahora (2026-08-27) mientras no exista un asset real para ella
           // -- la celda se queda solo con el lavado de bioma de base, sin
           // relleno provisional. En cuanto haya flora/hierba_silvestre_*.png
           // el guard de arriba ya la desvia sola al sistema de sellos.
-          if (c.planta.especie === 'hierba_silvestre') continue;
+          if (planta.especie === 'hierba_silvestre') return;
           // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba) esta
           // funcion solo corre a camara.zoom>=0.8 (el guard de arriba),
           // siempre en medio/micro. Proyecta directamente el CENTRO real
@@ -2378,10 +2397,10 @@ HTML_VISOR = """<!DOCTYPE html>
           // tam/2 plano".
           const proyeccionPlanta = celdaAPantallaCompleta(x + 0.5, y + 0.5, c.elevacion, tam, data.ancho, camara.rotacion);
           const cx = proyeccionPlanta.cx, cy = proyeccionPlanta.cy;
-          const escala = 0.32 + 0.68 * c.planta.etapa;
-          const [r, g, b] = COLOR_ESPECIE[c.planta.especie] || [90, 110, 70];
+          const escala = 0.32 + 0.68 * planta.etapa;
+          const [r, g, b] = COLOR_ESPECIE[planta.especie] || [90, 110, 70];
 
-          if (c.planta.especie === 'manzano') {
+          if (planta.especie === 'manzano') {
             ctx.strokeStyle = 'rgba(58,40,24,0.6)';
             ctx.lineWidth = Math.max(1, tam * 0.05);
             ctx.beginPath();
@@ -2394,7 +2413,7 @@ HTML_VISOR = """<!DOCTYPE html>
             ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
             ctx.fill();
 
-            if (c.planta.etapa >= 1.0) {
+            if (planta.etapa >= 1.0) {
               ctx.fillStyle = 'rgba(150,40,32,0.8)';
               for (const [ox, oy] of [[-0.12, -0.08], [0.1, 0.02], [-0.02, 0.14]]) {
                 ctx.beginPath();
@@ -2402,7 +2421,7 @@ HTML_VISOR = """<!DOCTYPE html>
                 ctx.fill();
               }
             }
-          } else if (c.planta.especie === 'hierba_silvestre') {
+          } else if (planta.especie === 'hierba_silvestre') {
             ctx.strokeStyle = `rgba(${r},${g},${b},0.85)`;
             ctx.lineWidth = Math.max(1, tam * 0.06);
             for (const dx of [-0.18, 0, 0.18]) {
@@ -2411,7 +2430,7 @@ HTML_VISOR = """<!DOCTYPE html>
               ctx.quadraticCurveTo(cx + dx * tam * 1.4, cy, cx + dx * tam * 0.6, cy - tam * 0.28 * escala);
               ctx.stroke();
             }
-          } else if (c.planta.especie === 'cactus') {
+          } else if (planta.especie === 'cactus') {
             const ancho = tam * 0.16 * escala, alto = tam * 0.42 * escala;
             ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
             ctx.beginPath();
@@ -2425,6 +2444,7 @@ HTML_VISOR = """<!DOCTYPE html>
             ctx.ellipse(cx, cy + tam * 0.18, tam * 0.3 * escala, tam * 0.14 * escala, 0, 0, Math.PI * 2);
             ctx.fill();
           }
+          });
         }
       }
     }
@@ -2626,6 +2646,11 @@ HTML_VISOR = """<!DOCTYPE html>
       tam0 = canvas.width / data.ancho;
       const tam = tam0;
 
+      if (!camaraCentradaInicial) {
+        centrarCamara();
+        camaraCentradaInicial = true;
+      }
+
       // Modo seguimiento (informe seccion 6.1): la camara persigue a la
       // entidad seleccionada con suavizado exponencial dependiente de dt
       // (antes era un salto de 0.15 fijo por cada tick de red de 250ms --
@@ -2790,13 +2815,12 @@ HTML_VISOR = """<!DOCTYPE html>
       // relieve lo suprime, con por-celda de color lo cubre montanaUsoAssets.
       if (!montanaUsoAssets && !(formaciones && formaciones.relieve)) dibujarRelieve(tam, data, frustum, esMacro);
       dibujarVegetacion(tam, data, frustum);
-      // Circulo 4: a macro el marco es el de codice (reticula de atlas con
-      // coordenadas); a medio/micro, el perimetral clasico sin rejilla.
-      // Circulo 4 v2: a medio/micro, perimetral clasico (espacio de mundo).
-      // A macro, el marco de codice se dibuja DESPUES de restaurar la
-      // transformacion, en espacio de pantalla: trazo y numeros de tamano
-      // constante a cualquier zoom.
-      if (!esMacro) dibujarMarco(tam, data.ancho, data.alto);
+      // (2026-09-04) El marco perimetral de medio/micro (dibujarMarco) se
+      // retira -- Diego, viendo una captura real: no aportaba nada legible
+      // (se leia como una linea/diagonal suelta segun la proyeccion
+      // Caballera, no como un borde de mapa reconocible). El marco de
+      // codice a nivel macro (dibujarMarcoCodice, mas abajo) no se toca --
+      // pregunta distinta, sin objecion.
 
       ctx.restore();
 
@@ -3113,15 +3137,23 @@ def construir_instantanea(
     # existe (solo superficie) deje de mentir cuando hay contenido bajo
     # tierra -- un selector de zona real sigue siendo trabajo de
     # presentacion aparte, no resuelto aqui.
-    plantas_por_celda: dict[tuple[int, int], dict[str, Any]] = {}
+    # LISTA por celda, no un unico dict: desde "cupo de espacio compartido
+    # por celda" (2026-09-03) una especie de cobertura (hierba_silvestre,
+    # flor_silvestre, liquen, musgo...) puede cohabitar la misma celda con
+    # una especie competidora (arbol/arbusto) -- con una clave (x,y) que
+    # sobrescribia en vez de acumular, la cobertura quedaba silenciosamente
+    # tapada por la ultima planta insertada. Bug real, no solo de esta
+    # vista: confirmado contra el motor (semilla 42) que 101 celdas tenian
+    # una especie de cobertura oculta de esta forma.
+    plantas_por_celda: dict[tuple[int, int], list[dict[str, Any]]] = {}
     for pid in sorted(gestor.entidades_con(Planta, Posicion)):
         planta = gestor.obtener_componente(pid, Planta)
         pos_p = gestor.obtener_componente(pid, Posicion)
         if planta and pos_p and pos_p.zona_idx == 0:
-            plantas_por_celda[(pos_p.x, pos_p.y)] = {
+            plantas_por_celda.setdefault((pos_p.x, pos_p.y), []).append({
                 "especie": planta.especie,
                 "etapa": round(planta.etapa, 3),
-            }
+            })
 
     ticks_por_anio = Reloj.TICKS_POR_DIA * Reloj.DIAS_POR_ESTACION * Reloj.ESTACIONES_POR_ANIO
 
@@ -3257,7 +3289,7 @@ def construir_instantanea(
                     "en_llamas": c.en_llamas,
                     "fertilidad": round(c.fertilidad, 3),
                     "recursos": {k: round(v, 2) for k, v in c.recursos.items()},
-                    "planta": plantas_por_celda.get((x, y)),
+                    "plantas": plantas_por_celda.get((x, y), []),
                 }
             )
         celdas_data.append(fila)
