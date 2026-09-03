@@ -309,8 +309,24 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     if [ $AGENTE_EXIT_CODE -ne 0 ]; then
         echo "[ERROR DE INFRAESTRUCTURA] Fallo del proxy o de mini-swe-agent (Código $AGENTE_EXIT_CODE)."
         mv "docs/plans/in_progress/$PLAN_NAME.md" "docs/plans/failed/$PLAN_NAME.md"
-        git checkout master || git checkout main
-        git branch -D "$BRANCH"
+        # NO borrar la rama si ya tiene trabajo real comiteado (2026-09-03,
+        # incidente real: un límite diario de la API de OpenRouter -- fallo
+        # de infraestructura EXTERNA, no del código -- hizo que este mismo
+        # bloque borrara con `git branch -D` un commit de seguridad con 864
+        # líneas de implementación real, tres veces seguidas, porque el
+        # centinela reintentaba sin pausa contra un límite que no se
+        # resetea hasta el día siguiente. PLAN_START_COMMIT es el commit
+        # justo después de "chore: iniciar plan" -- si HEAD sigue siendo
+        # ese mismo commit, no hay nada que perder y se borra como antes;
+        # si HEAD avanzó (el agente o el commit de seguridad añadieron
+        # algo), la rama se conserva para revisión manual.
+        if [ "$(git rev-parse HEAD)" = "$PLAN_START_COMMIT" ]; then
+            git checkout master || git checkout main
+            git branch -D "$BRANCH"
+        else
+            echo "[AVISO] La rama '$BRANCH' tiene trabajo real comiteado -- NO se borra. Revisar manualmente antes de reintentar este encargo."
+            git checkout master || git checkout main
+        fi
         exit 2
     fi
 
