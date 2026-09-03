@@ -13,15 +13,22 @@ from dataclasses import dataclass, field
 class Inventario:
     """
     Materiales que una criatura carga consigo -- ver nucleo/inventario.py.
-    Mismo patrón que Necromasa.masas/Celda.recursos: diccionario de
-    cantidades, no un slot por material.
 
     Atributos:
         contenidos: {clave_material: cantidad_kg}, cualquier clave del
-            catálogo de config/materiales.yaml. Sin límite de VARIEDAD --
-            solo el peso total importa. El límite de PESO se calcula
-            aparte (nucleo/inventario.py:capacidad_carga_kg) a partir de
+            catálogo de config/materiales.yaml. Masa a GRANEL, pensada para
+            construcción donde un puñado concreto no importa (arcilla,
+            tierra...). Sin límite de VARIEDAD -- solo el peso total importa.
+            El límite de PESO se calcula aparte
+            (nucleo/inventario.py:capacidad_carga_kg) a partir de
             DimensionesFisicas.peso propio, no se guarda aquí.
+        objetos: list[str], material NO fungible que la criatura porta como
+            objeto físico completo -- un palo entero, una piedra entera, o un
+            arma ya fabricada (mismo patrón de dato puro que
+            Agarre.objetos). Cada entrada tiene su propio peso
+            (config/materiales.yaml:peso_objeto_kg) que cuenta hacia la MISMA
+            capacidad de carga por peso que contenidos, no un límite de
+            "número de objetos" aparte.
 
     Se añade a TODA criatura por igual (mismo criterio que Necesidades/
     DimensionesFisicas/Temperamento -- componentes que ya existen en
@@ -32,11 +39,7 @@ class Inventario:
     ya filtra el sesgo de territorio en sistema_movimiento.py) -- hoy eso
     significa en la práctica solo gnomo, pero la regla es sobre consciencia,
     no sobre especie (leyes neutras, no guiones).
-
-    Sin ninguna acción que lo llene todavía -- declarado con intención,
-    mismo criterio que tipo_agua/madera/fibra/deposito_mineral cuando se
-    introdujeron sin consumidor. La acción de recolección/extracción que
-    de verdad lo usa es un círculo aparte, no resuelto en esta pieza.
     """
 
     contenidos: dict[str, float] = field(default_factory=dict)
+    objetos: list[str] = field(default_factory=list)

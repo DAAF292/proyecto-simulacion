@@ -26,6 +26,13 @@ from componentes.necromasa import Necromasa
 from componentes.posicion import Posicion
 from componentes.semillas import Semillas
 from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
+from nucleo.armas import (
+    celda_ofrece_material_arma,
+    mayor_nivel_arma,
+    mejor_receta_completable,
+    recolectar_material_arma_de_celda,
+    tiene_arma_nivel2_o_mas,
+)
 from nucleo.celda import Celda
 from nucleo.construccion import (
     masa_minima_para,
@@ -159,6 +166,14 @@ class SistemaRecursos:
             self.config.get("flora", {}).get("probabilidad_plantar_semilla_en_aliviarse", 0.5)
         )
 
+        # Armas primitivas v2 (2026-09-03, ver config/armas.yaml): recetas y
+        # efectos por nivel, y el peso de cada objeto discreto (tambien
+        # piedra_suelta, que viaja de Agarre a Inventario al encenderse la
+        # fogata).
+        self.config_armas: dict[str, Any] = self.config.get("armas", {})
+        self.recetas_armas: list[dict[str, Any]] = self.config_armas.get("recetas", [])
+        self.peso_objeto_kg: dict[str, float] = self.config.get("peso_objeto_kg", {})
+
     def ejecutar(
         self,
         gestor: GestorEntidades,
@@ -213,10 +228,23 @@ class SistemaRecursos:
                 consciente = (
                     cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia
                 )
-                self._resolver_recolectar(inv, dims, celda, agarre, ident.especie.value, consciente)
+                self._resolver_recolectar(
+                    inv, dims, celda, agarre, ident.especie.value, consciente,
+                    recolectar_arma=intencion.recolectar_motivo_arma,
+                )
             elif intencion.accion == Accion.ENCENDER_FUEGO:
+                inv_fuego = gestor.obtener_componente(eid, Inventario)
+                agarre_fuego = gestor.obtener_componente(eid, Agarre)
                 self._resolver_encender_fuego(
-                    gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual
+                    gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
+                    inv_fuego, agarre_fuego,
+                )
+            elif intencion.accion == Accion.FABRICAR_ARMA:
+                inv = gestor.obtener_componente(eid, Inventario)
+                agarre_fabricar = gestor.obtener_componente(eid, Agarre)
+                self._resolver_fabricar_arma(
+                    gestor, eid, inv, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
+                    agarre=agarre_fabricar,
                 )
 
         # Fogatas: consumo de combustible propio y extincion (ver
@@ -403,6 +431,7 @@ class SistemaRecursos:
         agarre: Agarre | None = None,
         especie: str | None = None,
         consciente: bool = False,
+        recolectar_arma: bool = False,
     ) -> None:
         """
         RECOLECTAR (ver componentes/intencion.py y nucleo/construccion.py).
@@ -414,33 +443,48 @@ class SistemaRecursos:
         se resuelve donde ya se está, el sustrato está bajo los pies de
         cualquiera.
 
-        AGARRE, DOS MECANISMOS DISTINTOS (ver componentes/agarre.py y
-        config/fuego.yaml para el porqué de la separación):
+        AGARRE / OBJETOS ARMA, DOS MECANISMOS CON CAUSA (ver
+        componentes/agarre.py, config/fuego.yaml y config/armas.yaml):
 
-        1. PIEDRA_SUELTA CON CAUSA: un individuo CONSCIENTE que todavía
-           no tiene sus piedras_necesarias_fuego (sistema_decision.py ya
-           elevó la utilidad de RECOLECTAR heredando el valor de
-           ENCENDER_FUEGO -- nunca una razón propia) intenta agarrar
-           piedra_suelta ESPECÍFICAMENTE, si la celda actual la tiene. Un
-           individuo que jamás ha necesitado fuego (confort_termico
-           siempre alto) nunca llega a esta rama con utilidad real, así
-           que nunca desarrolla interés en buscar piedra tampoco.
-        2. AGARRE GENÉRICO, sin causa concreta ("un palo para defenderse,
-           o una roca"): si queda algún punto de agarre libre tras lo
-           anterior, se llena con el mismo material que ya sería
-           elegible para recolectar (flora > sustrato, mismo orden que
-           abajo, salvo mineral -- minar una veta es un acto deliberado y
-           con coste real). piedra_suelta queda fuera de este segundo
-           mecanismo a propósito (no está en el catálogo de materiales,
-           así que apto_construccion la excluye sin necesidad de una
-           comprobación aparte) -- solo se agarra por la vía 1, con
-           causa.
+        1. PIEDRA_SUELTA CON CAUSA (fuego): un individuo CONSCIENTE que
+           todavía no tiene sus piedras_necesarias_fuego
+           (sistema_decision.py ya elevó la utilidad de RECOLECTAR
+           heredando el valor de ENCENDER_FUEGO -- nunca una razón propia)
+           intenta agarrar piedra_suelta ESPECÍFICAMENTE, si la celda
+           actual la tiene. Un individuo que jamás ha necesitado fuego
+           (confort_termico siempre alto) nunca llega a esta rama con
+           utilidad real, así que nunca desarrolla interés en buscar
+           piedra tampoco.
 
-        Ambos deliberadamente GRATUITOS y simbólicos: no descuentan nada
-        del Inventario, la capacidad de carga ni el recurso de la celda
-        (ni piedra_suelta ni un palo de flora se agotan por agarrar una
-        unidad). Si se llena un punto de agarre este tick, se corta aquí
-        -- no compite con la recolección normal en el mismo tick.
+        2. MATERIAL ARMA CON CAUSA (armas primitivas v2): mientras el
+           individuo no tenga NINGÚN arma de nivel ≥2 fabricada (ni en
+           Inventario ni en Agarre), sistema_decision.py eleva la utilidad
+           de RECOLECTAR heredando el valor de FABRICAR_ARMA
+           (1.0 - seguridad) cuando la celda actual ofrece un recurso
+           apto_arma. La resolución SOLO recoge ese material (como OBJETO
+           DISCRETO a Inventario.objetos -- un palo entero, una piedra
+           entera, topado por la capacidad de carga por peso) cuando ese
+           eslabón fue el MOTIVO del RECOLECTAR de este tick, marcado por
+           sistema_decision.py en Intencion.recolectar_motivo_arma (el
+           parámetro recolectar_arma de este método) -- nunca un RECOLECTAR
+           elegido por construcción. piedra_suelta como fuente del
+           material "piedra": las recetas hablan de "piedra", no de
+           "piedra_suelta", que es un recurso del suelo, no un material
+           del catálogo.
+
+        La "Vía 2" original de este método (agarre genérico sin causa, un
+        palo o una roca "porque se lo encuentra") se retiró por completo
+        en armas primitivas v2 -- violaba el principio 5 del proyecto
+        (leyes neutras, nunca teleológicas): ninguna acción debería
+        ocurrir sin un motivo real que la desencadene. El único bonus
+        defensivo por objeto crudo pasa a depender de la decisión causal
+        de empuñar (sistema_decision.py), no de agarrar cualquier cosa
+        del suelo sin motivo.
+
+        Ambos mecanismos deliberadamente GRATUITOS y simbólicos: no
+        descuentan nada del recurso de la celda (ni piedra_suelta ni un
+        palo de flora se agotan por recoger una unidad). El material de
+        arma se recoge como objeto discreto de peso propio, no a granel.
 
         MADERA/FIBRA/HIERBA_SECA: sistema_flora.py ya deposita estos
         materiales en Celda.recursos con el MISMO mecanismo de
@@ -471,9 +515,9 @@ class SistemaRecursos:
         if inv is None or dims is None:
             return
 
-        # Vía 1: piedra_suelta CON CAUSA -- ver docstring arriba. Solo
-        # conscientes, solo si todavía faltan piedras para fuego, solo si
-        # queda algún punto de agarre libre en total, solo si la celda
+        # Vía 1: piedra_suelta CON CAUSA (fuego) -- ver docstring arriba.
+        # Solo conscientes, solo si todavía faltan piedras para fuego, solo
+        # si queda algún punto de agarre libre en total, solo si la celda
         # actual tiene piedra_suelta.
         if consciente and agarre is not None and especie is not None:
             puntos_agarre_total = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
@@ -486,26 +530,38 @@ class SistemaRecursos:
                 agarre.objetos.append("piedra_suelta")
                 return
 
-        # Vía 2: agarre genérico, sin causa concreta -- diseño original.
-        if agarre is not None and especie is not None:
-            puntos_agarre = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
-            if len(agarre.objetos) < puntos_agarre:
-                for nombre, cantidad_disponible in celda.recursos.items():
-                    if cantidad_disponible <= 0.0:
-                        continue
-                    info = self.catalogo_materiales.get(nombre, {})
-                    if not info.get("apto_construccion", False):
-                        continue
-                    agarre.objetos.append(nombre)
-                    return
-                material_sustrato = celda.tipo_sustrato
-                if material_sustrato:
-                    info = self.catalogo_materiales.get(material_sustrato, {})
-                    if info.get("apto_construccion", False):
-                        agarre.objetos.append(material_sustrato)
+        # Vía 2: material apto_arma CON CAUSA (armas primitivas v2) -- ver
+        # docstring arriba. Mismo eslabón heredado que ENCENDER_FUEGO:
+        # sistema_decision.py eleva la utilidad de RECOLECTAR con el valor
+        # de FABRICAR_ARMA (1.0 - seguridad) mientras no tenga arma de
+        # nivel ≥2 y la celda ofrezca material apto_arma -- y solo cuando
+        # ese eslabón fue el MOTIVO del RECOLECTAR elegido (marcado en
+        # Intencion.recolectar_motivo_arma) se recoge material de arma.
+        # Un RECOLECTAR motivado por construccion nunca carga un palo
+        # "porque se lo encuentra": el crudo para fabricar vive en
+        # Inventario, mismo patrón causal que CONSTRUIR.
+        if recolectar_arma:
+            objetos_totales = list(inv.objetos)
+            if agarre is not None:
+                objetos_totales.extend(agarre.objetos)
+            if (
+                not tiene_arma_nivel2_o_mas(objetos_totales, self.catalogo_materiales, self.recetas_armas)
+                and celda_ofrece_material_arma(celda, self.catalogo_materiales)
+            ):
+                material = recolectar_material_arma_de_celda(celda, self.catalogo_materiales)
+                if material is not None:
+                    peso_objeto = float(self.peso_objeto_kg.get(material, 0.0))
+                    espacio = espacio_disponible_kg(
+                        inv.contenidos, dims.peso, self.fraccion_carga_maxima,
+                        inv.objetos, self.peso_objeto_kg,
+                    )
+                    if espacio >= peso_objeto:
+                        inv.objetos.append(material)
                         return
 
-        espacio = espacio_disponible_kg(inv.contenidos, dims.peso, self.fraccion_carga_maxima)
+        espacio = espacio_disponible_kg(
+            inv.contenidos, dims.peso, self.fraccion_carga_maxima, inv.objetos, self.peso_objeto_kg
+        )
         if espacio <= 0.0:
             return
 
@@ -548,6 +604,8 @@ class SistemaRecursos:
         zona_idx: int,
         bus_eventos: BusEventos,
         tick_actual: int,
+        inv: Inventario | None = None,
+        agarre: Agarre | None = None,
     ) -> None:
         """
         ENCENDER_FUEGO (ver componentes/agarre.py, componentes/fogata.py,
@@ -558,10 +616,16 @@ class SistemaRecursos:
         se crea la Fogata. Sin desplazamiento, igual que
         RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
 
-        Las PIEDRAS del Agarre NO se tocan aquí -- son herramientas, se
-        quedan sujetas (percusión repetida, no combustión). Solo se
-        consume yesca de Celda.recursos -- mismo catálogo apto_construccion
-        + combustibilidad que ya usa RECOLECTAR para material de flora.
+        Solo se consume yesca de Celda.recursos -- mismo catálogo
+        apto_construccion + combustibilidad que ya usa RECOLECTAR para
+        material de flora. En cuanto la fogata se enciende con éxito, las
+        piedras de percusión dejan de ser necesarias en la mano y vuelven
+        a Inventario.objetos como objeto discreto (armas primitivas v2:
+        nada debe quedarse fijo en Agarre para siempre -- sin lógica de
+        arma especial en el reflejo empuñar/guardar, porque un individuo
+        seguro pero con frío soltaría las piedras antes de poder
+        acumularlas: la liberación ocurre aquí, al completarse la causa
+        real que las tenía sujetas).
         """
         if self.rng.random() >= self.probabilidad_encender_fuego:
             return  # golpear piedra contra piedra no siempre prende
@@ -574,6 +638,12 @@ class SistemaRecursos:
                 continue
             consumido = min(self.masa_yesca_consumida, cantidad_disponible)
             celda.recursos[nombre] = cantidad_disponible - consumido
+            if inv is not None and agarre is not None:
+                while agarre.objetos.count("piedra_suelta") > 0 and len([
+                    o for o in inv.objetos if o == "piedra_suelta"
+                ]) < self.piedras_necesarias_fuego:
+                    agarre.objetos.remove("piedra_suelta")
+                    inv.objetos.append("piedra_suelta")
             fid = crear_fogata(gestor, pos_x, pos_y, self.combustible_inicial_fogata, zona_idx=zona_idx)
             bus_eventos.emitir(
                 Evento(
@@ -585,6 +655,70 @@ class SistemaRecursos:
                 )
             )
             return
+
+    def _resolver_fabricar_arma(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        inv: Inventario | None,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+        bus_eventos: BusEventos,
+        tick_actual: int,
+        agarre: Agarre | None = None,
+    ) -> None:
+        """
+        FABRICAR_ARMA (ver componentes/intencion.py y config/armas.yaml).
+        sistema_decision.py ya comprobó las precondiciones (consciente,
+        sin arma de nivel >=2 fabricada, con material apto_arma en crudo
+        entre lo que ya se porta) antes de elegir esta Accion. Aquí se
+        resuelve de forma determinista (tallar no es un suceso de azar, a
+        diferencia de encender fuego): busca la mejor receta completable
+        AHORA con lo que ya se porta (prioriza el nivel más alto
+        alcanzable con el material disponible en este instante -- no
+        espera a conseguir un material mejor, reacciona al presente,
+        coherente con que el resto de la Utility AI no planifica a
+        futuro), consume los materiales crudos de esa receta, añade el
+        nombre del arma resultante a Inventario.objetos y emite un Evento
+        ArmaFabricada (NOTABLE). Sin desplazamiento, igual que
+        RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
+
+        Los materiales se buscan en Inventario.objetos Y en Agarre.objetos
+        (lo que la criatura tiene en la mano es tan suyo como lo que lleva
+        en el inventario): el reflejo empunyar/guardar de sistema_decision.py
+        ya pudo haber movido el crudo a Agarre este mismo tick por inseguridad,
+        y sin mirar ambas fuentes una criatura asustada que empuña el único
+        palo que tiene nunca llegaria a fabricar -- se quedaria en un ciclo
+        de recolectar/huir sin cerrar el circulo (hallazgo real, ver
+        tests/test_armas_primitivas_v2.py). El arma resultante siempre
+        nace en Inventario.objetos.
+        """
+        if inv is None:
+            return
+        objetos_portados = list(inv.objetos)
+        if agarre is not None:
+            objetos_portados.extend(agarre.objetos)
+        receta = mejor_receta_completable(objetos_portados, self.recetas_armas)
+        if receta is None:
+            return
+        for material in receta.get("materiales", []):
+            if material in inv.objetos:
+                inv.objetos.remove(material)
+            elif agarre is not None and material in agarre.objetos:
+                agarre.objetos.remove(material)
+        arma = str(receta.get("nombre", ""))
+        nivel = int(receta.get("nivel", 0))
+        inv.objetos.append(arma)
+        bus_eventos.emitir(
+            Evento(
+                tipo="ArmaFabricada",
+                severidad=Severidad.NOTABLE,
+                tick=tick_actual,
+                entidad_id=entidad_id,
+                datos={"x": pos_x, "y": pos_y, "zona_idx": zona_idx, "arma": arma, "nivel": nivel},
+            )
+        )
 
     def _consumir_fogatas(self, gestor: GestorEntidades) -> None:
         """Cada Fogata existente quema su propio combustible cada tick,

@@ -203,6 +203,13 @@ from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.asentamiento import disposicion_a_aportar
+from nucleo.amenaza import posicion_amenaza_mas_cercana
+from nucleo.armas import (
+    celda_ofrece_material_arma,
+    mejor_objeto_para_empunar,
+    nivel_arma,
+    tiene_arma_nivel2_o_mas,
+)
 from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.construccion import (
     masa_apta_construccion,
@@ -212,6 +219,7 @@ from nucleo.construccion import (
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.inventario import espacio_disponible_kg
+from nucleo.percepcion import radio_individual
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
 
@@ -326,6 +334,53 @@ def _compromiso_construir_mantiene(
     return True
 
 
+def _ajustar_empunadura(
+    gestor,
+    id_entidad: int,
+    deseo_empunar: bool,
+    puntos_agarre: int,
+    catalogo_materiales: dict,
+    recetas_armas: list,
+) -> None:
+    """Reflejo empunyar/guardar (armas primitivas v2, ver
+    componentes/agarre.py, componentes/inventario.py y config/armas.yaml).
+    Cada tick decide que de Inventario.objetos pasa a Agarre.objetos (y
+    que vuelve de Agarre a Inventario), sin competir por turno en el
+    argmax de la Utility AI.
+
+    Si deseo_empunar es verdadero y hay algo empunable en Inventario (el
+    arma fabricada si existe, o si no el mejor material crudo apto_arma
+    disponible), se mueve a Agarre, respetando puntos_agarre como tope de
+    cuantas cosas distintas puede tener en la mano a la vez. Si es falso,
+    cualquier objeto apto_arma/arma que este en Agarre se guarda de vuelta
+    a Inventario -- Agarrea deja de ser un registro que solo crece y pasa
+    a ser un subconjunto decidido y reversible de Inventario.objetos.
+
+    piedra_suelta (la piedra de percusion del fuego) NO entra en este
+    reflejo: no es un arma, y moverla cada tick romperia el ciclo causal
+    frio -> recoger piedras -> encender fuego (un individuo seguro pero
+    con frio soltaria las piedras antes de poder acumular dos). Se libera
+    a Inventario en _resolver_encender_fuego cuando la fogata se enciende.
+    """
+    agarre = gestor.obtener_componente(id_entidad, Agarre)
+    inv = gestor.obtener_componente(id_entidad, Inventario)
+    if agarre is None or inv is None:
+        return
+
+    if deseo_empunar:
+        while len(agarre.objetos) < puntos_agarre:
+            mejor = mejor_objeto_para_empunar(inv.objetos, catalogo_materiales, recetas_armas)
+            if mejor is None:
+                break
+            inv.objetos.remove(mejor)
+            agarre.objetos.append(mejor)
+    else:
+        for obj in list(agarre.objetos):
+            if nivel_arma(obj, catalogo_materiales, recetas_armas) > 0:
+                agarre.objetos.remove(obj)
+                inv.objetos.append(obj)
+
+
 def _tipo_crisis(temperamento: Temperamento, config_crisis: dict) -> Accion:
     if temperamento.valentia < config_crisis["umbral_valentia_huida_erratica"]:
         return Accion.HUIDA_ERRATICA
@@ -372,6 +427,24 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
     catalogo_materiales = config.get("materiales", {})
     config_construccion = config.get("construccion", {})
     fraccion_carga_maxima = float(config.get("inventario", {}).get("fraccion_carga_maxima", 0.25))
+    # Armas primitivas v2 (2026-09-03, ver config/armas.yaml): recetas y
+    # umbrales del reflejo empunyar/guardar, y el peso de cada objeto
+    # discreto (para la capacidad de carga compartida).
+    config_armas = config.get("armas", {})
+    recetas_armas = config_armas.get("recetas", [])
+    umbral_base_empunar = float(config_armas.get("umbral_base_empunar", 0.5))
+    margen_valentia_empunar = float(config_armas.get("margen_valentia_empunar", 0.3))
+    peso_objeto_kg = config.get("peso_objeto_kg", {})
+    # Percepcion para el reflejo empunyar/guardar: reutiliza la MISMA señal
+    # de amenaza que ya usa HUIR (posicion_amenaza_mas_cercana) con el
+    # mismo radio por agudeza sensorial y el mismo umbral de disposicion
+    # -- no una etiqueta de zona ("fuera del asentamiento = se arma").
+    cfg_per_emp = config.get("percepcion", {})
+    radio_min_empunar = int(cfg_per_emp.get("radio_minimo_celdas", 0))
+    radio_max_empunar = int(cfg_per_emp.get("radio_maximo_celdas", 4))
+    umbral_disposicion_amenaza = float(
+        config.get("depredacion", {}).get("umbral_disposicion_caza", 0.5)
+    )
     # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/fogata.py y
     # nucleo/fuego.py).
     piedras_necesarias_fuego = int(config.get("fuego", {}).get("piedras_necesarias", 2))
@@ -414,6 +487,10 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         dims = gestor.obtener_componente(id_entidad, DimensionesFisicas)
         pos = gestor.obtener_componente(id_entidad, Posicion)
         agotado = pool.resistencia <= 0.0
+        # Transitorio por tick: el motivo del RECOLECTAR de ESTE tick se
+        # recalcula aqui (armas primitivas v2) -- nunca puede arrastrarse
+        # de un tick anterior.
+        intencion.recolectar_motivo_arma = False
 
         if pool_mental.estabilidad <= umbral_crisis:
             accion_previa = intencion.accion
@@ -551,6 +628,55 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
                 ):
                     utilidad_encender_fuego = 1.0 - necesidades.confort_termico
 
+        # FABRICAR_ARMA (armas primitivas v2, ver componentes/intencion.py,
+        # config/armas.yaml y nucleo/armas.py). Misma compuerta de
+        # consciencia que CONSTRUIR/RECOLECTAR. Utilidad = 1.0 - seguridad
+        # (responde a una necesidad real de defensa, mismo patron causal
+        # que ENCENDER_FUEGO con el frio -- un individuo que nunca ha
+        # sentido inseguridad real nunca desarrolla interes en tallar un
+        # palo). Gateada a 0.0 si ya hay un arma de nivel >=2 fabricada
+        # (el gate se cierra para siempre en este circulo) o si todavia
+        # no hay material apto_arma en crudo en Inventario.objetos.
+        #
+        # Recoger material apto_arma para fabricar NO es una utilidad
+        # independiente que lea seguridad por su cuenta -- eso seria una
+        # regla de "recoge palos porque si" aunque el individuo jamas haya
+        # sentido inseguridad real (misma correccion causal que
+        # piedra_suelta para el fuego). La utilidad de RECOLECTAR hereda
+        # el valor que FABRICAR_ARMA tendria SI YA tuviera el material en
+        # bruto -- solo cuando la celda actual ofrece un recurso apto_arma.
+        utilidad_fabricar_arma = 0.0
+        # True si el eslabon heredado de material de arma es el motivo que
+        # ELEVA la utilidad de RECOLECTAR en este tick (1.0 - seguridad
+        # supera la utilidad que RECOLECTAR ya tuviera por construccion) --
+        # se vuelca a Intencion.recolectar_motivo_arma si ademas RECOLECTAR
+        # acaba ganando el argmax (armas primitivas v2).
+        recolectar_con_motivo_arma = False
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            objetos_totales = list(inventario.objetos)
+            if agarre is not None:
+                objetos_totales.extend(agarre.objetos)
+            sin_arma_n2 = not tiene_arma_nivel2_o_mas(
+                objetos_totales, catalogo_materiales, recetas_armas
+            )
+            if sin_arma_n2:
+                tiene_material_crudo = any(
+                    nivel_arma(obj, catalogo_materiales, recetas_armas) == 1
+                    for obj in objetos_totales
+                )
+                if tiene_material_crudo:
+                    utilidad_fabricar_arma = 1.0 - necesidades.seguridad
+                zona_arma = mundo.territorio.zonas[pos.zona_idx]
+                celda_arma = zona_arma.obtener_celda(pos.x, pos.y)
+                if celda_ofrece_material_arma(celda_arma, catalogo_materiales):
+                    utilidad_recolectar_sin_arma = utilidad_recolectar
+                    recolectar_con_motivo_arma = (
+                        1.0 - necesidades.seguridad
+                    ) > utilidad_recolectar_sin_arma
+                    utilidad_recolectar = max(
+                        utilidad_recolectar, 1.0 - necesidades.seguridad
+                    )
+
         candidatas = (
             (utilidad_huir, Accion.HUIR),
             (utilidad_alimentarse, accion_alimentarse),
@@ -558,6 +684,23 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             (1.0 - necesidades.energia, Accion.DORMIR),
             (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
             (utilidad_buscar_pareja, Accion.BUSCAR_PAREJA),
+            # CUIDADO con el orden (hallazgo real ya documentado con HUIR
+            # en la implementacion anterior): FABRICAR_ARMA y HUIR
+            # comparten literalmente la formula 1.0 - seguridad, y max()
+            # conserva el primer maximo en un empate. HUIR es la primera
+            # candidata a proposito -- huir de una amenaza real antecede a
+            # tallar un arma; FABRICAR_ARMA se coloca DESPUES de HUIR para
+            # que un empate resuelva a favor de HUIR.
+            #
+            # FABRICAR_ARMA va ANTES de RECOLECTAR por el mismo motivo:
+            # RECOLECTAR tambien hereda 1.0 - seguridad cuando la celda
+            # ofrece material apto_arma, y si ya se porta crudo un empate
+            # debe resolver a favor de tallar (se recolecta hasta tener lo
+            # necesario, se consume al completar -- no se acumulan palos
+            # sin fin). Con el crudo en la mano (reflejo empunyar) la
+            # criatura sigue pudiendo fabricar: _resolver_fabricar_arma
+            # consume de Inventario y Agarre.
+            (utilidad_fabricar_arma, Accion.FABRICAR_ARMA),
             (utilidad_recolectar, Accion.RECOLECTAR),
             (utilidad_construir, Accion.CONSTRUIR),
             (utilidad_encender_fuego, Accion.ENCENDER_FUEGO),
@@ -597,3 +740,40 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             )
         if not mantiene:
             intencion.accion = elegida
+        # Vuelca a Intencion la causalidad del RECOLECTAR (armas
+        # primitivas v2): solo se recolecta material de arma a
+        # Inventario.objetos cuando RECOLECTAR se eligio por el eslabon
+        # heredado de FABRICAR_ARMA (celda con apto_arma y deficit real
+        # de seguridad), nunca cuando fue por construccion o deambular --
+        # un individuo con seguridad siempre alta no desarrolla interes
+        # en cargar un palo.
+        intencion.recolectar_motivo_arma = (
+            intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_arma
+        )
+
+        # Empunyar/guardar (armas primitivas v2, ver config/armas.yaml):
+        # ajuste automatico recalculado cada tick junto a la Accion
+        # elegida, no una Accion que compite por turno en el argmax. La
+        # decision es una formula continua, no una regla de zona:
+        # amenaza real presente, o un deficit de seguridad que supera el
+        # umbral individual (modulado por Temperamento.valentia -- el
+        # primer consumidor real de ese rasgo).
+        zona_emp = mundo.territorio.zonas[pos.zona_idx]
+        radio_amenaza_emp = radio_individual(
+            dims.agudeza_sensorial, radio_min_empunar, radio_max_empunar
+        )
+        amenaza_ahora = posicion_amenaza_mas_cercana(
+            gestor, zona_emp, id_entidad, pos.x, pos.y, radio_amenaza_emp,
+            dims.peso, umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
+        ) is not None
+        deseo_empunar = amenaza_ahora or (
+            (1.0 - necesidades.seguridad)
+            > (umbral_base_empunar + temperamento.valentia * margen_valentia_empunar)
+        )
+        puntos_agarre = int(
+            rangos_raciales.get(identidad.especie.value, {}).get("puntos_agarre", 0)
+        )
+        _ajustar_empunadura(
+            gestor, id_entidad, deseo_empunar, puntos_agarre,
+            catalogo_materiales, recetas_armas,
+        )

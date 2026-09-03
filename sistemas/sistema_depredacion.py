@@ -27,6 +27,7 @@ from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposi
 # (magnitud_disposicion_por_tamano) para no reescribir las llamadas de
 # abajo, sin cambiar ningún comportamiento.
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
+from nucleo.armas import bono_defensivo_arma, mayor_nivel_arma
 from nucleo.eventos import BusEventos, Evento, Severidad
 
 
@@ -49,10 +50,15 @@ class SistemaDepredacion:
         self.factor_agresividad_resistencia: float = float(
             cfg_dep.get("factor_agresividad_resistencia", 0.2)
         )
-        # Ver componentes/agarre.py.
-        self.reduccion_prob_captura_por_agarre: float = float(
-            cfg_dep.get("reduccion_prob_captura_por_agarre", 0.1)
-        )
+        # Armas primitivas v2 (2026-09-03, ver config/armas.yaml y
+        # nucleo/armas.py): el efecto defensivo de lo que la presa tenga
+        # empunado ya no es binario (reduccion_prob_captura_por_agarre,
+        # retirado) sino efecto_base_por_nivel[nivel] +
+        # efecto_ofensivo_por_nivel[nivel] * agresividad_presa -- escala
+        # con el nivel del arma y con el temperamento del portador.
+        self.config_armas: dict[str, Any] = self.config.get("armas", {})
+        self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
+        self.recetas_armas: list[dict[str, Any]] = self.config_armas.get("recetas", [])
         self.umbral_disposicion_caza: float = float(
             cfg_dep.get("umbral_disposicion_caza", 0.5)
         )
@@ -223,12 +229,20 @@ class SistemaDepredacion:
             )
             prob_exito += bono_grupo
 
-        # Agarre (ver componentes/agarre.py). Binario por ahora: tener
-        # algo sujeto reduce la probabilidad de captura, sin escalar por
-        # cuántos puntos de agarre estén llenos ni por qué material sea
-        # -- primera pasada deliberadamente simple.
-        if agarre_presa is not None and len(agarre_presa.objetos) > 0:
-            prob_exito -= self.reduccion_prob_captura_por_agarre
+        # Arma empunada de la presa (armas primitivas v2, ver
+        # nucleo/armas.py): nivel de lo que la presa tenga en la mano (0
+        # si nada), y el efecto real escala con ese nivel y con la
+        # agresividad de la propia presa -- un individuo poco agresivo
+        # apenas nota el salto ofensivo, pero conserva el obstáculo
+        # fisico base de tener algo en la mano.
+        nivel_arma_presa = mayor_nivel_arma(
+            agarre_presa.objetos if agarre_presa is not None else [],
+            self.catalogo_materiales,
+            self.recetas_armas,
+        )
+        agresividad_presa = temp_presa.agresividad if temp_presa else 0.0
+        if nivel_arma_presa > 0:
+            prob_exito -= bono_defensivo_arma(nivel_arma_presa, agresividad_presa, self.config_armas)
 
         prob_exito = max(self.captura_prob_min, min(self.captura_prob_max, prob_exito))
 

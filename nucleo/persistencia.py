@@ -77,7 +77,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.31-fase0"
+VERSION_ESQUEMA = "0.32-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -489,7 +489,9 @@ class Persistencia:
                             gest.id_padre if gest else None,
                             json.dumps(_serializar_snapshot_padre(gest)) if gest else None,
                             json.dumps(mem.recuerdos) if mem else None,
-                            json.dumps(inv.contenidos) if inv else None,
+                            json.dumps(
+                                {"contenidos": inv.contenidos, "objetos": inv.objetos}
+                            ) if inv else None,
                             pos.zona_idx,
                             json.dumps(agarre.objetos) if agarre else None,
                             semillas.especie_transportada if semillas else None,
@@ -713,14 +715,17 @@ class Persistencia:
                 celda.tiene_recurso = bool(tiene_rec)
                 celda.tipo_recurso = str(tipo_rec)
 
-            # 2. Cargar entidades biológicas. zona_idx es la ÚLTIMA
-            # columna de componentes_estado -- fila[47]. agarre se añadió
-            # DESPUÉS de zona_idx, como fila[48] -- desplaza en +1 los
-            # índices e.especie..e.id_padre de más abajo (fila[49]..
-            # fila[53]); semillas se añadió después de agarre, como
-            # fila[49], y desplaza en +1 esos índices una vez más
-            # (fila[50]..fila[54]). Ninguno de los índices anteriores
-            # (0..47, incluida la instantánea de gestación) cambia.
+            # 2. Cargar entidades biológicas. zona_idx es la columna
+            # fila[47]; agarre se añadió DESPUÉS de zona_idx, como
+            # fila[48] -- desplaza en +1 los índices e.especie..e.id_padre
+            # de más abajo (fila[49]..fila[53]); semillas se añadió
+            # después de agarre, como fila[49], y desplaza en +1 esos
+            # índices una vez más (fila[50]..fila[54]). La columna
+            # inventario (fila[46]) guarda un JSON único con
+            # {"contenidos": ..., "objetos": ...} desde armas primitivas v2
+            # (2026-09-03) -- ver carga de Inventario más abajo. Ninguno
+            # de los índices anteriores (0..46, incluida la instantánea
+            # de gestación) cambia.
             cur.execute(
                 """
                 SELECT c.*, e.especie, e.nombre, e.tick_nacimiento, e.id_madre, e.id_padre
@@ -801,7 +806,12 @@ class Persistencia:
                 recuerdos_dict = json.loads(fila[45]) if fila[45] else {}
                 gestor.anadir_componente(eid, MemoriaEspacial(recuerdos=recuerdos_dict))
                 inventario_dict = json.loads(fila[46]) if fila[46] else {}
-                gestor.anadir_componente(eid, Inventario(contenidos=inventario_dict))
+                inventario_objetos = inventario_dict.get("objetos", []) if isinstance(inventario_dict, dict) else []
+                contenidos = inventario_dict.get("contenidos", {}) if isinstance(inventario_dict, dict) else inventario_dict
+                gestor.anadir_componente(
+                    eid,
+                    Inventario(contenidos=contenidos, objetos=list(inventario_objetos)),
+                )
                 agarre_lista = json.loads(fila[48]) if fila[48] else []
                 gestor.anadir_componente(eid, Agarre(objetos=agarre_lista))
                 semillas_valor = fila[49] if fila[49] else ""

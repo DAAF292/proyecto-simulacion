@@ -49,6 +49,16 @@ class Accion(Enum):
     # ahí. Sin desplazamiento (como RECOLECTAR/ALIVIARSE) -- se resuelve
     # donde ya se esté.
     ENCENDER_FUEGO = "encender_fuego"
+    # FABRICAR_ARMA: exclusiva de quien supera
+    # decision.umbral_consciencia_agencia (gnomo hoy) -- fabricar un arma
+    # es agencia consciente, no instinto. Gateada por necesidad real
+    # (Necesidades.seguridad, mismo patron causal que ENCENDER_FUEGO con
+    # el frio): un individuo que nunca ha sentido inseguridad real nunca
+    # desarrolla interes en tallar un palo. Se resuelve donde se esta, sin
+    # desplazamiento propio (como RECOLECTAR/ALIVIARSE) -- consume
+    # materiales crudos apto_arma de Inventario.objetos y produce un arma
+    # de nivel >= 2 (ver config/armas.yaml:recetas) en Inventario.objetos.
+    FABRICAR_ARMA = "fabricar_arma"
     # Crisis mental: anulan la Utility AI normal mientras
     # PoolMental.estabilidad esté en crisis -- ver sistema_decision.py
     # para el disparador y sistema_movimiento.py para la resolución de
@@ -62,3 +72,12 @@ class Accion(Enum):
 @dataclass
 class Intencion:
     accion: Accion = Accion.DEAMBULAR
+    # Transitorio por tick (armas primitivas v2, ver
+    # sistema_decision.py): cuando el argmax de este tick elige RECOLECTAR
+    # con el material de arma como MOTIVO REAL (el eslabon heredado elevo
+    # la utilidad por 1.0 - seguridad), el reflejo cae aqui para que
+    # sistema_recursos.py recolecte a Inventario.objetos; si RECOLECTAR
+    # se eligio por construccion, se queda False y la resolucion no
+    # recoge armas "porque se lo encuentra". NO se persiste -- se
+    # recalcula cada tick, como la propia accion.
+    recolectar_motivo_arma: bool = False
