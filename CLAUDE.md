@@ -128,12 +128,89 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   catastrófico/inerte al correr el motor de verdad" (muerte por vejez,
   purga de memoria, sobrepoblación). Cuando la tarea lo permita, corre el
   motor (o un arnés equivalente) en vez de razonar solo desde el código.
+- **Para funcionalidad nueva del motor de simulación, Claude diseña y
+  especifica -- NO implementa la funcionalidad él mismo en la sesión.**
+  Regla fija, ver la sección dedicada "Flujo de implementación: Claude
+  diseña, el pipeline autónomo implementa" más abajo para el mecanismo
+  exacto y las excepciones reales. Si acabas de cerrar un diseño en
+  brainstorming, el siguiente paso NO es invocar `writing-plans` ni
+  implementar -- es trocear el spec y entregarlo al pipeline.
 - **Tono**: español, extenso/detallado/explicativo por defecto salvo que se
   pida lo contrario, nunca adulador ni condescendiente, crítico y
   contrastado en vez de solo confirmatorio. Diego es desarrollador
   profesional fullstack — usa terminología técnica sin explicarla de más,
   salvo en documentos explícitamente no técnicos (como el informe de
   visión), donde el registro se mantiene accesible.
+
+## Flujo de implementación: Claude diseña, el pipeline autónomo implementa
+## (regla fija desde el arco de flora, 2026-09-01/02 -- documentada aquí
+## el 2026-09-03 tras un incidente real)
+
+**Incidente que motivó documentar esto**: en la sesión del 2026-09-03,
+tras cerrar en brainstorming el diseño de "cupo de espacio compartido por
+celda" (pieza 3 de "poblar más el mundo") y escribir su spec, Claude
+ofreció invocar la skill `writing-plans` para elaborar un plan de
+implementación y ejecutarlo él mismo en la sesión -- saltándose sin darse
+cuenta un flujo que ya llevaba en pie, verificado y usado con éxito desde
+el arco de flora (varios días antes). Diego lo corrigió explícitamente:
+*"no tengo que explicarte cuál es el flujo de implementación... Claude va
+a hacer el diseño de la funcionalidad, elaborará un spec y esa spec se
+dará al modelo externo que la usará para hacer la implementación"*.
+Confirmado contra el propio historial de git antes de escribir esta
+sección (no de memoria) -- ver los commits reales más abajo.
+
+**El flujo real, verificado commit a commit**, para funcionalidad NUEVA
+del motor de simulación (mecanismos, sistemas, config -- no para
+infraestructura del propio pipeline, ver excepciones abajo):
+
+1. Claude diseña la pieza en conversación (skill `superpowers:brainstorming`)
+   y escribe el spec a `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+   (ubicación por defecto de la propia skill).
+2. Claude trocea el spec en uno o varios ficheros de plan -- código
+   completo, o blueprint puro (solo la spec, sin diff pre-escrito): ambos
+   formatos ya probados con éxito con `mini-swe-agent`, ver
+   `.ai-pipeline/guia-tareas.md` para cuál conviene según el tipo de
+   tarea -- y los COMITEA directamente dentro de `docs/superpowers/plans/`.
+   Ese commit ES la entrega real, no una llamada a ninguna skill de
+   implementación. Patrón real en el log de git: `d982056`/`f884483`/
+   `8696c91`/`cbd16bc`/`91bf85d`, todos titulados "chore: soltar plan X al
+   centinela del pipeline".
+3. El centinela (`.ai-pipeline/watch-plans.sh`, proceso en segundo plano,
+   sondea `docs/superpowers/plans/` cada 5s) recoge el primer `.md` que
+   encuentra y lo pasa a `.ai-pipeline/run-plan.sh`, que ejecuta
+   `mini-swe-agent` (modelo barato, alias `agente-obrero`) contra él,
+   mueve el plan a través de `docs/plans/{in_progress,in_review,failed,done}`,
+   corre la suite de tests real, y abre el PR si pasa.
+4. Una vez recogido por el centinela, Claude retira el fichero de
+   `docs/superpowers/plans/` con un commit "chore: retirar plan X de la
+   cola tras ser recogido" (limpieza -- el contenido ya vive duplicado en
+   `docs/plans/in_progress/`). Patrón real: `e3c3745`, `34087d4`, `040d298`.
+5. Claude revisa el PR resultante cuando el pipeline lo abre (o audita
+   manualmente si el disyuntor de 3 intentos salta sin converger, como en
+   armas primitivas v2) -- pero el CÓDIGO lo escribe el pipeline, no
+   Claude en la sesión de diseño.
+
+**Requisito operativo, comprobar SIEMPRE antes de dar la entrega por
+hecha**: el centinela debe estar corriendo de verdad
+(`ps aux | grep watch-plans`) para que soltar un plan en la carpeta tenga
+efecto -- si no está activo, el fichero se queda ahí sin que nadie lo
+recoja hasta que alguien arranque `.ai-pipeline/start-pipeline.sh` (o
+`watch-plans.sh` directamente).
+
+**Excepciones reales, ya confirmadas por la práctica -- aquí Claude SÍ
+implementa directamente, sin pasar por el pipeline**:
+- **Infraestructura del propio pipeline** (scripts de `.ai-pipeline/`,
+  como el fix de timeout/reintentos de `run-plan.sh` del 2026-09-03) --
+  el pipeline no se arregla a sí mismo.
+- **Tareas de calibración de juicio/estilo sin criterio de éxito
+  verificable mecánicamente** (p.ej. podar comentarios narrativos de
+  docstrings) -- confirmado 2/2 fallos reales con `mini-swe-agent`, ver
+  `.ai-pipeline/guia-tareas.md`, "Qué NO funciona todavía".
+- **Auditoría/corrección de algo que el pipeline dejó a medio converger**
+  tras agotar su disyuntor de 3 intentos (p.ej. armas primitivas v2,
+  2026-09-03).
+- **Documentación pura** (este mismo fichero, informes, specs).
+- Diego lo pide explícitamente.
 
 ## Límites conocidos y pendientes abiertos a fecha de esta migración (24-08-2026)
 
