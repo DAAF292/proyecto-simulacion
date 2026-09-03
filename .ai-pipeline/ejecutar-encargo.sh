@@ -320,12 +320,21 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         # ese mismo commit, no hay nada que perder y se borra como antes;
         # si HEAD avanzó (el agente o el commit de seguridad añadieron
         # algo), la rama se conserva para revisión manual.
+        # `|| true` en cada paso (2026-09-03, segundo hallazgo real del
+        # mismo incidente): un checkout que falla por CUALQUIER motivo
+        # (working tree sucio por un fichero mal trackeado, conflicto de
+        # merge, lo que sea) no debe poder abortar el script vía `set -e`
+        # ANTES de llegar al `exit 2` de abajo -- eso es precisamente lo
+        # que le pasó a esta rama: un `git checkout master` fallido dejó
+        # el script en código de salida 1 en vez de 2, así que el
+        # centinela nunca llegó a detenerse pese a que el fallo SÍ era de
+        # infraestructura externa (límite de API), no del código.
         if [ "$(git rev-parse HEAD)" = "$PLAN_START_COMMIT" ]; then
-            git checkout master || git checkout main
-            git branch -D "$BRANCH"
+            git checkout master 2>/dev/null || git checkout main 2>/dev/null || true
+            git branch -D "$BRANCH" 2>/dev/null || true
         else
             echo "[AVISO] La rama '$BRANCH' tiene trabajo real comiteado -- NO se borra. Revisar manualmente antes de reintentar este encargo."
-            git checkout master || git checkout main
+            git checkout master 2>/dev/null || git checkout main 2>/dev/null || true
         fi
         exit 2
     fi
