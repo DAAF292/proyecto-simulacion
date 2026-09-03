@@ -1896,6 +1896,7 @@ HTML_VISOR = """<!DOCTYPE html>
           trazarQuad(celdaComoQuad(x, y, c.elevacion, tam, data.ancho, camara.rotacion));
           ctx.fill();
           dibujarCaraDeRisco(tam, data, x, y, c.elevacion, r, g, b, alfaTexto);
+          dibujarHachuraRelieve(tam, data, x, y, c.elevacion, camara.rotacion);
         }
       }
     }
@@ -1910,6 +1911,7 @@ HTML_VISOR = """<!DOCTYPE html>
           trazarQuad(celdaComoQuad(x, y, c.elevacion, tam, data.ancho, camara.rotacion));
           ctx.fill();
           dibujarCaraDeRisco(tam, data, x, y, c.elevacion, lavado.r, lavado.g, lavado.b, lavado.alfa);
+          dibujarHachuraRelieve(tam, data, x, y, c.elevacion, camara.rotacion);
         }
       }
     }

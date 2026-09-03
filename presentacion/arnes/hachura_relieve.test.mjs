@@ -178,6 +178,21 @@ test('dibujarHachuraRelieve: los trazos quedan recortados a la celda (clip aplic
   assert.ok(llamadas.includes('clip'), 'debe llamar a ctx.clip() para recortar a la celda');
 });
 
+test('dibujarLavadoContinuo: una celda con pendiente real dispara hachurado de verdad', () => {
+  const data = {
+    ancho: 3,
+    alto: 3,
+    celdas: [
+      [{ elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }, { elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }, { elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }],
+      [{ elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }, { elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }, { elevacion: 0.1, lluvia: 0.5, temperatura: 0.5 }],
+      [{ elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }, { elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }, { elevacion: 0.5, lluvia: 0.5, temperatura: 0.5 }],
+    ],
+  };
+  visor.limpiarCtxVisor();
+  visor.dibujarLavadoContinuo(20, data, { xMin: 0, xMax: 3, yMin: 0, yMax: 3 });
+  assert.ok(contarTrazos() > 0, 'debe haber al menos un trazo real tras pintar el lavado completo');
+});
+
 test('constantes de hachurado de relieve existen con los valores PROVISIONAL documentados', () => {
   assert.equal(visor.UMBRAL_PENDIENTE_VISIBLE, 0.02);
   assert.equal(visor.PENDIENTE_SATURACION, 0.12);
