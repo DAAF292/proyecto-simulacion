@@ -2256,3 +2256,162 @@ verificar por su cuenta, a diferencia de una implementación con tests.
 Toda la poda del resto del repositorio se hizo directamente por Claude
 en la sesión de esa tarde, no vía pipeline -- decisión consistente con
 ese hallazgo, no una elección arbitraria de herramienta.
+
+## Armas primitivas v2 -- rediseño de Agarre/Inventario, mergeado tras
+## auditoría manual; banco de pruebas real de coste/eficiencia con una
+## tarea compleja (2026-09-03)
+
+Diego revisó el código de `feature/2026-09-01-armas-fabricadas` (PR
+#1, nunca mergeado) y encontró problemas de fondo, no de detalle:
+subir `puntos_agarre` de 2 a 3 fue un parche (el problema real es que
+nada sale nunca de `Agarre`); el modelo de `Inventario`/`Agarre` no
+tenía causalidad real (una criatura acumulaba recursos sin motivo);
+fabricar solo podía usar lo que estaba literalmente en `Agarre`, nunca
+lo que ya se portaba; la "Vía 2" de `_resolver_recolectar` (agarrar
+cualquier cosa "porque se lo encuentra") viola el principio 5 (leyes
+neutras). PR #1 cerrado, rama borrada por completo -- ver más abajo.
+
+**Rediseño en brainstorming** (spec completa:
+`docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md`,
+supersede a la de 2026-09-01, conservada como registro histórico):
+
+- **Sin norma fija por especie** (corrección real de Diego a mi primera
+  propuesta): el efecto de un arma no lo decide la especie, lo decide
+  el temperamento y la situación de cada individuo -- un gnomo poco
+  agresivo la usa a la defensiva, un futuro individuo agresivo
+  atacaría con la misma arma y la misma ley.
+- **El arma modula `nucleo/conflicto.py:indice_asertividad_social`**
+  (primer consumidor real de "robo/agravio genérico" que ese
+  resolutor ya esperaba desde su diseño original), no una lógica de
+  combate nueva.
+- **`Inventario` gana objetos discretos** (`objetos: list[str]`, un
+  palo, una piedra, un arma fabricada, cada uno con su propio peso)
+  junto a `contenidos` (kg a granel, sin cambios, sigue para
+  construcción). Corrección real de Diego sobre mi primera propuesta
+  ("no guardo kilos en mis bolsillos, llevo objetos").
+- **`Agarre` cambia de semántica, no de forma**: de "lo que agarré
+  alguna vez" (solo crecía) a "lo que empuño AHORA" -- subconjunto
+  decidido y reversible de `Inventario.objetos`, recalculado cada
+  tick por una fórmula continua (`Necesidades.seguridad` +
+  `Temperamento.valentia` + amenaza real presente), **sin regla de
+  zona** -- otra corrección real de Diego ("no debemos plantear que
+  estar fuera del asentamiento signifique estar inseguro"). Primer
+  consumidor real de `Temperamento.valentia`, sin ninguno hasta ahora.
+- **"Todo es un arma"**: un material crudo `apto_arma` empuñado ya
+  tiene efecto (nivel 1). Fabricar combina materiales por receta de
+  catálogo (`config/armas.yaml`, madera=lanza nivel 2, piedra=hacha_mano
+  nivel 2, madera+piedra=hacha_primitiva nivel 3) -- sin nombres de
+  arma hardcodeados en Python.
+- **Sin Accion nueva para empuñar/guardar** -- ajuste automático
+  recalculado cada tick, no una decisión que compite por turno.
+
+**Deliberadamente sin plan de código pre-escrito** -- a diferencia de
+los arcos de flora (código completo en varios de los 5 planes), esta
+spec se entregó como blueprint puro: el objetivo explícito era medir
+coste/eficiencia real del modelo barato (`agente-obrero`/
+`deepseek-v4-flash-0731` vía `mini-swe-agent`) ante una tarea de
+complejidad real, no una pieza mínima.
+
+### Resultado del pipeline: 3/3 intentos agotaron el timeout, disyuntor
+### activado -- pero el trabajo acumulado era sustancial y correcto
+
+Los tres intentos (900s cada uno) terminaron en código de salida 124
+(timeout), nunca en una convergencia propia del modelo a un commit
+final. El disyuntor de 3 intentos se activó exactamente como se
+diseñó, dejando el plan en `docs/plans/failed/`. **Esto NO significa
+que el modelo se quedara atascado sin avanzar**: el diff acumulado en
+los tres commits de seguridad (`c3657da`/`5a3038b`/`48c0b95`) suma
+1245 inserciones en 16 ficheros, incluido un fichero de tests nuevo de
+363 líneas (`tests/test_armas_primitivas_v2.py`) con la misma
+disciplina de "ley física" que el resto del proyecto -- la última
+franja visible del log (paso 117 del tercer intento) muestra al modelo
+todavía verificando cuidadosamente detalles reales contra `master`
+(confirmando que `puntos_agarre` de gnomo ya estaba en 2, revisando
+`sistema_depredacion.py`/`sistema_movimiento.py`), no dando vueltas en
+un bucle improductivo. La hipótesis más probable, no confirmada con
+más profundidad: cada uno de los 3 intentos reinicia el CONTEXTO de
+razonamiento del modelo desde cero (solo hereda el estado del código
+de intentos anteriores, nunca el razonamiento), así que buena parte de
+cada intento se gastó re-explorando/re-verificando trabajo que un
+intento previo ya había dejado casi completo, en vez de partir de
+"esto ya está verificado, sigue desde aquí".
+
+**Auditoría manual completa antes de mergear** (pedida explícitamente
+por Diego: "audítalo, deja todo corregido si algo falla"). Revisión
+línea a línea de los 16 ficheros contra la spec -- **no se encontró
+nada que corregir**, la implementación es fiel, causal, y en un punto
+mejora la propia spec: `_resolver_fabricar_arma` busca material tanto
+en `Inventario` como en `Agarre` (no solo donde la spec decía) --
+hallazgo real y documentado por el propio modelo, con test dedicado
+(`test_ley_ciclo_completo_recolectar_fabricar_empunyar`): sin mirar
+`Agarre`, una criatura asustada que ya empuñó su único palo (por el
+reflejo de empuñar) nunca llegaría a fabricar nada, quedándose en un
+ciclo de recolectar/huir sin cerrar. También excluyó a propósito
+`piedra_suelta` (la piedra de percusión del fuego) del reflejo
+empuñar/guardar genérico -- moverla cada tick habría roto el ciclo
+causal frío→recoger→encender (un individuo seguro con frío soltaría
+las piedras antes de acumular las dos necesarias), documentado en el
+propio `componentes/agarre.py` con la misma disciplina causal que el
+resto del proyecto exige.
+
+**Verificación contra el motor real, más allá de los tests** (99/99
+tests en verde tras el merge, antes 87): 5 semillas (42, 7, 1, 99, 3,
+12) × 3000-6000 ticks sin ninguna excepción. Semillas 42 y 7 llegaron a
+extinción total hacia el final de la ventana -- **ya documentado como
+comportamiento conocido y preexistente** (semilla 42 en la sección de
+"Sobrepoblación..." de este mismo documento, semilla 7 con fragilidad
+de gnomo ya señalada en la verificación de `Agarre`), no una regresión
+de esta pieza. **Semilla 3 confirmó el mecanismo completo en juego real
+sin intervención**: 2 eventos `ArmaFabricada`, un gnomo con
+`hacha_mano` real en `Inventario.objetos` a los 3000 ticks.
+
+**Hallazgo honesto, no corregido (fuera de alcance real, no un
+fallo)**: las piedras de percusión retiradas al encender una fogata se
+depositan en `Inventario.objetos` para siempre (nunca se reutilizan ni
+se descartan) -- observado en juego real (varios gnomos con 2
+`piedra_suelta` "muertas" en Inventario más 2 activas en Agarre para
+la próxima fogata). Ninguna spec, ni la de 2026-08-31 ni esta, definió
+qué hacer con piedras de fuego ya usadas -- ni bug ni regresión, un
+hueco honesto más para la lista de pendientes de "soltar/gastar" un
+objeto.
+
+### Coste y eficiencia real medidos
+
+`.ai-pipeline/costes/costes.jsonl`: **$0.619407 reales** (balance de
+OpenRouter antes/después) para las 3 intentos completos, 429 pasos de
+modelo en total (151+161+117 por intento). Comparado con el coste
+autoinformado por el propio `mini-swe-agent` en el último paso visible
+de cada intento (~$0.18/$0.20/$0.12, suma ~$0.50): **discrepancia real
+de ~24%, no el ~3x del hallazgo de zoocoria** (sección "Coste real del
+pipeline" más arriba) -- indicio de que el fix de precio de caché de
+prompt (`300b093`) cerró la mayor parte del hueco, aunque no todo.
+
+Para poder correr esta tarea sin que el disyuntor de coste la cortara
+a mitad de camino, se subió temporalmente `-l` (0.30→1.50 en
+`run-plan.sh`) y `max_budget` (1.00→6.00 USD/día en
+`litellm_config.yaml`), cada uno en su propio commit explícito
+(`74ef8b1`) y revertido a los valores originales tras el experimento
+(`aea9b84`) -- el proxy se reinició dos veces (subida y bajada) para
+que el proceso en memoria coincidiera con el fichero.
+
+**Balance del experimento**: el modelo barato SÍ es capaz de diseñar e
+implementar correctamente una tarea de complejidad real (rediseño de
+dos componentes existentes, una acción nueva, dos consumidores
+conectados, causalidad completa, tests de "ley física") trabajando
+solo desde una spec -- pero no dentro del presupuesto de tiempo de un
+único intento de 900s, ni tampoco de tres intentos con contexto de
+razonamiento reiniciado en cada uno. El coste real total ($0.62) sigue
+siendo bajo en términos absolutos, pero el proceso no fue autónomo de
+principio a fin -- requirió una auditoría humana (o de Claude) para
+cerrar lo que el pipeline dejó a medio converger. **Pendiente,
+señalado por Diego para una conversación futura** (ver memoria de
+sesión): el propio flujo del pipeline (nombres de script, carpetas
+`docs/plans/*` vs `docs/superpowers/specs/`) sigue pensado para
+"planes escritos por Claude", no para el flujo real de hoy
+("spec → el modelo diseña e implementa") -- candidato a revisar antes
+de repetir un experimento de esta escala.
+
+Commits: `00eb475` (spec), `9b52037`/`74ef8b1` (puesta al día de este
+documento + subida temporal de presupuesto), merge `--no-ff` de
+`feature/2026-09-03-armas-primitivas-v2` a `master`, `aea9b84`
+(revert del presupuesto).
