@@ -126,6 +126,58 @@ test('alfaPorLuz: siempre dentro de [0.6, 1.3] para cualquier orientacion', () =
   }
 });
 
+function contarTrazos() {
+  return visor.llamadasCtxUltimas().filter((l) => l.prop === 'stroke').length;
+}
+
+test('dibujarHachuraRelieve: pendiente por debajo del umbral no dibuja ningun trazo', () => {
+  const data = construirData([
+    [0.5, 0.5, 0.5],
+    [0.5, 0.5, 0.5],
+    [0.5, 0.5, 0.5],
+  ]);
+  visor.limpiarCtxVisor();
+  visor.dibujarHachuraRelieve(20, data, 1, 1, 0.5, 0);
+  assert.equal(contarTrazos(), 0);
+});
+
+test('dibujarHachuraRelieve: pendiente saturada dibuja mas trazos que pendiente cerca del umbral', () => {
+  const dataCercaUmbral = construirData([
+    [0.5, 0.5, 0.5],
+    [0.5, 0.5, 0.45],
+    [0.5, 0.5, 0.5],
+  ]);
+  visor.limpiarCtxVisor();
+  visor.dibujarHachuraRelieve(20, dataCercaUmbral, 1, 1, 0.5, 0);
+  const trazosCercaUmbral = contarTrazos();
+
+  const dataSaturada = construirData([
+    [0.5, 0.5, 0.5],
+    [0.5, 0.5, 0.1],
+    [0.5, 0.5, 0.5],
+  ]);
+  visor.limpiarCtxVisor();
+  visor.dibujarHachuraRelieve(20, dataSaturada, 1, 1, 0.5, 0);
+  const trazosSaturados = contarTrazos();
+
+  assert.ok(trazosCercaUmbral >= visor.TRAZOS_MIN, `trazosCercaUmbral=${trazosCercaUmbral} debe ser >= TRAZOS_MIN`);
+  assert.ok(trazosSaturados <= visor.TRAZOS_MAX, `trazosSaturados=${trazosSaturados} debe ser <= TRAZOS_MAX`);
+  assert.ok(trazosSaturados > trazosCercaUmbral,
+    `pendiente saturada (${trazosSaturados}) debe dar mas trazos que pendiente cerca del umbral (${trazosCercaUmbral})`);
+});
+
+test('dibujarHachuraRelieve: los trazos quedan recortados a la celda (clip aplicado)', () => {
+  const data = construirData([
+    [0.5, 0.5, 0.5],
+    [0.5, 0.5, 0.1],
+    [0.5, 0.5, 0.5],
+  ]);
+  visor.limpiarCtxVisor();
+  visor.dibujarHachuraRelieve(20, data, 1, 1, 0.5, 0);
+  const llamadas = visor.llamadasCtxUltimas().map((l) => l.prop);
+  assert.ok(llamadas.includes('clip'), 'debe llamar a ctx.clip() para recortar a la celda');
+});
+
 test('constantes de hachurado de relieve existen con los valores PROVISIONAL documentados', () => {
   assert.equal(visor.UMBRAL_PENDIENTE_VISIBLE, 0.02);
   assert.equal(visor.PENDIENTE_SATURACION, 0.12);

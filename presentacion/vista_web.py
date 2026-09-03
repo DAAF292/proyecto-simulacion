@@ -1837,6 +1837,55 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.fill();
     }
 
+    // Funcion principal del hachurado de relieve (spec, secciones 1-3):
+    // junta pendiente + direccion + alfa-por-luz y dibuja los trazos
+    // recortados al paralelogramo real de la celda. Textura de la cara
+    // SUPERIOR de la celda -- no compite con dibujarCaraDeRisco (esa es
+    // la geometria real del escalon entre celdas de distinta elevacion).
+    const TRAZO_GROSOR_FACTOR = 0.05;
+    const TRAZO_LONGITUD_FACTOR = 0.4;
+    const TRAZO_SEPARACION_FACTOR = 0.16;
+    const TRAZO_ALFA_BASE = 0.35;
+    function dibujarHachuraRelieve(tam, data, x, y, elevacion, rotacion) {
+      const { dzdx, dzdy, magnitud } = calcularPendiente(data, x, y);
+      if (magnitud < UMBRAL_PENDIENTE_VISIBLE) return;
+
+      const n = data.ancho;
+      const t = Math.min(1, (magnitud - UMBRAL_PENDIENTE_VISIBLE) / (PENDIENTE_SATURACION - UMBRAL_PENDIENTE_VISIBLE));
+      const numTrazos = Math.round(TRAZOS_MIN + t * (TRAZOS_MAX - TRAZOS_MIN));
+
+      const dir = direccionTrazoPantalla(x, y, elevacion, tam, n, rotacion, dzdx, dzdy);
+      const alfaMul = alfaPorLuz(dzdx, dzdy);
+      const c = data.celdas[y][x];
+      const [r, g, b] = colorLavadoContinuo(c);
+      const alfaFinal = Math.max(0, Math.min(1, TRAZO_ALFA_BASE * alfaMul));
+
+      const centro = celdaAPantallaCompleta(x + 0.5, y + 0.5, elevacion, tam, n, rotacion);
+      const perpx = -dir.dy;
+      const perpy = dir.dx;
+      const fase = hash2(x, y, 7) - 0.5; // [-0.5, 0.5) -- reparto sin patron repetitivo
+      const longitud = tam * TRAZO_LONGITUD_FACTOR;
+      const separacion = tam * TRAZO_SEPARACION_FACTOR;
+
+      ctx.save();
+      trazarQuad(celdaComoQuad(x, y, elevacion, tam, n, rotacion));
+      ctx.clip();
+      ctx.strokeStyle = `rgba(${Math.round(r * 0.7)}, ${Math.round(g * 0.7)}, ${Math.round(b * 0.7)}, ${alfaFinal.toFixed(3)})`;
+      ctx.lineWidth = Math.max(0.6, tam * TRAZO_GROSOR_FACTOR);
+      for (let i = 0; i < numTrazos; i++) {
+        const offset = (i - (numTrazos - 1) / 2 + fase) * separacion;
+        const cx0 = centro.cx + perpx * offset - dir.dx * longitud / 2;
+        const cy0 = centro.cy + perpy * offset - dir.dy * longitud / 2;
+        const cx1 = centro.cx + perpx * offset + dir.dx * longitud / 2;
+        const cy1 = centro.cy + perpy * offset + dir.dy * longitud / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx0, cy0);
+        ctx.lineTo(cx1, cy1);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     function dibujarLavadoContinuo(tam, data, frustum) {
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
