@@ -1015,7 +1015,7 @@ class SistemaMovimiento:
 
         if tipo == "refugio":
             if espacio_disponible_para_construir(
-                gestor, pos_x, pos_y, zona_idx, self.config_construccion
+                gestor, pos_x, pos_y, zona_idx, self.config
             ) < huella_m2_para("refugio", self.config_construccion):
                 return (0, 0)
             crear_construccion(
@@ -1029,7 +1029,7 @@ class SistemaMovimiento:
         if (cx, cy) != (pos_x, pos_y):
             return self._acercarse_a(pos_x, pos_y, cx, cy)
         if espacio_disponible_para_construir(
-            gestor, pos_x, pos_y, zona_idx, self.config_construccion
+            gestor, pos_x, pos_y, zona_idx, self.config
         ) < huella_m2_para("almacen", self.config_construccion):
             return (0, 0)
         crear_construccion(gestor, pos_x, pos_y, "almacen", propietario_id=None, zona_idx=zona_idx)

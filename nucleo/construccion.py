@@ -14,6 +14,11 @@ from __future__ import annotations
 
 from typing import Any
 
+# nucleo/espacio.py: el cálculo de m² libre de una celda se importa COMO
+# FUNCIÓN LOCAL dentro de cada wrapper de abajo -- nucleo/espacio.py no
+# importa nucleo.construccion, así que no hay ciclo de importación real y
+# mantenerlos diferidos evita crearlo en el futuro.
+
 
 def construccion_propia(gestor: Any, id_propietario: int, tipo: str):
     """Id de la Construccion de este tipo cuyo propietario_id es
@@ -87,38 +92,36 @@ def material_suficiente_para(
     return masa_total >= masa_minima_para(tipo, config_construccion)
 
 
+
 def huella_m2_para(tipo: str, config_construccion: dict[str, Any]) -> float:
     """Área en m² que ocupa una Construccion de este tipo -- config/
-    materiales.yaml sección construccion. Mismo criterio permisivo que
-    masa_minima_para: cualquier tipo no reconocido usa huella_m2_refugio
-    como base razonable en vez de fallar (catálogo abierto, ver
-    Construccion.tipo)."""
-    clave = f"huella_m2_{tipo}"
-    return float(
-        config_construccion.get(clave, config_construccion.get("huella_m2_refugio", 15.0))
-    )
+    materiales.yaml sección construccion. Re-exportado desde
+    nucleo/espacio.py (ver su docstring) para no romper a los consumidores
+    históricos que importan el nombre desde nucleo.construccion."""
+    from nucleo.espacio import huella_m2_para as _calcular
+    return _calcular(tipo, config_construccion)
 
 
 def espacio_disponible_para_construir(
-    gestor: Any, pos_x: int, pos_y: int, zona_idx: int, config_construccion: dict[str, Any]
+    gestor: Any, pos_x: int, pos_y: int, zona_idx: int, config: dict[str, Any]
 ) -> float:
-    """m² todavía libres para construcción en (pos_x, pos_y, zona_idx) --
-    capacidad_construccion_celda_m2 menos la suma de huella_m2 de toda
-    Construccion YA presente en esa celda exacta. Búsqueda lineal O(N)
-    sobre las construcciones del mundo, mismo límite ya aceptado en
-    construccion_propia."""
-    from componentes.construccion import Construccion
-    from componentes.posicion import Posicion
+    """m² todavía libres para construcción en (pos_x, pos_y, zona_idx).
 
-    capacidad = float(config_construccion.get("capacidad_construccion_celda_m2", 80.0))
-    ocupado = 0.0
-    for cid in gestor.entidades_con(Construccion, Posicion):
-        pos = gestor.obtener_componente(cid, Posicion)
-        if pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
-            continue
-        construccion = gestor.obtener_componente(cid, Construccion)
-        ocupado += huella_m2_para(construccion.tipo, config_construccion)
-    return capacidad - ocupado
+    HISTÓRICO: el cálculo vivió aquí (2026-08-31, "Capacidad de
+    construcción por celda") y solo contaba la huella de Construccion.
+    Desde la pieza 3 de "poblar más el mundo" (2026-09-03, cupo de
+    espacio compartido por celda) el cálculo es neutral respecto a qué
+    ocupa el cupo y vive en nucleo/espacio.py:espacio_disponible -- suma
+    construcciones y flora competidora. Este wrapper conserva el nombre
+    histórico para los consumidores que no distinguen entre las dos
+    pistas (sistema_movimiento.py:_calcular_construir).
+
+    `config` es la configuración COMPLETA (con secciones `construccion` y
+    `flora`), no solo config["construccion"] -- el cupo compartido necesita
+    el catálogo de especies para conocer huella_m2 y compite_espacio_fisico
+    de cada Planta."""
+    from nucleo.espacio import espacio_disponible as _calcular
+    return _calcular(gestor, pos_x, pos_y, zona_idx, config)
 
 
 def objetivo_construccion_actual(

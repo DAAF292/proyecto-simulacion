@@ -45,6 +45,7 @@ class ZonaBioma:
         clima_actual: Clima = Clima.DESPEJADO,
         viento_dx: int = 0,
         viento_dy: int = 0,
+        flora_competidora_inicial: dict[tuple[int, int], list[str]] | None = None,
     ):
         self.ancho = ancho
         self.alto = alto
@@ -52,6 +53,17 @@ class ZonaBioma:
         self.clima_actual = clima_actual
         self.viento_dx = viento_dx
         self.viento_dy = viento_dy
+        # (2026-09-03, pieza 3 -- cupo de espacio compartido por celda):
+        # especies COMPETIDORAS asignadas a cada celda en la generación
+        # ({(x, y): [especie, ...]}). Es metadata de generación, no
+        # estado de partida: la pista competidora vive en las entidades
+        # Planta (fuente de verdad) y no tiene espejo en Celda; main.py
+        # la consume una sola vez en sembrar_flora_inicial para crear esas
+        # entidades fundadoras. NO se persiste (mismo criterio que
+        # elevacion/lluvia/temperatura: determinista de la semilla).
+        self.flora_competidora_inicial: dict[tuple[int, int], list[str]] = (
+            flora_competidora_inicial if flora_competidora_inicial is not None else {}
+        )
         """Viento dominante fijo de la zona, sorteado una vez en la
         generación del mundo (nucleo/orografia.py:
         sortear_viento_dominante) y conservado como atributo de la zona --
@@ -263,13 +275,23 @@ def generar_zona_bioma(
     # Colonización de flora por idoneidad: cada celda decide qué especie
     # (si alguna) la coloniza según sustrato/fertilidad/lluvia/
     # temperatura reales, ya calculados arriba -- excluidas las sumergidas.
-    especie_por_celda = colonizar_por_idoneidad(
+    especies_por_celda = colonizar_por_idoneidad(
         rng, todas_las_celdas, biomas, campo_lluvia, campo_temperatura,
         fertilidad_por_celda, humedad_subsuelo_por_celda, capacidad_retencion_por_celda,
         config_flora["especies"],
         float(config_flora.get("umbral_minimo_idoneidad_colonizacion", 0.2)),
         celdas_con_agua=celdas_con_agua,
+        capacidad_construccion_celda_m2=float(
+            config_materiales.get("construccion", {}).get(
+                "capacidad_construccion_celda_m2", 80.0
+            )
+        ),
     )
+
+    flora_competidora_inicial: dict[tuple[int, int], list[str]] = {}
+    # Se llena en el bucle de celdas de abajo: las especies que compiten
+    # por espacio no tienen espejo en Celda (no tocan tipo_recurso), se
+    # registran aquí para que sembrar_flora_inicial cree sus entidades.
 
     celdas_piedra = {
         pos for pos, sustrato in tipo_sustrato_por_celda.items() if sustrato == "piedra"
@@ -298,7 +320,25 @@ def generar_zona_bioma(
             masa_mineral_restante = masa_inicial_veta if deposito_mineral else 0.0
             humedad_subsuelo = humedad_subsuelo_por_celda[(x, y)]
 
-            especie_key = especie_por_celda.get((x, y), "")
+            lista_especies = especies_por_celda.get((x, y), [])
+            # Pista no-competidora (Celda.tipo_recurso) vs. competidora
+            # (entidad Planta): la generación ahora puede asignar varias
+            # especies a una celda (pieza 3, cupo de espacio compartido).
+            # Solo la no-competidora escribe Celda.tiene_recurso/tipo_recurso
+            # y pre-rellena celda.recursos; la competidora se registra en
+            # flora_competidora_inicial para que sembrar_flora_inicial cree
+            # sus entidades Planta (fuente de verdad de esa pista).
+            no_competidoras = [
+                e for e in lista_especies
+                if not config_flora["especies"][e].get("compite_espacio_fisico", False)
+            ]
+            competidoras = [
+                e for e in lista_especies
+                if config_flora["especies"][e].get("compite_espacio_fisico", False)
+            ]
+            if competidoras:
+                flora_competidora_inicial[(x, y)] = competidoras
+            especie_key = no_competidoras[0] if no_competidoras else ""
             tiene_recurso = especie_key != ""
             recursos_iniciales = (
                 {r["nombre"]: r["capacidad_maxima"] for r in recursos_alimento(config_flora["especies"][especie_key])}
@@ -323,4 +363,5 @@ def generar_zona_bioma(
     return ZonaBioma(
         ancho=ancho, alto=alto, grid=grid,
         viento_dx=viento_dx, viento_dy=viento_dy,
+        flora_competidora_inicial=flora_competidora_inicial,
     )
