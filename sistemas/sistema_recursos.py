@@ -228,7 +228,10 @@ class SistemaRecursos:
                 consciente = (
                     cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia
                 )
-                self._resolver_recolectar(inv, dims, celda, agarre, ident.especie.value, consciente)
+                self._resolver_recolectar(
+                    inv, dims, celda, agarre, ident.especie.value, consciente,
+                    recolectar_arma=intencion.recolectar_motivo_arma,
+                )
             elif intencion.accion == Accion.ENCENDER_FUEGO:
                 inv_fuego = gestor.obtener_componente(eid, Inventario)
                 agarre_fuego = gestor.obtener_componente(eid, Agarre)
@@ -426,6 +429,7 @@ class SistemaRecursos:
         agarre: Agarre | None = None,
         especie: str | None = None,
         consciente: bool = False,
+        recolectar_arma: bool = False,
     ) -> None:
         """
         RECOLECTAR (ver componentes/intencion.py y nucleo/construccion.py).
@@ -455,11 +459,14 @@ class SistemaRecursos:
            Inventario ni en Agarre), sistema_decision.py eleva la utilidad
            de RECOLECTAR heredando el valor de FABRICAR_ARMA
            (1.0 - seguridad) cuando la celda actual ofrece un recurso
-           apto_arma. Aquí se recoge ese material como OBJETO DISCRETO a
-           Inventario.objetos (un palo entero, una piedra entera), topado
-           por la capacidad de carga por peso (incluido el peso de los
-           objetos ya portados). piedra_suelta como fuente del material
-           "piedra": las recetas hablan de "piedra", no de
+           apto_arma. La resolución SOLO recoge ese material (como OBJETO
+           DISCRETO a Inventario.objetos -- un palo entero, una piedra
+           entera, topado por la capacidad de carga por peso) cuando ese
+           eslabón fue el MOTIVO del RECOLECTAR de este tick, marcado por
+           sistema_decision.py en Intencion.recolectar_motivo_arma (el
+           parámetro recolectar_arma de este método) -- nunca un RECOLECTAR
+           elegido por construcción. piedra_suelta como fuente del
+           material "piedra": las recetas hablan de "piedra", no de
            "piedra_suelta", que es un recurso del suelo, no un material
            del catálogo.
 
@@ -523,12 +530,15 @@ class SistemaRecursos:
 
         # Vía 2: material apto_arma CON CAUSA (armas primitivas v2) -- ver
         # docstring arriba. Mismo eslabón heredado que ENCENDER_FUEGO:
-        # sistema_decision.py ya elevó la utilidad de RECOLECTAR con el
-        # valor de FABRICAR_ARMA (1.0 - seguridad) mientras no tenga arma
-        # de nivel ≥2 y la celda ofrezca material apto_arma. El material
-        # va a Inventario.objetos, no a Agarre (el crudo para fabricar
-        # vive en Inventario, mismo patrón causal que CONSTRUIR).
-        if consciente and especie is not None:
+        # sistema_decision.py eleva la utilidad de RECOLECTAR con el valor
+        # de FABRICAR_ARMA (1.0 - seguridad) mientras no tenga arma de
+        # nivel ≥2 y la celda ofrezca material apto_arma -- y solo cuando
+        # ese eslabón fue el MOTIVO del RECOLECTAR elegido (marcado en
+        # Intencion.recolectar_motivo_arma) se recoge material de arma.
+        # Un RECOLECTAR motivado por construccion nunca carga un palo
+        # "porque se lo encuentra": el crudo para fabricar vive en
+        # Inventario, mismo patrón causal que CONSTRUIR.
+        if recolectar_arma:
             objetos_totales = list(inv.objetos)
             if agarre is not None:
                 objetos_totales.extend(agarre.objetos)

@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -30,6 +31,7 @@ from componentes.gestacion import Gestacion
 from componentes.reproduccion import Reproduccion
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
+from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
 from nucleo.asentamiento import asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
 from nucleo.construccion import (
@@ -109,6 +111,12 @@ class SistemaMovimiento:
         # config/materiales.yaml sección construccion y
         # nucleo/construccion.py:espacio_disponible_para_construir.
         self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
+        # Armas primitivas v2 (2026-09-03, ver config/armas.yaml y
+        # nucleo/armas.py): catalogo y recetas para calcular el componente
+        # ofensivo del arma empunada en las disputas (nucleo/conflicto.py).
+        self.config_armas: dict[str, Any] = self.config.get("armas", {})
+        self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
+        self.recetas_armas: list[dict[str, Any]] = self.config_armas.get("recetas", [])
 
         # Coste de forrajeo vs. beneficio -- ver docstring de
         # _calcular_caza.
@@ -802,6 +810,25 @@ class SistemaMovimiento:
 
         return (0, 0)
 
+
+    def _bono_arma_empunada(self, gestor: GestorEntidades, entidad_id: int) -> float:
+        """Componente ofensivo del arma que esta entidad tiene empunada
+        AHORA (Agarre.objetos), para el indice de asertividad social de
+        nucleo/conflicto.py -- efecto_ofensivo_por_nivel[nivel] *
+        agresividad del portador. 0 si no empuna nada o no tiene
+        Temperamento/Agarre. Solo la empunadura cuenta (lo que este en
+        Inventario sin sacar no intimida a nadie todavia); el componente
+        base del arma deliberadamente no participa aqui (ver
+        nucleo/conflicto.py:indice_asertividad_social)."""
+        agarre = gestor.obtener_componente(entidad_id, Agarre)
+        temp = gestor.obtener_componente(entidad_id, Temperamento)
+        if agarre is None or temp is None:
+            return 0.0
+        nivel = mayor_nivel_arma(
+            agarre.objetos, self.catalogo_materiales, self.recetas_armas
+        )
+        return bono_ofensivo_arma(nivel, temp.agresividad, self.config_armas)
+
     def _resolver_posible_intruso(
         self,
         gestor: GestorEntidades,
@@ -882,6 +909,16 @@ class SistemaMovimiento:
         asen_propietario = asentamiento_de(mundo, propietario_id)
         mismo_grupo = asen_propietario is not None and intruso_id in asen_propietario.miembros
 
+        # Armas primitivas v2 (2026-09-03, ver nucleo/armas.py): el
+        # componente ofensivo del arma EMPUÑADA de cada parte se suma al
+        # índice de asertividad de quien la porte -- primer consumidor
+        # real de robo/agravio genérico para nucleo/conflicto.py. Quien
+        # sujeta el refugio con un hacha_primitiva en la mano se impone
+        # más; la ley es neutra, el arma no impone un carácter, modula la
+        # magnitud de la disputa.
+        bono_arma_propietario = self._bono_arma_empunada(gestor, propietario_id)
+        bono_arma_intruso = self._bono_arma_empunada(gestor, intruso_id)
+
         resultado = resolver_disputa(
             temperamento,
             urgencia_propietario,
@@ -889,6 +926,8 @@ class SistemaMovimiento:
             urgencia_intruso,
             mismo_grupo,
             self.config_conflicto,
+            bono_arma_a=bono_arma_propietario,
+            bono_arma_b=bono_arma_intruso,
         )
 
         if resultado == ResultadoDisputa.COMPARTE:

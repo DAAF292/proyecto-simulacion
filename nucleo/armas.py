@@ -134,3 +134,21 @@ def bono_defensivo_arma(nivel: int, agresividad: float, config_armas: dict[str, 
     base = float(config_armas.get("efecto_base_por_nivel", {}).get(str(nivel), 0.0))
     ofensivo = float(config_armas.get("efecto_ofensivo_por_nivel", {}).get(str(nivel), 0.0))
     return base + ofensivo * agresividad
+
+
+def bono_ofensivo_arma(nivel: int, agresividad: float, config_armas: dict[str, Any]) -> float:
+    """Componente ofensivo del arma empunada para el indice de
+    asertividad social (nucleo/conflicto.py:indice_asertividad_social,
+    primer consumidor real de "robo/agravio generico" para ese
+    resolutor) -- efecto_ofensivo_por_nivel[nivel] * agresividad.
+
+    A diferencia de bono_defensivo_arma, el componente base NO
+    participa aqui: la asertividad social ya tiene su propia lectura de
+    agresividad/dominancia/valentia (sumar el componente base encima
+    duplicaria esa lectura sin necesidad). Un individuo poco agresivo
+    apenas nota el salto ofensivo aunque empune el mejor arma -- la ley
+    es neutra, el arma no impone un caracter, lo modula."""
+    if nivel <= 0:
+        return 0.0
+    ofensivo = float(config_armas.get("efecto_ofensivo_por_nivel", {}).get(str(nivel), 0.0))
+    return ofensivo * agresividad

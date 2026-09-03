@@ -487,6 +487,10 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         dims = gestor.obtener_componente(id_entidad, DimensionesFisicas)
         pos = gestor.obtener_componente(id_entidad, Posicion)
         agotado = pool.resistencia <= 0.0
+        # Transitorio por tick: el motivo del RECOLECTAR de ESTE tick se
+        # recalcula aqui (armas primitivas v2) -- nunca puede arrastrarse
+        # de un tick anterior.
+        intencion.recolectar_motivo_arma = False
 
         if pool_mental.estabilidad <= umbral_crisis:
             accion_previa = intencion.accion
@@ -642,6 +646,12 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         # el valor que FABRICAR_ARMA tendria SI YA tuviera el material en
         # bruto -- solo cuando la celda actual ofrece un recurso apto_arma.
         utilidad_fabricar_arma = 0.0
+        # True si el eslabon heredado de material de arma es el motivo que
+        # ELEVA la utilidad de RECOLECTAR en este tick (1.0 - seguridad
+        # supera la utilidad que RECOLECTAR ya tuviera por construccion) --
+        # se vuelca a Intencion.recolectar_motivo_arma si ademas RECOLECTAR
+        # acaba ganando el argmax (armas primitivas v2).
+        recolectar_con_motivo_arma = False
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             objetos_totales = list(inventario.objetos)
             if agarre is not None:
@@ -659,6 +669,10 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
                 zona_arma = mundo.territorio.zonas[pos.zona_idx]
                 celda_arma = zona_arma.obtener_celda(pos.x, pos.y)
                 if celda_ofrece_material_arma(celda_arma, catalogo_materiales):
+                    utilidad_recolectar_sin_arma = utilidad_recolectar
+                    recolectar_con_motivo_arma = (
+                        1.0 - necesidades.seguridad
+                    ) > utilidad_recolectar_sin_arma
                     utilidad_recolectar = max(
                         utilidad_recolectar, 1.0 - necesidades.seguridad
                     )
@@ -717,6 +731,16 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             )
         if not mantiene:
             intencion.accion = elegida
+        # Vuelca a Intencion la causalidad del RECOLECTAR (armas
+        # primitivas v2): solo se recolecta material de arma a
+        # Inventario.objetos cuando RECOLECTAR se eligio por el eslabon
+        # heredado de FABRICAR_ARMA (celda con apto_arma y deficit real
+        # de seguridad), nunca cuando fue por construccion o deambular --
+        # un individuo con seguridad siempre alta no desarrolla interes
+        # en cargar un palo.
+        intencion.recolectar_motivo_arma = (
+            intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_arma
+        )
 
         # Empunyar/guardar (armas primitivas v2, ver config/armas.yaml):
         # ajuste automatico recalculado cada tick junto a la Accion

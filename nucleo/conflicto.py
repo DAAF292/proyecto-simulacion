@@ -35,7 +35,9 @@ class ResultadoDisputa(Enum):
     ENFRENTAMIENTO = "enfrentamiento"
 
 
-def indice_asertividad_social(temperamento: Any, urgencia: float = 0.0) -> float:
+def indice_asertividad_social(
+    temperamento: Any, urgencia: float = 0.0, bono_arma: float = 0.0
+) -> float:
     """Cuánto se impone este individuo en una disputa social -- dominancia
     y agresividad como disposición a imponerse, valentía como el coraje
     real de sostenerlo hasta el final (alguien dominante pero cobarde no
@@ -43,14 +45,19 @@ def indice_asertividad_social(temperamento: Any, urgencia: float = 0.0) -> float
     juego (cuánto le importa a ESTE individuo ganar esta disputa
     concreta, ahora mismo -- semántica libre a propósito, cada consumidor
     decide qué mide: para el refugio ocupado es el déficit de seguridad
-    propio). PROVISIONAL: pesos iguales entre los tres rasgos y la
-    urgencia, sin calibrar contra el motor en marcha."""
+    propio). bono_arma (armas primitivas v2, ver nucleo/armas.py): el
+    componente ofensivo del arma empunada (efecto_ofensivo_por_nivel *
+    agresividad) se suma al índice de quien la porte -- la base de
+    asertividad social ya lee agresividad/dominancia/valentía, sumar el
+    componente base del arma encima duplicaría esa lectura. PROVISIONAL:
+    pesos iguales entre los tres rasgos y la urgencia, sin calibrar
+    contra el motor en marcha."""
     return (
         temperamento.dominancia
         + temperamento.agresividad
         + temperamento.valentia
         + urgencia
-    ) / 4.0
+    ) / 4.0 + bono_arma
 
 
 def resolver_disputa(
@@ -60,6 +67,8 @@ def resolver_disputa(
     urgencia_b: float,
     mismo_grupo: bool,
     config_conflicto: dict[str, Any],
+    bono_arma_a: float = 0.0,
+    bono_arma_b: float = 0.0,
 ) -> ResultadoDisputa:
     """Resuelve una disputa bilateral entre A y B -- función SIMÉTRICA,
     ninguno de los dos es "el que pregunta" (mismo criterio que
@@ -73,7 +82,15 @@ def resolver_disputa(
     2. Ajenos entre sí: se comparan los índices de asertividad de ambos.
        Diferencia amplia -> cede el de menor índice. Diferencia pequeña
        Y ambos con agresividad alta -> ENFRENTAMIENTO (empate reñido
-       entre dos partes asertivas, sin retirada limpia posible)."""
+       entre dos partes asertivas, sin retirada limpia posible).
+
+    bono_arma_a/bono_arma_b (armas primitivas v2): componente ofensivo
+    del arma empunada de cada parte, calculado por el consumidor
+    (sistema_movimiento.py) y sumado al índice de quien la porte -- el
+    primer consumidor real de robo/agravio genérico para este
+    resolutor. Función simétrica: ningún lado está privilegiado por
+    defecto. Si un lado no puede portar armas (p.ej. sin Agarre o sin
+    Temperamento) su bono es 0."""
     if mismo_grupo:
         cohesion = (
             temperamento_a.sociabilidad + temperamento_a.empatia
@@ -83,8 +100,8 @@ def resolver_disputa(
         if cohesion >= umbral_comparte:
             return ResultadoDisputa.COMPARTE
 
-    indice_a = indice_asertividad_social(temperamento_a, urgencia_a)
-    indice_b = indice_asertividad_social(temperamento_b, urgencia_b)
+    indice_a = indice_asertividad_social(temperamento_a, urgencia_a, bono_arma_a)
+    indice_b = indice_asertividad_social(temperamento_b, urgencia_b, bono_arma_b)
     diferencia = abs(indice_a - indice_b)
 
     umbral_empate_renido = float(config_conflicto.get("umbral_empate_renido", 0.1))

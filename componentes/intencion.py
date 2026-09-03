@@ -72,3 +72,12 @@ class Accion(Enum):
 @dataclass
 class Intencion:
     accion: Accion = Accion.DEAMBULAR
+    # Transitorio por tick (armas primitivas v2, ver
+    # sistema_decision.py): cuando el argmax de este tick elige RECOLECTAR
+    # con el material de arma como MOTIVO REAL (el eslabon heredado elevo
+    # la utilidad por 1.0 - seguridad), el reflejo cae aqui para que
+    # sistema_recursos.py recolecte a Inventario.objetos; si RECOLECTAR
+    # se eligio por construccion, se queda False y la resolucion no
+    # recoge armas "porque se lo encuentra". NO se persiste -- se
+    # recalcula cada tick, como la propia accion.
+    recolectar_motivo_arma: bool = False
