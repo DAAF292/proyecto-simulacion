@@ -46,11 +46,11 @@ else
 fi
 
 # 2. Comprobar y arrancar el Centinela (Watch-plans) si no está activo
-if pgrep -f "watch-plans.sh" > /dev/null; then
+if pgrep -f "centinela.sh" > /dev/null; then
     echo "[INFO] El centinela de planes ya está vigilando."
 else
     echo "[*] Activando el centinela de planes..."
-    nohup .ai-pipeline/watch-plans.sh > .ai-pipeline/watch.log 2>&1 &
+    nohup .ai-pipeline/centinela.sh > .ai-pipeline/watch.log 2>&1 &
 fi
 
 echo "=== ¡SISTEMA OPERATIVO Y VIGILANDO! ==="
