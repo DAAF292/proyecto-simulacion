@@ -280,3 +280,224 @@ flora:
           tasa_regeneracion: 0.1
           valor_nutricional: 0.2
           valor_hidratacion: 0.04
+    # Pieza 4 de "poblar más el mundo" (2026-09-03, catálogo ampliado de
+    # especies): 10 especies nuevas, 2 por bioma que hasta hoy tenía solo
+    # una (pradera, desierto, montaña, tundra) más 2 en bosque (que ya
+    # tenía 2, sigue siendo el más biodiverso a propósito). Mismo patrón
+    # exacto que las 5 especies de arriba, sin ningún campo nuevo. Todos
+    # los rangos de preferencia/tasas son PROVISIONAL, sin calibrar
+    # contra el harness completo -- razonados por nombre/nicho, no
+    # medidos. Diseño cerrado en conversación con Diego el mismo día;
+    # tipo_propagacion sigue siendo un único valor por especie (sin
+    # multi-vector simultáneo, ver sistema_flora.py:_propagar_planta).
+    flor_silvestre:
+      biomas: [pradera]
+      compite_espacio_fisico: false
+      tasa_crecimiento_por_dia: 0.3
+      prob_propagacion_por_dia: 0.08
+      preferencia_lluvia: [0.35, 0.9]
+      preferencia_temperatura: [0.3, 0.8]
+      preferencia_fertilidad: [0.35, 0.9]
+      # tipo_propagacion: semilla ligera, viento -- alcance mayor que
+      # hierba_silvestre, flor pequeña sin peso real.
+      tipo_propagacion: viento
+      alcance_viento_celdas: [3, 8]
+      recursos:
+        - nombre: nectar_semillas
+          categoria: alimento
+          capacidad_maxima: 5.0
+          tasa_regeneracion: 0.3
+          valor_nutricional: 0.08
+          valor_hidratacion: 0.05
+    arbusto_espinoso:
+      biomas: [pradera]
+      # compite_espacio_fisico/huella_m2: arbusto leñoso real, más
+      # pequeño que manzano/roble pero mayor que cactus.
+      compite_espacio_fisico: true
+      huella_m2: 2.0
+      tasa_crecimiento_por_dia: 0.05
+      prob_propagacion_por_dia: 0.02
+      preferencia_lluvia: [0.15, 0.6]
+      preferencia_temperatura: [0.3, 0.85]
+      preferencia_fertilidad: [0.1, 0.6]
+      # tipo_propagacion: bayas pesadas, caen cerca de la planta madre.
+      tipo_propagacion: caida
+      recursos:
+        - nombre: bayas_espinosas
+          categoria: alimento
+          capacidad_maxima: 4.0
+          tasa_regeneracion: 0.15
+          valor_nutricional: 0.25
+          valor_hidratacion: 0.1
+        - nombre: ramas_espinosas
+          categoria: material
+          capacidad_maxima: 5.0
+          tasa_regeneracion: 0.08
+    roble:
+      biomas: [bosque]
+      # compite_espacio_fisico/huella_m2: árbol grande, huella mayor que
+      # manzano -- tronco más grueso.
+      compite_espacio_fisico: true
+      huella_m2: 5.0
+      tasa_crecimiento_por_dia: 0.04
+      prob_propagacion_por_dia: 0.012
+      preferencia_lluvia: [0.4, 0.85]
+      preferencia_temperatura: [0.25, 0.65]
+      preferencia_fertilidad: [0.35, 0.85]
+      # tipo_propagacion: zoocoria -- bellotas comidas y transportadas
+      # (genérico, cualquier criatura que las coma, no solo ardilla).
+      # Necesita un recurso de categoría alimento real para que el
+      # enganche de zoocoria en _resolver_comer llegue a activarse --
+      # ver nucleo/flora.py / sistema_recursos.py.
+      tipo_propagacion: zoocoria
+      recursos:
+        - nombre: bellotas
+          categoria: alimento
+          capacidad_maxima: 5.0
+          tasa_regeneracion: 0.12
+          valor_nutricional: 0.3
+          valor_hidratacion: 0.05
+        - nombre: madera
+          categoria: material
+          capacidad_maxima: 6.0
+          tasa_regeneracion: 0.08
+    helecho:
+      biomas: [bosque]
+      # compite_espacio_fisico: sotobosque, cobertura de suelo, sin
+      # obstáculo físico real -- no compite por espacio.
+      compite_espacio_fisico: false
+      tasa_crecimiento_por_dia: 0.15
+      prob_propagacion_por_dia: 0.03
+      preferencia_lluvia: [0.6, 1.0]
+      preferencia_temperatura: [0.2, 0.55]
+      preferencia_fertilidad: [0.3, 0.75]
+      # tipo_propagacion: esporas ligeras, viento.
+      tipo_propagacion: viento
+      alcance_viento_celdas: [1, 4]
+      recursos:
+        - nombre: brotes_helecho
+          categoria: alimento
+          capacidad_maxima: 3.0
+          tasa_regeneracion: 0.2
+          valor_nutricional: 0.1
+          valor_hidratacion: 0.15
+    arbusto_desertico:
+      biomas: [desierto]
+      # compite_espacio_fisico/huella_m2: arbusto leñoso, algo menor que
+      # el cactus en superficie ocupada.
+      compite_espacio_fisico: true
+      huella_m2: 1.8
+      tasa_crecimiento_por_dia: 0.04
+      prob_propagacion_por_dia: 0.015
+      preferencia_lluvia: [0.0, 0.3]
+      preferencia_temperatura: [0.45, 0.95]
+      preferencia_fertilidad: [0.0, 0.35]
+      # tipo_propagacion: semillas caen cerca de la base.
+      tipo_propagacion: caida
+      recursos:
+        - nombre: ramas_secas
+          categoria: material
+          capacidad_maxima: 5.0
+          tasa_regeneracion: 0.08
+    hierba_desertica:
+      biomas: [desierto]
+      # compite_espacio_fisico: cobertura de suelo dispersa, sin
+      # obstáculo físico -- no compite por espacio.
+      compite_espacio_fisico: false
+      tasa_crecimiento_por_dia: 0.15
+      prob_propagacion_por_dia: 0.04
+      preferencia_lluvia: [0.0, 0.15]
+      preferencia_temperatura: [0.5, 1.0]
+      preferencia_fertilidad: [0.0, 0.2]
+      # tipo_propagacion: semilla ligera, viento.
+      tipo_propagacion: viento
+      alcance_viento_celdas: [2, 5]
+      recursos:
+        - nombre: raices_deserticas
+          categoria: alimento
+          capacidad_maxima: 4.0
+          tasa_regeneracion: 0.2
+          valor_nutricional: 0.1
+          valor_hidratacion: 0.03
+    pino:
+      biomas: [montana]
+      # compite_espacio_fisico/huella_m2: árbol grande, coníferas de
+      # tronco grueso -- huella similar al roble.
+      compite_espacio_fisico: true
+      huella_m2: 4.5
+      tasa_crecimiento_por_dia: 0.03
+      prob_propagacion_por_dia: 0.01
+      preferencia_lluvia: [0.2, 0.6]
+      preferencia_temperatura: [0.05, 0.45]
+      preferencia_fertilidad: [0.15, 0.5]
+      # tipo_propagacion: semilla alada, viento -- alcance real de un
+      # pinar en ladera.
+      tipo_propagacion: viento
+      alcance_viento_celdas: [2, 6]
+      recursos:
+        - nombre: madera
+          categoria: material
+          capacidad_maxima: 6.0
+          tasa_regeneracion: 0.08
+    arbusto_montano:
+      biomas: [montana]
+      # compite_espacio_fisico/huella_m2: arbusto leñoso más pequeño que
+      # el pino.
+      compite_espacio_fisico: true
+      huella_m2: 2.2
+      tasa_crecimiento_por_dia: 0.05
+      prob_propagacion_por_dia: 0.015
+      preferencia_lluvia: [0.15, 0.55]
+      preferencia_temperatura: [0.0, 0.4]
+      preferencia_fertilidad: [0.1, 0.4]
+      # tipo_propagacion: bayas caen cerca de la planta madre.
+      tipo_propagacion: caida
+      recursos:
+        - nombre: bayas_montanas
+          categoria: alimento
+          capacidad_maxima: 4.0
+          tasa_regeneracion: 0.12
+          valor_nutricional: 0.22
+          valor_hidratacion: 0.08
+        - nombre: ramas
+          categoria: material
+          capacidad_maxima: 5.0
+          tasa_regeneracion: 0.07
+    arbusto_artico:
+      biomas: [tundra]
+      # compite_espacio_fisico/huella_m2: arbusto ártico enano, leñoso
+      # pero pequeño -- el más chico de los competidores del catálogo.
+      compite_espacio_fisico: true
+      huella_m2: 1.0
+      tasa_crecimiento_por_dia: 0.03
+      prob_propagacion_por_dia: 0.01
+      preferencia_lluvia: [0.15, 0.55]
+      preferencia_temperatura: [0.0, 0.2]
+      preferencia_fertilidad: [0.05, 0.35]
+      # tipo_propagacion: semillas caen cerca de la base.
+      tipo_propagacion: caida
+      recursos:
+        - nombre: ramas_articas
+          categoria: material
+          capacidad_maxima: 4.0
+          tasa_regeneracion: 0.06
+    hierba_artica:
+      biomas: [tundra]
+      # compite_espacio_fisico: cobertura de suelo dispersa, sin
+      # obstáculo físico -- no compite por espacio.
+      compite_espacio_fisico: false
+      tasa_crecimiento_por_dia: 0.1
+      prob_propagacion_por_dia: 0.025
+      preferencia_lluvia: [0.15, 0.5]
+      preferencia_temperatura: [0.0, 0.18]
+      preferencia_fertilidad: [0.0, 0.25]
+      # tipo_propagacion: semilla ligera, viento.
+      tipo_propagacion: viento
+      alcance_viento_celdas: [1, 4]
+      recursos:
+        - nombre: brotes_articos
+          categoria: alimento
+          capacidad_maxima: 3.0
+          tasa_regeneracion: 0.15
+          valor_nutricional: 0.1
+          valor_hidratacion: 0.05
