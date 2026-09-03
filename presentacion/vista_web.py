@@ -469,6 +469,31 @@ HTML_VISOR = """<!DOCTYPE html>
     // de plumilla queda solo para el mapa completo de un vistazo.
     ZOOM_ESTILO_COLOR = 1.0;
 
+    // Alzado por elevacion (circulo 2026-09-03, spec en
+    // docs/superpowers/specs/2026-09-03-motor-visual-elevacion-design.md):
+    // terreno, sellos de relieve/flora y criaturas se dibujan mas arriba
+    // en pantalla cuanto mayor es la elevacion REAL de su celda -- solo
+    // en niveles medio/micro, macro se queda cenital puro. La camara
+    // sigue aplicando pan/zoom con una unica transformacion global
+    // (ctx.translate/scale en dibujarFrame): todo lo dibujado en espacio
+    // de mundo (unidades de tam) hereda pan/zoom gratis, asi que basta
+    // con restar este desplazamiento antes de multiplicar por tam.
+    // PROVISIONAL: 0.6 elegido contra el rango real de elevacion medido
+    // en 5 semillas (min~0.05, max~0.91, gradiente maximo entre celdas
+    // vecinas ~0.17) -- un valor mayor produciria paredes verticales
+    // dificiles de leer entre celdas contiguas.
+    const ESCALA_VERTICAL_ELEVACION = 0.6;
+    function alzadoY(elevacion, tam) {
+      return (elevacion || 0) * tam * ESCALA_VERTICAL_ELEVACION;
+    }
+
+    // Mismo umbral que ya fijaba dibujarFrame inline -- extraido aqui
+    // para que entidadEnPunto() (hit-test de click) pueda consultar el
+    // nivel actual sin duplicar la formula.
+    function nivelActual() {
+      return camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
+    }
+
     async function cargarBibliotecaAssets() {
       try {
         const resp = await fetch('/assets_manifest.json');

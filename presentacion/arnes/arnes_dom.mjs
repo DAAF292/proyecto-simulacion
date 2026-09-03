@@ -109,6 +109,23 @@ const FRAGMENTO_EXPORT = `
   registrarFormacion: typeof FORMACIONES_POR_BIOMA !== 'undefined'
     ? (bioma, cfg) => { FORMACIONES_POR_BIOMA[bioma] = cfg; }
     : undefined,
+  // Alzado por elevacion (2026-09-03): alzadoY/nivelActual son funciones
+  // puras, se exportan tal cual. dibujarLavadoContinuo/dibujarLavadoModo/
+  // entidadEnPunto/mundoAPantalla ya existian en el visor pero no
+  // estaban en esta lista todavia -- primeros tests que las necesitan
+  // directamente. tam0 es un "let" primitivo de nivel de script: como
+  // cualquier primitivo, exportarlo devuelve una copia desconectada del
+  // binding interno (mismo motivo documentado arriba para
+  // FORMACIONES_POR_BIOMA, pero aqui ni siquiera aplica el truco de
+  // mutar un objeto ya compartido) -- se exporta tambien un setter que
+  // corre DENTRO de la vm para poder fijarlo desde un test.
+  alzadoY: typeof alzadoY !== 'undefined' ? alzadoY : undefined,
+  nivelActual: typeof nivelActual !== 'undefined' ? nivelActual : undefined,
+  dibujarLavadoContinuo: typeof dibujarLavadoContinuo !== 'undefined' ? dibujarLavadoContinuo : undefined,
+  dibujarLavadoModo: typeof dibujarLavadoModo !== 'undefined' ? dibujarLavadoModo : undefined,
+  entidadEnPunto: typeof entidadEnPunto !== 'undefined' ? entidadEnPunto : undefined,
+  mundoAPantalla: typeof mundoAPantalla !== 'undefined' ? mundoAPantalla : undefined,
+  establecerTam0: typeof tam0 !== 'undefined' ? (v) => { tam0 = v; } : undefined,
 });
 `;
 
