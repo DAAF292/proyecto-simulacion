@@ -294,23 +294,34 @@ test('entidadEnPunto localiza una entidad usando la proyeccion Caballera complet
   visor.camara.rotacion = 0;
 });
 
-// (2026-09-03, CORREGIDO por segunda vez -- reportado por Diego con
-// capturas reales: centrar el bounding box del rombo completo seguia
-// dejando la mitad del canvas vacia, porque el rombo es mas ancho que
-// el canvas a zoom 1. centrarCamara ahora centra sobre el CENTRO
-// LOGICO del mundo, no sobre el rombo entero -- en medio/micro nunca
-// se pretende ver el mapa completo de un vistazo.
-test('centrarCamara centra sobre el centro logico del mundo (no el bounding box del rombo completo)', () => {
+// (2026-09-03, CORREGIDO por TERCERA vez -- reportado por Diego con
+// capturas reales: incluso centrando sobre el centro logico del mundo
+// (zoom fijo en 1) seguia quedando mucho hueco vacio. Causa real,
+// medida: el rombo Caballera es estructuralmente mucho mas ancho que
+// alto (ALPHA=45/K=0.5 -- el eje X lleva la anchura de fila completa
+// sin comprimir, el eje Y solo lleva la compresion), asi que a zoom 1
+// la ALTURA del rombo no llega ni a la mitad del canvas. centrarCamara
+// ahora ajusta el zoom para que la ALTURA del rombo llene el canvas
+// (con margen) -- el ancho se desborda a proposito, se acepta que en
+// medio/micro haga falta pan lateral para ver el mundo entero (nunca
+// fue el objetivo verlo completo de un vistazo, para eso esta macro).
+test('centrarCamara ajusta el zoom para llenar la altura del rombo, centrado sobre el centro logico', () => {
   const TAM0 = 20;
   const n = 40;
   visor.establecerTam0(TAM0);
   visor.establecerUltimoDataConocido({ ancho: n, alto: n });
   visor.camara.rotacion = 0;
   visor.centrarCamara();
-  assert.equal(visor.camara.zoom, 1);
+
+  const bbox = visor.calcularBoundingBoxProyectado(n, 0);
+  const alturaRombo = bbox.maxY - bbox.minY;
+  const zoomEsperado = (visor.canvas.height * 0.85) / alturaRombo;
+  assert.ok(Math.abs(visor.camara.zoom - zoomEsperado) < 0.001,
+    `zoom esperado ${zoomEsperado}, fue ${visor.camara.zoom}`);
+
   const centro = visor.celdaAPantallaCompleta(n / 2, n / 2, 0, TAM0, n, 0);
-  const offsetXEsperado = visor.canvas.width / 2 - centro.cx;
-  const offsetYEsperado = visor.canvas.height / 2 - centro.cy;
+  const offsetXEsperado = visor.canvas.width / 2 - centro.cx * visor.camara.zoom;
+  const offsetYEsperado = visor.canvas.height / 2 - centro.cy * visor.camara.zoom;
   assert.ok(Math.abs(visor.camara.offsetX - offsetXEsperado) < 0.001,
     `offsetX esperado ${offsetXEsperado}, fue ${visor.camara.offsetX}`);
   assert.ok(Math.abs(visor.camara.offsetY - offsetYEsperado) < 0.001,

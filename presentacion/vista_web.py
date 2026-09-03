@@ -1059,18 +1059,40 @@ HTML_VISOR = """<!DOCTYPE html>
     // del medio), no sobre el rombo completo -- mismo criterio que
     // cualquier vista de detalle de este tipo, nunca se ve el mapa
     // entero "de cerca".
+    // (2026-09-03, TERCERA correccion de centrarCamara -- reportado por
+    // Diego con capturas reales: seguia quedando mucho hueco vacio,
+    // incluso centrando sobre el centro logico del mundo). Causa real,
+    // medida contra el motor: el rombo Caballera es ESTRUCTURALMENTE
+    // mucho mas ancho que alto con ALPHA=45/K=0.5 -- el eje X lleva la
+    // anchura COMPLETA de una fila sin comprimir mas el desplazamiento
+    // de profundidad, mientras el eje Y solo lleva la compresion. Con
+    // un mundo 40x40 y canvas 900px: ancho del rombo ~1218px (ya se
+    // desborda a zoom 1), alto ~318px (menos de la mitad del canvas).
+    // Ningun centrado arregla esto -- subir el zoom para llenar la
+    // altura desborda el ancho todavia mas de lo que ya se desborda.
+    // Se acepta: en medio/micro NUNCA se pretende ver el ancho completo
+    // del mundo sin hacer pan lateral (coherente con que tampoco se
+    // pretende ver el mundo entero -- para eso esta la vista macro). El
+    // zoom se ajusta para que la ALTURA del rombo llene el canvas (con
+    // margen), no el ancho.
+    const MARGEN_ENCUADRE_VERTICAL = 0.85;
     function centrarCamara() {
-      camara.zoom = 1;
       if (!tam0 || !ultimoDataConocido) {
+        camara.zoom = 1;
         camara.offsetX = 0;
         camara.offsetY = 0;
         return;
       }
       const n = ultimoDataConocido.ancho;
       const alto = ultimoDataConocido.alto;
+      const bbox = calcularBoundingBoxProyectado(n, camara.rotacion);
+      const alturaRombo = bbox.maxY - bbox.minY;
+      camara.zoom = alturaRombo > 0
+        ? Math.min(ZOOM_MAXIMO, Math.max(ZOOM_MINIMO, (canvas.height * MARGEN_ENCUADRE_VERTICAL) / alturaRombo))
+        : 1;
       const centro = celdaAPantallaCompleta(n / 2, alto / 2, 0, tam0, n, camara.rotacion);
-      camara.offsetX = canvas.width / 2 - centro.cx;
-      camara.offsetY = canvas.height / 2 - centro.cy;
+      camara.offsetX = canvas.width / 2 - centro.cx * camara.zoom;
+      camara.offsetY = canvas.height / 2 - centro.cy * camara.zoom;
     }
 
     function rotarCamara() {
