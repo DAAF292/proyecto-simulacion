@@ -163,8 +163,13 @@ test('construirElementoCriatura dibuja la sombra de anclaje en el suelo SIN alza
   assert.ok(elipses.length >= 1, 'debe dibujar al menos una elipse de sombra');
   // (2026-09-03) Con la Caballera completa, baseYSuelo ya no es
   // (e.y+1)*TAM plano -- el sesgo por profundidad esta siempre activo,
-  // se calcula con la misma formula real, no con el valor plano de antes.
-  const baseYSueloEsperado = visor.celdaAPantallaCompleta(1 + 0.5, 1 + 1, 0, TAM, 40, 0).cy;
+  // se calcula con la misma formula real, no con el valor plano de
+  // antes. CORRECCION (mismo dia, tras ver el visor real: "los sprites
+  // flotan"): el offset dentro de la celda (+tam, borde inferior) se
+  // suma en PIXELES ya proyectados -- pasarlo como wy=e.y+1 dentro de
+  // celdaAPantallaCompleta reshea ese punto como si fuera otra fila del
+  // mundo, desalineando la sombra del suelo real.
+  const baseYSueloEsperado = visor.celdaAPantallaCompleta(1, 1, 0, TAM, 40, 0).cy + TAM;
   assert.ok(Math.abs(elipses[0].args[1] - baseYSueloEsperado) < 0.001,
     `la sombra debe anclarse en baseYSuelo=${baseYSueloEsperado} (sin alzar), fue ${elipses[0].args[1]}`);
 });
@@ -189,17 +194,20 @@ test('entidadEnPunto localiza una entidad en una celda alzada usando su posicion
   // (2026-09-03) Con la Caballera completa, la posicion de mundo ya no
   // es (1.5*TAM, 1.5*TAM - alzado) -- el sesgo por profundidad esta
   // siempre activo (rotacion=0 explicita, para no depender de estado de
-  // otro test). Se compara contra celdaAPantallaCompleta, la fuente real.
+  // otro test). CORRECCION (mismo dia, tras ver el visor real): el
+  // centro de la celda se proyecta con (e.x, e.y) y el +0.5 de centrado
+  // se suma en pixeles ya proyectados, no como wy/wx fraccional dentro
+  // de celdaAPantallaCompleta.
   visor.camara.rotacion = 0;
-  const { cx, cy } = visor.celdaAPantallaCompleta(1.5, 1.5, 0.9, TAM, data.ancho, 0);
-  const pantalla = visor.mundoAPantalla(cx, cy);
+  const base = visor.celdaAPantallaCompleta(1, 1, 0.9, TAM, data.ancho, 0);
+  const pantalla = visor.mundoAPantalla(base.cx + TAM / 2, base.cy + TAM / 2);
 
   const encontrada = visor.entidadEnPunto(data, pantalla.x, pantalla.y);
   assert.ok(encontrada, 'debe encontrar la entidad en su posicion YA alzada');
   assert.equal(encontrada.id, 42);
 
-  const sinAlzar = visor.celdaAPantallaCompleta(1.5, 1.5, 0, TAM, data.ancho, 0);
-  const pantallaSinAlzar = visor.mundoAPantalla(sinAlzar.cx, sinAlzar.cy);
+  const baseSinAlzar = visor.celdaAPantallaCompleta(1, 1, 0, TAM, data.ancho, 0);
+  const pantallaSinAlzar = visor.mundoAPantalla(baseSinAlzar.cx + TAM / 2, baseSinAlzar.cy + TAM / 2);
   const distanciaAlzado = Math.hypot(pantalla.x - pantallaSinAlzar.x, pantalla.y - pantallaSinAlzar.y);
   if (distanciaAlzado > 16) {
     const noEncontrada = visor.entidadEnPunto(data, pantallaSinAlzar.x, pantallaSinAlzar.y);

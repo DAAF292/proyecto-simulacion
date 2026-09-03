@@ -221,7 +221,10 @@ test('dibujarStampsRelieveYFlora: el sello de montana cae donde predice celdaAPa
     }
   }
   assert.ok(candidatas.length > 0, 'debe haber al menos una celda que pase el gate de hash2 en este grid');
-  const cyEsperados = candidatas.map((c) => visor.celdaAPantallaCompleta(c.x, c.y + 1, 0.9, TAM, data.ancho, 0).cy);
+  // (2026-09-03, correccion real tras ver el visor: "los sprites
+  // flotan") el borde inferior (+tam) se suma en pixeles YA proyectados
+  // sobre (c.x, c.y), no como wy=c.y+1 dentro de celdaAPantallaCompleta.
+  const cyEsperados = candidatas.map((c) => visor.celdaAPantallaCompleta(c.x, c.y, 0.9, TAM, data.ancho, 0).cy + TAM);
   const cyMinimoEsperado = Math.min(...cyEsperados);
   // El drawImage real usa dy = baseY - alto (alto = ancho de la estampa,
   // ya que naturalWidth===naturalHeight===40 en el mock -- aspecto 1),
@@ -242,7 +245,10 @@ test('construirElementoCriatura usa celdaAPantallaCompleta para su posicion (ses
   const TAM = 50;
   const N = 40;
   const el = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0.5, N, 0);
-  const { cy } = visor.celdaAPantallaCompleta(2.5, 4, 0.5, TAM, N, 0);
+  // (2026-09-03, correccion real) proyectar (2,3) y sumar el borde
+  // inferior (+tam) en pixeles ya proyectados, no wy=4 dentro de
+  // celdaAPantallaCompleta.
+  const cy = visor.celdaAPantallaCompleta(2, 3, 0.5, TAM, N, 0).cy + TAM;
   assert.ok(Math.abs(el.ordenY - (cy + TAM * 0.01)) < 0.001,
     `ordenY esperado ${cy + TAM * 0.01}, fue ${el.ordenY}`);
 });
@@ -273,8 +279,10 @@ test('entidadEnPunto localiza una entidad usando la proyeccion Caballera complet
     entidades: [{ id: 99, x: 1, y: 1 }],
   };
 
-  const { cx, cy } = visor.celdaAPantallaCompleta(1.5, 1.5, 0.6, TAM, data.ancho, 90);
-  const pantalla = visor.mundoAPantalla(cx, cy);
+  // (2026-09-03, correccion real) proyectar (1,1) y centrar en pixeles
+  // ya proyectados (+tam/2), no wx/wy=1.5 dentro de celdaAPantallaCompleta.
+  const base = visor.celdaAPantallaCompleta(1, 1, 0.6, TAM, data.ancho, 90);
+  const pantalla = visor.mundoAPantalla(base.cx + TAM / 2, base.cy + TAM / 2);
 
   const encontrada = visor.entidadEnPunto(data, pantalla.x, pantalla.y);
   assert.ok(encontrada && encontrada.id === 99, 'debe encontrar la entidad en su posicion proyectada con rotacion');
@@ -307,4 +315,27 @@ test('centrarCamara sin datos conocidos cae al comportamiento simple (zoom 1, of
   assert.equal(visor.camara.zoom, 1);
   assert.equal(visor.camara.offsetX, 0);
   assert.equal(visor.camara.offsetY, 0);
+});
+
+// (2026-09-03) Regresion real, reportada por Diego con capturas del
+// visor: "los sprites parecen flotar, no estan sobre el suelo". Causa:
+// pasar un offset fraccional (y+1, y+0.85, x+0.5) DENTRO de
+// celdaAPantallaCompleta lo reshea como si fuera otra fila/columna del
+// mundo, en vez de sumarse en pixeles ya proyectados -- desalineaba
+// criaturas/sellos del suelo real por hasta ~0.65*tam. Este test fija
+// el invariante para que no se repita: los pies de una criatura deben
+// coincidir EXACTAMENTE con el borde inferior de SU PROPIA celda de
+// terreno (misma formula que usa dibujarLavadoContinuo: proyeccion de
+// (x,y) + tam plano), para varias rotaciones.
+test('los pies de una criatura coinciden con el borde inferior real de su celda de terreno (las 4 rotaciones)', () => {
+  const TAM = 50;
+  const N = 40;
+  const x = 7, y = 12, elevacion = 0.4;
+  for (const rotacion of [0, 90, 180, 270]) {
+    const el = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x, y }, TAM, elevacion, N, rotacion);
+    const bordeInferiorTerreno = visor.celdaAPantallaCompleta(x, y, elevacion, TAM, N, rotacion).cy + TAM;
+    const piesCriatura = el.ordenY - TAM * 0.01; // ordenY = baseY + sesgo minimo
+    assert.ok(Math.abs(piesCriatura - bordeInferiorTerreno) < 0.001,
+      `rotacion ${rotacion}: los pies (${piesCriatura}) deben coincidir con el borde inferior del terreno (${bordeInferiorTerreno})`);
+  }
 });

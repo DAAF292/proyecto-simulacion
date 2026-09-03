@@ -756,15 +756,23 @@ HTML_VISOR = """<!DOCTYPE html>
         const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
         imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
       }
-      // baseYSuelo: posicion real en el suelo de la celda, SIN alzar --
-      // ancla de la sombra. baseY: con la proyeccion Caballera completa
-      // (sesgo en X + alzado por elevacion), ancla del sprite/halo y del
-      // ordenamiento Y-sorted. cx no depende de la elevacion (verificado
-      // en el test de celdaAPantallaCompleta "la elevacion NO debe
-      // afectar a cx"), asi que una sola llamada con la elevacion real
-      // basta para ambos usos.
-      const { cx, cy: baseY } = celdaAPantallaCompleta(e.x + 0.5, e.y + 1, elevacion, tam, n, rotacion);
-      const { cy: baseYSuelo } = celdaAPantallaCompleta(e.x + 0.5, e.y + 1, 0, tam, n, rotacion);
+      // (2026-09-03, correccion real tras ver el visor: "los sprites
+      // parecen flotar") -- el desplazamiento DENTRO de la celda (pies
+      // en el borde inferior, centrado en X) NO debe pasar por
+      // celdaAPantallaCompleta con wy=e.y+1: eso resheara ese punto como
+      // si fuera una fila de mundo distinta (una fila mas al sur), que
+      // bajo Caballera cae en una posicion de pantalla distinta de "el
+      // borde inferior de ESTA celda" -- desalineaba la criatura del
+      // suelo por ~0.65*tam. Se proyecta la celda (e.x, e.y) UNA vez y
+      // el offset dentro de la celda (+tam para el borde, +tam/2 para
+      // centrar) se suma en PIXELES ya proyectados, igual que hace el
+      // terreno con su fillRect(cx, cy, tam, tam) y el jitter de los
+      // sellos de relieve/flora.
+      const proyeccionCelda = celdaAPantallaCompleta(e.x, e.y, elevacion, tam, n, rotacion);
+      const cx = proyeccionCelda.cx + tam / 2;
+      const baseY = proyeccionCelda.cy + tam;
+      const proyeccionCeldaSuelo = celdaAPantallaCompleta(e.x, e.y, 0, tam, n, rotacion);
+      const baseYSuelo = proyeccionCeldaSuelo.cy + tam;
       const ordenY = baseY + tam * 0.01;
       const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
       const runa = RUNAS[e.tipo] || '?';
@@ -899,9 +907,14 @@ HTML_VISOR = """<!DOCTYPE html>
                 cxBase = x * tam + tam / 2;
                 baseY = (y + 1) * tam;
               } else {
-                const proyeccion = celdaAPantallaCompleta(x, y + 1, c.elevacion, tam, data.ancho, camara.rotacion);
+                // (2026-09-03, correccion real) igual que en
+                // construirElementoCriatura: NO pasar y+1 dentro de
+                // celdaAPantallaCompleta (eso reshea el offset como fila
+                // de mundo distinta) -- proyectar la celda (x,y) y sumar
+                // el borde inferior en pixeles ya proyectados.
+                const proyeccion = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
                 cxBase = proyeccion.cx + tam / 2;
-                baseY = proyeccion.cy;
+                baseY = proyeccion.cy + tam;
               }
               elementos.push({
                 img, ordenY: baseY,
@@ -952,9 +965,12 @@ HTML_VISOR = """<!DOCTYPE html>
                 cxBase = x * tam + tam / 2;
                 baseYBase = y * tam + tam * 0.85;
               } else {
-                const proyeccion = celdaAPantallaCompleta(x, y + 0.85, c.elevacion, tam, data.ancho, camara.rotacion);
+                // (2026-09-03, correccion real) mismo criterio que arriba
+                // -- proyectar (x,y) y sumar el offset dentro de la celda
+                // (0.85*tam) en pixeles ya proyectados.
+                const proyeccion = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
                 cxBase = proyeccion.cx + tam / 2;
-                baseYBase = proyeccion.cy;
+                baseYBase = proyeccion.cy + tam * 0.85;
               }
               const baseY = baseYBase + (hash2(x, y, 95) - 0.5) * tam * 0.3;
               elementos.push({
@@ -1165,7 +1181,12 @@ HTML_VISOR = """<!DOCTYPE html>
           const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
           const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
           const elevacion = data.celdas[cyCelda][cxCelda].elevacion || 0;
-          proyeccion = celdaAPantallaCompleta(e.x + 0.5, e.y + 0.5, elevacion, tam0, data.ancho, camara.rotacion);
+          // (2026-09-03, correccion real) proyectar (e.x, e.y) y centrar
+          // en pixeles ya proyectados -- e.x+0.5/e.y+0.5 dentro de
+          // celdaAPantallaCompleta reshearia el centro como si fuera
+          // otra celda del mundo.
+          const base = celdaAPantallaCompleta(e.x, e.y, elevacion, tam0, data.ancho, camara.rotacion);
+          proyeccion = { cx: base.cx + tam0 / 2, cy: base.cy + tam0 / 2 };
         }
         const centro = mundoAPantalla(proyeccion.cx, proyeccion.cy);
         const d = (centro.x - px) ** 2 + (centro.y - py) ** 2;
@@ -2527,8 +2548,10 @@ HTML_VISOR = """<!DOCTYPE html>
           const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
           const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
           const elevacionEntidad = data.celdas[cyCelda][cxCelda].elevacion || 0;
-          const proyeccion = celdaAPantallaCompleta(e.x + 0.5, e.y + 0.5, elevacionEntidad, tam, data.ancho, camara.rotacion);
-          const centro = mundoAPantalla(proyeccion.cx, proyeccion.cy);
+          // (2026-09-03, correccion real) mismo criterio: proyectar
+          // (e.x, e.y) y centrar en pixeles ya proyectados.
+          const baseAnotacion = celdaAPantallaCompleta(e.x, e.y, elevacionEntidad, tam, data.ancho, camara.rotacion);
+          const centro = mundoAPantalla(baseAnotacion.cx + tam / 2, baseAnotacion.cy + tam / 2);
           const margen = 24;
           if (centro.x < -margen || centro.x > canvas.width + margen ||
               centro.y < -margen || centro.y > canvas.height + margen) return;
