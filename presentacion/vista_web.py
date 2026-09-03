@@ -1013,10 +1013,47 @@ HTML_VISOR = """<!DOCTYPE html>
     let tam0 = null;
     const camara = { zoom: 1, offsetX: 0, offsetY: 0, rotacion: 0 };
 
+    // (2026-09-03) Bounding box real de las 4 esquinas del mundo, ya
+    // proyectadas con Caballera+rotacion (elevacion=0 -- la elevacion
+    // real solo añade un desplazamiento vertical pequeño frente al
+    // sesgo por profundidad, se ignora aqui por simplicidad). Como la
+    // proyeccion es afin en (px,py) para cualquiera de las 4 rotaciones
+    // discretas, el minimo/maximo de cx/cy del grid completo siempre
+    // cae en una de las 4 esquinas -- no hace falta recorrer celda a
+    // celda.
+    function calcularBoundingBoxProyectado(n, rotacion) {
+      const esquinas = [
+        celdaAPantallaCompleta(0, 0, 0, tam0, n, rotacion),
+        celdaAPantallaCompleta(n, 0, 0, tam0, n, rotacion),
+        celdaAPantallaCompleta(0, n, 0, tam0, n, rotacion),
+        celdaAPantallaCompleta(n, n, 0, tam0, n, rotacion),
+      ];
+      const xs = esquinas.map((e) => e.cx);
+      const ys = esquinas.map((e) => e.cy);
+      return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+    }
+
+    // (2026-09-03) Corregido tras ver el visor real: con la Caballera
+    // activa, el mundo proyectado ya no es el rectangulo de siempre --
+    // es un rombo mas ancho que alto (el sesgo por profundidad expande
+    // el ancho real bastante mas alla de lo que cabe en el canvas a
+    // zoom 1). offsetX/offsetY=0 dejaba la mayor parte del mundo fuera
+    // de encuadre (reportado por Diego con capturas reales). Centra el
+    // BOUNDING BOX real del rombo respecto al canvas -- no garantiza que
+    // el mundo entero quepa a zoom 1 (puede seguir sobrando por los
+    // lados, eso exigiria tambien reducir el zoom, fuera de alcance de
+    // este arreglo), pero deja de estar sistematicamente descentrado.
     function centrarCamara() {
       camara.zoom = 1;
-      camara.offsetX = 0;
-      camara.offsetY = 0;
+      if (!tam0 || !ultimoDataConocido) {
+        camara.offsetX = 0;
+        camara.offsetY = 0;
+        return;
+      }
+      const n = ultimoDataConocido.ancho;
+      const { minX, maxX, minY, maxY } = calcularBoundingBoxProyectado(n, camara.rotacion);
+      camara.offsetX = canvas.width / 2 - (minX + maxX) / 2;
+      camara.offsetY = canvas.height / 2 - (minY + maxY) / 2;
     }
 
     function rotarCamara() {

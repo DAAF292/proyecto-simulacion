@@ -132,6 +132,12 @@ const FRAGMENTO_EXPORT = `
   ALPHA_CABALLERA: typeof ALPHA_CABALLERA !== 'undefined' ? ALPHA_CABALLERA : undefined,
   K_CABALLERA: typeof K_CABALLERA !== 'undefined' ? K_CABALLERA : undefined,
   rotarCamara: typeof rotarCamara !== 'undefined' ? rotarCamara : undefined,
+  calcularBoundingBoxProyectado: typeof calcularBoundingBoxProyectado !== 'undefined' ? calcularBoundingBoxProyectado : undefined,
+  centrarCamara: typeof centrarCamara !== 'undefined' ? centrarCamara : undefined,
+  canvas: typeof canvas !== 'undefined' ? canvas : undefined,
+  establecerUltimoDataConocido: typeof ultimoDataConocido !== 'undefined'
+    ? (v) => { ultimoDataConocido = v; }
+    : undefined,
 });
 `;
 

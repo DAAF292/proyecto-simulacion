@@ -282,3 +282,29 @@ test('entidadEnPunto localiza una entidad usando la proyeccion Caballera complet
   visor.camara.zoom = 1;
   visor.camara.rotacion = 0;
 });
+
+test('centrarCamara centra el bounding box real del rombo proyectado, no el rectangulo antiguo', () => {
+  const TAM0 = 20;
+  const n = 40;
+  visor.establecerTam0(TAM0);
+  visor.establecerUltimoDataConocido({ ancho: n, alto: n });
+  visor.camara.rotacion = 0;
+  visor.centrarCamara();
+  assert.equal(visor.camara.zoom, 1);
+  const bbox = visor.calcularBoundingBoxProyectado(n, 0);
+  const offsetXEsperado = visor.canvas.width / 2 - (bbox.minX + bbox.maxX) / 2;
+  const offsetYEsperado = visor.canvas.height / 2 - (bbox.minY + bbox.maxY) / 2;
+  assert.ok(Math.abs(visor.camara.offsetX - offsetXEsperado) < 0.001,
+    `offsetX esperado ${offsetXEsperado}, fue ${visor.camara.offsetX}`);
+  assert.ok(Math.abs(visor.camara.offsetY - offsetYEsperado) < 0.001,
+    `offsetY esperado ${offsetYEsperado}, fue ${visor.camara.offsetY}`);
+  visor.establecerUltimoDataConocido(null);
+});
+
+test('centrarCamara sin datos conocidos cae al comportamiento simple (zoom 1, offset 0)', () => {
+  visor.establecerUltimoDataConocido(null);
+  visor.centrarCamara();
+  assert.equal(visor.camara.zoom, 1);
+  assert.equal(visor.camara.offsetX, 0);
+  assert.equal(visor.camara.offsetY, 0);
+});
