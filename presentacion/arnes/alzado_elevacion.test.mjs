@@ -35,3 +35,41 @@ test('nivelActual clasifica por el umbral real de zoom (0.8/2.0)', () => {
   assert.equal(visor.nivelActual(), 'micro');
   visor.camara.zoom = 1; // restaurar valor por defecto para otros tests
 });
+
+function gridElevacion(elevaciones) {
+  // elevaciones: array 2D [fila][columna], igual que data.celdas
+  const celdas = elevaciones.map((fila, y) =>
+    fila.map((elevacion, x) => ({ x, y, bioma: 'pradera', planta: null, elevacion, lluvia: 0.4, temperatura: 0.5 }))
+  );
+  return { ancho: elevaciones[0].length, alto: elevaciones.length, celdas };
+}
+
+test('dibujarLavadoContinuo alza una celda de mayor elevacion mas arriba en pantalla', () => {
+  const TAM = 50;
+  const data = gridElevacion([
+    [0.1, 0.1],
+    [0.1, 0.1],
+  ]);
+  data.celdas[0][0].elevacion = 0.8; // celda alta en (0,0)
+  const frustum = { xMin: 0, xMax: 2, yMin: 0, yMax: 2 };
+  visor.limpiarCtxVisor();
+  visor.dibujarLavadoContinuo(TAM, data, frustum);
+  const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
+  const rectAlta = rects[0]; // (0,0), primera en el orden de iteracion
+  const alzadoEsperado = visor.alzadoY(0.8, TAM);
+  assert.ok(Math.abs(rectAlta.args[1] - (0 * TAM - alzadoEsperado)) < 0.001,
+    `la celda alta debe dibujarse en y0=${0 * TAM - alzadoEsperado}, fue ${rectAlta.args[1]}`);
+});
+
+test('dibujarLavadoContinuo dibuja una cara de risco cuando el vecino sur es mas bajo', () => {
+  const TAM = 50;
+  const data = gridElevacion([
+    [0.8],
+    [0.1],
+  ]);
+  const frustum = { xMin: 0, xMax: 1, yMin: 0, yMax: 2 };
+  visor.limpiarCtxVisor();
+  visor.dibujarLavadoContinuo(TAM, data, frustum);
+  const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
+  assert.ok(rects.length > 2, `se esperaba una cara de risco extra, hubo ${rects.length} fillRect`);
+});

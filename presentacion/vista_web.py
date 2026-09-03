@@ -1414,12 +1414,12 @@ HTML_VISOR = """<!DOCTYPE html>
     function lavadoDeCelda(celda) {
       if (modoMapa === 'relieve') {
         const [r, g, b] = colorHipsometrico(celda.elevacion || 0);
-        return { relleno: `rgba(${r}, ${g}, ${b}, 0.5)` };
+        return { relleno: `rgba(${r}, ${g}, ${b}, 0.5)`, r, g, b, alfa: '0.5' };
       }
       if (modoMapa === 'hidro') {
         if (!celda.tiene_agua) return null;
         const [r, g, b] = colorAguaPorProfundidad(celda.profundidad_agua || 0);
-        return { relleno: `rgba(${r}, ${g}, ${b}, 0.6)` };
+        return { relleno: `rgba(${r}, ${g}, ${b}, 0.6)`, r, g, b, alfa: '0.6' };
       }
       return null;
     }
@@ -1447,12 +1447,33 @@ HTML_VISOR = """<!DOCTYPE html>
       return [color[0], color[1], color[2], 90];
     }
 
+    // Cara de risco: rellena el hueco vertical entre el borde inferior de
+    // una celda alzada y el borde superior de su vecino SUR cuando este
+    // ultimo tiene menor elevacion (la celda "sobresale" sobre el). Sin
+    // vecino sur mas bajo (llanura, o borde de mapa), no dibuja nada.
+    // Reutilizada por dibujarLavadoContinuo/dibujarLavadoModo -- mismo
+    // relleno oscurecido, misma geometria.
+    function dibujarCaraDeRisco(tam, data, x, y, r, g, b, alfaTexto, y0, alzado) {
+      if (y + 1 >= data.alto) return;
+      const vecinoSur = data.celdas[y + 1][x];
+      const alzadoVecino = alzadoY(vecinoSur.elevacion || 0, tam);
+      if (alzado <= alzadoVecino) return;
+      const altoRisco = alzado - alzadoVecino;
+      ctx.fillStyle = `rgba(${Math.round(r * 0.7)}, ${Math.round(g * 0.7)}, ${Math.round(b * 0.7)}, ${alfaTexto})`;
+      ctx.fillRect(x * tam, y0 + tam, tam, altoRisco);
+    }
+
     function dibujarLavadoContinuo(tam, data, frustum) {
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
-          const [r, g, b, a] = colorLavadoContinuo(data.celdas[y][x]);
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
-          ctx.fillRect(x * tam, y * tam, tam, tam);
+          const c = data.celdas[y][x];
+          const [r, g, b, a] = colorLavadoContinuo(c);
+          const alzado = alzadoY(c.elevacion, tam);
+          const y0 = y * tam - alzado;
+          const alfaTexto = (a / 255).toFixed(3);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alfaTexto})`;
+          ctx.fillRect(x * tam, y0, tam, tam);
+          dibujarCaraDeRisco(tam, data, x, y, r, g, b, alfaTexto, y0, alzado);
         }
       }
     }
@@ -1460,10 +1481,14 @@ HTML_VISOR = """<!DOCTYPE html>
     function dibujarLavadoModo(tam, data, frustum) {
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
-          const lavado = lavadoDeCelda(data.celdas[y][x]);
+          const c = data.celdas[y][x];
+          const lavado = lavadoDeCelda(c);
           if (!lavado) continue;
+          const alzado = alzadoY(c.elevacion, tam);
+          const y0 = y * tam - alzado;
           ctx.fillStyle = lavado.relleno;
-          ctx.fillRect(x * tam, y * tam, tam, tam);
+          ctx.fillRect(x * tam, y0, tam, tam);
+          dibujarCaraDeRisco(tam, data, x, y, lavado.r, lavado.g, lavado.b, lavado.alfa, y0, alzado);
         }
       }
     }
