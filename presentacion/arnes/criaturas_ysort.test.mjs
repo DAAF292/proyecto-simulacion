@@ -53,10 +53,9 @@ test('construirElementoCriatura ancla la criatura al suelo de su celda con sesgo
   // (2026-09-03) Con la Caballera completa, baseY ya no es (e.y+1)*TAM
   // plano -- el sesgo por profundidad esta siempre activo (rotacion=0 no
   // lo anula, solo hace que rotarCoordenadas sea la identidad).
-  // CORRECCION (mismo dia, tras ver el visor real: "los sprites flotan"):
-  // el borde inferior (+tam) se suma en pixeles ya proyectados sobre
-  // (2,3), no como wy=4 dentro de celdaAPantallaCompleta.
-  const baseY = visor.celdaAPantallaCompleta(2, 3, 0, TAM, 40, 0).cy + TAM;
+  // CORRECCION FINAL (ver celdaComoQuad en vista_web.py): se proyecta
+  // DIRECTAMENTE (2.5, 4), no "proyectar (2,3) y sumar tam plano".
+  const baseY = visor.celdaAPantallaCompleta(2.5, 4, 0, TAM, 40, 0).cy;
   assert.ok(Math.abs(el.ordenY - (baseY + TAM * 0.01)) < 0.001,
     `ordenY debe ser baseY de SU celda mas el sesgo, fue ${el.ordenY}`);
 
@@ -170,10 +169,9 @@ test('oclusion completa: criatura entre dos montanas, norte la deja ver y sur la
 test('sin sprite para la especie, la criatura entra en la cola como halo+runa en espacio de mundo', () => {
   limpiarBiblioteca();
   const el = visor.construirElementoCriatura({ id: 1, tipo: 'lobo', x: 1, y: 1 }, TAM);
-  // (2026-09-03) Ver comentario del test de arriba -- el sesgo por
-  // profundidad de Caballera esta siempre activo, no es (e.y+1)*TAM
-  // plano, y el borde inferior se suma en pixeles ya proyectados.
-  const baseYEsperado = visor.celdaAPantallaCompleta(1, 1, 0, TAM, 40, 0).cy + TAM;
+  // (2026-09-03, CORRECCION FINAL) ver comentario del test de arriba --
+  // se proyecta DIRECTAMENTE (1.5, 2).
+  const baseYEsperado = visor.celdaAPantallaCompleta(1.5, 2, 0, TAM, 40, 0).cy;
   assert.equal(el.ordenY, baseYEsperado + TAM * 0.01, 'mismo anclaje base que un sprite');
   visor.limpiarCtxVisor();
   el.dibujar();

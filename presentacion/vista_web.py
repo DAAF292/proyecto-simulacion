@@ -756,23 +756,21 @@ HTML_VISOR = """<!DOCTYPE html>
         const nombreCriatura = elegirVariante(variantesCriatura, e.id, 0, 199);
         imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
       }
-      // (2026-09-03, correccion real tras ver el visor: "los sprites
-      // parecen flotar") -- el desplazamiento DENTRO de la celda (pies
-      // en el borde inferior, centrado en X) NO debe pasar por
-      // celdaAPantallaCompleta con wy=e.y+1: eso resheara ese punto como
-      // si fuera una fila de mundo distinta (una fila mas al sur), que
-      // bajo Caballera cae en una posicion de pantalla distinta de "el
-      // borde inferior de ESTA celda" -- desalineaba la criatura del
-      // suelo por ~0.65*tam. Se proyecta la celda (e.x, e.y) UNA vez y
-      // el offset dentro de la celda (+tam para el borde, +tam/2 para
-      // centrar) se suma en PIXELES ya proyectados, igual que hace el
-      // terreno con su fillRect(cx, cy, tam, tam) y el jitter de los
-      // sellos de relieve/flora.
-      const proyeccionCelda = celdaAPantallaCompleta(e.x, e.y, elevacion, tam, n, rotacion);
-      const cx = proyeccionCelda.cx + tam / 2;
-      const baseY = proyeccionCelda.cy + tam;
-      const proyeccionCeldaSuelo = celdaAPantallaCompleta(e.x, e.y, 0, tam, n, rotacion);
-      const baseYSuelo = proyeccionCeldaSuelo.cy + tam;
+      // (2026-09-03, CORRECCION de la correccion anterior -- ver el
+      // comentario de celdaComoQuad mas arriba) el "borde inferior de la
+      // celda" no es "proyectar (e.x,e.y) y sumar tam plano" -- eso
+      // asumia que una celda mide tam de alto en pantalla, y NO es asi
+      // bajo Caballera (una fila del mundo solo desplaza sin(ALPHA)*K*tam,
+      // no tam). El punto correcto es proyectar DIRECTAMENTE la posicion
+      // fraccional real del mundo (e.x+0.5, e.y+1 -- centro en X, borde
+      // sur en Y) a traves de la formula completa, exactamente como ya
+      // hace el terreno con sus 4 esquinas reales. La correccion de hoy
+      // (evitar pasar offsets DENTRO de celdaAPantallaCompleta) seguia
+      // siendo el diagnostico correcto -- lo que estaba mal era el
+      // remedio (sumar pixeles planos en vez de proyectar la posicion
+      // real), no la deteccion del sintoma.
+      const { cx, cy: baseY } = celdaAPantallaCompleta(e.x + 0.5, e.y + 1, elevacion, tam, n, rotacion);
+      const { cy: baseYSuelo } = celdaAPantallaCompleta(e.x + 0.5, e.y + 1, 0, tam, n, rotacion);
       const ordenY = baseY + tam * 0.01;
       const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
       const runa = RUNAS[e.tipo] || '?';
@@ -907,14 +905,14 @@ HTML_VISOR = """<!DOCTYPE html>
                 cxBase = x * tam + tam / 2;
                 baseY = (y + 1) * tam;
               } else {
-                // (2026-09-03, correccion real) igual que en
-                // construirElementoCriatura: NO pasar y+1 dentro de
-                // celdaAPantallaCompleta (eso reshea el offset como fila
-                // de mundo distinta) -- proyectar la celda (x,y) y sumar
-                // el borde inferior en pixeles ya proyectados.
-                const proyeccion = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
-                cxBase = proyeccion.cx + tam / 2;
-                baseY = proyeccion.cy + tam;
+                // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba)
+                // proyectar directamente la posicion fraccional real del
+                // mundo (x+0.5, y+1), no "proyectar (x,y) y sumar tam
+                // plano" (una celda no mide tam de alto en pantalla bajo
+                // Caballera).
+                const proyeccion = celdaAPantallaCompleta(x + 0.5, y + 1, c.elevacion, tam, data.ancho, camara.rotacion);
+                cxBase = proyeccion.cx;
+                baseY = proyeccion.cy;
               }
               elementos.push({
                 img, ordenY: baseY,
@@ -965,12 +963,12 @@ HTML_VISOR = """<!DOCTYPE html>
                 cxBase = x * tam + tam / 2;
                 baseYBase = y * tam + tam * 0.85;
               } else {
-                // (2026-09-03, correccion real) mismo criterio que arriba
-                // -- proyectar (x,y) y sumar el offset dentro de la celda
-                // (0.85*tam) en pixeles ya proyectados.
-                const proyeccion = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
-                cxBase = proyeccion.cx + tam / 2;
-                baseYBase = proyeccion.cy + tam * 0.85;
+                // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba)
+                // proyectar directamente (x+0.5, y+0.85), no "proyectar
+                // (x,y) y sumar 0.85*tam plano".
+                const proyeccion = celdaAPantallaCompleta(x + 0.5, y + 0.85, c.elevacion, tam, data.ancho, camara.rotacion);
+                cxBase = proyeccion.cx;
+                baseYBase = proyeccion.cy;
               }
               const baseY = baseYBase + (hash2(x, y, 95) - 0.5) * tam * 0.3;
               elementos.push({
@@ -1181,12 +1179,10 @@ HTML_VISOR = """<!DOCTYPE html>
           const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
           const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
           const elevacion = data.celdas[cyCelda][cxCelda].elevacion || 0;
-          // (2026-09-03, correccion real) proyectar (e.x, e.y) y centrar
-          // en pixeles ya proyectados -- e.x+0.5/e.y+0.5 dentro de
-          // celdaAPantallaCompleta reshearia el centro como si fuera
-          // otra celda del mundo.
-          const base = celdaAPantallaCompleta(e.x, e.y, elevacion, tam0, data.ancho, camara.rotacion);
-          proyeccion = { cx: base.cx + tam0 / 2, cy: base.cy + tam0 / 2 };
+          // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba)
+          // proyectar directamente el centro real (e.x+0.5, e.y+0.5), no
+          // "proyectar (e.x,e.y) y sumar tam0/2 plano".
+          proyeccion = celdaAPantallaCompleta(e.x + 0.5, e.y + 0.5, elevacion, tam0, data.ancho, camara.rotacion);
         }
         const centro = mundoAPantalla(proyeccion.cx, proyeccion.cy);
         const d = (centro.x - px) ** 2 + (centro.y - py) ** 2;
@@ -1386,18 +1382,17 @@ HTML_VISOR = """<!DOCTYPE html>
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           if (c.bioma !== 'montana') continue;
-          // (2026-09-03, correccion real -- gap conocido de la spec de
-          // Caballera, cerrado junto con hidrografia/vegetacion) mismo
-          // patron que el resto: proyectar (x,y) y sumar el offset
-          // dentro de la celda en pixeles ya proyectados.
+          // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba)
+          // proyectar directamente (x+0.5, y+1), no "proyectar (x,y) y
+          // sumar tam plano".
           let cxBase, base;
           if (esMacro) {
             cxBase = x * tam + tam / 2;
             base = (y + 1) * tam;
           } else {
-            const proyeccion = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
-            cxBase = proyeccion.cx + tam / 2;
-            base = proyeccion.cy + tam;
+            const proyeccion = celdaAPantallaCompleta(x + 0.5, y + 1, c.elevacion, tam, data.ancho, camara.rotacion);
+            cxBase = proyeccion.cx;
+            base = proyeccion.cy;
           }
           const cx = cxBase + (hash2(x, y, 102) - 0.5) * tam * 0.3;
           const apice = base - alturaDe(x, y);
@@ -1654,24 +1649,79 @@ HTML_VISOR = """<!DOCTYPE html>
       return [color[0], color[1], color[2], 90];
     }
 
+    // (2026-09-03, correccion real -- reportado por Diego con capturas:
+    // borde "en escalera" entre el terreno y el fondo) HALLAZGO: una
+    // celda no puede dibujarse como un cuadrado plano tam x tam en
+    // pantalla. Bajo Caballera, un paso de una fila del mundo (wy -> wy+1)
+    // solo desplaza cy en sin(ALPHA)*K*tam (~0.35*tam con los valores
+    // actuales), no tam -- dibujar cuadrados de tam de alto los hace
+    // solaparse mucho mas de lo que la proyeccion real produce, y el
+    // canto recto de cada cuadrado es lo que se ve como escalera en el
+    // borde del terreno. La celda es un PARALELOGRAMO: sus 4 esquinas
+    // reales del mundo (wx,wy)-(wx+1,wy)-(wx+1,wy+1)-(wx,wy+1),
+    // proyectadas con la MISMA elevacion de la celda (una celda es un
+    // plano, no cuatro alturas distintas).
+    function celdaComoQuad(wx, wy, elevacion, tam, n, rotacion) {
+      return [
+        celdaAPantallaCompleta(wx, wy, elevacion, tam, n, rotacion),
+        celdaAPantallaCompleta(wx + 1, wy, elevacion, tam, n, rotacion),
+        celdaAPantallaCompleta(wx + 1, wy + 1, elevacion, tam, n, rotacion),
+        celdaAPantallaCompleta(wx, wy + 1, elevacion, tam, n, rotacion),
+      ];
+    }
+
+    function trazarQuad(quad) {
+      ctx.beginPath();
+      ctx.moveTo(quad[0].cx, quad[0].cy);
+      for (let i = 1; i < quad.length; i++) ctx.lineTo(quad[i].cx, quad[i].cy);
+      ctx.closePath();
+    }
+
+    // De las 4 esquinas de la celda unidad (wx,wy)-(wx+1,wy+1), el borde
+    // "mas profundo en pantalla" (mayor py tras rotarCoordenadas) no es
+    // siempre el sur del mundo -- depende de la rotacion (a 90 grados es
+    // el oeste, a 180 el norte, a 270 el este). Se deriva de forma
+    // generica (comparando py real de las 4 esquinas) en vez de una
+    // tabla escrita a mano, para no arriesgar un caso mal derivado.
+    function bordeDeCelda(wx, wy, n, rotacion, masProfundo) {
+      const esquinas = [
+        { wx, wy }, { wx: wx + 1, wy }, { wx: wx + 1, wy: wy + 1 }, { wx, wy: wy + 1 },
+      ].map((p) => ({ ...p, ...rotarCoordenadas(p.wx, p.wy, n, rotacion) }));
+      const pyObjetivo = masProfundo
+        ? Math.max(...esquinas.map((e) => e.py))
+        : Math.min(...esquinas.map((e) => e.py));
+      return esquinas.filter((e) => Math.abs(e.py - pyObjetivo) < 1e-9).map((e) => ({ wx: e.wx, wy: e.wy }));
+    }
+
     // Cara de risco (generalizada, circulo 2026-09-03): rellena el hueco
-    // vertical entre el borde inferior de una celda alzada y el borde
-    // superior de su vecino "siguiente en profundidad de PANTALLA" --
-    // que ya no es necesariamente el sur del mundo tras rotar. Dada la
-    // celda actual (wx,wy), su remapeo (px,py), el vecino de pantalla es
-    // (px,py+1); invertirRotacion lo devuelve a coordenadas de MUNDO para
-    // leer su elevacion real.
-    function dibujarCaraDeRisco(tam, data, wx, wy, r, g, b, alfaTexto, cxCelda, cyCelda, alzado) {
+    // entre el borde "mas profundo en pantalla" de la celda actual y el
+    // borde "menos profundo" de su vecino de pantalla, cuando el vecino
+    // es mas bajo. Ya no es un rectangulo plano -- es el cuadrilatero
+    // real entre ambos bordes (que pueden estar sesgados por Caballera).
+    function dibujarCaraDeRisco(tam, data, wx, wy, elevacion, r, g, b, alfaTexto) {
       const n = data.ancho;
       const { px, py } = rotarCoordenadas(wx, wy, n, camara.rotacion);
       const { wx: vx, wy: vy } = invertirRotacion(px, py + 1, n, camara.rotacion);
       if (vx < 0 || vy < 0 || vx >= data.ancho || vy >= data.alto) return;
       const vecino = data.celdas[vy][vx];
-      const alzadoVecino = alzadoY(vecino.elevacion || 0, tam);
-      if (alzado <= alzadoVecino) return;
-      const altoRisco = alzado - alzadoVecino;
+      const elevVecino = vecino.elevacion || 0;
+      if (elevacion <= elevVecino) return;
+
+      const miBorde = bordeDeCelda(wx, wy, n, camara.rotacion, true);
+      const bordeVecino = bordeDeCelda(vx, vy, n, camara.rotacion, false);
+      const p1 = celdaAPantallaCompleta(miBorde[0].wx, miBorde[0].wy, elevacion, tam, n, camara.rotacion);
+      const p2 = celdaAPantallaCompleta(miBorde[1].wx, miBorde[1].wy, elevacion, tam, n, camara.rotacion);
+      const p3 = celdaAPantallaCompleta(bordeVecino[1].wx, bordeVecino[1].wy, elevVecino, tam, n, camara.rotacion);
+      const p4 = celdaAPantallaCompleta(bordeVecino[0].wx, bordeVecino[0].wy, elevVecino, tam, n, camara.rotacion);
+
       ctx.fillStyle = `rgba(${Math.round(r * 0.7)}, ${Math.round(g * 0.7)}, ${Math.round(b * 0.7)}, ${alfaTexto})`;
-      ctx.fillRect(cxCelda, cyCelda + tam, tam, altoRisco);
+      ctx.beginPath();
+      ctx.moveTo(p1.cx, p1.cy);
+      ctx.lineTo(p2.cx, p2.cy);
+      ctx.lineTo(p3.cx, p3.cy);
+      ctx.lineTo(p4.cx, p4.cy);
+      ctx.closePath();
+      ctx.fill();
     }
 
     function dibujarLavadoContinuo(tam, data, frustum) {
@@ -1679,12 +1729,11 @@ HTML_VISOR = """<!DOCTYPE html>
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
           const [r, g, b, a] = colorLavadoContinuo(c);
-          const { cx, cy } = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
           const alfaTexto = (a / 255).toFixed(3);
           ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alfaTexto})`;
-          ctx.fillRect(cx, cy, tam, tam);
-          const alzado = alzadoY(c.elevacion, tam);
-          dibujarCaraDeRisco(tam, data, x, y, r, g, b, alfaTexto, cx, cy, alzado);
+          trazarQuad(celdaComoQuad(x, y, c.elevacion, tam, data.ancho, camara.rotacion));
+          ctx.fill();
+          dibujarCaraDeRisco(tam, data, x, y, c.elevacion, r, g, b, alfaTexto);
         }
       }
     }
@@ -1695,11 +1744,10 @@ HTML_VISOR = """<!DOCTYPE html>
           const c = data.celdas[y][x];
           const lavado = lavadoDeCelda(c);
           if (!lavado) continue;
-          const { cx, cy } = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
           ctx.fillStyle = lavado.relleno;
-          ctx.fillRect(cx, cy, tam, tam);
-          const alzado = alzadoY(c.elevacion, tam);
-          dibujarCaraDeRisco(tam, data, x, y, lavado.r, lavado.g, lavado.b, lavado.alfa, cx, cy, alzado);
+          trazarQuad(celdaComoQuad(x, y, c.elevacion, tam, data.ancho, camara.rotacion));
+          ctx.fill();
+          dibujarCaraDeRisco(tam, data, x, y, c.elevacion, lavado.r, lavado.g, lavado.b, lavado.alfa);
         }
       }
     }
@@ -2114,16 +2162,13 @@ HTML_VISOR = """<!DOCTYPE html>
           // relleno provisional. En cuanto haya flora/hierba_silvestre_*.png
           // el guard de arriba ya la desvia sola al sistema de sellos.
           if (c.planta.especie === 'hierba_silvestre') continue;
-          // (2026-09-03, correccion real -- reportado por Diego: "las
-          // manchas verdes se superponen a todo") esta funcion solo
-          // corre a camara.zoom>=0.8 (el guard de arriba), es decir
-          // SIEMPRE en medio/micro -- Caballera esta siempre activo
-          // aqui, sin rama macro que considerar. Usaba x*tam/y*tam
-          // directo (gap conocido, sin migrar en el circulo de
-          // Caballera) mientras terreno/sellos/criaturas ya se habian
-          // movido -- quedaba flotando desalineada de todo lo demas.
-          const proyeccionPlanta = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
-          const cx = proyeccionPlanta.cx + tam / 2, cy = proyeccionPlanta.cy + tam / 2;
+          // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba) esta
+          // funcion solo corre a camara.zoom>=0.8 (el guard de arriba),
+          // siempre en medio/micro. Proyecta directamente el CENTRO real
+          // de la celda (x+0.5, y+0.5), no "proyectar (x,y) y sumar
+          // tam/2 plano".
+          const proyeccionPlanta = celdaAPantallaCompleta(x + 0.5, y + 0.5, c.elevacion, tam, data.ancho, camara.rotacion);
+          const cx = proyeccionPlanta.cx, cy = proyeccionPlanta.cy;
           const escala = 0.32 + 0.68 * c.planta.etapa;
           const [r, g, b] = COLOR_ESPECIE[c.planta.especie] || [90, 110, 70];
 
@@ -2432,15 +2477,9 @@ HTML_VISOR = """<!DOCTYPE html>
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
-          // (2026-09-03) Con Caballera activo (medio/micro), px/py deben
-          // salir de celdaAPantallaCompleta -- antes usaban x*tam/y*tam
-          // directo, un desajuste real encontrado al mapear este circulo
-          // (el charco/fuego no seguian ni el alzado del circulo
-          // anterior ni el sesgo de este).
-          const { cx: px, cy: py } = esMacro
-            ? { cx: x * tam, cy: y * tam }
-            : celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
-
+          // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba) el
+          // charco/fuego cubren la celda entera, igual que el terreno --
+          // se dibujan como el mismo paralelogramo, no un fillRect plano.
           // Agua permanente (rio/lago/poza) ya no se pinta plana aqui --
           // dibujarHidrografia() la traza como forma vectorial despues de
           // esta pasada. El charco efimero SI se queda plano: es una
@@ -2451,12 +2490,18 @@ HTML_VISOR = """<!DOCTYPE html>
           if (!esMacro && c.profundidad_charco > 0) {
             const intensidad = Math.min(1, c.profundidad_charco / 0.3);
             ctx.fillStyle = `rgba(${COLOR_CHARCO[0]}, ${COLOR_CHARCO[1]}, ${COLOR_CHARCO[2]}, ${0.15 + intensidad * 0.3})`;
-            ctx.fillRect(px, py, tam, tam);
+            trazarQuad(celdaComoQuad(x, y, c.elevacion, tam, data.ancho, camara.rotacion));
+            ctx.fill();
           }
 
           if (c.en_llamas) {
             ctx.fillStyle = `rgba(${COLOR_FUEGO[0]}, ${COLOR_FUEGO[1]}, ${COLOR_FUEGO[2]}, 0.55)`;
-            ctx.fillRect(px, py, tam, tam);
+            if (esMacro) {
+              ctx.fillRect(x * tam, y * tam, tam, tam);
+            } else {
+              trazarQuad(celdaComoQuad(x, y, c.elevacion, tam, data.ancho, camara.rotacion));
+              ctx.fill();
+            }
           }
         }
       }
@@ -2595,10 +2640,10 @@ HTML_VISOR = """<!DOCTYPE html>
           const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
           const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
           const elevacionEntidad = data.celdas[cyCelda][cxCelda].elevacion || 0;
-          // (2026-09-03, correccion real) mismo criterio: proyectar
-          // (e.x, e.y) y centrar en pixeles ya proyectados.
-          const baseAnotacion = celdaAPantallaCompleta(e.x, e.y, elevacionEntidad, tam, data.ancho, camara.rotacion);
-          const centro = mundoAPantalla(baseAnotacion.cx + tam / 2, baseAnotacion.cy + tam / 2);
+          // (2026-09-03, CORRECCION -- ver celdaComoQuad mas arriba)
+          // proyectar directamente el centro real (e.x+0.5, e.y+0.5).
+          const baseAnotacion = celdaAPantallaCompleta(e.x + 0.5, e.y + 0.5, elevacionEntidad, tam, data.ancho, camara.rotacion);
+          const centro = mundoAPantalla(baseAnotacion.cx, baseAnotacion.cy);
           const margen = 24;
           if (centro.x < -margen || centro.x > canvas.width + margen ||
               centro.y < -margen || centro.y > canvas.height + margen) return;

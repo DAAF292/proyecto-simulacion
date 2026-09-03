@@ -120,6 +120,9 @@ function gridElevacionCaballera(n, elevacionPorDefecto) {
   return { ancho: n, alto: n, celdas };
 }
 
+// (2026-09-03, correccion real -- reportado por Diego con capturas:
+// borde "en escalera") las celdas ya no se dibujan como fillRect planos
+// -- son paralelogramos (moveTo/lineTo/fill) con sus 4 esquinas reales.
 test('dibujarLavadoContinuo con Caballera: la celda (0,0) cae exactamente donde predice celdaAPantallaCompleta', () => {
   const TAM = 50;
   visor.camara.rotacion = 0;
@@ -127,8 +130,8 @@ test('dibujarLavadoContinuo con Caballera: la celda (0,0) cae exactamente donde 
   const frustum = { xMin: 0, xMax: 3, yMin: 0, yMax: 3 };
   visor.limpiarCtxVisor();
   visor.dibujarLavadoContinuo(TAM, data, frustum);
-  const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
-  const primero = rects[0]; // celda (0,0), primera en el orden de iteracion
+  const movimientos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'moveTo');
+  const primero = movimientos[0]; // esquina superior-izquierda de la celda (0,0)
   const { cx, cy } = visor.celdaAPantallaCompleta(0, 0, 0.3, TAM, data.ancho, 0);
   assert.ok(Math.abs(primero.args[0] - cx) < 0.001, `x esperado ${cx}, fue ${primero.args[0]}`);
   assert.ok(Math.abs(primero.args[1] - cy) < 0.001, `y esperado ${cy}, fue ${primero.args[1]}`);
@@ -141,8 +144,8 @@ test('dibujarLavadoContinuo con rotacion 90: la celda (0,0) cae donde predice ce
   const frustum = { xMin: 0, xMax: 3, yMin: 0, yMax: 3 };
   visor.limpiarCtxVisor();
   visor.dibujarLavadoContinuo(TAM, data, frustum);
-  const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
-  const primero = rects[0];
+  const movimientos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'moveTo');
+  const primero = movimientos[0];
   const { cx, cy } = visor.celdaAPantallaCompleta(0, 0, 0.3, TAM, data.ancho, 90);
   assert.ok(Math.abs(primero.args[0] - cx) < 0.001, `x esperado ${cx}, fue ${primero.args[0]}`);
   assert.ok(Math.abs(primero.args[1] - cy) < 0.001, `y esperado ${cy}, fue ${primero.args[1]}`);
@@ -183,10 +186,13 @@ test('cara de risco tras rotar 90 grados encuentra el vecino real del MUNDO, no 
   visor.camara.rotacion = 90;
   visor.limpiarCtxVisor();
   visor.dibujarLavadoContinuo(TAM, data, frustum);
-  const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
-  const { cx, cy } = visor.celdaAPantallaCompleta(1, 1, 0.8, TAM, n, 90);
-  const risco = rects.find((r) => Math.abs(r.args[0] - cx) < 0.001 && Math.abs(r.args[1] - (cy + TAM)) < 0.001);
-  assert.ok(risco, 'debe existir una cara de risco justo debajo de la celda (1,1), usando el vecino de PANTALLA real (0,1), no el sur fijo del mundo');
+  // (2026-09-03, correccion real) el risco ya no es un fillRect plano --
+  // es un cuadrilatero (moveTo/lineTo x3/closePath/fill). 9 celdas del
+  // grid + exactamente 1 risco esperado (solo (1,1) es mas alta que su
+  // vecino de pantalla real) = 10 fill en total.
+  const rellenos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fill');
+  assert.equal(rellenos.length, 10,
+    'se esperaban 9 celdas + 1 cara de risco (la del vecino de PANTALLA real, no el sur fijo del mundo)');
 
   visor.camara.rotacion = 0;
 });
@@ -221,10 +227,10 @@ test('dibujarStampsRelieveYFlora: el sello de montana cae donde predice celdaAPa
     }
   }
   assert.ok(candidatas.length > 0, 'debe haber al menos una celda que pase el gate de hash2 en este grid');
-  // (2026-09-03, correccion real tras ver el visor: "los sprites
-  // flotan") el borde inferior (+tam) se suma en pixeles YA proyectados
-  // sobre (c.x, c.y), no como wy=c.y+1 dentro de celdaAPantallaCompleta.
-  const cyEsperados = candidatas.map((c) => visor.celdaAPantallaCompleta(c.x, c.y, 0.9, TAM, data.ancho, 0).cy + TAM);
+  // (2026-09-03, CORRECCION FINAL -- ver celdaComoQuad en vista_web.py)
+  // se proyecta DIRECTAMENTE (c.x+0.5, c.y+1), no "proyectar (c.x,c.y) y
+  // sumar tam plano".
+  const cyEsperados = candidatas.map((c) => visor.celdaAPantallaCompleta(c.x + 0.5, c.y + 1, 0.9, TAM, data.ancho, 0).cy);
   const cyMinimoEsperado = Math.min(...cyEsperados);
   // El drawImage real usa dy = baseY - alto (alto = ancho de la estampa,
   // ya que naturalWidth===naturalHeight===40 en el mock -- aspecto 1),
@@ -245,10 +251,8 @@ test('construirElementoCriatura usa celdaAPantallaCompleta para su posicion (ses
   const TAM = 50;
   const N = 40;
   const el = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0.5, N, 0);
-  // (2026-09-03, correccion real) proyectar (2,3) y sumar el borde
-  // inferior (+tam) en pixeles ya proyectados, no wy=4 dentro de
-  // celdaAPantallaCompleta.
-  const cy = visor.celdaAPantallaCompleta(2, 3, 0.5, TAM, N, 0).cy + TAM;
+  // (2026-09-03, CORRECCION FINAL) se proyecta DIRECTAMENTE (2.5, 4).
+  const cy = visor.celdaAPantallaCompleta(2.5, 4, 0.5, TAM, N, 0).cy;
   assert.ok(Math.abs(el.ordenY - (cy + TAM * 0.01)) < 0.001,
     `ordenY esperado ${cy + TAM * 0.01}, fue ${el.ordenY}`);
 });
@@ -279,10 +283,9 @@ test('entidadEnPunto localiza una entidad usando la proyeccion Caballera complet
     entidades: [{ id: 99, x: 1, y: 1 }],
   };
 
-  // (2026-09-03, correccion real) proyectar (1,1) y centrar en pixeles
-  // ya proyectados (+tam/2), no wx/wy=1.5 dentro de celdaAPantallaCompleta.
-  const base = visor.celdaAPantallaCompleta(1, 1, 0.6, TAM, data.ancho, 90);
-  const pantalla = visor.mundoAPantalla(base.cx + TAM / 2, base.cy + TAM / 2);
+  // (2026-09-03, CORRECCION FINAL) se proyecta DIRECTAMENTE (1.5, 1.5).
+  const base = visor.celdaAPantallaCompleta(1.5, 1.5, 0.6, TAM, data.ancho, 90);
+  const pantalla = visor.mundoAPantalla(base.cx, base.cy);
 
   const encontrada = visor.entidadEnPunto(data, pantalla.x, pantalla.y);
   assert.ok(encontrada && encontrada.id === 99, 'debe encontrar la entidad en su posicion proyectada con rotacion');
@@ -327,13 +330,34 @@ test('centrarCamara sin datos conocidos cae al comportamiento simple (zoom 1, of
 // coincidir EXACTAMENTE con el borde inferior de SU PROPIA celda de
 // terreno (misma formula que usa dibujarLavadoContinuo: proyeccion de
 // (x,y) + tam plano), para varias rotaciones.
+// (2026-09-03, CORRECCION FINAL -- reportado por Diego con capturas
+// reales: borde "en escalera" entre el terreno y el fondo) el remedio
+// original (sumar tam plano) resulto ser tan incorrecto como el
+// sintoma que arreglaba: bajo Caballera una celda NO mide tam de alto
+// en pantalla (una fila solo desplaza sin(ALPHA)*K*tam), y el offset
+// "tam plano" solo daba resultados casualmente correctos a rotacion=0
+// (a 90/180/270 habria estado mal de una forma distinta). El terreno
+// ahora es un paralelogramo real (celdaComoQuad, 4 esquinas propias);
+// este test compara los pies de la criatura contra el borde inferior
+// REAL de ese paralelogramo (esquinas [2] y [3] del quad, que
+// comparten la misma cy por construccion -- es un borde recto en su
+// propio sistema), no contra una formula plana.
 test('los pies de una criatura coinciden con el borde inferior real de su celda de terreno (las 4 rotaciones)', () => {
   const TAM = 50;
   const N = 40;
   const x = 7, y = 12, elevacion = 0.4;
   for (const rotacion of [0, 90, 180, 270]) {
     const el = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x, y }, TAM, elevacion, N, rotacion);
-    const bordeInferiorTerreno = visor.celdaAPantallaCompleta(x, y, elevacion, TAM, N, rotacion).cy + TAM;
+    // La criatura se ancla en un punto FIJO del MUNDO (x+0.5, y+1 --
+    // ligeramente al sur, dentro de su celda), sea cual sea la rotacion
+    // de camara -- esta de pie en el mismo sitio fisico, solo cambia
+    // desde donde la mira la camara. Ese punto sigue siendo parte del
+    // paralelogramo real del terreno (celdaComoQuad usa las mismas 4
+    // esquinas de mundo), asi que basta comparar contra la MISMA
+    // proyeccion directa -- no hace falta encontrar "el borde mas
+    // profundo en pantalla" (eso es solo relevante para decidir donde
+    // dibujar la cara de risco, un problema distinto).
+    const bordeInferiorTerreno = visor.celdaAPantallaCompleta(x + 0.5, y + 1, elevacion, TAM, N, rotacion).cy;
     const piesCriatura = el.ordenY - TAM * 0.01; // ordenY = baseY + sesgo minimo
     assert.ok(Math.abs(piesCriatura - bordeInferiorTerreno) < 0.001,
       `rotacion ${rotacion}: los pies (${piesCriatura}) deben coincidir con el borde inferior del terreno (${bordeInferiorTerreno})`);
@@ -368,9 +392,11 @@ test('dibujarVegetacion (respaldo vectorial de flora sin asset) usa la proyeccio
   const elipses = visor.llamadasCtxUltimas().filter((l) => l.prop === 'ellipse');
   assert.ok(elipses.length >= 1, 'roble sin asset real debe caer al respaldo vectorial (elipse)');
 
-  const proyeccion = visor.celdaAPantallaCompleta(1, 1, 0.3, TAM, data.ancho, 0);
-  const cxEsperado = proyeccion.cx + TAM / 2;
-  const cyEsperado = proyeccion.cy + TAM / 2 + TAM * 0.18; // offset fijo del dibujo de "liquen/musgo/generico"
+  // (2026-09-03, CORRECCION FINAL) se proyecta DIRECTAMENTE el centro
+  // real (1.5, 1.5), no "proyectar (1,1) y sumar tam/2 plano".
+  const proyeccion = visor.celdaAPantallaCompleta(1.5, 1.5, 0.3, TAM, data.ancho, 0);
+  const cxEsperado = proyeccion.cx;
+  const cyEsperado = proyeccion.cy + TAM * 0.18; // offset fijo del dibujo de "liquen/musgo/generico"
   assert.ok(Math.abs(elipses[0].args[0] - cxEsperado) < 0.001, `cx esperado ${cxEsperado}, fue ${elipses[0].args[0]}`);
   assert.ok(Math.abs(elipses[0].args[1] - cyEsperado) < 0.001, `cy esperado ${cyEsperado}, fue ${elipses[0].args[1]}`);
 

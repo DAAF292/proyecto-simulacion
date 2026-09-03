@@ -137,6 +137,8 @@ const FRAGMENTO_EXPORT = `
   dibujarVegetacion: typeof dibujarVegetacion !== 'undefined' ? dibujarVegetacion : undefined,
   dibujarHidrografia: typeof dibujarHidrografia !== 'undefined' ? dibujarHidrografia : undefined,
   dibujarRelieve: typeof dibujarRelieve !== 'undefined' ? dibujarRelieve : undefined,
+  celdaComoQuad: typeof celdaComoQuad !== 'undefined' ? celdaComoQuad : undefined,
+  bordeDeCelda: typeof bordeDeCelda !== 'undefined' ? bordeDeCelda : undefined,
   contornoDeCluster: typeof contornoDeCluster !== 'undefined' ? contornoDeCluster : undefined,
   pintarCuerpoAgua: typeof pintarCuerpoAgua !== 'undefined' ? pintarCuerpoAgua : undefined,
   canvas: typeof canvas !== 'undefined' ? canvas : undefined,

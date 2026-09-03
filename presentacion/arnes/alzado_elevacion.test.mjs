@@ -44,7 +44,12 @@ function gridElevacion(elevaciones) {
   return { ancho: elevaciones[0].length, alto: elevaciones.length, celdas };
 }
 
-test('dibujarLavadoContinuo alza una celda de mayor elevacion mas arriba en pantalla', () => {
+// (2026-09-03, correccion real -- reportado por Diego con capturas:
+// borde "en escalera") las celdas ya no se dibujan como fillRect planos
+// -- son paralelogramos reales (4 esquinas proyectadas via
+// celdaAPantallaCompleta, trazados con moveTo/lineTo/fill). Estos dos
+// tests se actualizan al nuevo mecanismo.
+test('dibujarLavadoContinuo dibuja el paralelogramo real de una celda alta en la posicion correcta', () => {
   const TAM = 50;
   const data = gridElevacion([
     [0.1, 0.1],
@@ -54,11 +59,11 @@ test('dibujarLavadoContinuo alza una celda de mayor elevacion mas arriba en pant
   const frustum = { xMin: 0, xMax: 2, yMin: 0, yMax: 2 };
   visor.limpiarCtxVisor();
   visor.dibujarLavadoContinuo(TAM, data, frustum);
-  const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
-  const rectAlta = rects[0]; // (0,0), primera en el orden de iteracion
-  const alzadoEsperado = visor.alzadoY(0.8, TAM);
-  assert.ok(Math.abs(rectAlta.args[1] - (0 * TAM - alzadoEsperado)) < 0.001,
-    `la celda alta debe dibujarse en y0=${0 * TAM - alzadoEsperado}, fue ${rectAlta.args[1]}`);
+  const movimientos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'moveTo');
+  const primero = movimientos[0]; // esquina superior-izquierda de la celda (0,0)
+  const esperado = visor.celdaAPantallaCompleta(0, 0, 0.8, TAM, data.ancho, 0);
+  assert.ok(Math.abs(primero.args[0] - esperado.cx) < 0.001, `x esperado ${esperado.cx}, fue ${primero.args[0]}`);
+  assert.ok(Math.abs(primero.args[1] - esperado.cy) < 0.001, `y esperado ${esperado.cy}, fue ${primero.args[1]}`);
 });
 
 test('dibujarLavadoContinuo dibuja una cara de risco cuando el vecino sur es mas bajo', () => {
@@ -70,8 +75,8 @@ test('dibujarLavadoContinuo dibuja una cara de risco cuando el vecino sur es mas
   const frustum = { xMin: 0, xMax: 1, yMin: 0, yMax: 2 };
   visor.limpiarCtxVisor();
   visor.dibujarLavadoContinuo(TAM, data, frustum);
-  const rects = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fillRect');
-  assert.ok(rects.length > 2, `se esperaba una cara de risco extra, hubo ${rects.length} fillRect`);
+  const rellenos = visor.llamadasCtxUltimas().filter((l) => l.prop === 'fill');
+  assert.ok(rellenos.length > 2, `se esperaba una cara de risco extra, hubo ${rellenos.length} fill`);
 });
 
 // Grid 6x6 de montana (no 1x1): dibujarStampsRelieveYFlora gatea cada
@@ -162,14 +167,13 @@ test('construirElementoCriatura dibuja la sombra de anclaje en el suelo SIN alza
   const elipses = llamadas.filter((l) => l.prop === 'ellipse');
   assert.ok(elipses.length >= 1, 'debe dibujar al menos una elipse de sombra');
   // (2026-09-03) Con la Caballera completa, baseYSuelo ya no es
-  // (e.y+1)*TAM plano -- el sesgo por profundidad esta siempre activo,
-  // se calcula con la misma formula real, no con el valor plano de
-  // antes. CORRECCION (mismo dia, tras ver el visor real: "los sprites
-  // flotan"): el offset dentro de la celda (+tam, borde inferior) se
-  // suma en PIXELES ya proyectados -- pasarlo como wy=e.y+1 dentro de
-  // celdaAPantallaCompleta reshea ese punto como si fuera otra fila del
-  // mundo, desalineando la sombra del suelo real.
-  const baseYSueloEsperado = visor.celdaAPantallaCompleta(1, 1, 0, TAM, 40, 0).cy + TAM;
+  // (e.y+1)*TAM plano. CORRECCION FINAL (mismo dia, tras ver el visor
+  // real con capturas: borde "en escalera"): el punto correcto es
+  // proyectar DIRECTAMENTE la posicion fraccional real del mundo
+  // (1.5, 2 -- centro en X, borde sur en Y), no "proyectar (1,1) y sumar
+  // tam plano" (una celda no mide tam de alto en pantalla bajo
+  // Caballera -- ver celdaComoQuad en vista_web.py).
+  const baseYSueloEsperado = visor.celdaAPantallaCompleta(1.5, 2, 0, TAM, 40, 0).cy;
   assert.ok(Math.abs(elipses[0].args[1] - baseYSueloEsperado) < 0.001,
     `la sombra debe anclarse en baseYSuelo=${baseYSueloEsperado} (sin alzar), fue ${elipses[0].args[1]}`);
 });
@@ -194,20 +198,18 @@ test('entidadEnPunto localiza una entidad en una celda alzada usando su posicion
   // (2026-09-03) Con la Caballera completa, la posicion de mundo ya no
   // es (1.5*TAM, 1.5*TAM - alzado) -- el sesgo por profundidad esta
   // siempre activo (rotacion=0 explicita, para no depender de estado de
-  // otro test). CORRECCION (mismo dia, tras ver el visor real): el
-  // centro de la celda se proyecta con (e.x, e.y) y el +0.5 de centrado
-  // se suma en pixeles ya proyectados, no como wy/wx fraccional dentro
-  // de celdaAPantallaCompleta.
+  // otro test). CORRECCION FINAL: el centro de la celda se proyecta
+  // DIRECTAMENTE (1.5, 1.5), no "proyectar (1,1) y sumar tam/2 plano".
   visor.camara.rotacion = 0;
-  const base = visor.celdaAPantallaCompleta(1, 1, 0.9, TAM, data.ancho, 0);
-  const pantalla = visor.mundoAPantalla(base.cx + TAM / 2, base.cy + TAM / 2);
+  const base = visor.celdaAPantallaCompleta(1.5, 1.5, 0.9, TAM, data.ancho, 0);
+  const pantalla = visor.mundoAPantalla(base.cx, base.cy);
 
   const encontrada = visor.entidadEnPunto(data, pantalla.x, pantalla.y);
   assert.ok(encontrada, 'debe encontrar la entidad en su posicion YA alzada');
   assert.equal(encontrada.id, 42);
 
-  const baseSinAlzar = visor.celdaAPantallaCompleta(1, 1, 0, TAM, data.ancho, 0);
-  const pantallaSinAlzar = visor.mundoAPantalla(baseSinAlzar.cx + TAM / 2, baseSinAlzar.cy + TAM / 2);
+  const baseSinAlzar = visor.celdaAPantallaCompleta(1.5, 1.5, 0, TAM, data.ancho, 0);
+  const pantallaSinAlzar = visor.mundoAPantalla(baseSinAlzar.cx, baseSinAlzar.cy);
   const distanciaAlzado = Math.hypot(pantalla.x - pantallaSinAlzar.x, pantalla.y - pantallaSinAlzar.y);
   if (distanciaAlzado > 16) {
     const noEncontrada = visor.entidadEnPunto(data, pantallaSinAlzar.x, pantallaSinAlzar.y);
