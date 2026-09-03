@@ -129,23 +129,32 @@ alza con el terreno que pisa la criatura. `ordenY` (que ya deriva de
 `baseY`) hereda el cambio automáticamente, sin tocar la fórmula del
 sesgo.
 
-### 4. Escalado por altura real + sombra de anclaje (pieza barata, aprobada para este mismo círculo)
+### 4. Sombra de anclaje (pieza barata, aprobada para este mismo círculo)
 
-- El DTO ya manda `altura_m` por entidad (`presentacion/vista_web.py:2607`).
-  `construirElementoCriatura` incorpora un factor `alturaReal(e) =
-  clamp(e.altura_m / ALTURA_REFERENCIA_GNOMO_M, ESCALA_MIN, ESCALA_MAX)`
-  multiplicando `lado` junto a `escalaPorPeso(e)`/`factorPose` que ya
-  existen — mismo patrón, un factor más en la misma multiplicación.
-  `ALTURA_REFERENCIA_GNOMO_M` (PROVISIONAL, ~1.05m, centro del rango
-  racial de gnomo) normaliza para que un gnomo se vea igual que hoy y
-  las demás especies escalen relativas a él.
-- Una elipse translúcida se dibuja en el `baseY` SIN alzar (la posición
-  real en el suelo, antes de restar `alzadoY`) — ancla visualmente la
-  criatura a la celda que pisa, con el mismo criterio que ya usa el
-  anillo de selección (`dibujarAnotacionesEntidad`, pero esa es
-  post-cola, en espacio de pantalla; la sombra nueva se dibuja como
-  parte del elemento de la cola, en espacio de mundo, para quedar
-  correctamente ocluida si algo se dibuja delante).
+**CORRECCIÓN sobre la auditoría original**: la spec inicial proponía
+añadir aquí un escalado de sprite por `altura_m` real. Al leer el código
+con más profundidad para escribir el plan de implementación, se
+encontró que `escalaPorPeso(entidad)`
+(`presentacion/vista_web.py:392-396`) **ya escala cada sprite por un
+dato físico real e individual** — `dimensiones.peso`, vía raíz cúbica
+(relación física real peso→volumen→talla lineal), no por especie. El
+propio comentario que la precede documenta que esto ya fue corregido una
+vez con exactamente el mismo criterio ("el gnomo es mas pequeño que el
+lobo en codigo, la representacion debe responder a las medidas fisicas
+que tienen en el motor, no a una regla que tu definas") tras retirar una
+tabla de escalas inventada por especie. Añadir un segundo factor por
+`altura_m` encima sería redundante con una ley que ya existe, ya lee
+dato real, y ya fue corregida una vez con este mismo criterio — se
+retira esta pieza del círculo.
+
+Queda solo la sombra de anclaje: una elipse translúcida se dibuja en el
+`baseY` SIN alzar (la posición real en el suelo, antes de restar
+`alzadoY`) — ancla visualmente la criatura a la celda que pisa, con el
+mismo criterio que ya usa el anillo de selección
+(`dibujarAnotacionesEntidad`, pero esa es post-cola, en espacio de
+pantalla; la sombra nueva se dibuja como parte del elemento de la cola,
+en espacio de mundo, para quedar correctamente ocluida si algo se dibuja
+delante).
 
 ### 5. Selección por click (`entidadEnPunto`)
 
