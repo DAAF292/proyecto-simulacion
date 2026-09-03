@@ -126,6 +126,8 @@ const FRAGMENTO_EXPORT = `
   entidadEnPunto: typeof entidadEnPunto !== 'undefined' ? entidadEnPunto : undefined,
   mundoAPantalla: typeof mundoAPantalla !== 'undefined' ? mundoAPantalla : undefined,
   establecerTam0: typeof tam0 !== 'undefined' ? (v) => { tam0 = v; } : undefined,
+  rotarCoordenadas: typeof rotarCoordenadas !== 'undefined' ? rotarCoordenadas : undefined,
+  invertirRotacion: typeof invertirRotacion !== 'undefined' ? invertirRotacion : undefined,
 });
 `;
 

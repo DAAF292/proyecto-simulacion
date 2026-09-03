@@ -510,6 +510,33 @@ HTML_VISOR = """<!DOCTYPE html>
       return camara.zoom < 0.8 ? 'macro' : (camara.zoom < 2.0 ? 'medio' : 'micro');
     }
 
+    // Remapeo discreto de coordenadas para la rotacion de camara (circulo
+    // 2026-09-03, spec en
+    // docs/superpowers/specs/2026-09-03-caballera-rotacion-design.md):
+    // NO es una rotacion continua -- es un intercambio/reflejo de ejes en
+    // incrementos de 90 grados, aplicado ANTES de la proyeccion Caballera.
+    // n es el lado del grid (el mundo es siempre cuadrado, ancho===alto,
+    // verificado contra generar_zona_bioma -- un unico parametro, no dos).
+    function rotarCoordenadas(wx, wy, n, rotacion) {
+      switch (rotacion) {
+        case 90:  return { px: wy, py: n - wx };
+        case 180: return { px: n - wx, py: n - wy };
+        case 270: return { px: n - wy, py: wx };
+        default:  return { px: wx, py: wy };
+      }
+    }
+
+    // Inversa de rotarCoordenadas -- la inversa de 90 es 270, la de 180 es
+    // 180, la de 0 es 0 (propiedad del grupo de rotaciones discretas,
+    // verificada por composicion antes de escribir esto). Usada por la
+    // cara de risco para encontrar, dada una posicion de PANTALLA, que
+    // celda del MUNDO es de verdad (para leer su elevacion real).
+    function invertirRotacion(px, py, n, rotacion) {
+      const inversa = { 0: 0, 90: 270, 180: 180, 270: 90 }[rotacion];
+      const { px: wx, py: wy } = rotarCoordenadas(px, py, n, inversa);
+      return { wx, wy };
+    }
+
     async function cargarBibliotecaAssets() {
       try {
         const resp = await fetch('/assets_manifest.json');
@@ -950,7 +977,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // profundidad de zoom contra el motor real.
     const ZOOM_MINIMO = 0.4, ZOOM_MAXIMO = 8.0;
     let tam0 = null;
-    const camara = { zoom: 1, offsetX: 0, offsetY: 0 };
+    const camara = { zoom: 1, offsetX: 0, offsetY: 0, rotacion: 0 };
 
     function centrarCamara() {
       camara.zoom = 1;
