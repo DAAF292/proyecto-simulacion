@@ -83,15 +83,19 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- **Tests automatizados (CORREGIDO 29-08-2026, esta frase estaba desactualizada)**:
-  `tests/` sí contiene tests reales — `test_agua.py`, `test_bioma.py`,
-  `test_orografia.py`, 22 en total, escritos como "ley física" con docstring
-  explicando el comportamiento que validan (mismo criterio declarativo que
-  pide este documento para las reglas del motor). Cobertura real pero
-  limitada a tres módulos del núcleo (agua, bioma, orografía) — nada de
-  sistemas de comportamiento, reproducción, persistencia ni el bucle
-  principal tiene test dedicado todavía. CI/linting sigue sin configurar —
-  en eso la frase anterior seguía siendo exacta.
+- **Tests automatizados (CORREGIDO 2026-09-03, la cifra "22" ya estaba
+  desactualizada)**: `tests/` contiene 18 ficheros / 87 tests reales a
+  esta fecha (verificado con `pytest`, no de memoria), escritos como
+  "ley física" con docstring explicando el comportamiento que validan
+  (mismo criterio declarativo que pide este documento para las reglas
+  del motor). La cifra de 22 (fijada 29-08-2026) creció con los arcos de
+  flora (distribución causal + tipos de propagación, ver más abajo) y
+  dos pendientes cerrados de paso (`test_persistencia_entidades_viva.py`,
+  `test_rng_reproduccion.py`) — la afirmación "nada de reproducción ni
+  persistencia tiene test dedicado" ya NO es cierta, aunque la cobertura
+  sigue siendo parcial (nada del bucle principal, la mayoría de sistemas
+  de comportamiento, ni la mayor parte de persistencia). CI/linting
+  sigue sin configurar.
 
 ## Cómo comportarte al ayudar en este proyecto
 
@@ -905,11 +909,13 @@ profundidad + corrección de `zona_idx` en el conflicto por refugio),
 `fe47bb1` (arreglo del visor), `622abe8` (recolección de flora).
 
 **Pendiente real que sigue abierto**, sin una sola línea de código:
-`entidades.viva` nunca actualizado (señalado arriba, pre-existente);
-selector de zona real en el visor (el arreglo de hoy solo evita que la
-vista de superficie mienta, no añade forma de ver el subsuelo); liquen
-(montaña) y musgo (tundra) siguen sin ganar su propia entrada de
-material recolectable -- Diego no lo pidió esta vez, no se ha tocado.
+~~`entidades.viva` nunca actualizado (señalado arriba, pre-existente)~~
+-- CERRADO 2026-09-01/02, ver la sección "Dos pendientes antiguos
+cerrados vía pipeline" más abajo; selector de zona real en el visor (el
+arreglo de hoy solo evita que la vista de superficie mienta, no añade
+forma de ver el subsuelo); liquen (montaña) y musgo (tundra) siguen sin
+ganar su propia entrada de material recolectable -- Diego no lo pidió
+esta vez, no se ha tocado.
 
 ## Sobrepoblación sin techo aparente -- investigado y mitigado con un
 ## mecanismo natural de fertilidad por nutrición (2026-08-31)
@@ -1053,10 +1059,12 @@ comida (hallazgo secundario de esta investigación, no corregido -- las
 cuevas fueron diseñadas en un círculo previo sin plantearse el hueco de
 flora, y esta sesión no lo tocó); los dos modos de fallo residuales
 (colapso, overshoot lento) sin resolver, candidatos para cuando se aborde
-una calibración más profunda de reproducción; separar `sistema_
+una calibración más profunda de reproducción; ~~separar `sistema_
 reproduccion.py` a su propio `rng` en vez de compartir `rng_juego` con el
 resto del motor, si se quiere volver a comparar versiones de código
-semilla-a-semilla de forma fiable en el futuro.
+semilla-a-semilla de forma fiable en el futuro~~ -- CERRADO 2026-09-01,
+`rng_reproduccion` propio y persistido, ver "Dos pendientes antiguos
+cerrados vía pipeline" más abajo.
 
 ## Conflicto por refugio ocupado -- estado real corregido, no una pieza
 ## nueva (2026-08-31)
@@ -1652,6 +1660,124 @@ de una sesión real de `aider`); (c) otra opción. No decidido
 unilateralmente por Claude -- el patrón de esta sesión (Diego elige el
 modelo, Claude prueba y reporta con evidencia) se mantiene.
 
+## Dos pendientes antiguos cerrados vía pipeline, mismo tramo de trabajo
+## (2026-09-01/02) -- entidades.viva y RNG propio de reproducción
+
+Tras el balance del Hallazgo 3 (sección anterior), el pipeline autónomo
+(todavía con `aider` en este tramo, antes de la migración a
+`mini-swe-agent` documentada más abajo) sí llegó a cerrar limpiamente
+dos pendientes reales señalados en secciones previas de este documento
+-- ninguno de los dos documentado como cerrado hasta ahora (encontrado
+al auditar el `git log` real contra este documento, no al releerlo).
+
+- **`entidades.viva` nunca se actualizaba a `False` al morir** (hueco
+  señalado en "Auditoría de coherencia...", 2026-08-31, arriba --
+  tachado ahí). Plan `2026-09-02-fix-entidades-viva`: `UPDATE` real al
+  emitir el evento de muerte + test de persistencia dedicado
+  (`tests/test_persistencia_entidades_viva.py`). Cerrado con `aider`, a
+  pesar de que el Hallazgo 3 (modelo sin usar de forma fiable el
+  contenido de los ficheros) seguía sin resolución formal -- para una
+  tarea de una sola línea con poco contexto, el problema de fondo no
+  llegó a manifestarse esta vez; no se investigó por qué, tampoco se
+  necesitó.
+- **`sistema_reproduccion.py` seguía compartiendo `rng_juego` con el
+  resto del motor** (candidato señalado en "Sobrepoblación...",
+  2026-08-31, arriba -- tachado ahí, para cuando se quisiera volver a
+  comparar semillas de forma fiable). Plan
+  `2026-09-02-rng-propio-reproduccion`: `rng_reproduccion` propio,
+  sembrado de forma determinista a partir de la semilla del mundo y
+  persistido junto al resto del estado de RNG
+  (`tests/test_rng_reproduccion.py`). Cierra la lección metodológica de
+  aquella sección -- comparar código de reproducción semilla-a-semilla
+  vuelve a ser fiable.
+
+De paso, mismo tramo: `tests/test_ciclo_vital_es_adulto.py` añade
+cobertura nueva (sin ningún bug encontrado -- cobertura pura) a la ley
+de madurez reproductiva (`es_adulto`/`fraccion_madurez` por especie),
+que hasta entonces no tenía ningún test dedicado.
+
+## Distribución causal de flora (2026-09-01/02) -- pieza 1 de la cola
+## "poblar más el mundo", 5/5 mergeada vía pipeline con `aider`
+
+Primera pieza real de la cola acordada para "poblar más el mundo" (1.
+este círculo; 2. tipos de propagación, ver la sección de ese nombre más
+abajo; 3. cupo de espacio compartido por celda, sin empezar; 4. catálogo
+ampliado de especies, sin empezar) -- **nunca tuvo su propia sección en
+este documento hasta ahora**, pese a que secciones posteriores ya la
+referencian como "ya cerrada". Spec aprobada por Diego en
+`docs/superpowers/specs/2026-09-01-distribucion-causal-flora-design.md`:
+sustituye la colocación de flora en generación -- hasta entonces una
+norma de config (`proporcion` + `celdas_por_mancha_objetivo` por
+especie, sin relación con el terreno real) -- por una ley física real
+que lee sustrato, humedad de subsuelo, lluvia y temperatura ya
+calculados en generación. Troceada en 5 planes, cada uno soltado al
+pipeline autónomo (`aider`, en este arco) y mergeado por su propio PR:
+
+1. **PR #4** -- catálogo de sustrato con `fertilidad_base` (piedra,
+   arcilla, arena, tierra + tres materiales nuevos: tierra_negra,
+   marga, grava). **Incidente real de corrupción de `aider`, encontrado
+   en revisión de código, no por el pipeline**: el commit original
+   dejaba `fertilidad_base` triplicada/cuadruplicada en piedra/arcilla
+   (una copia con el homoglifo cirílico "misма" en vez de "misma"),
+   `tasa_infiltracion` corrompida a la clave inexistente
+   `taa_infiltracion` en piedra/tierra (habría roto en silencio la
+   infiltración de agua real de esos sustratos), y el fichero de test
+   entero duplicado -- la copia corrupta quedaba sombreada por la
+   limpia, por lo que "33 passed" no lo detectó. **Fallo de
+   verificación propio, reconocido en el commit de corrección**: haber
+   confiado en el recuento de pytest en vez de leer el diff completo.
+   Corregido con una segunda pasada: diff completo + loader YAML
+   estricto (rechaza claves duplicadas) + búsqueda de caracteres
+   no-ASCII sospechosos.
+2. **PR #5** -- `elegir_sustrato_celda`. Primer plan limpio con
+   `--edit-format udiff` en vez de `diff`/SEARCH-REPLACE (0
+   duplicación, 0 typos, diff exacto al plan) -- interrumpido a media
+   ejecución por una suspensión de la máquina (~6h sin proceso vivo),
+   completado a mano el resto del flujo de éxito ya en marcha.
+3. **PR #6** -- `idoneidad_colonizacion` + refactor de
+   `factor_produccion`. El modelo añadió 7 tests no pedidos por el
+   plan, 2 con bugs reales (afirmaban resultados que contradecían la
+   propia función documentada, o ignoraban una trampa de saturación de
+   humedad que el plan ya evitaba a propósito) -- retirados, quedan
+   solo los 7 del plan.
+4. **PR #7** -- sustrato variado + fertilidad inicial en generación.
+   Dos correcciones manuales: una línea duplicada en
+   `nucleo/territorio.py` rompía TODA generación de mundo con un
+   `TypeError` (afectaba incluso a un test preexistente sin relación,
+   `test_rng_reproduccion`); un test heredado de la pieza 1 que
+   afirmaba que `sustrato_por_bioma` no cambiaría de forma quedó sin
+   retirar por el propio plan, pese a que la pieza 4 sí lo cambia a
+   lista por diseño -- hallazgo de revisión del plan, no de ejecución.
+5. **PR #8** -- ley de colonización por idoneidad
+   (`colonizar_por_idoneidad`), sustituye del todo el reparto por
+   proporción/mancha. Dos correcciones: función duplicada byte a byte
+   (inofensiva en ejecución, sucia); un test que exigía observar celdas
+   vacías nunca se cumplía contra la calibración PROVISIONAL real (0
+   celdas vacías en 5 semillas × 900 celdas) -- corregida la aserción,
+   señalado para revisar en calibración futura, sin tocar los números
+   a ojo por corregir un test.
+
+**Recalibración post-merge** (`3b427be`, verificación de conjunto tras
+las 5 piezas): `umbrales_sustrato_fertil` de montaña (0.6) y bosque
+(0.55) estaban por debajo del propio umbral de clasificación de esos
+biomas -- grava y arcilla quedaban estructuralmente inalcanzables ahí,
+no solo raras (confirmado: fertilidad de montaña siempre 0.0, de bosque
+siempre 0.70, en 3 semillas). Un primer intento de corrección (punto
+medio hasta 1.0) sobrecorrigió bosque -- medido en 10 semillas, la
+lluvia real dentro de bosque nunca supera 0.78. Recalibrado con la
+mediana real observada de cada bioma en vez del techo teórico del
+campo. Desierto y pradera no tenían este problema, sin tocar.
+
+**Balance**: 5/5 piezas mergeadas, 3 de los 5 PRs con al menos una
+corrección manual real tras revisión (corrupción, tests inventados con
+bugs, línea duplicada rompiendo la generación completa) -- ninguna
+quedó sin detectar antes de mergear, pero ninguna se mergeó limpia al
+primer intento tampoco. Contraste directo con las ejecuciones de
+`mini-swe-agent` documentadas más abajo, aunque sobre piezas de menor
+alcance cada una -- la comparación no es enteramente equivalente. 56/56
+tests en verde al cierre del arco, 1000 ticks de `BOSQUE_AUTO_TICKS` sin
+excepciones.
+
 ## Prueba de control del pipeline (2026-09-02, misma tarde) -- dos fallos
 ## más, causa raíz real del Hallazgo 3 identificada, `aider` descartado
 ## como herramienta, pieza 1 de propagación de flora resuelta a mano
@@ -1750,7 +1876,8 @@ pipeline más adelante, quedaron aparcados en
 el centinela), sin implementar.
 
 ## Tipos de propagación de flora (2026-09-02) -- pieza 2 de la cola
-## "poblar más el mundo", pieza 1/5 implementada, 2-5 pendientes
+## "poblar más el mundo", 5/5 IMPLEMENTADA Y MERGEADA (ver cierre real
+## más abajo, tras la sección de sustitución de aider por mini-swe-agent)
 
 Segunda pieza de la cola acordada en brainstorming el mismo día que la
 distribución causal de flora (1. distribución causal, ya cerrada -- ver
@@ -1783,10 +1910,13 @@ distribución causal (código completo, no blueprint):
    `tipo_propagacion` hasta la pieza 3. `tests/test_flora_tipo_propagacion.py`
    (5 tests), 61/61 en verde, `BOSQUE_AUTO_TICKS=800` sin excepciones.
 
-2-5. **Planes escritos, NO implementados**, aparcados en
-   `docs/superpowers/plans/pendientes/` (código completo ya redactado,
-   listos para ejecutar a mano o por pipeline cuando se decida la
-   herramienta):
+2-5. **CIERRE REAL (2026-09-02, mismo día): las 5 piezas quedaron
+   implementadas y mergeadas** -- lo que sigue es el diseño de cada
+   plan tal como se escribió originalmente (narrativa histórica,
+   conservada), más una nota de cierre real al final de cada una. Ver
+   la sección "Sustitución de aider por mini-swe-agent" más abajo para
+   2/5 y 3/5, y la sección siguiente a esa para 4/5 y 5/5 (incluye la
+   primera prueba real de planes tipo "blueprint" del proyecto):
    - **2/5**: `nucleo.flora.intentar_colonizar_celda` -- helper
      compartido por los tres vectores, sustituye la validación de
      destino que hoy vive solo dentro de `_intentar_propagacion`.
@@ -1796,14 +1926,21 @@ distribución causal (código completo, no blueprint):
      False`) porque `sistema_flora.py` ya tenía ese guard con un
      comentario documentando que fue un bug real ya corregido una vez
      ("la propagación colonizaba celdas de río/lago/poza"). **Hallazgo
-     colateral real, verificado contra el motor, NO corregido**: la
-     generación inicial (pieza 1 de la distribución causal, ya
-     mergeada) tiene exactamente este mismo bug sin el guard --
-     `colonizar_por_idoneidad` nunca excluye celdas sumergidas, medido
-     en 3 semillas (40x40): entre el 5% y el 11% de las celdas
-     colonizadas con flora en generación están también sobre agua.
-     Fuera de alcance corregirlo ahora (círculo ya cerrado), señalado
-     aquí para no perderlo.
+     colateral real, verificado contra el motor** -- en su momento NO
+     corregido: la generación inicial (pieza 1 de la distribución
+     causal, ya mergeada) tenía exactamente este mismo bug sin el
+     guard -- `colonizar_por_idoneidad` nunca excluía celdas sumergidas,
+     medido en 3 semillas (40x40): entre el 5% y el 11% de las celdas
+     colonizadas con flora en generación estaban también sobre agua.
+     **CORREGIDO el mismo día** (`500c05a`, PR #10
+     `feature/2026-09-02-fix-flora-sobre-agua`, primera prueba real de
+     plan tipo "blueprint" -- ver detalle en la sección "Piezas 4/5 y
+     5/5..." más abajo): `colonizar_por_idoneidad` recibe ahora
+     `celdas_con_agua` (reutiliza el resultado ya calculado de
+     `generar_cuerpos_agua`, sin recorrer el grid otra vez) y excluye
+     las celdas sumergidas antes de sortear especie, misma ley física
+     que ya aplicaba `intentar_colonizar_celda` a la propagación en
+     tiempo real.
    - **3/5**: integra el helper en `_intentar_propagacion` (vector
      caída) y añade `SistemaFlora._propagar_planta`, el punto único de
      dispatch por `tipo_propagacion` que sustituirá la llamada
@@ -1822,18 +1959,15 @@ distribución causal (código completo, no blueprint):
      `_resolver_comer`/`_resolver_aliviarse` de `sistema_recursos.py`;
      persistencia (`VERSION_ESQUEMA` a `0.31-fase0`).
 
-**Pendiente real, explícito**: pieza 2/5 a 5/5 sin implementar (planes
-ya escritos, ver arriba); asignación de vector por especie y las
-constantes numéricas nuevas, todas PROVISIONALES sin calibrar; el bug
-de flora-sobre-agua en generación inicial, señalado y no corregido;
-piezas 3 (cupo de espacio) y 4 (catálogo ampliado) de la cola "poblar
-más el mundo" sin empezar. Próximo paso acordado con Diego: cerrar el
-planteamiento del nuevo flujo del pipeline (sección anterior) antes de
-retomar la implementación de las piezas 2-5.
-
-**ACTUALIZACIÓN (2026-09-02, mismo día): pieza 2/5 y 3/5 ya
-implementadas -- ver la sección siguiente, sustitución real de aider
-por mini-swe-agent en el pipeline.**
+**CIERRE REAL (2026-09-02, mismo día): las 5/5 piezas quedaron
+implementadas y mergeadas** -- ver "Sustitución de aider por
+mini-swe-agent" (2/5, 3/5) y "Piezas 4/5 y 5/5 de propagación de
+flora..." (4/5, 5/5, más el fix del bug de flora-sobre-agua) más abajo.
+**Pendiente real que queda de verdad**: asignación de vector por
+especie y las constantes numéricas nuevas, todas PROVISIONALES sin
+calibrar contra el harness completo; piezas 3 (cupo de espacio
+compartido por celda) y 4 (catálogo ampliado de especies) de la cola
+"poblar más el mundo" sin empezar.
 
 ## Sustitución de aider por mini-swe-agent en el pipeline (2026-09-02) --
 ## validado dos veces de extremo a extremo, piezas 2/5 y 3/5 de
@@ -1916,13 +2050,12 @@ sobre viabilidad económica: con el mecanismo de tool-calling, el
 formato de plan actual (código completo, no blueprint) ya no es la
 única palanca posible -- pedirle al modelo más autonomía real (explorar
 el repo, decidir la implementación) ya no choca con la fragilidad
-mecánica que hundía a `aider`. **Pendiente, sin decidir**: si retomar
-la propuesta original de Diego de planes tipo blueprint (menos código
-pre-escrito por Claude, más exploración real del modelo) ahora que la
-herramienta lo permite, o seguir con el formato de código completo ya
-validado dos veces. Piezas 4/5 (viento) y 5/5 (zoocoria) de propagación
-de flora siguen aparcadas en `docs/superpowers/plans/pendientes/`,
-listas para soltar con el pipeline ya migrado.
+mecánica que hundía a `aider`. **Pregunta cerrada el mismo día, ver la
+sección siguiente**: si retomar la propuesta original de Diego de
+planes tipo blueprint ahora que la herramienta lo permite, o seguir con
+el formato de código completo ya validado dos veces -- la respuesta
+real, probada contra el motor, fue "blueprint funciona, y hasta mejora
+sobre el plan escrito a mano".
 
 **Nota técnica sobre el propio proceso de esta migración, sin relación
 con el pipeline en sí**: al mergear el PR #9, `origin/master` había
@@ -1932,6 +2065,152 @@ con `git diff` que el remoto era un superset exacto del local (mismo
 contenido, historia squasheada), resuelto con `git reset --hard
 origin/master` tras verificar que no había pérdida real de trabajo,
 solo de granularidad de commits locales.
+
+## Piezas 4/5 y 5/5 de propagación de flora, más el fix de
+## flora-sobre-agua -- primeras pruebas reales de planes "blueprint"
+## con mini-swe-agent, cierre completo del arco de propagación (2026-09-02)
+
+Con `mini-swe-agent` ya validado 2/2 sobre planes de código completo
+(sección anterior), se probó la otra pregunta que había quedado
+explícitamente abierta desde el balance del pipeline: si un plan tipo
+**blueprint** (solo la sección de spec, sin código pre-escrito por
+Claude) también funciona con esta herramienta -- la propuesta
+económica original de Diego, descartada antes por chocar con la
+fragilidad de `aider` (más autonomía real solo empeoraba la cascada de
+auto-mención de ficheros).
+
+**Primer intento de blueprint -- PR #10, fix de flora-sobre-agua**
+(mismo bug señalado como "NO corregido" en la pieza 2/5 de arriba):
+1/2 intentos. El primero se atascó en un paso por defecto del flujo de
+fábrica de `mini-swe-agent` -- "crear un script para reproducir el
+issue" -- porque el propio modelo escribió ese script con una comilla
+triple mal cerrada (código lleno de docstrings de comilla triple) y
+nunca convergió, agotando los 900s. **Causa raíz corregida, no
+parcheada a ciegas**: `.ai-pipeline/mini-agente-obrero.yaml`
+(`instance_template` propio, `30dbbcd`) sustituye ese paso por "edita
+directo, verifica con la suite de tests real del proyecto (ya sirve de
+reproducción)", más un aviso explícito contra escribir scripts de
+parche/reproducción en este código. El segundo intento, ya con esa
+config, completó limpio en 26 pasos con diseño independiente de
+calidad -- `500c05a`, PR #10 mergeado. Documentado también, de paso:
+`watch-plans.sh` puede quedar vivo entre sesiones sin que se sepa
+(hallazgo operativo, no corregido aquí).
+
+**Segundo intento de blueprint -- pieza 4/5, vector viento**
+(`8e6351a`): soltado como spec pura, sin ningún plan de código escrito
+por Claude -- `mini-swe-agent` exploró el repo, diseñó
+`SistemaFlora._propagar_viento` y `ZonaBioma.viento_dx/viento_dy` por
+su cuenta. Verificado independientemente contra el diseño ya
+documentado (arriba, en "Tipos de propagación de flora"): equivalente,
+**con una mejora real que el propio plan escrito no tenía** -- un
+guard explícito para zona sin viento. 76/76 tests, motor real sin
+excepciones. El plan 4/5 ya redactado a mano quedó retirado de
+`docs/superpowers/plans/pendientes/`, sin uso -- superado por la
+prueba, no por decisión de descartarlo antes de intentarlo.
+
+**Pieza 5/5, vector zoocoria** (componente `Semillas`, hooks en
+`_resolver_comer`/`_resolver_aliviarse`, persistencia a
+`VERSION_ESQUEMA=0.31-fase0`): cerrada con PR #11
+(`feature/2026-09-02-propagacion-05-zoocoria`), completando las 3
+partes ya diseñadas en la pieza 2/5 original (componente en ambas
+fábricas ECS, hooks, persistencia). Con esto, **el arco completo de
+"tipos de propagación de flora" (pieza 2 de la cola "poblar más el
+mundo") queda cerrado, 5/5**, junto con la "distribución causal de
+flora" (pieza 1, ver más arriba) -- quedan piezas 3 (cupo de espacio
+compartido por celda) y 4 (catálogo ampliado de especies) sin empezar.
+
+**Conclusión sobre blueprint vs. código completo, la pregunta que
+quedaba abierta**: con `mini-swe-agent`, un blueprint puro SÍ funciona
+-- de hecho, en la única comparación directa disponible (pieza 4/5)
+igualó y mejoró el diseño que Claude había escrito a mano. La
+limitación real encontrada no es el formato del plan sino el TIPO de
+tarea: `dc64f30` documenta que tareas de calibración de
+juicio/estilo (como la poda de comentarios narrativos de la sección
+siguiente) fallaron 2/2 con `mini-swe-agent` -- confirmado, esa poda
+se acabó haciendo a mano, por Claude, en toda la sesión siguiente (ver
+más abajo). El patrón que emerge, con evidencia real de ambos lados:
+implementación con criterio de éxito objetivo (tests, comportamiento
+verificable) funciona bien delegada, sea blueprint o plan completo;
+juicio de estilo sin un criterio de éxito objetivo no funciona
+delegado todavía.
+
+## Coste real del pipeline -- instrumentación y una causa raíz de
+## discrepancia de ~3x, investigada hasta el fondo (2026-09-02)
+
+Con el pipeline ya migrado a `mini-swe-agent` y probado repetidamente,
+Diego pidió medir si de verdad compensa económicamente -- pregunta que
+exigió investigar en profundidad, no una respuesta de una línea, porque
+la primera fuente de coste consultada resultó no ser fiable.
+
+**Instrumentación** (`707d3bb`, el commit más reciente de esta rama de
+trabajo): `run-plan.sh` consulta el balance real de la cuenta de
+OpenRouter (`/api/v1/credits`) antes del primer intento y al salir de
+cada ejecución (éxito o fallo, vía el `trap EXIT` ya existente),
+dejando un registro por ejecución en `.ai-pipeline/costes/costes.jsonl`
+(gitignored, igual que `trayectorias/`, best-effort -- nunca tumba el
+pipeline si la API no responde). Antes de esto, el coste real de cada
+pieza (flora, zoocoria) se calculaba a mano, con el campo
+`instance_cost` que `mini-swe-agent` reporta por su cuenta.
+
+**Investigación real de una discrepancia de ~3x, con dos hipótesis
+descartadas antes de encontrar la causa correcta** (mismo criterio que
+el resto del proyecto: verificar contra la fuente real, no conformarse
+con la primera explicación plausible):
+1. **Hipótesis 1, descartada**: "aterrizó en un proveedor caro
+   (DeepSeek/Fireworks/SiliconFlow oficial)". Comprobado contra el
+   catálogo real de OpenRouter -- Diego identificó en el panel que el
+   proveedor había cambiado a mitad de la ejecución de zoocoria
+   (OpenInference → Baidu/Qianfan), real, pero Baidu cuesta
+   $0.065/$0.130 por millón, prácticamente lo mismo que OpenInference
+   ($0.050/$0.160) -- no explica un salto de 3x.
+2. **Hipótesis 2, descartada**: `instance_cost` de `mini-swe-agent` es
+   fiable. Falso -- ese campo asume siempre el proveedor MÁS BARATO del
+   catálogo de litellm, con independencia de a cuál haya enrutado
+   OpenRouter la llamada de verdad (`sort:"price"` es una preferencia,
+   no una garantía; los proveedores baratos pueden estar saturados).
+   Verificado contra el balance real de la cuenta para la pieza de
+   zoocoria: coste real $0.12 frente a $0.03957 calculado -- ~3x, el
+   mismo patrón.
+3. **Causa raíz real, confirmada (`300b093`)**: `litellm_model_registry.json`
+   no declaraba `cache_read_input_token_cost` para el alias custom --
+   `mini-swe-agent`/litellm tratan como GRATIS cualquier token de
+   prompt marcado `cached` por el proveedor cuando el modelo no tiene
+   tarifa de caché registrada. En un bucle agéntico con contexto
+   creciente, el 96.8% del prompt de zoocoria (6.73M de 6.95M tokens)
+   estaba marcado `cached` -- casi todo el coste real venía de tokens
+   que el cálculo daba por gratuitos. Recalculado con la tarifa real
+   añadida: $0.127 contra el balance real medido de $0.12 --
+   reconciliado. El fix de flora se recalculó con el mismo método:
+   $0.03232 (antes $0.01949 con el cálculo viejo, ~1.66x).
+
+**Cuatro ajustes de coste tras el hallazgo** (`50ee3fd`), directos una
+vez identificada la causa (más contexto en caché = más coste real, no
+gratis): umbral de elisión de salidas largas bajado (4000/1500+1500,
+antes 10000/5000+5000 -- toda salida que quede en contexto se
+refactura, a precio de caché, en cada paso siguiente); instrucción para
+correr solo tests concretos mientras se desarrolla, suite completa una
+única vez al terminar; límite de coste por intento (`-l`) bajado de
+0.60 a 0.30 USD (la pieza más cara medida hasta ahora costó $0.127
+real); miga de pan en blueprints documentada con su peso económico
+real en `guia-tareas.md`.
+
+**Otros ajustes de infraestructura del mismo tramo, encontrados de
+paso**: `bda0c14` declaró el pricing real del alias en
+`litellm_model_registry.json` (litellm ya no necesita
+`MSWEA_COST_TRACKING=ignore_errors` para no fallar, y calcula coste
+real por llamada); `6780e88` forzó `extra_body.provider.sort="price"`
+tras verificar que ir directo a la API oficial de DeepSeek sería 3-4x
+más caro que los proveedores de inferencia más baratos del mismo
+modelo de pesos abiertos.
+
+**Pendiente real, explícito**: `.ai-pipeline/costes/costes.jsonl` no
+tiene todavía ninguna entrada real -- ninguna ejecución del pipeline ha
+corrido desde que se conectó la instrumentación; la próxima tarea
+soltada al centinela dará el primer dato de coste medido de extremo a
+extremo sin cálculo manual. La pregunta de fondo de Diego ("¿compensa
+económicamente?") sigue sin una respuesta agregada -- solo hay costes
+puntuales de piezas sueltas ($0.03-$0.13), no un balance sobre varias
+ejecuciones.
 
 ## Comentarios técnicos vs narrativa histórica (2026-09-02)
 
@@ -1952,8 +2231,28 @@ poda, con los resultados reales de intentarlo).
   Diego, referencias a specs por ruta completa. Nada se pierde, solo
   cambia de sitio.
 
-Ya aplicado a `nucleo/flora.py`, `sistemas/sistema_flora.py` y
-`nucleo/celda.py` (ver `docs/historial_flora.md`/`historial_celda.md`).
-Pendiente el resto del repositorio -- ficheros grandes como
-`sistemas/sistema_movimiento.py` (1102 líneas) y `nucleo/persistencia.py`
-(916 líneas) sin empezar.
+**ACTUALIZACIÓN (2026-09-02, mismo día): la poda se completó en todo el
+repositorio**, no solo en los tres ficheros originales -- `nucleo/flora.py`,
+`sistemas/sistema_flora.py`, `nucleo/celda.py` (`docs/historial_flora.md`/
+`historial_celda.md`), y a continuación el resto de `nucleo/`
+(`construccion.py`, `disposicion.py`, `territorio.py`, `orografia.py`,
+`asentamiento.py`, `cueva.py`, `materiales.py`, `entidad.py`, `agua.py`,
+`persistencia.py`, `zona_bioma.py`), todo `componentes/`, y todos los
+sistemas (`sistema_movimiento.py`, `sistema_recursos.py`,
+`sistema_decision.py`, `sistema_necesidades.py`, `sistema_reproduccion.py`,
+`sistema_desastres.py`, `sistema_depredacion.py`,
+`sistema_descomposicion.py`, `sistema_clima.py`,
+`sistema_capacidad_fisica.py`, `sistema_ciclo_vital.py`,
+`sistema_capacidad_mental.py`, `sistema_asentamiento.py`) más `main.py`.
+Cada módulo grande generó su propio `docs/historial_<módulo>.md`, mismo
+patrón que los tres originales.
+
+**Hallazgo real sobre CÓMO se hizo, no solo que se hizo**: `dc64f30`
+documenta que delegar esta poda a `mini-swe-agent` falló 2/2 -- tareas
+de calibración de juicio/estilo (qué comentario es "narrativa histórica"
+frente a "invariante que hace falta para no romper el código al
+tocarlo") no tienen un criterio de éxito objetivo que el modelo pueda
+verificar por su cuenta, a diferencia de una implementación con tests.
+Toda la poda del resto del repositorio se hizo directamente por Claude
+en la sesión de esa tarde, no vía pipeline -- decisión consistente con
+ese hallazgo, no una elección arbitraria de herramienta.
