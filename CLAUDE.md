@@ -2504,3 +2504,190 @@ Commits: `00eb475` (spec), `9b52037`/`74ef8b1` (puesta al día de este
 documento + subida temporal de presupuesto), merge `--no-ff` de
 `feature/2026-09-03-armas-primitivas-v2` a `master`, `aea9b84`
 (revert del presupuesto).
+
+## Cupo de espacio compartido por celda -- pieza 3 de "poblar más el
+## mundo", cerrada (2026-09-03, misma tarde)
+
+Diseño completo en `docs/superpowers/specs/2026-09-03-cupo-espacio-celda-design.md`
+(brainstorming con Diego, resumen: dos pistas de ocupación
+independientes en `Celda` -- especies con `compite_espacio_fisico:
+true`, hoy `manzano`/`cactus`, compiten por un cupo real en m²
+compartido con `Construccion` vía `nucleo/espacio.py`, huella fija por
+especie; especies de cobertura de suelo, `hierba_silvestre`/`liquen`/
+`musgo`, no compiten con nada, cohabitan libremente con la pista
+competidora). Decisiones reales de la conversación, no autoría de
+Claude: Diego rechazó dejar que un árbol bloqueara sin más un refugio
+en la misma celda ("no tiene sentido, lo lógico es que cohabiten"),
+lo que llevó a separar las dos pistas en vez de compartir un único
+gate; también preguntó explícitamente si una criatura consciente
+consideraría la hierba un obstáculo físico real -- respuesta que
+fijó la categoría `compite_espacio_fisico` como distinción binaria
+por naturaleza física de la especie, no un número pequeño calibrado a
+ojo. Tala (destruir una `Planta` para liberar su hueco) quedó
+señalada explícitamente como acción consciente futura, no construida
+aquí -- el bloqueo silencioso (sin búsqueda de celda vecina) sigue el
+mismo criterio ya aceptado para construcción-vs-construcción.
+
+**Cierre real, no trivial**: el primer intento real del pipeline
+implementó la pieza completa (864 líneas, `nucleo/espacio.py` nuevo,
+396 líneas de test) pero el commit quedó huérfano por un incidente de
+infraestructura (ver sección siguiente) antes de que Claude lo
+recuperara y auditara. Verificado antes de mergear: 110/110 tests en
+verde (99 previos + 11 nuevos), dos smoke tests reales
+(`BOSQUE_AUTO_TICKS` 1000 y 500 ticks) sin ninguna excepción. Cerrado
+manualmente por Claude, no por el flujo de éxito automático del
+pipeline -- commit `db817bc`/merge `b5406b9`.
+
+## Reenfoque del pipeline + una tarde de incidentes reales de
+## infraestructura (2026-09-03)
+
+Mismo día, después de cerrar la pieza 3, Diego pidió reenfocar
+partes del pipeline "que cree que están desactualizadas". Diagnóstico
+compartido en conversación: el fichero que Claude dejaba en
+`docs/superpowers/plans/` ya no contenía ningún plan real desde el
+arco de flora -- solo un envoltorio que apuntaba a la spec ("libertad
+total para decidir la forma exacta"). Rediseño acordado en
+brainstorming (spec:
+`docs/superpowers/specs/2026-09-03-reenfoque-pipeline-spec-no-plan-design.md`):
+
+- `docs/superpowers/plans/` → `docs/superpowers/encargos/` (Claude
+  deja un ENCARGO mínimo -- ruta a la spec + qué NO tocar, sin
+  repetir boilerplate).
+- `.ai-pipeline/watch-plans.sh` → `.ai-pipeline/centinela.sh`,
+  `.ai-pipeline/run-plan.sh` → `.ai-pipeline/ejecutar-encargo.sh`
+  (nombre fiel a lo que hace cada uno, decidido explícitamente con
+  Diego, incluida la pregunta directa sobre si renombrar
+  `run-plan.sh` también -- sí).
+- `instance_template` de `mini-agente-obrero.yaml` gana un paso 0:
+  el propio modelo escribe y comitea su plan real de implementación
+  (sobrescribiendo el fichero que `ejecutar-encargo.sh` ya movió a
+  `docs/plans/in_progress/`) ANTES de tocar código -- el encargo se
+  convierte en plan real en ese momento, no antes.
+
+Implementado en worktree aislado (`.claude/worktrees/reenfoque-pipeline`,
+skill `using-git-worktrees`) porque el directorio principal tenía
+`mini-swe-agent` corriendo en vivo sobre la pieza 3 en ese momento --
+comprobado con `ps aux` antes de tocar cualquier rama, evitando
+corromper el trabajo en curso. Mergeado a `master` tras 99/99 tests.
+
+**Cuatro incidentes reales de infraestructura, todos encontrados
+soltando la propia pieza 3 de nuevo como primera prueba del flujo
+nuevo -- ninguno hipotético, los cuatro con coste real medido**:
+
+1. **Límite diario de OpenRouter, tres reintentos consecutivos
+   borraron trabajo real**: `mini` chocó contra `"Key limit exceeded
+   (daily limit)"`, reintentó con backoff exponencial hasta que el
+   proceso se rindió con código de salida no-0/no-124 (camino de
+   "error de infraestructura" de `ejecutar-encargo.sh`), que hacía
+   `git branch -D` de la rama SIN comprobar si tenía un commit de
+   seguridad con trabajo real -- y el centinela, sin pausa, volvía a
+   recoger el mismo encargo de la cola (nunca se había retirado de
+   `master`) y repetía el ciclo. Pasó 3 veces seguidas antes de
+   intervención manual. **Recuperado** un commit huérfano de 864
+   líneas vía `git fsck --unreachable` (los objetos seguían vivos,
+   sin GC todavía) a una rama de rescate, subida a `origin` antes de
+   arreglar nada -- disciplina de "proteger primero, arreglar
+   después". Fix real (`2122d17`): `ejecutar-encargo.sh` compara
+   `HEAD` contra `PLAN_START_COMMIT` antes de borrar -- solo borra si
+   no hay nada que perder.
+2. **El fix anterior no bastaba por sí solo -- dos bugs más
+   encontrados en la SIGUIENTE prueba real** (un límite DISTINTO de
+   OpenRouter, `"total limit"`, no el `"daily limit"` ya levantado):
+   `.ai-pipeline/watch.log` estaba en `.gitignore` pero llevaba
+   tiempo trackeado desde antes de esa regla -- sus escrituras
+   continuas ensuciaban el árbol de trabajo y hacían fallar `git
+   checkout master`, y ese fallo abortaba el script vía `set -e`
+   ANTES de llegar al `exit 2` que el centinela necesita para
+   detenerse -- el disyuntor del punto 1 nunca se disparaba pese a
+   ser exactamente el caso para el que se diseñó. Fix (`e56269a`):
+   `git rm --cached` sobre `watch.log`, y `|| true` en cada paso de
+   limpieza para garantizar que se llegue al `exit 2` pase lo que
+   pase. **Confirmado funcionando la vez siguiente**: el centinela se
+   detuvo solo con el mensaje `"CENTINELA DETENIDO: fallo de
+   infraestructura externa"` -- la causa real esa vez ni siquiera era
+   de OpenRouter, era nuestro propio `max_budget: 1.00` USD/día del
+   proxy, agotado por la suma de reintentos del propio día.
+3. **PR vacío reportado como éxito** (mismo día, tras levantar todos
+   los límites externos): el modelo exploró 66 pasos correctamente y
+   luego dejó de emitir tool calls 6 veces seguidas (rechazado por
+   `mini-swe-agent`: "cada respuesta debe incluir al menos una
+   llamada a herramienta"), cerrando la tarea sin tocar ni un fichero
+   de código. El pipeline lo marcó como ÉXITO -- tests "en verde"
+   trivialmente, PR #12 con diff 0/0 -- porque el chequeo
+   `CAMBIOS_REALES` excluía `docs/plans/`/`.ai-pipeline/` pero NO
+   `docs/superpowers/encargos/`, así que el simple borrado
+   administrativo del propio fichero de encargo (que pasa siempre,
+   toque código o no) ya contaba como "1 cambio real". Mismo tipo de
+   fallo que ese chequeo se diseñó para evitar en 2026-09-01. Fix
+   (`00c7737`): excluir también `docs/superpowers`. PR #12 cerrado,
+   rama vacía borrada.
+4. **Cuarto intento, ya con los tres fixes aplicados, funcionó de
+   punta a punta**: el modelo escribió y comitó su propio plan
+   (`plan: cupo de espacio compartido por celda...`, confirmando que
+   el paso 0 nuevo funciona), llegó al paso 136 sin atascos, y volvió
+   a chocar solo con el tope diario del proxy -- de nuevo con el
+   trabajo real preservado (964 líneas) y el centinela deteniéndose
+   correctamente. Ver sección anterior para el cierre final (manual,
+   por Claude).
+
+**Balance honesto**: el reenfoque del pipeline en sí (renombrado +
+paso 0) funcionó a la primera. Los tres bugs de infraestructura
+NINGUNO estaba relacionado con el reenfoque -- eran fallos latentes
+del código ya existente (`watch.log` trackeado desde antes,
+`CAMBIOS_REALES` sin excluir la carpeta correcta) que solo salieron a
+la luz porque esta tarde de pruebas generó, por primera vez, la
+combinación exacta de circunstancias (límite externo + trabajo real
+ya comiteado + un PR completamente vacío) que los exponía. Todos
+corregidos y verificados con una repetición real, no solo con
+lectura de código.
+
+## Catálogo ampliado de especies de flora -- pieza 4 de "poblar más el
+## mundo", cierra el arco (2026-09-03, misma tarde)
+
+10 especies nuevas, 2 por bioma que hasta hoy tenía solo una
+(`pradera`: `flor_silvestre`+`arbusto_espinoso`; `desierto`:
+`arbusto_desertico`+`hierba_desertica`; `montana`: `pino`+
+`arbusto_montano`; `tundra`: `arbusto_artico`+`hierba_artica`) más 2
+en `bosque` (`roble`+`helecho`, pese a ya tener 2 -- Diego señaló que
+un bosque real es el bioma más biodiverso de todos, así que 2 seguía
+siendo poco). Diseño cerrado en conversación, sin spec aparte
+(bounded, sin decisión de arquitectura pendiente): mismo patrón de
+catálogo exacto que las 5 especies previas, cero mecanismo nuevo.
+
+**Hallazgo real al diseñar, no al implementar**: la primera propuesta
+del roble era "solo madera, sin alimento" con `tipo_propagacion:
+zoocoria` -- verificado contra `sistema_recursos.py` que zoocoria
+exige un recurso de categoría `alimento` de verdad (el enganche de
+`Semillas.especie_transportada` solo se dispara al comer), así que
+sin bellotas comestibles el roble nunca se habría propagado pese a
+tener el vector "correcto" configurado. Corregido antes de escribir
+una sola línea de config. De paso, Diego preguntó si "las ardillas
+cogen bellotas" necesitaba un mecanismo dedicado -- confirmado que
+zoocoria YA es genérica (cualquier criatura que coma el recurso puede
+dispersarlo), así que la idea emerge sola sin tocar nada.
+
+**Implementado directamente por Claude, no vía pipeline** -- el proxy
+tenía el tope diario agotado tras las pruebas de la pieza 3 ("hazlo
+tú", Diego). Verificado: 116/116 tests en verde (6 nuevos), smoke
+test real de 3000 ticks, y confirmado contra la base de datos real
+(no solo "no lanzó excepción") que las 10 especies nuevas -- incluidas
+las 6 competidoras por espacio -- tienen entidades `Planta` reales en
+el mundo tras la corrida. Commit `0afe91d`.
+
+Con esto, **la cola completa de "poblar más el mundo" queda cerrada**
+(distribución causal de flora, tipos de propagación, cupo de espacio,
+catálogo ampliado -- las 4 piezas).
+
+**Pendiente real, explícito**: todos los rangos de
+preferencia/tasas/huella_m2 de las 10 especies nuevas son
+PROVISIONAL, sin calibrar contra el harness completo, mismo criterio
+que el resto del catálogo. Propagación multi-vector simultánea por
+especie (p.ej. un roble que se disperse por caída Y por zoocoria a la
+vez) señalada como círculo futuro, no construida -- `tipo_propagacion`
+sigue siendo un único valor por especie. Evaluar modelos alternativos
+de OpenRouter para el pipeline (Diego pidió comparar coste/fiabilidad
+real de `deepseek-v4-flash-0731` contra candidatos como
+`z-ai/glm-4.7-flash`, posicionado para *"long-horizon task planning y
+tool collaboration"* -- justo el punto débil visto hoy) quedó
+explícitamente aplazado a una conversación futura, sin decidir nada
+todavía.
