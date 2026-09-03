@@ -407,18 +407,34 @@ HTML_VISOR = """<!DOCTYPE html>
     // definicion). PROVISIONAL: valores de medicion automatica, pendientes
     // de validacion visual de Diego en el visor real -- una pose concreta
     // que se lea mal se recalibra aqui a mano, sin tocar el mecanismo.
+    // RECALIBRADO (2026-09-03, feedback real de Diego sobre el visor en
+    // marcha -- "un lobo que duerme no puede ser mas grande que ese
+    // mismo lobo andando"). La tabla anterior usaba lado_mayor/
+    // lado_mayor_de_idle_e: sensible a la orientacion del recorte, una
+    // pose tumbada (dormir, muerto) es una tira horizontal larga y
+    // estrecha, asi que su "lado mayor" salia desproporcionado aunque el
+    // bulto visual real no lo fuera -- y ademas los sprites de lobo se
+    // habian reemplazado desde el ultimo calculo sin recalibrar (gnomo
+    // seguia coincidiendo con sus ficheros reales, lobo no). Recalculada
+    // con raiz cuadrada del AREA de contenido real (bbox sin
+    // transparencia, medido con PIL contra los ficheros actuales de
+    // presentacion/assets/criaturas_poses/), una metrica que no depende
+    // de la orientacion del recorte. andar_n/andar_s siguen siendo mas
+    // pequenos que andar_e a proposito -- silueta de perfil frontal/
+    // trasero, mas estrecha que de costado, diferencia anatomica real,
+    // no un error de calibracion.
     const ESCALA_POSE = {
-      'gnomo':   { 'andar_e': 1.031, 'andar_n': 1.028, 'andar_s': 1.021,
-                   'durmiendo': 1.836, 'forrajeando': 1.150, 'herido': 1.343,
-                   'idle_n': 1.014, 'idle_s': 1.010, 'muerto': 1.745 },
-      'lobo':    { 'andar_e': 1.475, 'andar_n': 0.979, 'andar_s': 1.021,
-                   'durmiendo': 1.250, 'forrajeando': 1.275, 'herido': 1.637,
-                   'idle_n': 1.011, 'idle_s': 1.018, 'muerto': 1.785 },
-      'conejo':  { 'andar_e': 1.821, 'durmiendo': 1.074, 'forrajeando': 1.436,
-                   'herido': 1.703, 'idle_n': 1.024, 'muerto': 1.993 },
-      'ardilla': { 'andar_e': 2.064, 'durmiendo': 1.053, 'forrajeando': 1.057,
-                   'herido': 1.950, 'idle_n': 0.989, 'idle_s': 1.014,
-                   'muerto': 2.082 },
+      'gnomo':   { 'andar_e': 1.169, 'andar_n': 1.167, 'andar_s': 1.177,
+                   'durmiendo': 1.597, 'forrajeando': 1.696, 'herido': 1.818,
+                   'idle_n': 1.135, 'idle_s': 1.185, 'muerto': 1.488 },
+      'lobo':    { 'andar_e': 0.973, 'andar_n': 0.553, 'andar_s': 0.575,
+                   'durmiendo': 0.831, 'forrajeando': 0.970, 'herido': 1.019,
+                   'idle_n': 0.582, 'idle_s': 0.577, 'muerto': 0.919 },
+      'conejo':  { 'andar_e': 1.117, 'durmiendo': 0.934, 'forrajeando': 1.016,
+                   'herido': 1.107, 'idle_n': 0.742, 'muerto': 1.154 },
+      'ardilla': { 'andar_e': 1.081, 'durmiendo': 0.805, 'forrajeando': 0.896,
+                   'herido': 0.931, 'idle_n': 0.653, 'idle_s': 0.686,
+                   'muerto': 0.899 },
     };
 
     // Color por especie de planta (config/constantes.yaml, flora.especies --
@@ -884,7 +900,17 @@ HTML_VISOR = """<!DOCTYPE html>
                 img, ordenY: baseY,
                 cx: x * tam + tam / 2 + (hash2(x, y, 94) - 0.5) * tam * 0.5,
                 baseY,
-                escala: 0.4 + c.planta.etapa * 0.6, base: 1.0,
+                // (2026-09-03) base 1.0 -> 1.4 -- feedback real de Diego:
+                // un arbol maduro debe verse claramente mas grande que un
+                // lobo (el mayor de los depredadores). Con base 1.0 un
+                // arbol maduro ya salia ~1.9x un lobo en idle (1.0*tam
+                // vs ~0.52*tam), pero un arbol JOVEN (etapa baja, escala
+                // hasta 0.4) se quedaba mas pequeno que el propio lobo --
+                // con base 1.4, un brote (escala 0.4) sale ~0.56*tam
+                // (similar a un lobo adulto) y un arbol maduro (escala
+                // 1.0) sale 1.4*tam (~2.7x un lobo) -- jerarquia
+                // razonada, PROVISIONAL, sin calibrar contra el harness.
+                escala: 0.4 + c.planta.etapa * 0.6, base: 1.4,
               });
             }
           }
@@ -917,7 +943,12 @@ HTML_VISOR = """<!DOCTYPE html>
     // la primera vez que se conoce data.ancho. offsetX/offsetY y zoom los
     // mueve la interaccion de raton -- ver mundoAPantalla()/pantallaAMundo()
     // mas abajo para la formula de transformacion.
-    const ZOOM_MINIMO = 0.4, ZOOM_MAXIMO = 4.5;
+    // (2026-09-03) ZOOM_MAXIMO subido de 4.5 a 8.0 -- feedback real de
+    // Diego: a 4.5 las criaturas pequenas (conejo/ardilla, lado real
+    // ~0.09-0.16*tam) quedaban demasiado pequenas para verlas/clicarlas
+    // bien. PROVISIONAL, sin medir el efecto sobre rendimiento a esa
+    // profundidad de zoom contra el motor real.
+    const ZOOM_MINIMO = 0.4, ZOOM_MAXIMO = 8.0;
     let tam0 = null;
     const camara = { zoom: 1, offsetX: 0, offsetY: 0 };
 

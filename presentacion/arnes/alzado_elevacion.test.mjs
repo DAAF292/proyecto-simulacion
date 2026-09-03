@@ -218,3 +218,68 @@ test('entidadEnPunto NO alza nada a nivel macro', () => {
 
   visor.camara.zoom = 1;
 });
+
+// Recalibración de ESCALA_POSE (2026-09-03, feedback real de Diego sobre
+// el visor en marcha): la tabla anterior usaba lado_mayor/lado_mayor de
+// idle_e, sensible a la orientacion del recorte -- una pose tumbada
+// (dormir, muerto) es una tira horizontal larga y estrecha, asi que su
+// "lado mayor" salia desproporcionado aunque el bulto visual real no lo
+// fuera. Recalibrada con raiz cuadrada del area de contenido real
+// (medido con PIL sobre los ficheros reales de presentacion/assets/
+// criaturas_poses/, sin transparencia), metrica que no depende de la
+// orientacion del recorte.
+// Comparado contra andar_e -- la direccion "nativa" de todos los
+// recortes (ver comentario de imagenPose: "El este (E) es la direccion
+// nativa de TODOS los recortes"), la referencia mas natural. andar_n/
+// andar_s son legitimamente mas estrechos (silueta de perfil frontal,
+// no de costado) -- no se comparan aqui, esa diferencia es anatomica,
+// no un error de calibracion.
+test('ESCALA_POSE: un lobo dormido no es mas grande que ese mismo lobo andando (direccion nativa este)', () => {
+  const p = visor.ESCALA_POSE.lobo;
+  assert.ok(p.durmiendo < p.andar_e,
+    `durmiendo (${p.durmiendo}) debe ser menor que andar_e (${p.andar_e})`);
+});
+
+test('ESCALA_POSE: todos los factores de las 4 especies estan en un rango razonable (0.4-2.0)', () => {
+  for (const [especie, poses] of Object.entries(visor.ESCALA_POSE)) {
+    for (const [pose, factor] of Object.entries(poses)) {
+      assert.ok(factor > 0.4 && factor < 2.0,
+        `${especie}.${pose} = ${factor} fuera de un rango razonable`);
+    }
+  }
+});
+
+test('ZOOM_MAXIMO permite zoom significativamente mayor que antes (4.5)', () => {
+  visor.camara.zoom = 8;
+  assert.equal(visor.camara.zoom, 8);
+  visor.camara.zoom = 1;
+});
+
+test('un arbol maduro se estampa con un area de dibujo mayor que la de un lobo adulto', () => {
+  limpiarBibliotecaFloraLobo();
+  const TAM = 50;
+  visor.catalogoAssets.flora = { manzano: ['a.png'] };
+  visor.imagenesCache['flora/a.png'] = { naturalWidth: 100, naturalHeight: 100 };
+  const data = { ancho: 1, alto: 1, celdas: [[{ x: 0, y: 0, bioma: 'bosque', elevacion: 0.1, tipo_agua: null, planta: { especie: 'manzano', etapa: 1.0 } }]] };
+  const frustum = { xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
+  visor.limpiarCtxVisor();
+  visor.dibujarStampsRelieveYFlora(TAM, data, frustum, [], null, 'medio');
+  const dibujo = visor.llamadasCtxUltimas().filter((l) => l.prop === 'drawImage')[0];
+  const anchoArbol = dibujo.args[3]; // dw
+
+  const elLobo = visor.construirElementoCriatura({ id: 1, tipo: 'lobo', x: 5, y: 5 }, TAM, 0);
+  // lado del lobo en idle_e (sin sprite real -> halo, radio = tam*0.3):
+  // comparamos contra el caso CON sprite, usando la formula real.
+  const anchoLoboConSprite = TAM * 0.55 * visor.escalaPorPeso({ tipo: 'lobo', dimensiones: { peso: 75 } });
+
+  assert.ok(anchoArbol > anchoLoboConSprite,
+    `arbol maduro (${anchoArbol}) debe ser mayor que un lobo adulto (${anchoLoboConSprite})`);
+});
+
+function limpiarBibliotecaFloraLobo() {
+  visor.catalogoAssets.flora = {};
+  visor.catalogoAssets.flora_color = {};
+  visor.catalogoAssets.relieve = { montana: [], montana_color: [] };
+  visor.catalogoAssets.criaturas = {};
+  for (const k of Object.keys(visor.imagenesCache)) delete visor.imagenesCache[k];
+}

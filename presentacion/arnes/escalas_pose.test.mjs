@@ -1,10 +1,16 @@
 // Tests de la calibracion de poses (2026-08-28): cada pose se dibuja con un
 // factor de densidad propio (ESCALA_POSE) en vez de forzar el lado mayor de
 // CUALQUIER pose al mismo lado -- lo que aplanaba las poses anchas (galope,
-// cadaver) a astillas. Los literales de estos tests son medidas reales de
-// los recortes y de las hojas fuente (contenido opaco contado con PIL sobre
-// criaturas_poses/ y nuevosAssetsDefinitivos/criaturas): si se recalibra la
-// tabla a mano, estos tests se actualizan a proposito.
+// cadaver) a astillas. (2026-09-03) Los dos primeros tests leen el factor
+// real de visor.ESCALA_POSE en vez de fijarlo como literal -- tras la
+// recalibracion de esa tabla (ver su comentario en vista_web.py), un
+// literal fijo se habria desincronizado de nuevo en la proxima
+// recalibracion; lo que verifican es que el MECANISMO consume la tabla
+// correctamente (dw = lado * factor, necromasa usa ESCALA_NECROMASA), no
+// un numero concreto -- la sanidad de los NUMEROS de la tabla la cubren
+// los tests dedicados en alzado_elevacion.test.mjs. El tercer test SI usa
+// un literal (1.0, el factor de idle_e por definicion, invariante a
+// cualquier recalibracion).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarVisor } from './arnes_dom.mjs';
@@ -42,35 +48,39 @@ function dibujoUnico() {
 // (ESCALA_POSE) no cambia: sigue siendo el objeto de esta prueba.
 const PESO_CONEJO = 2.0; // rango racial real [1.5, 3.0], config/constantes.yaml
 
+// (2026-09-03) ESCALA_POSE recalibrada -- ver el comentario en su propia
+// tabla en vista_web.py (feedback real de Diego: "un lobo que duerme no
+// puede ser mas grande que ese mismo lobo andando", tabla anterior
+// sensible a la orientacion del recorte + sprites de lobo reemplazados
+// sin recalibrar). Estos dos tests usaban los factores VIEJOS como
+// literal -- actualizados al valor real de visor.ESCALA_POSE (no un
+// numero inventado, se lee la tabla real para no volver a desincronizar
+// el test de la implementacion si se recalibra otra vez).
 test('la pose tumbada se dibuja con su factor de densidad, no con el lado mayor puro', () => {
   limpiarBiblioteca();
-  // conejo durmiendo: contenido 318x237 px, ancla de la especie idle_e 296
-  // px de alto -> factor 318/237 = 1.074. Sin factor, el visor dibuja el
-  // lado mayor a 0.55*celda*escala secos y la pose colapsa.
   visor.catalogoAssets.criaturas_poses.conejo.durmiendo = 'c_d.png';
   visor.imagenesCache['criaturas_poses/c_d.png'] = imagenFalsa(318, 237);
   visor.limpiarCtxVisor();
   const entidad = { id: 1, tipo: 'conejo', x: 1, y: 1, accion: 'dormir', dimensiones: { peso: PESO_CONEJO } };
   visor.construirElementoCriatura(entidad, TAM).dibujar();
   const [, , , dw, dh] = dibujoUnico();
-  const lado = TAM * 0.55 * visor.escalaPorPeso(entidad) * 1.074;
+  const factor = visor.ESCALA_POSE.conejo.durmiendo;
+  const lado = TAM * 0.55 * visor.escalaPorPeso(entidad) * factor;
   assert.ok(Math.abs(dw - lado) < 0.001, `ancho = lado con factor de pose (${dw} vs ${lado})`);
   assert.ok(Math.abs(dh - lado * (237 / 318)) < 0.001, `alto por aspecto (${dh} vs ${lado * (237 / 318)})`);
 });
 
 test('el necromasa hereda el factor de la pose muerto de su especie de origen', () => {
   limpiarBiblioteca();
-  // lobo muerto: contenido 507x168, ancla idle_e 284 -> factor 507/284 = 1.785.
-  // necromasa no tiene DimensionesFisicas propio (restos inertes): escalaPorPeso()
-  // devuelve ESCALA_NECROMASA sin mirar `dimensiones`, por tipo=='necromasa'.
   visor.catalogoAssets.criaturas_poses.lobo.muerto = 'l_m.png';
   visor.imagenesCache['criaturas_poses/l_m.png'] = imagenFalsa(507, 168);
   visor.limpiarCtxVisor();
   const entidad = { id: 2, tipo: 'necromasa', origen: 'lobo', x: 1, y: 1 };
   visor.construirElementoCriatura(entidad, TAM).dibujar();
   const [, , , dw, dh] = dibujoUnico();
-  const lado = TAM * 0.55 * visor.escalaPorPeso(entidad) * 1.785;
-  assert.ok(Math.abs(lado - TAM * 0.55 * visor.ESCALA_NECROMASA * 1.785) < 0.001, 'necromasa usa ESCALA_NECROMASA');
+  const factor = visor.ESCALA_POSE.lobo.muerto;
+  const lado = TAM * 0.55 * visor.escalaPorPeso(entidad) * factor;
+  assert.ok(Math.abs(lado - TAM * 0.55 * visor.ESCALA_NECROMASA * factor) < 0.001, 'necromasa usa ESCALA_NECROMASA');
   assert.ok(Math.abs(dw - lado) < 0.001, `ancho = lado con factor muerto (${dw} vs ${lado})`);
   assert.ok(Math.abs(dh - lado * (168 / 507)) < 0.001, `alto por aspecto (${dh} vs ${lado * (168 / 507)})`);
 });
