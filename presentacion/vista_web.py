@@ -592,6 +592,31 @@ HTML_VISOR = """<!DOCTYPE html>
       return { dzdx, dzdy, magnitud };
     }
 
+    // Deriva la direccion de trazo EN PANTALLA proyectando el centro de
+    // la celda y el centro desplazado un paso pequeno en la direccion
+    // "cuesta abajo" de MUNDO, con la misma celdaAPantallaCompleta que
+    // usa todo el resto del visor -- correcta bajo cualquier rotacion
+    // de camara sin ninguna tabla de casos nueva (mismo principio que
+    // ya aplica bordeDeCelda). El tamano del paso no importa: al
+    // normalizar el resultado, cualquier paso pequeno da la misma
+    // direccion (la proyeccion es afin en wx,wy a elevacion fija).
+    function direccionTrazoPantalla(wx, wy, elevacion, tam, n, rotacion, dzdx, dzdy) {
+      const mag = Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+      if (mag < 1e-9) return { dx: 1, dy: 0 };
+      const wdx = -dzdx / mag;
+      const wdy = -dzdy / mag;
+      const PASO_MUNDO = 0.05;
+      const centro = celdaAPantallaCompleta(wx + 0.5, wy + 0.5, elevacion, tam, n, rotacion);
+      const paso = celdaAPantallaCompleta(
+        wx + 0.5 + wdx * PASO_MUNDO, wy + 0.5 + wdy * PASO_MUNDO, elevacion, tam, n, rotacion,
+      );
+      const dx = paso.cx - centro.cx;
+      const dy = paso.cy - centro.cy;
+      const magPantalla = Math.sqrt(dx * dx + dy * dy);
+      if (magPantalla < 1e-9) return { dx: 1, dy: 0 };
+      return { dx: dx / magPantalla, dy: dy / magPantalla };
+    }
+
     async function cargarBibliotecaAssets() {
       try {
         const resp = await fetch('/assets_manifest.json');

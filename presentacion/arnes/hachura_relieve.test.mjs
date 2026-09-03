@@ -74,6 +74,35 @@ test('calcularPendiente: celda de esquina opuesta (n-1,n-1) usa diferencia simpl
   assert.ok(Math.abs(dzdy - (-0.2)) < 1e-9, `dzdy esperado -0.2, fue ${dzdy}`);
 });
 
+test('direccionTrazoPantalla: pendiente cero da un vector por defecto sin NaN', () => {
+  const dir = visor.direccionTrazoPantalla(5, 5, 0.3, 20, 40, 0, 0, 0);
+  assert.ok(Number.isFinite(dir.dx) && Number.isFinite(dir.dy));
+});
+
+for (const rotacion of [0, 90, 180, 270]) {
+  test(`direccionTrazoPantalla: coincide con la proyeccion real de celdaAPantallaCompleta (rotacion ${rotacion})`, () => {
+    const TAM = 20, N = 40;
+    const wx = 10, wy = 15, elevacion = 0.4;
+    // Pendiente conocida, no alineada a un eje, para que la comparacion
+    // sea real en las 4 rotaciones (no un caso degenerado).
+    const dzdx = 0.08, dzdy = 0.03;
+    const mag = Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+    const wdx = -dzdx / mag, wdy = -dzdy / mag;
+    // El propio test deriva el vector esperado proyectando dos puntos
+    // de mundo con la funcion real -- no un angulo hardcodeado a mano.
+    const EPS = 0.01;
+    const centro = visor.celdaAPantallaCompleta(wx + 0.5, wy + 0.5, elevacion, TAM, N, rotacion);
+    const paso = visor.celdaAPantallaCompleta(wx + 0.5 + wdx * EPS, wy + 0.5 + wdy * EPS, elevacion, TAM, N, rotacion);
+    const edx = paso.cx - centro.cx, edy = paso.cy - centro.cy;
+    const emag = Math.sqrt(edx * edx + edy * edy);
+    const esperado = { dx: edx / emag, dy: edy / emag };
+
+    const real = visor.direccionTrazoPantalla(wx, wy, elevacion, TAM, N, rotacion, dzdx, dzdy);
+    assert.ok(Math.abs(real.dx - esperado.dx) < 1e-6, `dx esperado ${esperado.dx}, fue ${real.dx}`);
+    assert.ok(Math.abs(real.dy - esperado.dy) < 1e-6, `dy esperado ${esperado.dy}, fue ${real.dy}`);
+  });
+}
+
 test('constantes de hachurado de relieve existen con los valores PROVISIONAL documentados', () => {
   assert.equal(visor.UMBRAL_PENDIENTE_VISIBLE, 0.02);
   assert.equal(visor.PENDIENTE_SATURACION, 0.12);
