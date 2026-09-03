@@ -1,0 +1,57 @@
+# ==============================================================================
+# config/armas.yaml
+# Armas primitivas v2 (2026-09-03, ver docs/superpowers/specs/
+# 2026-09-03-armas-primitivas-v2-design.md) -- circulo 1 del arco
+# herramientas/utensilios/armas: madera y piedra, sin metales.
+#
+# Parte del catalogo de configuracion del motor "Un mundo vivo" -- todos los
+# ficheros de config/*.yaml se cargan y fusionan en un solo diccionario
+# (main.py:cargar_configuracion), as"i que ninguna seccion cambia de nombre
+# ni de forma de acceso al dividirse.
+# ==============================================================================
+
+# --- Armas primitivas --------------------------------------------------------
+# PROVISIONAL en su totalidad, sin calibrar contra el motor en marcha (no hay
+# tiempo en esta pieza para un harness de calibracion completo -- se calibra
+# cuando el arco herramientas/armas tenga consumidores reales estables).
+armas:
+  # Recetas de fabricacion: combinaciones de materiales CRUDOS en
+  # Inventario.objetos que producen un arma con nombre y nivel propios.
+  # Anadir una receta nueva (hueso, metal...) es solo config, sin codigo
+  # nuevo -- los consumidores buscan por nombre y nivel, nunca por una
+  # lista de nombres hardcodeada en Python.
+  recetas:
+    - {materiales: [madera], nombre: lanza, nivel: 2}
+    - {materiales: [piedra], nombre: hacha_mano, nivel: 2}
+    - {materiales: [madera, piedra], nombre: hacha_primitiva, nivel: 3}
+
+  # Efecto real de tener un arma empunada (ver sistemas/sistema_depredacion.py
+  # y nucleo/conflicto.py). Dos componentes, para que un individuo poco
+  # agresivo siga obteniendo un beneficio defensivo REAL sin volverse un
+  # atacante:
+  #   efecto_base_por_nivel[nivel]: igual para cualquiera que empune algo de
+  #     ese nivel -- el obstaculo fisico de tener algo en la mano.
+  #   efecto_ofensivo_por_nivel[nivel] * Temperamento.agresividad: cuanto mas
+  #     agresivo el portador, mayor el salto -- un individuo poco agresivo
+  #     apenas lo nota.
+  # PROVISIONAL: valores de partida razonados (un objeto en la mano estorba
+  # ~5% por nivel, el componente ofensivo modula la agresividad), sin medir
+  # contra el motor en marcha.
+  efecto_base_por_nivel:
+    "1": 0.05
+    "2": 0.10
+    "3": 0.15
+  efecto_ofensivo_por_nivel:
+    "1": 0.05
+    "2": 0.10
+    "3": 0.15
+
+  # Empunar/guardar (ver sistemas/sistema_decision.py): formula continua que
+  # decide cada tick si la criatura lleva algo en la mano, en vez de una
+  # regla de zona ("fuera del asentamiento = se arma"). La seguridad integra
+  # ya mucho contexto real (amenaza percibida, disputas, huida); la valentia
+  # modula el umbral INDIVIDUAL (un valiente aguanta mas sin armarse; un
+  # cobarde se arma antes) -- primer consumidor real de Temperamento.valentia.
+  # PROVISIONAL, sin calibrar contra el motor en marcha.
+  umbral_base_empunar: 0.5
+  margen_valentia_empunar: 0.3

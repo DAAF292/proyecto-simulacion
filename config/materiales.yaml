@@ -107,6 +107,11 @@ materiales:
     capacidad_retencion: 0.05
     combustibilidad: 0.0
     apto_construccion: true
+    # apto_arma (2026-09-03, armas primitivas v2 -- ver
+    # docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md): una
+    # piedra suelta empunada en crudo ya es un arma de nivel 1; fabricar
+    # (hacha_mano, hacha_primitiva) la combina con madera.
+    apto_arma: true
     # fertilidad_base (2026-09-01, ver docs/superpowers/specs/
     # 2026-09-01-distribucion-causal-flora-design.md): roca desnuda, sin
     # ninguna capacidad de sostener vegetación por sí misma.
@@ -213,6 +218,11 @@ materiales:
     combustibilidad: 0.55
     tasa_descomposicion_dia: 0.01
     apto_construccion: true
+    # apto_arma (2026-09-03, armas primitivas v2 -- ver
+    # docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md): un
+    # palo empunado en crudo ya es un arma de nivel 1 (lanza); fabricar lo
+    # combina con piedra para un hacha_primitiva.
+    apto_arma: true
   fibra:
     categoria: organico_vegetal
     forma_en_mundo: deposito
@@ -461,3 +471,27 @@ construccion:
   # inventar ese consumo (hueco honesto, no resuelto en esta pieza).
   # PROVISIONAL, sin calibrar contra el motor en marcha.
   tasa_recoleccion_kg_tick: 1.0
+
+
+# --- Objetos discretos (2026-09-03, armas primitivas v2 -- ver
+# docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md) -----------
+# Peso en kg de cada UNIDAD FISICA COMPLETA que puede vivir en
+# Inventario.objetos (lo que la criatura porta como objeto, no a granel en
+# Inventario.contenidos). Cada entrada cuenta hacia la MISMA capacidad de
+# carga por peso que los materiales a granel (nucleo/inventario.py:
+# espacio_disponible_kg), no un limite de "numero de objetos" aparte.
+# Cubre: materiales crudos apto_arma, los nombres de arma de armas.recetas y
+# piedra_suelta (la piedra de percusion del fuego, que si nunca sale de
+# Agarre por el mecanismo de empunyar/guardar -- no es un arma -- se deposita
+# a Inventario cuando la fogata se enciende, ver sistema_recursos.py).
+# PROVISIONAL, sin calibrar contra el motor en marcha: tamano de una piedra
+# de mano ~1kg, un palo util ~1kg, la piedra de percusion ~0.5kg, un arma
+# fabricada pesa mas que el material crudo del que sale (lanza ~1.5kg,
+# hacha_mano ~1.5kg, hacha_primitiva ~2kg por sumar piedra+mango).
+peso_objeto_kg:
+  piedra: 1.0
+  madera: 1.0
+  piedra_suelta: 0.5
+  lanza: 1.5
+  hacha_mano: 1.5
+  hacha_primitiva: 2.0

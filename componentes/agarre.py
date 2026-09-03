@@ -13,14 +13,25 @@ rangos_raciales[especie]['puntos_agarre'] (config/poblacion.yaml), un
 hecho FIJO por especie, no un rango sorteado por individuo como fuerza
 o agilidad. Se consulta por especie, no se duplica aquí.
 
-Objetos discretos, NO masa continua (a diferencia de
-Inventario.contenidos, que es kg a granel para construcción): sujetar
-una piedra o un palo es un suceso simbólico y gratuito (recoger algo
-que ya está en el suelo), no compite con la economía de materiales de
-construcción ni con la capacidad de carga -- ver
-sistemas/sistema_recursos.py:_resolver_recolectar para el mecanismo de
-llenado. Nada quita un objeto todavía (sin acción de soltar/gastar) --
-límite conocido, no resuelto.
+SEMÁNTICA (2026-09-03, armas primitivas v2 -- ver
+docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md):
+Agarre.objetos NO es un registro que solo crece -- es un SUBCONJUNTO
+decidido y reversible de Inventario.objetos: lo que la criatura tiene
+activamente en la mano en este tick, recalculado cada tick por el
+reflejo empuñar/guardar (sistema_decision.py). Nada persiste aquí
+"para siempre" salvo mientras la decisión de empuñar siga siendo
+verdadera.
+
+Excepción deliberada: piedra_suelta (la piedra de percusión del fuego)
+vive en Agarre como herramienta de fuego (Vía 1 de _resolver_recolectar
+en sistema_recursos.py) y NO es un arma -- el reflejo empuñar/guardar
+no la mueve (rompería el ciclo causal frío → recoger piedras →
+encender fuego: un individuo seguro pero con frío soltaría las piedras
+cada tick antes de poder acumular dos). Se deposita a
+Inventario.objetos cuando la fogata se enciende con éxito, en
+_resolver_encender_fuego -- mismo resultado observable que buscaba la
+spec (no quedarse fija para siempre en Agarre), sin lógica de arma
+especial en el reflejo genérico.
 
 Historial de diseño y decisiones: docs/historial_componentes.md.
 """
