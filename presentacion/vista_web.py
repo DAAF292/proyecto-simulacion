@@ -1047,16 +1047,18 @@ HTML_VISOR = """<!DOCTYPE html>
       return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
     }
 
-    // (2026-09-03) Corregido tras ver el visor real: con la Caballera
-    // activa, el mundo proyectado ya no es el rectangulo de siempre --
-    // es un rombo mas ancho que alto (el sesgo por profundidad expande
-    // el ancho real bastante mas alla de lo que cabe en el canvas a
-    // zoom 1). offsetX/offsetY=0 dejaba la mayor parte del mundo fuera
-    // de encuadre (reportado por Diego con capturas reales). Centra el
-    // BOUNDING BOX real del rombo respecto al canvas -- no garantiza que
-    // el mundo entero quepa a zoom 1 (puede seguir sobrando por los
-    // lados, eso exigiria tambien reducir el zoom, fuera de alcance de
-    // este arreglo), pero deja de estar sistematicamente descentrado.
+    // (2026-09-03, CORREGIDO por segunda vez tras ver el visor real con
+    // capturas) el primer intento centraba el BOUNDING BOX completo del
+    // rombo -- pero ese rombo es bastante mas ancho que el canvas a
+    // zoom 1 (el sesgo por profundidad expande el ancho real muy por
+    // encima de lo que cabe), asi que centrar SU bounding box seguia
+    // dejando la mitad del canvas vacio. Reencuadre: en niveles
+    // medio/micro (Caballera) nunca se pretende ver el mundo ENTERO de
+    // un vistazo -- para eso ya existe la vista macro cenital. Centrar
+    // aqui significa centrar sobre el CENTRO LOGICO del mundo (la celda
+    // del medio), no sobre el rombo completo -- mismo criterio que
+    // cualquier vista de detalle de este tipo, nunca se ve el mapa
+    // entero "de cerca".
     function centrarCamara() {
       camara.zoom = 1;
       if (!tam0 || !ultimoDataConocido) {
@@ -1065,9 +1067,10 @@ HTML_VISOR = """<!DOCTYPE html>
         return;
       }
       const n = ultimoDataConocido.ancho;
-      const { minX, maxX, minY, maxY } = calcularBoundingBoxProyectado(n, camara.rotacion);
-      camara.offsetX = canvas.width / 2 - (minX + maxX) / 2;
-      camara.offsetY = canvas.height / 2 - (minY + maxY) / 2;
+      const alto = ultimoDataConocido.alto;
+      const centro = celdaAPantallaCompleta(n / 2, alto / 2, 0, tam0, n, camara.rotacion);
+      camara.offsetX = canvas.width / 2 - centro.cx;
+      camara.offsetY = canvas.height / 2 - centro.cy;
     }
 
     function rotarCamara() {

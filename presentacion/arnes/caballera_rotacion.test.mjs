@@ -294,7 +294,13 @@ test('entidadEnPunto localiza una entidad usando la proyeccion Caballera complet
   visor.camara.rotacion = 0;
 });
 
-test('centrarCamara centra el bounding box real del rombo proyectado, no el rectangulo antiguo', () => {
+// (2026-09-03, CORREGIDO por segunda vez -- reportado por Diego con
+// capturas reales: centrar el bounding box del rombo completo seguia
+// dejando la mitad del canvas vacia, porque el rombo es mas ancho que
+// el canvas a zoom 1. centrarCamara ahora centra sobre el CENTRO
+// LOGICO del mundo, no sobre el rombo entero -- en medio/micro nunca
+// se pretende ver el mapa completo de un vistazo.
+test('centrarCamara centra sobre el centro logico del mundo (no el bounding box del rombo completo)', () => {
   const TAM0 = 20;
   const n = 40;
   visor.establecerTam0(TAM0);
@@ -302,13 +308,19 @@ test('centrarCamara centra el bounding box real del rombo proyectado, no el rect
   visor.camara.rotacion = 0;
   visor.centrarCamara();
   assert.equal(visor.camara.zoom, 1);
-  const bbox = visor.calcularBoundingBoxProyectado(n, 0);
-  const offsetXEsperado = visor.canvas.width / 2 - (bbox.minX + bbox.maxX) / 2;
-  const offsetYEsperado = visor.canvas.height / 2 - (bbox.minY + bbox.maxY) / 2;
+  const centro = visor.celdaAPantallaCompleta(n / 2, n / 2, 0, TAM0, n, 0);
+  const offsetXEsperado = visor.canvas.width / 2 - centro.cx;
+  const offsetYEsperado = visor.canvas.height / 2 - centro.cy;
   assert.ok(Math.abs(visor.camara.offsetX - offsetXEsperado) < 0.001,
     `offsetX esperado ${offsetXEsperado}, fue ${visor.camara.offsetX}`);
   assert.ok(Math.abs(visor.camara.offsetY - offsetYEsperado) < 0.001,
     `offsetY esperado ${offsetYEsperado}, fue ${visor.camara.offsetY}`);
+
+  // El propio centro del mundo debe caer cerca del centro del canvas.
+  const pantalla = visor.mundoAPantalla(centro.cx, centro.cy);
+  assert.ok(Math.abs(pantalla.x - visor.canvas.width / 2) < 0.001);
+  assert.ok(Math.abs(pantalla.y - visor.canvas.height / 2) < 0.001);
+
   visor.establecerUltimoDataConocido(null);
 });
 
