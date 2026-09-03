@@ -165,3 +165,56 @@ test('construirElementoCriatura dibuja la sombra de anclaje en el suelo SIN alza
   assert.ok(Math.abs(elipses[0].args[1] - baseYSueloEsperado) < 0.001,
     `la sombra debe anclarse en baseYSuelo=${baseYSueloEsperado} (sin alzar), fue ${elipses[0].args[1]}`);
 });
+
+test('entidadEnPunto localiza una entidad en una celda alzada usando su posicion YA alzada', () => {
+  const TAM = 50;
+  visor.establecerTam0(TAM);
+  visor.camara.zoom = 1.5; // medio -- el alzado debe aplicarse
+  visor.camara.offsetX = 0;
+  visor.camara.offsetY = 0;
+
+  const data = {
+    ancho: 3, alto: 3,
+    celdas: [
+      [{ elevacion: 0.1 }, { elevacion: 0.1 }, { elevacion: 0.1 }],
+      [{ elevacion: 0.1 }, { elevacion: 0.9 }, { elevacion: 0.1 }],
+      [{ elevacion: 0.1 }, { elevacion: 0.1 }, { elevacion: 0.1 }],
+    ],
+    entidades: [{ id: 42, x: 1, y: 1 }],
+  };
+
+  const alzado = visor.alzadoY(0.9, TAM);
+  const pantalla = visor.mundoAPantalla(1.5 * TAM, 1.5 * TAM - alzado);
+
+  const encontrada = visor.entidadEnPunto(data, pantalla.x, pantalla.y);
+  assert.ok(encontrada, 'debe encontrar la entidad en su posicion YA alzada');
+  assert.equal(encontrada.id, 42);
+
+  const pantallaSinAlzar = visor.mundoAPantalla(1.5 * TAM, 1.5 * TAM);
+  const distanciaAlzado = Math.hypot(pantalla.x - pantallaSinAlzar.x, pantalla.y - pantallaSinAlzar.y);
+  if (distanciaAlzado > 16) {
+    const noEncontrada = visor.entidadEnPunto(data, pantallaSinAlzar.x, pantallaSinAlzar.y);
+    assert.equal(noEncontrada, null, 'sin alzado, el punto queda fuera del radio de acierto');
+  }
+
+  visor.camara.zoom = 1;
+});
+
+test('entidadEnPunto NO alza nada a nivel macro', () => {
+  const TAM = 50;
+  visor.establecerTam0(TAM);
+  visor.camara.zoom = 0.5; // macro
+  visor.camara.offsetX = 0;
+  visor.camara.offsetY = 0;
+
+  const data = {
+    ancho: 2, alto: 2,
+    celdas: [[{ elevacion: 0.9 }, { elevacion: 0.1 }], [{ elevacion: 0.1 }, { elevacion: 0.1 }]],
+    entidades: [{ id: 7, x: 0, y: 0 }],
+  };
+  const pantallaSinAlzar = visor.mundoAPantalla(0.5 * TAM, 0.5 * TAM);
+  const encontrada = visor.entidadEnPunto(data, pantallaSinAlzar.x, pantallaSinAlzar.y);
+  assert.ok(encontrada && encontrada.id === 7, 'a macro debe localizarse en su posicion sin alzar');
+
+  visor.camara.zoom = 1;
+});

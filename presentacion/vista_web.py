@@ -1023,8 +1023,15 @@ HTML_VISOR = """<!DOCTYPE html>
     // cercana al click dentro de un radio razonable de acierto.
     function entidadEnPunto(data, px, py) {
       let mejor = null, distMejor = 16 * 16;   // radio de acierto ~16px
+      const nivel = nivelActual();
       for (const e of data.entidades) {
-        const centro = mundoAPantalla((e.x + 0.5) * tam0, (e.y + 0.5) * tam0);
+        let alzado = 0;
+        if (nivel !== 'macro') {
+          const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
+          const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
+          alzado = alzadoY(data.celdas[cyCelda][cxCelda].elevacion || 0, tam0);
+        }
+        const centro = mundoAPantalla((e.x + 0.5) * tam0, (e.y + 0.5) * tam0 - alzado);
         const d = (centro.x - px) ** 2 + (centro.y - py) ** 2;
         if (d < distMejor) { distMejor = d; mejor = e; }
       }
