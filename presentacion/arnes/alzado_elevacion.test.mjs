@@ -161,7 +161,10 @@ test('construirElementoCriatura dibuja la sombra de anclaje en el suelo SIN alza
   const llamadas = visor.llamadasCtxUltimas();
   const elipses = llamadas.filter((l) => l.prop === 'ellipse');
   assert.ok(elipses.length >= 1, 'debe dibujar al menos una elipse de sombra');
-  const baseYSueloEsperado = (1 + 1) * TAM; // SIN restar alzadoY
+  // (2026-09-03) Con la Caballera completa, baseYSuelo ya no es
+  // (e.y+1)*TAM plano -- el sesgo por profundidad esta siempre activo,
+  // se calcula con la misma formula real, no con el valor plano de antes.
+  const baseYSueloEsperado = visor.celdaAPantallaCompleta(1 + 0.5, 1 + 1, 0, TAM, 40, 0).cy;
   assert.ok(Math.abs(elipses[0].args[1] - baseYSueloEsperado) < 0.001,
     `la sombra debe anclarse en baseYSuelo=${baseYSueloEsperado} (sin alzar), fue ${elipses[0].args[1]}`);
 });

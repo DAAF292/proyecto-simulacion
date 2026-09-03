@@ -740,7 +740,7 @@ HTML_VISOR = """<!DOCTYPE html>
       return { pose: (enMarcha ? 'andar_' : 'idle_') + dir, dir };
     }
 
-    function construirElementoCriatura(e, tam, elevacion = 0) {
+    function construirElementoCriatura(e, tam, elevacion = 0, n = 40, rotacion = 0) {
       const resuelta = resolverPose(e);
       let imgCriatura = null;
       let poseResuelta = null;
@@ -757,13 +757,15 @@ HTML_VISOR = """<!DOCTYPE html>
         imgCriatura = nombreCriatura ? imagenesCache['criaturas/' + nombreCriatura] : null;
       }
       // baseYSuelo: posicion real en el suelo de la celda, SIN alzar --
-      // ancla de la sombra. baseY: con el alzado por elevacion, ancla del
-      // sprite/halo y del ordenamiento Y-sorted.
-      const alzado = alzadoY(elevacion, tam);
-      const baseYSuelo = (e.y + 1) * tam;
-      const baseY = baseYSuelo - alzado;
+      // ancla de la sombra. baseY: con la proyeccion Caballera completa
+      // (sesgo en X + alzado por elevacion), ancla del sprite/halo y del
+      // ordenamiento Y-sorted. cx no depende de la elevacion (verificado
+      // en el test de celdaAPantallaCompleta "la elevacion NO debe
+      // afectar a cx"), asi que una sola llamada con la elevacion real
+      // basta para ambos usos.
+      const { cx, cy: baseY } = celdaAPantallaCompleta(e.x + 0.5, e.y + 1, elevacion, tam, n, rotacion);
+      const { cy: baseYSuelo } = celdaAPantallaCompleta(e.x + 0.5, e.y + 1, 0, tam, n, rotacion);
       const ordenY = baseY + tam * 0.01;
-      const cx = (e.x + 0.5) * tam;
       const [r, g, b] = COLOR_INK_ESPECIE[e.tipo] || [70, 60, 50];
       const runa = RUNAS[e.tipo] || '?';
 
@@ -892,11 +894,18 @@ HTML_VISOR = """<!DOCTYPE html>
             const nombre = elegirVariante(poolMontana.lista, x, y, 91);
             const img = imagenesCache[poolMontana.prefijo + nombre];
             if (img) {
-              const alzado = nivel === 'macro' ? 0 : alzadoY(c.elevacion, tam);
-              const baseY = (y + 1) * tam - alzado;
+              let cxBase, baseY;
+              if (nivel === 'macro') {
+                cxBase = x * tam + tam / 2;
+                baseY = (y + 1) * tam;
+              } else {
+                const proyeccion = celdaAPantallaCompleta(x, y + 1, c.elevacion, tam, data.ancho, camara.rotacion);
+                cxBase = proyeccion.cx + tam / 2;
+                baseY = proyeccion.cy;
+              }
               elementos.push({
                 img, ordenY: baseY,
-                cx: x * tam + tam / 2 + (hash2(x, y, 92) - 0.5) * tam * 0.3,
+                cx: cxBase + (hash2(x, y, 92) - 0.5) * tam * 0.3,
                 baseY,
                 // (2026-08-28) Jerarquia de escala: la montana DOMINA el
                 // paisaje -- base 2.6 (3.4-5.2 celdas de ancho en las
@@ -938,11 +947,19 @@ HTML_VISOR = """<!DOCTYPE html>
             const nombre = elegirVariante(poolPlanta.lista, x, y, 93);
             const img = nombre ? imagenesCache[poolPlanta.prefijo + nombre] : null;
             if (img) {
-              const alzadoFlora = nivel === 'macro' ? 0 : alzadoY(c.elevacion, tam);
-              const baseY = y * tam + tam * 0.85 - alzadoFlora + (hash2(x, y, 95) - 0.5) * tam * 0.3;
+              let cxBase, baseYBase;
+              if (nivel === 'macro') {
+                cxBase = x * tam + tam / 2;
+                baseYBase = y * tam + tam * 0.85;
+              } else {
+                const proyeccion = celdaAPantallaCompleta(x, y + 0.85, c.elevacion, tam, data.ancho, camara.rotacion);
+                cxBase = proyeccion.cx + tam / 2;
+                baseYBase = proyeccion.cy;
+              }
+              const baseY = baseYBase + (hash2(x, y, 95) - 0.5) * tam * 0.3;
               elementos.push({
                 img, ordenY: baseY,
-                cx: x * tam + tam / 2 + (hash2(x, y, 94) - 0.5) * tam * 0.5,
+                cx: cxBase + (hash2(x, y, 94) - 0.5) * tam * 0.5,
                 baseY,
                 // (2026-09-03) base 1.0 -> 1.4 -- feedback real de Diego:
                 // un arbol maduro debe verse claramente mas grande que un
@@ -2307,7 +2324,14 @@ HTML_VISOR = """<!DOCTYPE html>
       for (let y = frustum.yMin; y < frustum.yMax; y++) {
         for (let x = frustum.xMin; x < frustum.xMax; x++) {
           const c = data.celdas[y][x];
-          const px = x * tam, py = y * tam;
+          // (2026-09-03) Con Caballera activo (medio/micro), px/py deben
+          // salir de celdaAPantallaCompleta -- antes usaban x*tam/y*tam
+          // directo, un desajuste real encontrado al mapear este circulo
+          // (el charco/fuego no seguian ni el alzado del circulo
+          // anterior ni el sesgo de este).
+          const { cx: px, cy: py } = esMacro
+            ? { cx: x * tam, cy: y * tam }
+            : celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
 
           // Agua permanente (rio/lago/poza) ya no se pinta plana aqui --
           // dibujarHidrografia() la traza como forma vectorial despues de
@@ -2358,7 +2382,7 @@ HTML_VISOR = """<!DOCTYPE html>
             const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
             const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
             const elevacionEntidad = data.celdas[cyCelda][cxCelda].elevacion || 0;
-            const el = construirElementoCriatura(e, tam, elevacionEntidad);
+            const el = construirElementoCriatura(e, tam, elevacionEntidad, data.ancho, camara.rotacion);
             visualesPorId.set(e.id, el.alturaVisual);
             return el;
           });
@@ -2454,7 +2478,17 @@ HTML_VISOR = """<!DOCTYPE html>
       // queda la capa de anotaciones en pantalla: seleccion siempre, y
       // nombre + barra de vitalidad a nivel micro.
       entidadesAnimadas.forEach(e => {
-          const centro = mundoAPantalla((e.x + 0.5) * tam, (e.y + 0.5) * tam);
+          // (2026-09-03) Corrige un cabo suelto del circulo del alzado
+          // vertical: esta posicion nunca seguia el alzado (ni ahora el
+          // sesgo de Caballera) del cuerpo ya dibujado en la cola
+          // Y-sorted -- solo se llega aqui con nivel!=='macro' (el
+          // branch macro ya retorno arriba), asi que siempre usa la
+          // proyeccion completa.
+          const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
+          const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
+          const elevacionEntidad = data.celdas[cyCelda][cxCelda].elevacion || 0;
+          const proyeccion = celdaAPantallaCompleta(e.x + 0.5, e.y + 0.5, elevacionEntidad, tam, data.ancho, camara.rotacion);
+          const centro = mundoAPantalla(proyeccion.cx, proyeccion.cy);
           const margen = 24;
           if (centro.x < -margen || centro.x > canvas.width + margen ||
               centro.y < -margen || centro.y > canvas.height + margen) return;

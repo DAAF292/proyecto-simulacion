@@ -50,7 +50,10 @@ test('construirElementoCriatura ancla la criatura al suelo de su celda con sesgo
   visor.imagenesCache['criaturas/g1.png'] = img;
 
   const el = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3, nombre: 'E' }, TAM);
-  const baseY = (3 + 1) * TAM;
+  // (2026-09-03) Con la Caballera completa, baseY ya no es (e.y+1)*TAM
+  // plano -- el sesgo por profundidad esta siempre activo (rotacion=0 no
+  // lo anula, solo hace que rotarCoordenadas sea la identidad).
+  const baseY = visor.celdaAPantallaCompleta(2 + 0.5, 3 + 1, 0, TAM, 40, 0).cy;
   assert.ok(Math.abs(el.ordenY - (baseY + TAM * 0.01)) < 0.001,
     `ordenY debe ser baseY de SU celda mas el sesgo, fue ${el.ordenY}`);
 
@@ -164,7 +167,10 @@ test('oclusion completa: criatura entre dos montanas, norte la deja ver y sur la
 test('sin sprite para la especie, la criatura entra en la cola como halo+runa en espacio de mundo', () => {
   limpiarBiblioteca();
   const el = visor.construirElementoCriatura({ id: 1, tipo: 'lobo', x: 1, y: 1 }, TAM);
-  assert.equal(el.ordenY, (1 + 1) * TAM + TAM * 0.01, 'mismo anclaje base que un sprite');
+  // (2026-09-03) Ver comentario del test de arriba -- el sesgo por
+  // profundidad de Caballera esta siempre activo, no es (e.y+1)*TAM plano.
+  const baseYEsperado = visor.celdaAPantallaCompleta(1 + 0.5, 1 + 1, 0, TAM, 40, 0).cy;
+  assert.equal(el.ordenY, baseYEsperado + TAM * 0.01, 'mismo anclaje base que un sprite');
   visor.limpiarCtxVisor();
   el.dibujar();
   const llamadas = visor.llamadasCtxUltimas();

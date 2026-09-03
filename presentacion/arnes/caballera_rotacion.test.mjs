@@ -190,3 +190,67 @@ test('cara de risco tras rotar 90 grados encuentra el vecino real del MUNDO, no 
 
   visor.camara.rotacion = 0;
 });
+
+function gridMontanaCaballera(n, elevacion) {
+  const celdas = [];
+  for (let y = 0; y < n; y++) {
+    const fila = [];
+    for (let x = 0; x < n; x++) fila.push({ x, y, bioma: 'montana', elevacion, planta: null, tipo_agua: null });
+    celdas.push(fila);
+  }
+  return { ancho: n, alto: n, celdas };
+}
+
+test('dibujarStampsRelieveYFlora: el sello de montana cae donde predice celdaAPantallaCompleta', () => {
+  const TAM = 50;
+  visor.catalogoAssets.relieve = { montana: ['pico.png'], montana_color: [] };
+  visor.imagenesCache['relieve/pico.png'] = { naturalWidth: 40, naturalHeight: 40 };
+  visor.camara.zoom = 1.5;
+  const data = gridMontanaCaballera(6, 0.9);
+  const frustum = { xMin: 0, xMax: 6, yMin: 0, yMax: 6 };
+
+  // Ojo: dibujarStampsRelieveYFlora ordena `elementos` por ordenY antes
+  // de dibujar -- el primer drawImage NO es necesariamente la primera
+  // celda del recorrido raster, es la de menor ordenY entre TODAS las
+  // que pasan el gate de hash2. Se calculan todas las candidatas y se
+  // compara contra la de cy minimo, no contra "la primera encontrada".
+  const candidatas = [];
+  for (let y = 0; y < 6; y++) {
+    for (let x = 0; x < 6; x++) {
+      if (visor.hash2(x, y, 99) < 0.5) candidatas.push({ x, y });
+    }
+  }
+  assert.ok(candidatas.length > 0, 'debe haber al menos una celda que pase el gate de hash2 en este grid');
+  const cyEsperados = candidatas.map((c) => visor.celdaAPantallaCompleta(c.x, c.y + 1, 0.9, TAM, data.ancho, 0).cy);
+  const cyMinimoEsperado = Math.min(...cyEsperados);
+  // El drawImage real usa dy = baseY - alto (alto = ancho de la estampa,
+  // ya que naturalWidth===naturalHeight===40 en el mock -- aspecto 1),
+  // no baseY directo -- ancho = tam * base(2.6) * escala(2.0+elevacion*0.7).
+  const ancho = TAM * 2.6 * (2.0 + 0.9 * 0.7);
+  const dyEsperado = cyMinimoEsperado - ancho;
+
+  visor.limpiarCtxVisor();
+  visor.dibujarStampsRelieveYFlora(TAM, data, frustum, [], null, 'medio');
+  const dibujo = visor.llamadasCtxUltimas().filter((l) => l.prop === 'drawImage')[0];
+  assert.ok(Math.abs(dibujo.args[2] - dyEsperado) < 0.001,
+    `dy esperado ${dyEsperado}, fue ${dibujo.args[2]}`);
+
+  visor.camara.zoom = 1;
+});
+
+test('construirElementoCriatura usa celdaAPantallaCompleta para su posicion (sesgo en X incluido)', () => {
+  const TAM = 50;
+  const N = 40;
+  const el = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0.5, N, 0);
+  const { cy } = visor.celdaAPantallaCompleta(2.5, 4, 0.5, TAM, N, 0);
+  assert.ok(Math.abs(el.ordenY - (cy + TAM * 0.01)) < 0.001,
+    `ordenY esperado ${cy + TAM * 0.01}, fue ${el.ordenY}`);
+});
+
+test('construirElementoCriatura con rotacion 90 remapea antes de proyectar', () => {
+  const TAM = 50;
+  const N = 40;
+  const el0 = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0, N, 0);
+  const el90 = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0, N, 90);
+  assert.notEqual(el0.ordenY, el90.ordenY);
+});
