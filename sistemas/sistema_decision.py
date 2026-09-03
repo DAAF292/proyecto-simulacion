@@ -662,7 +662,7 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             if sin_arma_n2:
                 tiene_material_crudo = any(
                     nivel_arma(obj, catalogo_materiales, recetas_armas) == 1
-                    for obj in inventario.objetos
+                    for obj in objetos_totales
                 )
                 if tiene_material_crudo:
                     utilidad_fabricar_arma = 1.0 - necesidades.seguridad
@@ -684,9 +684,6 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             (1.0 - necesidades.energia, Accion.DORMIR),
             (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
             (utilidad_buscar_pareja, Accion.BUSCAR_PAREJA),
-            (utilidad_recolectar, Accion.RECOLECTAR),
-            (utilidad_construir, Accion.CONSTRUIR),
-            (utilidad_encender_fuego, Accion.ENCENDER_FUEGO),
             # CUIDADO con el orden (hallazgo real ya documentado con HUIR
             # en la implementacion anterior): FABRICAR_ARMA y HUIR
             # comparten literalmente la formula 1.0 - seguridad, y max()
@@ -694,7 +691,19 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             # candidata a proposito -- huir de una amenaza real antecede a
             # tallar un arma; FABRICAR_ARMA se coloca DESPUES de HUIR para
             # que un empate resuelva a favor de HUIR.
+            #
+            # FABRICAR_ARMA va ANTES de RECOLECTAR por el mismo motivo:
+            # RECOLECTAR tambien hereda 1.0 - seguridad cuando la celda
+            # ofrece material apto_arma, y si ya se porta crudo un empate
+            # debe resolver a favor de tallar (se recolecta hasta tener lo
+            # necesario, se consume al completar -- no se acumulan palos
+            # sin fin). Con el crudo en la mano (reflejo empunyar) la
+            # criatura sigue pudiendo fabricar: _resolver_fabricar_arma
+            # consume de Inventario y Agarre.
             (utilidad_fabricar_arma, Accion.FABRICAR_ARMA),
+            (utilidad_recolectar, Accion.RECOLECTAR),
+            (utilidad_construir, Accion.CONSTRUIR),
+            (utilidad_encender_fuego, Accion.ENCENDER_FUEGO),
             (base_deambular, Accion.DEAMBULAR),
         )
         # max() con esta lista respeta el orden de prioridad en empates

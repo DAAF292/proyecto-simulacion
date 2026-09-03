@@ -241,8 +241,10 @@ class SistemaRecursos:
                 )
             elif intencion.accion == Accion.FABRICAR_ARMA:
                 inv = gestor.obtener_componente(eid, Inventario)
+                agarre_fabricar = gestor.obtener_componente(eid, Agarre)
                 self._resolver_fabricar_arma(
-                    gestor, eid, inv, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual
+                    gestor, eid, inv, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
+                    agarre=agarre_fabricar,
                 )
 
         # Fogatas: consumo de combustible propio y extincion (ver
@@ -664,12 +666,13 @@ class SistemaRecursos:
         zona_idx: int,
         bus_eventos: BusEventos,
         tick_actual: int,
+        agarre: Agarre | None = None,
     ) -> None:
         """
         FABRICAR_ARMA (ver componentes/intencion.py y config/armas.yaml).
         sistema_decision.py ya comprobó las precondiciones (consciente,
         sin arma de nivel >=2 fabricada, con material apto_arma en crudo
-        en Inventario.objetos) antes de elegir esta Accion. Aquí se
+        entre lo que ya se porta) antes de elegir esta Accion. Aquí se
         resuelve de forma determinista (tallar no es un suceso de azar, a
         diferencia de encender fuego): busca la mejor receta completable
         AHORA con lo que ya se porta (prioriza el nivel más alto
@@ -680,15 +683,30 @@ class SistemaRecursos:
         nombre del arma resultante a Inventario.objetos y emite un Evento
         ArmaFabricada (NOTABLE). Sin desplazamiento, igual que
         RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
+
+        Los materiales se buscan en Inventario.objetos Y en Agarre.objetos
+        (lo que la criatura tiene en la mano es tan suyo como lo que lleva
+        en el inventario): el reflejo empunyar/guardar de sistema_decision.py
+        ya pudo haber movido el crudo a Agarre este mismo tick por inseguridad,
+        y sin mirar ambas fuentes una criatura asustada que empuña el único
+        palo que tiene nunca llegaria a fabricar -- se quedaria en un ciclo
+        de recolectar/huir sin cerrar el circulo (hallazgo real, ver
+        tests/test_armas_primitivas_v2.py). El arma resultante siempre
+        nace en Inventario.objetos.
         """
         if inv is None:
             return
-        receta = mejor_receta_completable(inv.objetos, self.recetas_armas)
+        objetos_portados = list(inv.objetos)
+        if agarre is not None:
+            objetos_portados.extend(agarre.objetos)
+        receta = mejor_receta_completable(objetos_portados, self.recetas_armas)
         if receta is None:
             return
         for material in receta.get("materiales", []):
             if material in inv.objetos:
                 inv.objetos.remove(material)
+            elif agarre is not None and material in agarre.objetos:
+                agarre.objetos.remove(material)
         arma = str(receta.get("nombre", ""))
         nivel = int(receta.get("nivel", 0))
         inv.objetos.append(arma)

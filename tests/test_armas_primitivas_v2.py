@@ -278,6 +278,54 @@ def test_ley_decision_seguridad_plena_nunca_motiva_arma():
     assert intencion.recolectar_motivo_arma is False
 
 
+
+
+def test_ley_ciclo_completo_recolectar_fabricar_empunyar() -> None:
+    """El circulo causal completo se cierra en juego: un individuo con
+    inseguridad real y material apto_arma en la celda recolecta crudo a
+    Inventario.objetos, fabrica el arma (reaccionando al presente, sin
+    planificar a futuro) y acaba empunando el arma fabricada. Cubre el
+    hallazgo real de la implementacion: el reflejo empunyar/guardar puede
+    mover el crudo a Agarre en el mismo tick en que se decide FABRICAR_ARMA,
+    y la resolución debe poder consumirlo de donde este (Inventario o
+    Agarre) -- si solo mirara Inventario, una criatura asustada que empunya
+    el unico palo que tiene se quedaria en un ciclo de recolectar sin cerrar
+    el circulo."""
+    config = _config()
+    gestor = GestorEntidades()
+    mundo = Mundo(20, 20, config, random.Random(1))
+    rng = random.Random(1)
+    eid = crear_criatura(gestor, Especie.GNOMO, 5, 5, config, rng, tick_actual=0)
+    nec = gestor.obtener_componente(eid, Necesidades)
+    pool = gestor.obtener_componente(eid, PoolFisico)
+    inv = gestor.obtener_componente(eid, Inventario)
+    agarre = gestor.obtener_componente(eid, Agarre)
+    dims = gestor.obtener_componente(eid, DimensionesFisicas)
+    nec.seguridad = 0.2
+    pool.resistencia = 0.0  # agotado -> HUIR se apaga, la necesidad de defensa cae al resto
+    zona = mundo.territorio.zonas[0]
+    zona.obtener_celda(5, 5).recursos["madera"] = 100.0
+    bus = BusEventos()
+    sistema = SistemaRecursos(config, rng)
+
+    for tick in range(1, 10):
+        actualizar(gestor, mundo, config, bus, tick)
+        intencion = gestor.obtener_componente(eid, Intencion)
+        if intencion.accion == Accion.RECOLECTAR and intencion.recolectar_motivo_arma:
+            sistema._resolver_recolectar(
+                inv, dims, zona.obtener_celda(5, 5), agarre, "gnomo", True, recolectar_arma=True
+            )
+        if intencion.accion == Accion.FABRICAR_ARMA:
+            sistema._resolver_fabricar_arma(
+                gestor, eid, inv, 5, 5, 0, bus, tick, agarre=agarre
+            )
+
+    # Se fabrico un arma de nivel >= 2 y (a partir de ese momento) el
+    # reflejo empunyar la saca de Inventario a la mano.
+    assert any(o in ("lanza", "hacha_mano", "hacha_primitiva") for o in inv.objetos + agarre.objetos)
+    assert any(o in ("lanza", "hacha_mano", "hacha_primitiva") for o in agarre.objetos)
+
+
 def test_ley_inventario_objetos_sobrevive_roundtrip():
     """Persistencia: guardar/cargar preserva Inventario.objetos exacto,
     incluidos casos con arma fabricada y material crudo sin fabricar
