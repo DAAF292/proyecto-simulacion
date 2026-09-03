@@ -134,6 +134,7 @@ const FRAGMENTO_EXPORT = `
   rotarCamara: typeof rotarCamara !== 'undefined' ? rotarCamara : undefined,
   calcularBoundingBoxProyectado: typeof calcularBoundingBoxProyectado !== 'undefined' ? calcularBoundingBoxProyectado : undefined,
   centrarCamara: typeof centrarCamara !== 'undefined' ? centrarCamara : undefined,
+  dibujarVegetacion: typeof dibujarVegetacion !== 'undefined' ? dibujarVegetacion : undefined,
   canvas: typeof canvas !== 'undefined' ? canvas : undefined,
   establecerUltimoDataConocido: typeof ultimoDataConocido !== 'undefined'
     ? (v) => { ultimoDataConocido = v; }

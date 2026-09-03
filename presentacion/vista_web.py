@@ -2076,7 +2076,16 @@ HTML_VISOR = """<!DOCTYPE html>
           // relleno provisional. En cuanto haya flora/hierba_silvestre_*.png
           // el guard de arriba ya la desvia sola al sistema de sellos.
           if (c.planta.especie === 'hierba_silvestre') continue;
-          const cx = x * tam + tam / 2, cy = y * tam + tam / 2;
+          // (2026-09-03, correccion real -- reportado por Diego: "las
+          // manchas verdes se superponen a todo") esta funcion solo
+          // corre a camara.zoom>=0.8 (el guard de arriba), es decir
+          // SIEMPRE en medio/micro -- Caballera esta siempre activo
+          // aqui, sin rama macro que considerar. Usaba x*tam/y*tam
+          // directo (gap conocido, sin migrar en el circulo de
+          // Caballera) mientras terreno/sellos/criaturas ya se habian
+          // movido -- quedaba flotando desalineada de todo lo demas.
+          const proyeccionPlanta = celdaAPantallaCompleta(x, y, c.elevacion, tam, data.ancho, camara.rotacion);
+          const cx = proyeccionPlanta.cx + tam / 2, cy = proyeccionPlanta.cy + tam / 2;
           const escala = 0.32 + 0.68 * c.planta.etapa;
           const [r, g, b] = COLOR_ESPECIE[c.planta.especie] || [90, 110, 70];
 

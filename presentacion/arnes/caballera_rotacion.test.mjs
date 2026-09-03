@@ -339,3 +339,40 @@ test('los pies de una criatura coinciden con el borde inferior real de su celda 
       `rotacion ${rotacion}: los pies (${piesCriatura}) deben coincidir con el borde inferior del terreno (${bordeInferiorTerreno})`);
   }
 });
+
+// (2026-09-03, correccion real -- reportado por Diego: "las manchas
+// verdes se superponen a todo"). dibujarVegetacion es el respaldo
+// vectorial para especies de flora sin sprite real (hoy: las 10
+// especies nuevas del catalogo ampliado, ninguna tiene arte todavia) --
+// quedo señalada como gap conocido en la spec de Caballera, sin
+// migrar, y eso causaba un desalineamiento real y visible una vez que
+// terreno/sellos/criaturas si se movieron.
+test('dibujarVegetacion (respaldo vectorial de flora sin asset) usa la proyeccion Caballera completa', () => {
+  const TAM = 50;
+  visor.catalogoAssets.flora = {};
+  visor.catalogoAssets.flora_color = {};
+  visor.camara.zoom = 1.5; // >= 0.8, la funcion exige medio/micro
+  visor.camara.rotacion = 0;
+  const data = {
+    ancho: 3, alto: 3,
+    celdas: [
+      [{ x: 0, y: 0, planta: null }, { x: 1, y: 0, planta: null }, { x: 2, y: 0, planta: null }],
+      [{ x: 0, y: 1, planta: null }, { x: 1, y: 1, planta: { especie: 'roble', etapa: 0.8 }, elevacion: 0.3 }, { x: 2, y: 1, planta: null }],
+      [{ x: 0, y: 2, planta: null }, { x: 1, y: 2, planta: null }, { x: 2, y: 2, planta: null }],
+    ],
+  };
+  const frustum = { xMin: 0, xMax: 3, yMin: 0, yMax: 3 };
+
+  visor.limpiarCtxVisor();
+  visor.dibujarVegetacion(TAM, data, frustum);
+  const elipses = visor.llamadasCtxUltimas().filter((l) => l.prop === 'ellipse');
+  assert.ok(elipses.length >= 1, 'roble sin asset real debe caer al respaldo vectorial (elipse)');
+
+  const proyeccion = visor.celdaAPantallaCompleta(1, 1, 0.3, TAM, data.ancho, 0);
+  const cxEsperado = proyeccion.cx + TAM / 2;
+  const cyEsperado = proyeccion.cy + TAM / 2 + TAM * 0.18; // offset fijo del dibujo de "liquen/musgo/generico"
+  assert.ok(Math.abs(elipses[0].args[0] - cxEsperado) < 0.001, `cx esperado ${cxEsperado}, fue ${elipses[0].args[0]}`);
+  assert.ok(Math.abs(elipses[0].args[1] - cyEsperado) < 0.001, `cy esperado ${cyEsperado}, fue ${elipses[0].args[1]}`);
+
+  visor.camara.zoom = 1;
+});
