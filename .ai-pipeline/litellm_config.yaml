@@ -60,7 +60,12 @@ model_list:
       # protegiendo contra el riesgo original (un bucle que dispare
       # muchas llamadas sin supervisión), solo que con más margen para
       # una sesión de trabajo normal.
-      max_budget: 1.00
+      # SUBIDA TEMPORAL (2026-09-03, revertir a 1.00 tras el experimento
+      # de "armas primitivas v2" -- tarea deliberadamente compleja, con
+      # -l subido a 1.50 en run-plan.sh, ver ese fichero): 1.00 se
+      # quedaría corto si el disyuntor de 3 intentos consume cerca del
+      # tope de -l en cada uno.
+      max_budget: 6.00
       budget_duration: "1d"
       # provider.sort: price (2026-09-02, pregunta real de Diego: "¿no
       # sería más rentable ir directo a DeepSeek?"). Verificado contra el

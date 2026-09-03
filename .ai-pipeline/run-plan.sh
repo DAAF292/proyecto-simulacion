@@ -198,11 +198,10 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # aider.
     TAREA=$(grep -v '^> \*\*For agentic workers:\*\*' "docs/plans/in_progress/$PLAN_NAME.md")
 
-    # -l 0.30 (2026-09-02, bajado de 0.60 tras medir coste real contra
-    # balance: la pieza más cara vista hasta ahora costó $0.127 -- 0.30
-    # deja ~2.4x de margen sobre eso en vez de ~4.7x, capa de seguridad
-    # adicional sobre el tope diario ya existente de litellm_config.yaml,
-    # max_budget). --exit-immediately: sin esto,
+    # -l 1.50 (SUBIDA TEMPORAL 2026-09-03, revertir a 0.30 tras el
+    # experimento de "armas primitivas v2" -- tarea deliberadamente
+    # compleja para medir coste/eficiencia real del modelo barato, no
+    # una pieza pequeña como las que calibraron 0.30). --exit-immediately: sin esto,
     # mini-swe-agent pregunta interactivamente al terminar la tarea; en
     # un pipeline desatendido no hay nadie para responder. -y: equivalente
     # a --yes-always de aider, sin confirmación por acción.
@@ -249,7 +248,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     timeout 900 env OPENAI_API_BASE=http://0.0.0.0:4000 OPENAI_API_KEY=dummy \
         LITELLM_MODEL_REGISTRY_PATH=.ai-pipeline/litellm_model_registry.json \
         mini -m openai/agente-obrero -c .ai-pipeline/mini-agente-obrero.yaml \
-             -y -l 0.30 --exit-immediately \
+             -y -l 1.50 --exit-immediately \
              -o "$TRAYECTORIA_FILE" \
              -t "$TAREA"
     AGENTE_EXIT_CODE=$?
