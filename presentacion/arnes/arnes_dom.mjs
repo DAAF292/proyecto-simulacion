@@ -135,6 +135,9 @@ const FRAGMENTO_EXPORT = `
   calcularBoundingBoxProyectado: typeof calcularBoundingBoxProyectado !== 'undefined' ? calcularBoundingBoxProyectado : undefined,
   centrarCamara: typeof centrarCamara !== 'undefined' ? centrarCamara : undefined,
   dibujarVegetacion: typeof dibujarVegetacion !== 'undefined' ? dibujarVegetacion : undefined,
+  dibujarHidrografia: typeof dibujarHidrografia !== 'undefined' ? dibujarHidrografia : undefined,
+  contornoDeCluster: typeof contornoDeCluster !== 'undefined' ? contornoDeCluster : undefined,
+  pintarCuerpoAgua: typeof pintarCuerpoAgua !== 'undefined' ? pintarCuerpoAgua : undefined,
   canvas: typeof canvas !== 'undefined' ? canvas : undefined,
   establecerUltimoDataConocido: typeof ultimoDataConocido !== 'undefined'
     ? (v) => { ultimoDataConocido = v; }

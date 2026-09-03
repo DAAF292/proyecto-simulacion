@@ -376,3 +376,53 @@ test('dibujarVegetacion (respaldo vectorial de flora sin asset) usa la proyeccio
 
   visor.camara.zoom = 1;
 });
+
+// (2026-09-03, correccion real -- reportado por Diego: "hay lineas por
+// el mapa que no se entienden"). contornoDeCluster/pintarCuerpoAgua
+// (rios/lagos/pozas) calculaban su silueta y su hachurado en pixeles
+// planos (x*tam), ajenos a la proyeccion Caballera que ya movia todo lo
+// demas -- quedaban desalineados de la orilla/terreno real.
+test('contornoDeCluster proyecta cada vertice del contorno con celdaAPantallaCompleta (no macro)', () => {
+  const TAM = 50;
+  const N = 40;
+  // Cluster de una sola celda (5,5): su contorno es el cuadrado unidad
+  // (5,5)-(6,5)-(6,6)-(5,6) en coordenadas de mundo.
+  const cluster = [{ x: 5, y: 5 }];
+  const contorno = visor.contornoDeCluster(cluster, TAM, N, 0.3, false);
+  assert.equal(contorno.length, 4);
+  const verticesMundoEsperados = [[5, 5], [6, 5], [6, 6], [5, 6]];
+  for (let i = 0; i < 4; i++) {
+    const [wx, wy] = verticesMundoEsperados[i];
+    const { cx, cy } = visor.celdaAPantallaCompleta(wx, wy, 0.3, TAM, N, 0);
+    assert.ok(Math.abs(contorno[i].x - cx) < 0.001, `vertice ${i}: x esperado ${cx}, fue ${contorno[i].x}`);
+    assert.ok(Math.abs(contorno[i].y - cy) < 0.001, `vertice ${i}: y esperado ${cy}, fue ${contorno[i].y}`);
+  }
+});
+
+test('contornoDeCluster a macro NO proyecta (cenital plano, sin cambios)', () => {
+  const TAM = 50;
+  const N = 40;
+  const cluster = [{ x: 5, y: 5 }];
+  const contorno = visor.contornoDeCluster(cluster, TAM, N, 0.3, true);
+  const verticesMundoEsperados = [[5, 5], [6, 5], [6, 6], [5, 6]];
+  for (let i = 0; i < 4; i++) {
+    const [wx, wy] = verticesMundoEsperados[i];
+    assert.ok(Math.abs(contorno[i].x - wx * TAM) < 0.001);
+    assert.ok(Math.abs(contorno[i].y - wy * TAM) < 0.001);
+  }
+});
+
+test('pintarCuerpoAgua no lanza excepcion y respeta la elevacion media del cuerpo de agua', () => {
+  const TAM = 50;
+  const N = 40;
+  visor.camara.zoom = 1.5;
+  const comp = [
+    { x: 10, y: 10, elevacion: 0.2, profundidad: 0.5 },
+    { x: 11, y: 10, elevacion: 0.2, profundidad: 0.5 },
+  ];
+  visor.limpiarCtxVisor();
+  visor.pintarCuerpoAgua(comp, TAM, 96, N, false);
+  const llamadas = visor.llamadasCtxUltimas();
+  assert.ok(llamadas.some((l) => l.prop === 'fill'), 'debe rellenar el cuerpo de agua');
+  visor.camara.zoom = 1;
+});

@@ -1419,7 +1419,7 @@ HTML_VISOR = """<!DOCTYPE html>
     // para picos/lagos-sin-asset): recorre cada celda en sentido horario,
     // se queda solo con las aristas que dan a fuera del cluster, y las
     // encadena por sus puntos hasta formar el poligono de frontera exacto.
-    function contornoDeCluster(cluster, tam) {
+    function contornoDeCluster(cluster, tam, n, elevacion, esMacro) {
       const enCluster = new Set(cluster.map(c => c.x + ',' + c.y));
       const dentro = (x, y) => enCluster.has(x + ',' + y);
       const aristas = new Map();
@@ -1444,7 +1444,18 @@ HTML_VISOR = """<!DOCTYPE html>
         }
         if (bucle.length > mejorBucle.length) mejorBucle = bucle;
       }
-      return mejorBucle.map(p => ({ x: p.x * tam, y: p.y * tam }));
+      // (2026-09-03, correccion real -- reportado por Diego: "hay lineas
+      // por el mapa que no se entienden") esta silueta vivia en pixeles
+      // planos (x*tam), ajena a la proyeccion Caballera que ya mueve
+      // todo lo demas -- el agua quedaba desalineada de la orilla real.
+      // A macro (cenital, sin Caballera) sigue igual que siempre.
+      if (esMacro) {
+        return mejorBucle.map(p => ({ x: p.x * tam, y: p.y * tam }));
+      }
+      return mejorBucle.map(p => {
+        const { cx, cy } = celdaAPantallaCompleta(p.x, p.y, elevacion, tam, n, camara.rotacion);
+        return { x: cx, y: cy };
+      });
     }
 
     // Chaikin corner-cutting: redondea el contorno en bloques del grid
@@ -1853,7 +1864,7 @@ HTML_VISOR = """<!DOCTYPE html>
       });
     }
 
-    function pintarCuerpoAgua(comp, tam, sal) {
+    function pintarCuerpoAgua(comp, tam, sal, n, esMacro) {
       // (2026-08-28, v4) HACHURADO horizontal clasico de los mapas de
       // plumilla: relleno de agua + trazos ondulados paralelos recortados
       // por la silueta (clip). Historial: v2 bandas contraidas (bordes
@@ -1862,7 +1873,12 @@ HTML_VISOR = """<!DOCTYPE html>
       // acumulaciones ni bandas.
       if (comp.length === 0) return;
       const tinta = !estiloColorActivo();
-      let silueta = suavizarChaikin(contornoDeCluster(comp, tam), 2);
+      // (2026-09-03) Elevacion representativa del cuerpo de agua -- media
+      // de sus celdas reales (ya la trae componentesAgua). El agua no
+      // "flota": se ancla a la misma altura que el terreno que la rodea,
+      // igual que el resto de elementos ya migrados a Caballera.
+      const elevacionAgua = comp.reduce((s, c) => s + (c.elevacion || 0), 0) / comp.length;
+      let silueta = suavizarChaikin(contornoDeCluster(comp, tam, n, elevacionAgua, esMacro), 2);
       const fase = hash2(comp[0].x, comp[0].y, sal) * Math.PI * 2;
 
       trazarPoligono(silueta);
@@ -1875,28 +1891,34 @@ HTML_VISOR = """<!DOCTYPE html>
       }
 
       // Trazos ondulados horizontales dentro de la silueta (clip).
+      // (2026-09-03, correccion real -- "lineas que no se entienden") el
+      // bounding box del muestreo salia de comp (coordenadas de mundo
+      // planas, x*tam), ajeno a donde la silueta YA proyectada por
+      // Caballera cae de verdad -- las lineas se dibujaban fuera de
+      // fase con el propio contorno que las recorta. Se deriva de la
+      // silueta YA proyectada, no de comp.
       ctx.save();
       trazarPoligono(silueta);
       ctx.clip();
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const c of comp) {
-        if (c.x < minX) minX = c.x;
-        if (c.x > maxX) maxX = c.x;
-        if (c.y < minY) minY = c.y;
-        if (c.y > maxY) maxY = c.y;
+      for (const p of silueta) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
       }
       const colorTrazo = tinta ? AGUA_TINTA.contorno : AGUA_COLOR.profundo;
       const alfaTrazo = tinta ? 0.30 : 0.32;
       ctx.strokeStyle = `rgba(${colorTrazo.join(',')}, ${alfaTrazo})`;
       ctx.lineWidth = Math.max(0.7, tam * 0.055);
       const paso = tam * 0.38;
-      let ypx = minY * tam;
+      let ypx = minY;
       let fila = 0;
-      while (ypx <= (maxY + 1) * tam) {
+      while (ypx <= maxY + tam) {
         ctx.beginPath();
-        let px = (minX - 0.5) * tam;
+        let px = minX - tam * 0.5;
         let primero = true;
-        while (px <= (maxX + 1.5) * tam) {
+        while (px <= maxX + tam * 1.5) {
           const py = ypx + Math.sin(px / (tam * 0.9) + fase + fila * 0.7) * tam * 0.09;
           if (primero) { ctx.moveTo(px, py); primero = false; }
           else ctx.lineTo(px, py);
@@ -1917,13 +1939,13 @@ HTML_VISOR = """<!DOCTYPE html>
       ctx.stroke();
     }
 
-    function dibujarCuencaConAssets(tam, comp, variantesLago) {
+    function dibujarCuencaConAssets(tam, comp, variantesLago, n, esMacro) {
       // (2026-08-28) Ya no estampa sellos de imagen: el agua se pinta
       // (pintarCuerpoAgua, decision de Diego). La firma conserva el
       // nombre y el argumento de variantes para no reescribir el
       // llamador; el argumento queda sin uso, y los PNG de agua siguen
       // en disco sin referenciar.
-      pintarCuerpoAgua(comp, tam, 96);
+      pintarCuerpoAgua(comp, tam, 96, n, esMacro);
     }
 
     // Circulo 2 (2026-08-27): a zoom macro el mapa es PERGAMINO PURO con
@@ -1968,14 +1990,14 @@ HTML_VISOR = """<!DOCTYPE html>
     // rios son spline vectorial siempre desde el commit eea8104 (ver la
     // nota de dibujarRioPiezas mas arriba, mismo hallazgo). Los PNG de
     // agua.rio quedan en disco sin referenciar.
-    function dibujarRioVectorial(tam, comp) {
+    function dibujarRioVectorial(tam, comp, n, esMacro) {
       // (2026-08-28) El rio es un cuerpo de agua alargado y se pinta con
       // el MISMO pipeline que lagos y pozas (banda organica del contorno
       // de su cauce+orillas, bandas de profundidad). Historial: la
       // spline por centros rebotaba cauce-orilla en dientes de sierra
       // (la orilla NO es superficial: 0.001-0.03 unidades x escala 100
       // = hasta 3 m, indistinguible del cauce por profundidad).
-      pintarCuerpoAgua(comp, tam, 213);
+      pintarCuerpoAgua(comp, tam, 213, n, esMacro);
     }
 
     // (2026-08-29, fix de auditoria) Kit de piezas de rio por celda
@@ -2030,11 +2052,15 @@ HTML_VISOR = """<!DOCTYPE html>
       // caminos reales del motor -- mismo tipo de fallo que su historial
       // ya documenta -- y se retira del camino (el material queda en
       // disco sin uso, como el resto de bibliotecas retiradas).
+      // (2026-09-03) rioFino coincide con esMacro en el unico llamador
+      // real (dibujarFrame pasa esMacro aqui) -- se reutiliza para
+      // decidir si el agua se proyecta con Caballera o se queda cenital.
+      const esMacro = rioFino;
       for (const comp of componentesAgua(data, 'rio')) {
-        dibujarRioVectorial(tam, comp);
+        dibujarRioVectorial(tam, comp, data.ancho, esMacro);
       }
-      componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp)));
-      componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp)));
+      componentesAgua(data, 'lago').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp), data.ancho, esMacro));
+      componentesAgua(data, 'poza').forEach(comp => dibujarCuencaConAssets(tam, comp, poolDeCuerpo(comp), data.ancho, esMacro));
     }
 
     function dibujarVegetacion(tam, data, frustum) {
