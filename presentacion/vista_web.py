@@ -254,6 +254,7 @@ HTML_VISOR = """<!DOCTYPE html>
           <button class="btn-modo" id="btn-modo-hidro" type="button" title="Hidrografia: tierra en pergamino, agua por profundidad">Hidro</button>
         </div>
         <button id="btn-centrar" type="button">Centrar mapa</button>
+        <button id="btn-rotar" type="button" title="Rotar camara 90 grados (tecla R)">Rotar</button>
       </div>
     </div>
     <div id="panel-lateral">
@@ -1001,6 +1002,10 @@ HTML_VISOR = """<!DOCTYPE html>
       camara.offsetY = 0;
     }
 
+    function rotarCamara() {
+      camara.rotacion = (camara.rotacion + 90) % 360;
+    }
+
     function mundoAPantalla(x, y) {
       return { x: x * camara.zoom + camara.offsetX, y: y * camara.zoom + camara.offsetY };
     }
@@ -1166,6 +1171,10 @@ HTML_VISOR = """<!DOCTYPE html>
     }, { passive: false });
 
     document.getElementById('btn-centrar').addEventListener('click', centrarCamara);
+    document.getElementById('btn-rotar').addEventListener('click', rotarCamara);
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key === 'r' || ev.key === 'R') rotarCamara();
+    });
 
     // Pieza 3: botones de modo de mapa (codice / relieve / hidro)
     for (const m of ['codice', 'relieve', 'hidro']) {

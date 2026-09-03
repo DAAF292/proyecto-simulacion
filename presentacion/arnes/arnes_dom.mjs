@@ -131,6 +131,7 @@ const FRAGMENTO_EXPORT = `
   celdaAPantallaCompleta: typeof celdaAPantallaCompleta !== 'undefined' ? celdaAPantallaCompleta : undefined,
   ALPHA_CABALLERA: typeof ALPHA_CABALLERA !== 'undefined' ? ALPHA_CABALLERA : undefined,
   K_CABALLERA: typeof K_CABALLERA !== 'undefined' ? K_CABALLERA : undefined,
+  rotarCamara: typeof rotarCamara !== 'undefined' ? rotarCamara : undefined,
 });
 `;
 

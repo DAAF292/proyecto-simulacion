@@ -91,3 +91,15 @@ test('celdaAPantallaCompleta con rotacion 90 remapea antes de proyectar', () => 
   assert.ok(Math.abs(cx - cxEsperado) < 0.001);
   assert.ok(Math.abs(cy - cyEsperado) < 0.001);
 });
+
+test('rotarCamara avanza camara.rotacion en pasos de 90, con vuelta a 0 tras 270', () => {
+  visor.camara.rotacion = 0;
+  visor.rotarCamara();
+  assert.equal(visor.camara.rotacion, 90);
+  visor.rotarCamara();
+  assert.equal(visor.camara.rotacion, 180);
+  visor.rotarCamara();
+  assert.equal(visor.camara.rotacion, 270);
+  visor.rotarCamara();
+  assert.equal(visor.camara.rotacion, 0);
+});
