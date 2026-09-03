@@ -209,7 +209,7 @@ registre en `litellm_model_registry.json` debe declarar
 agéntico con contexto creciente, omitirlo no es un error pequeño, es
 la diferencia entre medir bien y medir ~3x por debajo.
 
-**Instrumentado en `run-plan.sh` (2026-09-02), ya no hay que hacerlo a
+**Instrumentado en `ejecutar-encargo.sh` (2026-09-02), ya no hay que hacerlo a
 mano**: el script consulta el balance real de OpenRouter
 (`/api/v1/credits`) justo antes del primer intento y de nuevo al salir
 (éxito o fallo, vía el `trap EXIT` ya existente), y deja un registro por
@@ -252,7 +252,7 @@ número de intentos.
   más de 900-1500s incluso para tareas que sí funcionan bien -- no
   probado todavía a esa escala, extrapolación razonada, no medida.
 - **Un plan tipo BLUEPRINT (sin sección `**Files:**` con líneas
-  `- Modify/Create/Test: \`ruta\``) hacía fallar `run-plan.sh` antes de
+  `- Modify/Create/Test: \`ruta\``) hacía fallar `ejecutar-encargo.sh` antes de
   que el agente llegara a ejecutarse** (2026-09-02, encontrado en la
   primera prueba real de blueprint): `ARCHIVOS_PLAN` se construye con un
   `grep` que, sin ninguna coincidencia, devuelve código 1 -- con
@@ -260,24 +260,21 @@ número de intentos.
   "limpieza de ficheros no declarados" habría borrado cualquier fichero
   nuevo legítimo del agente (tests incluidos) al no tener ninguna
   whitelist contra la que comparar. Corregido en el propio
-  `run-plan.sh`: `ARCHIVOS_PLAN` ya no aborta el script si queda vacío,
-  y el bloque de limpieza se salta entero en ese caso (sin whitelist, no
-  se puede distinguir "declarado" de "no declarado" con seguridad).
-- **El mensaje de fallo por timeout todavía dice "480s" aunque el valor
-  real configurado es 900s** -- cosmético, viene de cuando se subió el
-  timeout sin actualizar el texto del mensaje, no afecta al
-  comportamiento real. Pendiente de limpiar si se retoma este fichero.
-- **El centinela (`watch-plans.sh`) puede llevar corriendo en segundo
+  `ejecutar-encargo.sh`: `ARCHIVOS_PLAN` ya no aborta el script si queda
+  vacío, y el bloque de limpieza se salta entero en ese caso (sin
+  whitelist, no se puede distinguir "declarado" de "no declarado" con
+  seguridad).
+- **El centinela (`centinela.sh`) puede llevar corriendo en segundo
   plano desde una sesión anterior sin que la sesión actual lo sepa** --
-  vigila `docs/superpowers/plans/*.md` cada 5s y dispara `run-plan.sh`
+  vigila `docs/superpowers/encargos/*.md` cada 5s y dispara `ejecutar-encargo.sh`
   en cuanto aparece un fichero nuevo ahí, aunque nadie lo haya invocado
-  esta sesión. Comprobar `ps aux | grep watch-plans` antes de escribir o
+  esta sesión. Comprobar `ps aux | grep centinela` antes de escribir o
   reescribir un plan directamente en esa carpeta -- si está vivo, un
   borrador a medio escribir puede dispararse antes de terminarlo de
   corregir (pasó exactamente esto la primera vez que se probó
   blueprint). Más seguro: redactar el plan fuera de esa carpeta (o en
-  `docs/superpowers/plans/pendientes/`) y moverlo/copiarlo ahí solo
-  cuando esté listo de verdad, o invocar `run-plan.sh <ruta>`
+  `docs/superpowers/encargos/pendientes/`) y moverlo/copiarlo ahí solo
+  cuando esté listo de verdad, o invocar `ejecutar-encargo.sh <ruta>`
   directamente sin depender del centinela.
 - **Miga de pan en los blueprints -- vale más de lo que parecía antes
   del hallazgo de coste real** (2026-09-02): dar la ubicación
@@ -301,6 +298,8 @@ número de intentos.
     completa varias veces como autoverificación intermedia, cada
     corrida quedándose en el contexto para siempre) + aviso genérico
     contra repetir comandos ya ejecutados sin necesidad.
-  - `run-plan.sh`: límite de coste por intento (`-l`) bajado de 0.60 a
-    0.30 -- la pieza más cara medida hasta ahora costó $0.127 real;
-    0.30 deja ~2.4x de margen en vez de ~4.7x.
+  - `ejecutar-encargo.sh`: límite de coste por intento (`-l`) bajado de
+    0.60 a 0.30 (después subido a 0.90 el 2026-09-03, en proporción al
+    timeout único de 2700s -- ver CLAUDE.md) -- la pieza más cara medida
+    hasta ahora costó $0.127 real; 0.30 dejaba ~2.4x de margen sobre eso
+    en vez de ~4.7x.

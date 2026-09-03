@@ -20,7 +20,7 @@ set -euo pipefail
 mkdir -p .ai-pipeline
 exec > >(tee -a .ai-pipeline/run-plan.log) 2>&1
 echo ""
-echo "########## $(date -Iseconds) -- nueva ejecución de run-plan.sh (PID $$) ##########"
+echo "########## $(date -Iseconds) -- nueva ejecución de ejecutar-encargo.sh (PID $$) ##########"
 trap 'echo "[TRAP ERR] línea $LINENO, comando: \"$BASH_COMMAND\", código de salida $?"' ERR
 
 # COSTE REAL (2026-09-02, ver guia-tareas.md "Coste real"): el
@@ -54,7 +54,7 @@ except Exception:
 
 _al_salir() {
     local codigo=$?
-    echo "[TRAP EXIT] run-plan.sh termina con código $codigo a las $(date -Iseconds)"
+    echo "[TRAP EXIT] ejecutar-encargo.sh termina con código $codigo a las $(date -Iseconds)"
     if [ -n "${BALANCE_ANTES:-}" ]; then
         local balance_despues
         balance_despues=$(consultar_balance_real || echo "")
@@ -301,7 +301,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         # sale del bucle sin gastar los intentos que queden, TEST_PASSED
         # sigue en false y el bloque de después del bucle lo trata igual
         # que agotar MAX_RETRIES.
-        echo "[FALLO FATAL] mini-swe-agent superó el timeout de ${TIMEOUT_SEGUNDOS}s sin converger a un commit final. Sin reintento -- ver run-plan.sh junto a TIMEOUT_SEGUNDOS."
+        echo "[FALLO FATAL] mini-swe-agent superó el timeout de ${TIMEOUT_SEGUNDOS}s sin converger a un commit final. Sin reintento -- ver ejecutar-encargo.sh junto a TIMEOUT_SEGUNDOS."
         TIMEOUT_FATAL=true
         break
     fi
