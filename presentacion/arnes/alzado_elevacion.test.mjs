@@ -186,14 +186,20 @@ test('entidadEnPunto localiza una entidad en una celda alzada usando su posicion
     entidades: [{ id: 42, x: 1, y: 1 }],
   };
 
-  const alzado = visor.alzadoY(0.9, TAM);
-  const pantalla = visor.mundoAPantalla(1.5 * TAM, 1.5 * TAM - alzado);
+  // (2026-09-03) Con la Caballera completa, la posicion de mundo ya no
+  // es (1.5*TAM, 1.5*TAM - alzado) -- el sesgo por profundidad esta
+  // siempre activo (rotacion=0 explicita, para no depender de estado de
+  // otro test). Se compara contra celdaAPantallaCompleta, la fuente real.
+  visor.camara.rotacion = 0;
+  const { cx, cy } = visor.celdaAPantallaCompleta(1.5, 1.5, 0.9, TAM, data.ancho, 0);
+  const pantalla = visor.mundoAPantalla(cx, cy);
 
   const encontrada = visor.entidadEnPunto(data, pantalla.x, pantalla.y);
   assert.ok(encontrada, 'debe encontrar la entidad en su posicion YA alzada');
   assert.equal(encontrada.id, 42);
 
-  const pantallaSinAlzar = visor.mundoAPantalla(1.5 * TAM, 1.5 * TAM);
+  const sinAlzar = visor.celdaAPantallaCompleta(1.5, 1.5, 0, TAM, data.ancho, 0);
+  const pantallaSinAlzar = visor.mundoAPantalla(sinAlzar.cx, sinAlzar.cy);
   const distanciaAlzado = Math.hypot(pantalla.x - pantallaSinAlzar.x, pantalla.y - pantallaSinAlzar.y);
   if (distanciaAlzado > 16) {
     const noEncontrada = visor.entidadEnPunto(data, pantallaSinAlzar.x, pantallaSinAlzar.y);

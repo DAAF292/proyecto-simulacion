@@ -1121,13 +1121,16 @@ HTML_VISOR = """<!DOCTYPE html>
       let mejor = null, distMejor = 16 * 16;   // radio de acierto ~16px
       const nivel = nivelActual();
       for (const e of data.entidades) {
-        let alzado = 0;
-        if (nivel !== 'macro') {
+        let proyeccion;
+        if (nivel === 'macro') {
+          proyeccion = { cx: (e.x + 0.5) * tam0, cy: (e.y + 0.5) * tam0 };
+        } else {
           const cxCelda = Math.max(0, Math.min(data.ancho - 1, Math.round(e.x)));
           const cyCelda = Math.max(0, Math.min(data.alto - 1, Math.round(e.y)));
-          alzado = alzadoY(data.celdas[cyCelda][cxCelda].elevacion || 0, tam0);
+          const elevacion = data.celdas[cyCelda][cxCelda].elevacion || 0;
+          proyeccion = celdaAPantallaCompleta(e.x + 0.5, e.y + 0.5, elevacion, tam0, data.ancho, camara.rotacion);
         }
-        const centro = mundoAPantalla((e.x + 0.5) * tam0, (e.y + 0.5) * tam0 - alzado);
+        const centro = mundoAPantalla(proyeccion.cx, proyeccion.cy);
         const d = (centro.x - px) ** 2 + (centro.y - py) ** 2;
         if (d < distMejor) { distMejor = d; mejor = e; }
       }

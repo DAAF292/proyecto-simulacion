@@ -254,3 +254,31 @@ test('construirElementoCriatura con rotacion 90 remapea antes de proyectar', () 
   const el90 = visor.construirElementoCriatura({ id: 1, tipo: 'gnomo', x: 2, y: 3 }, TAM, 0, N, 90);
   assert.notEqual(el0.ordenY, el90.ordenY);
 });
+
+test('entidadEnPunto localiza una entidad usando la proyeccion Caballera completa (con rotacion)', () => {
+  const TAM = 50;
+  visor.establecerTam0(TAM);
+  visor.camara.zoom = 1.5;
+  visor.camara.offsetX = 0;
+  visor.camara.offsetY = 0;
+  visor.camara.rotacion = 90;
+
+  const data = {
+    ancho: 3, alto: 3,
+    celdas: [
+      [{ elevacion: 0.1 }, { elevacion: 0.1 }, { elevacion: 0.1 }],
+      [{ elevacion: 0.1 }, { elevacion: 0.6 }, { elevacion: 0.1 }],
+      [{ elevacion: 0.1 }, { elevacion: 0.1 }, { elevacion: 0.1 }],
+    ],
+    entidades: [{ id: 99, x: 1, y: 1 }],
+  };
+
+  const { cx, cy } = visor.celdaAPantallaCompleta(1.5, 1.5, 0.6, TAM, data.ancho, 90);
+  const pantalla = visor.mundoAPantalla(cx, cy);
+
+  const encontrada = visor.entidadEnPunto(data, pantalla.x, pantalla.y);
+  assert.ok(encontrada && encontrada.id === 99, 'debe encontrar la entidad en su posicion proyectada con rotacion');
+
+  visor.camara.zoom = 1;
+  visor.camara.rotacion = 0;
+});
