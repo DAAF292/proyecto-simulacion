@@ -335,7 +335,7 @@ def ejecutar_tick(
     # ---------------------------------------------------------
     # FASE 2: ACCIÓN, CINEMÁTICA Y CONTACTO FÍSICO
     # ---------------------------------------------------------
-    sistemas["movimiento"].ejecutar(gestor, mundo)
+    sistemas["movimiento"].ejecutar(gestor, mundo, reloj)
     sistemas["desastres"].procesar_fuego_tick(gestor, mundo, reloj, bus_eventos)
     sistemas["depredacion"].ejecutar(gestor, bus_eventos)
 

@@ -10,11 +10,18 @@ resiliencia y estabilidad_mental_maxima SÍ tienen consumidor real
 (resiliencia repone el pool de estabilidad mental; estabilidad_mental_maxima
 divide la pérdida bruta de estrés antes de restarla, mismo criterio que
 vitalidad_maxima/resistencia_maxima en DimensionesFisicas -- ver
-sistemas/sistema_capacidad_mental.py). Sin consumidor todavía:
+sistemas/sistema_capacidad_mental.py).
+memoria SÍ tiene consumidor real -- de hecho DOS (2026-09-04, corrección
+de docstring: el texto anterior decía "sin consumidor todavía", pero
+nucleo/memoria.py:capacidad_memoria ya la consumía desde antes para el
+cupo de recuerdos espaciales, y la memoria espacial es solo uno de ellos):
+(1) cupo de recuerdos de sitios (MemoriaEspacial, nucleo/memoria.py) y
+(2) cupo de vínculos personales (Relaciones, nucleo/relaciones.py:
+capacidad_vinculos) -- un individuo con buena memoria recuerda mejor tanto
+sitios como personas. Sin consumidor todavía:
 inteligencia (espera aprendizaje individual, profesión emergente y
-magia), memoria (espera el hilo individual de nombres propios),
-voluntad (espera necesidades superiores -- propósito, trabajo, pasión,
-conocimiento -- que la jerarquía del motor hoy no modela).
+magia), voluntad (espera necesidades superiores -- propósito, trabajo,
+pasión, conocimiento -- que la jerarquía del motor hoy no modela).
 
 consciencia: no es una capacidad más, es el umbral racial que determina
 qué parte del plano mental está activa -- mismo mecanismo de sorteo que

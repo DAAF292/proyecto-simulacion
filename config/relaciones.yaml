@@ -1,0 +1,20 @@
+# ==============================================================================
+# config/relaciones.yaml
+# Relaciones interpersonales (vinculos con afinidad) -- ver
+# componentes/relaciones.py, nucleo/relaciones.py y
+# docs/superpowers/specs/2026-09-04-cimiento-relaciones-design.md.
+#
+# Este circulo solo escribe rencor (afinidad negativa); amistad
+# (afinidad positiva) es un circulo futuro sobre el mismo cimiento.
+# ==============================================================================
+
+relaciones:
+  # Capacidad FIFO de vinculos por individuo (nucleo/relaciones.py:
+  # capacidad_vinculos), interpolada por CapacidadMental.memoria entre
+  # min y max. PROVISIONAL, sin calibrar contra el harness completo.
+  min_vinculos_por_individuo: 2
+  max_vinculos_por_individuo: 6
+  # Magnitud (NEGATIVA) del rencor que genera cada disputa por refugio
+  # ocupado (consumidor: sistema_movimiento.py:_resolver_posible_intruso).
+  # PROVISIONAL.
+  delta_rencor_disputa: -0.25

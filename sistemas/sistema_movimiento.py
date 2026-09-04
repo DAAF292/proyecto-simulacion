@@ -29,6 +29,7 @@ from componentes.temperamento import Temperamento
 # el estado de un embarazo concreto.
 from componentes.gestacion import Gestacion
 from componentes.reproduccion import Reproduccion
+from componentes.relaciones import Relaciones
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
@@ -42,6 +43,7 @@ from nucleo.construccion import (
 )
 from nucleo.entidad import GestorEntidades, crear_construccion
 from nucleo.memoria import objetivo_recordado
+from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
 from nucleo.relieve import costo_resistencia_por_pendiente, pendiente_maxima_transitable
@@ -118,6 +120,14 @@ class SistemaMovimiento:
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
         self.recetas_armas: list[dict[str, Any]] = self.config_armas.get("recetas", [])
 
+        # Rencor por refugio ocupado (2026-09-04, ver componentes/relaciones.py
+        # y nucleo/relaciones.py): magnitud NEGATIVA que ajusta cada disputa
+        # sobre el Relaciones del consciente. PROVISIONAL.
+        self.config_relaciones: dict[str, Any] = self.config.get("relaciones", {})
+        self.delta_rencor_disputa: float = float(
+            self.config_relaciones.get("delta_rencor_disputa", -0.2)
+        )
+
         # Coste de forrajeo vs. beneficio -- ver docstring de
         # _calcular_caza.
         cfg_dep = self.config.get("depredacion", {})
@@ -139,10 +149,21 @@ class SistemaMovimiento:
             cfg_dep.get("peso_agresividad_amenaza", 0.3)
         )
 
-    def ejecutar(self, gestor: GestorEntidades, mundo: Mundo) -> None:
+    def ejecutar(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Any | None = None,
+    ) -> None:
         """
         Ejecuta el paso de movimiento para todas las criaturas con Intencion y Posicion.
+
+        reloj: opcional, para resolver el rencor del conflicto por refugio
+        ocupado con el tick actual (ultima_actualizacion_tick de los
+        vínculos, nucleo/relaciones.py). Sin reloj (tests aislados) se usa
+        tick 0.
         """
+        tick_actual: int = reloj.tick_actual if reloj is not None else 0
         entidades = sorted(
             gestor.entidades_con(Intencion, Posicion, DimensionesFisicas, Identidad)
         )
@@ -178,7 +199,7 @@ class SistemaMovimiento:
             if accion == Accion.DORMIR:
                 dx, dy = self._calcular_dormir(
                     gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
-                    temperamento, pos.zona_idx,
+                    temperamento, pos.zona_idx, tick_actual,
                 )
             elif accion == Accion.HUIR:
                 dx, dy = self._calcular_huida(
@@ -756,6 +777,7 @@ class SistemaMovimiento:
         cap_mental: CapacidadMental | None,
         temperamento: Temperamento | None,
         zona_idx: int = 0,
+        tick_actual: int = 0,
     ) -> tuple[int, int]:
         """
         REFUGIO INSTINTIVO: buscar comodidad, seguridad, un entorno
@@ -799,7 +821,8 @@ class SistemaMovimiento:
                     return self._acercarse_a(pos_x, pos_y, *objetivo_refugio)
                 if temperamento is not None:
                     self._resolver_posible_intruso(
-                        gestor, mundo, entidad_id, pos_x, pos_y, zona_idx, temperamento
+                        gestor, mundo, entidad_id, pos_x, pos_y, zona_idx, temperamento,
+                        tick_actual,
                     )
                 return (0, 0)
 
@@ -833,6 +856,42 @@ class SistemaMovimiento:
         )
         return bono_ofensivo_arma(nivel, temp.agresividad, self.config_armas)
 
+    def _aplicar_rencor(
+        self,
+        gestor: GestorEntidades,
+        autor_id: int,
+        otro_id: int,
+        tick_actual: int,
+    ) -> None:
+        """Ajusta la afinidad (rencor) de `autor_id` hacia `otro_id`.
+
+        (2026-09-04, nucleo/relaciones.py) -- SOLO ESCRIBE afinidad, nunca
+        la lee en ningun punto de decision (no modula comportamiento aqui).
+
+        Mismo criterio que el nombre propio: un individuo NO consciente
+        (fauna) nunca ejecuta ajustar_afinidad sobre su propio Relaciones
+        en este circulo -- su componente se queda vacio indefinidamente,
+        coherente con "fauna aplazada, no descartada". Un consciente SÍ
+        escribe aunque la otra parte no sea consciente.
+        """
+        cap_mental = gestor.obtener_componente(autor_id, CapacidadMental)
+        if (
+            cap_mental is None
+            or cap_mental.consciencia < self.umbral_consciencia_agencia
+        ):
+            return
+        relaciones = gestor.obtener_componente(autor_id, Relaciones)
+        if relaciones is None:
+            return
+        capacidad = capacidad_vinculos(cap_mental, self.config)
+        ajustar_afinidad(
+            relaciones,
+            otro_id,
+            self.delta_rencor_disputa,
+            tick_actual,
+            capacidad,
+        )
+
     def _resolver_posible_intruso(
         self,
         gestor: GestorEntidades,
@@ -842,10 +901,17 @@ class SistemaMovimiento:
         pos_y: int,
         zona_idx: int,
         temperamento: Temperamento,
+        tick_actual: int = 0,
     ) -> None:
         """
         CONFLICTO POR REFUGIO OCUPADO -- primer consumidor de
-        nucleo/conflicto.py. Solo aplica a un refugio CONSTRUIDO propio y
+        nucleo/conflicto.py. Tambien primer consumidor de
+        nucleo/relaciones.py (rencor persistente, 2026-09-04): ademas del
+        drenaje de seguridad ya existente, cada desenlace escribe afinidad
+        NEGATIVA sobre el Relaciones de la parte CONSCIENTE.
+        tick_actual: para ultima_actualizacion_tick de los vinculos.
+
+        Solo aplica a un refugio CONSTRUIDO propio y
         ya habitado alguna vez (Construccion real con
         completado_alguna_vez, no un punto de memoria instintivo sin
         dueño) -- un refugio instintivo es solo un sitio vacío recordado,
@@ -943,6 +1009,9 @@ class SistemaMovimiento:
                 nec_intruso.seguridad = max(
                     0.0, nec_intruso.seguridad - self.drenaje_seguridad_perdedor
                 )
+            # Rencor (2026-09-04): B (intruso) cedio; B, si es consciente,
+            # acumula rencor hacia A. A no cambia.
+            self._aplicar_rencor(gestor, intruso_id, propietario_id, tick_actual)
             return
         if resultado == ResultadoDisputa.CEDE_A:
             # El propietario cede en su propio refugio: paga el coste,
@@ -951,6 +1020,9 @@ class SistemaMovimiento:
                 nec_propietario.seguridad = max(
                     0.0, nec_propietario.seguridad - self.drenaje_seguridad_perdedor
                 )
+            # Rencor (2026-09-04): A (propietario) cedio; A, si es
+            # consciente, acumula rencor hacia B. B no cambia.
+            self._aplicar_rencor(gestor, propietario_id, intruso_id, tick_actual)
             return
         # ENFRENTAMIENTO: empate reñido entre dos partes asertivas,
         # ambos pagan el coste del enfrentamiento.
@@ -962,6 +1034,12 @@ class SistemaMovimiento:
             nec_intruso.seguridad = max(
                 0.0, nec_intruso.seguridad - self.drenaje_seguridad_enfrentamiento
             )
+        # Rencor (2026-09-04): ambas partes acumulan rencor mutuo, cada una
+        # solo si ES consciente -- un gnomo consciente que se enfrenta a un
+        # lobo no-consciente acumula rencor hacia el aunque el lobo no
+        # acumule nada de vuelta.
+        self._aplicar_rencor(gestor, propietario_id, intruso_id, tick_actual)
+        self._aplicar_rencor(gestor, intruso_id, propietario_id, tick_actual)
 
     def _calcular_construir(
         self,
