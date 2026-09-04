@@ -2975,7 +2975,134 @@ arranque queda como pendiente real, sin decidir si se retoma.
 
 129/129 tests en verde (7 nuevos, `tests/test_amenaza_agresividad.py`,
 primer test dedicado de `nucleo/disposicion.py`/`nucleo/amenaza.py`, no
-tenían ninguno). **Pendiente real: este cambio (`nucleo/disposicion.py`,
-`nucleo/amenaza.py`, `config/combate.yaml`, y los tres sistemas
-consumidores) sigue sin comitear a fecha de esta nota** -- último punto
-de la sesión antes de ponerse a revisar la documentación.
+tenían ninguno). **CORREGIDO 2026-09-04**: la nota anterior de este
+párrafo decía "sigue sin comitear a fecha de esta nota" -- quedó
+desactualizada sin corregir; el cambio (`nucleo/disposicion.py`,
+`nucleo/amenaza.py`, `config/combate.yaml`, tres sistemas consumidores)
+en realidad ya se comiteó ese mismo día (`4abf887`), antes incluso de
+que se escribiera la actualización de este documento (`ca77a7e`) --
+inconsistencia real entre dos commits de la misma sesión, encontrada al
+auditar `git log` contra CLAUDE.md antes de añadir la sección siguiente,
+no de memoria.
+
+## Hilo individual — arranque del arco, primer círculo (nombre propio
+## real) cerrado (2026-09-04)
+
+Diego pidió empezar a plantear el "hilo individual" (nombre propio,
+desarrollo personal, relaciones interpersonales -- pareja, amistad,
+familia) pidiendo explícitamente un INFORME de alternativas antes de
+decidir nada, no un diseño cerrado de entrada. Investigado contra el
+código real antes de escribir el informe (no contra el informe técnico
+en abstracto): `Identidad.nombre` nunca contenía un nombre real
+(siempre `especie_id`); `id_madre`/`id_padre` ya trackeados y
+persistidos sin ningún consumidor; `Temperamento.empatia`/`lealtad` ya
+declaraban en su propio docstring "esperan vínculos personales con
+nombre propio"; `nucleo/conflicto.py` ya diseñado como resolutor
+genérico con robo/agravio genérico como consumidores futuros
+explícitos; y -- hallazgo clave que orientó el cimiento recomendado --
+el propio `nucleo/disposicion.py` ya se auto-señalaba (comentario
+preexistente, sin relación con esta conversación) como destinado a
+reutilizarse "entre dos individuos con nombre", exactamente el problema
+de relaciones interpersonales.
+
+Informe entregado con seis piezas distinguibles (nombre propio,
+biografía, pareja estable, amistad, familia extendida, rencor) más un
+cimiento común propuesto (componente `Relaciones` genérico, afinidad
+continua, reutilizando el modelo de disposición en tres capas) --
+decisión de NO cerrar un diseño único de entrada, coherente con
+"crecer en círculos pequeños".
+
+**Decisiones cerradas con Diego, en orden, antes de tocar código**:
+1. Hilo individual pleno (nombre, relaciones futuras) solo para
+   conscientes -- hoy en la práctica solo gnomo
+   (`decision.umbral_consciencia_agencia`). Fauna queda como círculo
+   futuro APLAZADO, no descartado.
+2. Familia como DOS capas separadas: linaje biológico (sangre, siempre
+   presente, deriva de `id_madre`/`id_padre` ya existentes) y
+   convivencia (asentamiento, puede no coincidir con el linaje) -- sin
+   que una sustituya a la otra.
+3. Orden de círculos: **nombre propio primero**, aislado del cimiento
+   de `Relaciones` (que llega después, sin dependencias entre ambos).
+4. El futuro componente `Relaciones` llevará tope duro de vínculos por
+   individuo desde el principio, mismo criterio que `MemoriaEspacial`
+   -- decidido antes de que exista una sola línea de código de esa
+   pieza, para no heredar una estructura sin freno si se llega tarde a
+   pensarlo (sobrepoblación ya tiene dos modos de fallo residuales sin
+   resolver).
+
+### Círculo 1 -- Nombre propio real, cerrado (spec, PR #13, mergeado)
+
+Spec: `docs/superpowers/specs/2026-09-04-nombre-propio-design.md`.
+Generación por sílabas fijas combinadas al azar (prefijo+sufijo,
+concatenación directa) -- descartado tanto una lista plana de nombres
+completos como un generador fonético completo con reglas de gramática,
+decisión explícita de Diego tras comparar los tres. Nombre real gateado
+por `CapacidadMental.consciencia >= decision.umbral_consciencia_agencia`
+en las dos fábricas ECS (`crear_criatura`/`nacer_criatura`); sin
+chequeo de unicidad entre vivos.
+
+**El catálogo de nombres (`config/nombres.yaml`) se curó a mano por
+Diego + Claude en la misma conversación, NO se delegó al pipeline** --
+decisión explícita, coherente con la categoría ya documentada en
+`.ai-pipeline/guia-tareas.md` ("calibración de estilo/juicio sin
+criterio de éxito verificable mecánicamente", misma clase que la poda
+de comentarios narrativos que ya falló 2/2 con `mini-swe-agent`). El
+encargo al pipeline cubrió solo el mecanismo (asignación + narrador +
+cableado de eventos), tratando el catálogo como dato de entrada
+cerrado.
+
+`presentacion/narrador.py` gana `sujeto`/`tiene_nombre_propio`: nombre
+real como sujeto de las plantillas Muerte/Herida/CrisisMental/
+Nacimiento cuando lo hay, con concordancia de participio
+(herido/herida) por el SEXO REAL del individuo (`Reproduccion.sexo`) en
+ese caso -- distinto del fallback (`"{articulo} {especie}"`), que sigue
+concordando por el género gramatical de la especie exactamente como
+antes (el fix de "un ardilla" -> "una ardilla" de la sesión anterior
+queda intacto para quien no tiene nombre real). `Concepcion` y
+`sistema_desastres.py` quedaron fuera a propósito.
+
+**Hallazgo real del propio pipeline, no anticipado en el spec**: el
+evento `Herida` de `sistema_depredacion.py` no llevaba `especie`/
+`nombre` en absoluto desde que existe (gap preexistente, distinto del
+ya conocido de `zona_idx` en el evento `Muerte` por incendio) -- sin
+esos campos, el `sujeto` de fallback habría quedado vacío para toda
+herida por depredación. El propio `mini-swe-agent` lo detectó y lo
+corrigió como parte necesaria de la tarea, no como scope creep.
+
+**Verificado por el propio pipeline contra el motor real, no solo con
+tests**: tras generar una corrida con `BOSQUE_AUTO_TICKS`, el agente
+notó que la base de datos mezclaba filas de una corrida anterior
+(fallback `gnomo_3` residual), lo señaló explícitamente, borró la BD y
+repitió limpio -- confirmó nombres reales (Krugun, Fennora, Grimora...)
+en la crónica de Muerte/Herida/CrisisMental, fauna con fallback intacto.
+140/140 tests en verde (12 nuevos: `tests/test_nombre_propio.py` +
+extensión de `tests/test_narrador_genero.py`).
+
+**Auditoría manual de Claude antes de mergear** (diff completo, no solo
+el recuento de tests): sin bugs encontrados. Un efecto colateral real,
+NO un bug -- el sorteo de sexo/consciencia se adelanta al principio de
+ambas fábricas ECS (necesario para que el nombre exista antes de
+`Identidad`), lo que cambia el orden de consumo del RNG por criatura:
+para una misma semilla, los atributos concretos de cada individuo
+(peso, temperamento...) difieren de antes de este merge -- mismo tipo
+de efecto ya documentado con el RNG de reproducción, sin bloquear nada.
+
+**Incidente operativo real, corregido en el momento**: Claude comiteó
+localmente el spec + `config/nombres.yaml` + el encargo pero olvidó
+`git push` antes de soltar la tarea al centinela -- el PR resultante
+mostraba esos ficheros como "nuevos" en su diff porque `origin/master`
+llevaba 3 commits de retraso respecto al `master` local. Corregido
+empujando `master` (fast-forward puro) antes de mergear el PR --
+lección para encargos futuros: comitear Y empujar antes de escribir el
+encargo, no solo comitear.
+
+**Coste real medido** (balance real de OpenRouter antes/después, no el
+autoinformado por el modelo): **$0.155374**, un único intento de 3
+posibles, sin reintentos.
+
+**Pendiente real tras este círculo**: nombre para fauna (aplazado, no
+descartado); el cimiento genérico `Relaciones` (afinidad continua, tope
+de vínculos) es el siguiente círculo real de este arco, sin ninguna
+dependencia de código de este círculo salvo `Identidad.nombre` ya real;
+contenido del catálogo (`config/nombres.yaml`) PROVISIONAL, sin más
+revisión que "sonar razonable".
