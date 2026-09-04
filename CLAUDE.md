@@ -3544,5 +3544,148 @@ lobo-conejo ni lobo-ardilla (solo lobo-gnomo) -- no se puede confirmar
 si la letalidad por encuentro de gnomo es anómala frente a otras presas
 o refleja el mismo patrón general; las cifras de riesgo de fondo vienen
 de 5-7 semillas, no del harness completo de 15×12000 ya pendiente desde
-la sección "Sobrepoblación...". Sin decisión tomada sobre cuál de las 3
-propuestas seguir -- pendiente de conversación con Diego.
+la sección "Sobrepoblación...". ~~Sin decisión tomada sobre cuál de las
+3 propuestas seguir -- pendiente de conversación con Diego.~~
+**ACTUALIZACIÓN el mismo día, ver la sección siguiente: la Propuesta A
+de aquí (recalibrar gnomo hacia el perfil de lobo) queda SUPERADA -- se
+descubrió que lobo también fracasa reproductivamente, así que copiar su
+perfil no habría arreglado nada.** No se tache el texto de arriba
+porque documenta con fidelidad el razonamiento y los datos disponibles
+en el momento en que se escribió -- es la investigación siguiente la
+que lo corrige, no un error de lectura de esta.
+
+## Sesgo de agrupamiento al construir refugio + hallazgo que reinterpreta
+## la causa del colapso: lobo también fracasa, no solo gnomo (2026-09-04,
+## misma tarde, implementado directamente por Claude a petición de Diego)
+
+Diego propuso una vía distinta a las tres anteriores, mejor fundamentada
+biológicamente: en vez de recalibrar números o depender de mecanismos
+sociales (pareja/asentamiento, ambos frágiles), preguntó si la propia
+consciencia de gnomo debería traducirse en comportamiento social que
+compense su bajo rendimiento reproductivo -- la estrategia real de
+especies k-estrategas (primates, elefantes, cetáceos): cooperación,
+vigilancia compartida, reparto de comida, en vez de reproducir más
+rápido. Antes de diseñar ese mecanismo, se midió si tenía sentido
+temporal: **cuando un asentamiento SÍ se forma, lo hace muy rápido
+(tick 192-384, 8-16 días) -- mucho antes que cualquier gestación**, así
+que la velocidad no es el problema. El problema real es que **solo se
+formaba en 4/10 semillas (40%)** -- fiabilidad de formación, no
+velocidad.
+
+**Implementado (commit `99a2bff`)**: sesgo de agrupamiento en
+`sistema_movimiento.py:_calcular_construir`, dos capas que reutilizan
+mecanismos YA existentes (mismo criterio de leyes neutras que
+`_calcular_dormir` ya aplicaba) -- (1) si el individuo recuerda un
+refugio (memoria `objetivo_recordado(mem, "refugio", ...)`, que YA no
+distingue de quién es, se registra al dormir sin amenaza cerca sea o no
+el refugio propio), camina hacia él en vez de construir aislado; (2) sin
+recuerdo, mismo sesgo gregario que ya usa deambular/dormir -- busca al
+conspecífico más cercano según sociabilidad propia. Sin ninguno de los
+dos, o ya cerca, construye en su posición actual -- comportamiento
+original intacto. 4 tests nuevos (`tests/test_construir_agrupamiento.py`),
+199/199 en total.
+
+**Verificación A/B a escala real, 30 semillas nuevas (101-130) x
+8000 ticks, un worktree en el commit padre (`92d384f`, sin el fix) y
+`master` (`99a2bff`, con el fix) -- mismo criterio metodológico ya
+aprendido con el fix de fertilidad (comparar DISTRIBUCIONES sobre
+muchas semillas nuevas, no pares puntuales, porque añadir una tirada de
+rng desplaza la secuencia de todo lo demás)**:
+
+- Sin el fix: 7/30 (23.3%) formaron asentamiento.
+- Con el fix: 8/30 (26.7%).
+
+**Veredicto honesto: mejora dentro del ruido, no significativa a este
+tamaño de muestra.** El mecanismo es correcto (verificado con tests
+dirigidos) y se mantiene -- ley limpia, coste cero, sin regresión -- pero
+**no resuelve el problema de fondo**: los asentamientos siguen sin
+formarse en ~73-77% de las partidas con o sin el cambio. La causa real
+no estaba en cómo se posicionan los refugios.
+
+### El hallazgo real: inanición domina las 4 especies, y lobo fracasa
+### reproductivamente igual o peor que gnomo
+
+Aprovechando la escala de la prueba, Diego pidió auditar más ampliamente
+mientras se corría. Datos reales (10 semillas nuevas, 201-210, 8000
+ticks -- recortado de 30 semillas/2h de cómputo a petición explícita de
+Diego tras medir el ritmo real):
+
+| Especie | Muertes totales | Depredación | Inanición | Vejez | Concepciones → Nacimientos |
+|---|---|---|---|---|---|
+| gnomo | 180 | 37.8% | 58.3% | 3.9% | 44 → 3 (6.8%) |
+| **lobo** | 60 | 0% | **90.0%** | 10.0% | 2 → **0 (0%)** |
+| conejo | 4694 | 3.2% | 74.3% | 22.5% | 1882 → 4642 (sostiene de sobra) |
+| ardilla | 352 | 21.6% | 65.9% | 12.5% | 32 → 52 (sostiene) |
+
+**Esto invalida la mitad central de la conclusión causal de la sección
+anterior.** Se había concluido que gnomo fallaba por tener "la peor
+combinación reproductiva" mientras lobo "compensaba con gestación corta
+y camadas grandes" -- un argumento calculado sobre el papel a partir de
+las cifras de `config/poblacion.yaml`, nunca verificado contra si lobo
+REALMENTE llegaba a reproducirse en la práctica. No llega: **0% de
+éxito reproductivo, peor que gnomo**, porque el 90% de las muertes de
+lobo son por inanición -- el depredador se muere de hambre antes de
+tener ocasión de aparearse, con solo 6 lobos fundadores y sin ningún
+encuentro de caza medido en esta corrida que sugiera que la presa
+disponible (gnomo/conejo/ardilla, los tres existen en la simulación) es
+el problema.
+
+**Conclusión causal revisada**: no es "gnomo tiene mala genética
+reproductiva frente a lobo" -- **la inanición es letal de forma
+sistémica para las 4 especies a la vez** (58-90% de las muertes según
+la especie), y gnomo y lobo chocan contra ese mismo muro por caminos
+distintos que ninguno comparte con conejo/ardilla: gnomo por ventana de
+exposición reproductiva demasiado larga, lobo porque su población de
+depredadores no se sostiene cazando lo suficiente para sobrevivir, ni
+siquiera para llegar a intentar reproducirse.
+
+**Propuestas actualizadas (sustituyen a la Propuesta A de la sección
+anterior, ninguna implementada)**:
+- **A' (recomendada primero por ambos forks que investigaron esto)**:
+  revisar `probabilidad_muerte_saciedad_critica`/mecánica de inanición
+  de forma UNIVERSAL (`config/fisiologia.yaml`), no solo para gnomo --
+  palanca más neutral (afecta a las 4 especies por igual), con mucho más
+  respaldo de datos que antes porque explica el fracaso de dos especies
+  con estrategias reproductivas opuestas. Riesgo real: podría
+  desestabilizar el equilibrio que hoy sostiene a conejo/ardilla si se
+  sobre-corrige -- medir con una corrida de control antes de fijar un
+  valor nuevo, no ajustar a ciegas.
+- **B' (en paralelo o inmediatamente después)**: investigar
+  específicamente la relación depredador-presa de lobo -- disponibilidad
+  real de presa perceptible, tasa de encuentro, eficiencia de caza, o si
+  6 lobos fundadores son sencillamente demasiado pocos para sostener una
+  tasa de encuentro viable (en cuyo caso subir `lobos_iniciales` sería
+  calibración pura, no un guion). No medido con esta corrida --
+  requeriría el mismo tipo de arnés de encuentro lobo-presa ya usado una
+  vez para lobo-gnomo, repetido para lobo-conejo/lobo-ardilla.
+- **C' (aplazada)**: recalibrar gnomo copiando el perfil de lobo -- YA
+  NO tiene sentido como objetivo de referencia, dado que lobo también
+  está roto. Si se retoma, calibrar contra el riesgo de fondo real (una
+  vez A' se aborde), no contra otra especie que resulta estar igual de
+  mal.
+
+**Deshidratación resultó prácticamente irrelevante en la práctica**: 1
+sola muerte por esa causa en las 4 especies combinadas sobre 10 semillas
+× 8000 ticks -- o el agua es efectivamente abundante, o el mecanismo casi
+nunca se dispara. Merece una nota, no una calibración a ciegas.
+
+**Decisión de cierre de esta sesión (Diego, "procede como consideres")**:
+dado el alcance de este hallazgo (afecta a las 4 especies y al
+equilibrio poblacional ya alcanzado por conejo/ardilla), Claude decidió
+NO tocar `probabilidad_muerte_saciedad_critica` ni ninguna otra
+constante de riesgo de fondo en esta misma sesión -- documentarlo aquí
+con el máximo detalle posible y dejarlo como el punto de partida real
+para la siguiente sesión de calibración, en vez de cambiar un número de
+tanto alcance sin la misma ronda de diseño+verificación que se ha
+seguido con todo lo demás hoy.
+
+**Pendiente real, explícito, esta es ahora la investigación prioritaria
+del proyecto**: A' (revisar inanición universal) y B' (investigar
+depredación lobo-presa específicamente) sin empezar; `fraccion_minima_peso_presa`/
+`peso_referencia_deteccion_plena`/tasas de charco efímero/probabilidad
+de muerte por vejez siguen totalmente sin iluminar por esta corrida
+(instrumentación distinta, no barata de obtener de los mismos eventos
+Muerte/Concepcion/Nacimiento ya usados); el harness completo de 15
+semillas × 12000 ticks sigue sin correrse nunca para nada de esto,
+sigue siendo la referencia de rigor que el proyecto tiene pendiente
+desde la sección "Sobrepoblación...".
