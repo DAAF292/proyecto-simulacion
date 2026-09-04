@@ -3689,3 +3689,57 @@ Muerte/Concepcion/Nacimiento ya usados); el harness completo de 15
 semillas × 12000 ticks sigue sin correrse nunca para nada de esto,
 sigue siendo la referencia de rigor que el proyecto tiene pendiente
 desde la sección "Sobrepoblación...".
+
+### Por qué lobo se muere de hambre pese a cazar más que nadie -- hallazgo
+### de esa misma noche, verificado directamente contra el motor real
+
+Ante la pregunta directa de Diego ("si la cantidad de conejos es tan
+alta, ¿no es la presa principal del lobo?"), se investigó con datos
+reales en vez de suponer. Dos hipótesis descartadas por evidencia:
+
+- **Aislamiento geográfico** (lobo nace en bosque, conejo en pradera):
+  descartada -- bosque y pradera son biomas CONTIGUOS (distancia mínima
+  borde a borde de 1 celda, medido en 4 semillas), no hay barrera real.
+- **Lobo no encuentra/no caza conejo**: descartada de forma tajante --
+  matriz de depredación real medida (4 semillas × 6000 ticks): **lobo
+  caza conejo 40 veces, ardilla 28, gnomo 27** -- conejo es la presa MÁS
+  frecuente de lobo, no la menos.
+
+**Causa real**: la fórmula de cuánto alimenta una captura
+(`sistema_depredacion.py`: `saciedad_ganada = (peso_presa/peso_cazador) *
+eficiencia_biomasa_saciedad(1.5)`) depende del RATIO de masa, no del
+número de capturas. Con los pesos reales del catálogo (lobo ~75kg,
+gnomo ~11.5kg, conejo ~2.25kg, ardilla ~0.45kg de media): una captura de
+gnomo da ~23% de saciedad, conejo ~4.5%, ardilla ~0.9%. Cruzando esto
+con la matriz real: **el 75% de toda la nutrición que obtiene un lobo
+viene de sus 27 capturas de gnomo, pese a ser la presa menos
+frecuente** -- conejo y ardilla, aunque abundantes y fáciles de cazar,
+apenas alimentan a un depredador del tamaño de lobo. Coherente con la
+biología real: un lobo no puede sostenerse cazando solo conejos y
+ardillas, necesita presas grandes -- y hoy gnomo (la única presa grande
+del catálogo) es también la más frágil y escasa.
+
+**Primera idea de Diego para esto, evaluada y matizada**: "madrigueras"
+de conejo agrupado + memoria de zona de caza para lobo (reutilizando el
+mismo patrón de `MemoriaEspacial` ya usado para comida/agua/refugio).
+Buena idea de diseño en sí (reutiliza antes de inventar), pero **NO
+ataca la causa raíz** según esta medición -- lobo ya encuentra y caza
+conejo más que ninguna otra presa; facilitarle encontrar más no cambia
+que cada captura solo dé un 4.5% de saciedad. Aparcada por esta razón,
+no descartada por mala idea.
+
+**Segunda idea de Diego, la que se retoma**: introducir una especie
+NUEVA de herbívoro grande (working name "caballo") como presa de peso
+comparable o mayor al de lobo, combinado con un mecanismo de **caza en
+manada** (varios lobos coordinándose contra una sola presa, mecanismo
+que hoy no existe -- `sistema_depredacion.py` solo resuelve encuentros
+1 contra 1) -- exactamente la estrategia real de los lobos para poder
+abatir presas mucho más grandes que un individuo solo. **Alcance real:
+dos piezas de diseño grandes, del mismo calibre que el arco "hilo
+individual" de hoy** -- (1) la especie nueva en sí (catálogo, peso,
+bioma de aparición, ciclo reproductivo propio) y (2) el mecanismo de
+coordinación de caza en grupo, sin precedente en el motor actual.
+**Decisión de Diego: diseñar YA la especie "caballo" como pieza
+independiente; la caza en manada queda aparcada para una sesión
+dedicada aparte** -- ver la sección siguiente para el diseño real de
+"caballo", si llegó a cerrarse esa misma sesión.
