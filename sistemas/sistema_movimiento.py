@@ -127,13 +127,16 @@ class SistemaMovimiento:
         self.peso_referencia_deteccion_plena: float = float(
             cfg_dep.get("peso_referencia_deteccion_plena", 0.1)
         )
-        # Reutiliza depredacion.umbral_disposicion_caza en vez de
-        # inventar una constante nueva: es la misma magnitud (disposición
-        # logarítmica por peso) aplicada en sentido contrario -- "cuánto
-        # más grande que yo cuenta como amenaza" es simétrico a "cuánto
-        # más pequeño que yo cuenta como presa viable".
+        # (2026-09-04) umbral y bono de agresividad PROPIOS de la amenaza
+        # -- ver el comentario de config/combate.yaml. Mismos valores que
+        # usa el drenaje de seguridad en sistema_necesidades.py y el deseo
+        # de empunar arma en sistema_decision.py -- una sola nocion de
+        # amenaza en todo el motor.
         self.umbral_disposicion_amenaza: float = float(
-            cfg_dep.get("umbral_disposicion_caza", 0.5)
+            cfg_dep.get("umbral_amenaza_percibida", 0.65)
+        )
+        self.peso_agresividad_amenaza: float = float(
+            cfg_dep.get("peso_agresividad_amenaza", 0.3)
         )
 
     def ejecutar(self, gestor: GestorEntidades, mundo: Mundo) -> None:
@@ -326,6 +329,7 @@ class SistemaMovimiento:
         amenaza_pos = posicion_amenaza_mas_cercana(
             gestor, zona, entidad_id, pos_x, pos_y, radio,
             peso_propio, self.umbral_disposicion_amenaza, zona_idx=zona_idx,
+            peso_agresividad_candidato=self.peso_agresividad_amenaza,
         )
         if amenaza_pos is None:
             return self._paso_aleatorio()

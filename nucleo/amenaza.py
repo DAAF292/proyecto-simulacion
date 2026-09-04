@@ -43,7 +43,7 @@ def _es_celda_peligrosa(celda) -> bool:
 
 def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
                                   radio: int, peso_propio: float, umbral_disposicion: float,
-                                  zona_idx: int = 0):
+                                  zona_idx: int = 0, peso_agresividad_candidato: float = 0.0):
     """Posición (x, y) de la amenaza más cercana -- por criatura o
     ambiental -- dentro del radio de percepción. None si no se percibe
     ninguna.
@@ -51,10 +51,17 @@ def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
     zona_idx filtra la amenaza por CRIATURA a la misma zona que
     id_propio -- la amenaza AMBIENTAL ya viene acotada porque `zona`
     (el objeto ZonaBioma, distinto de este índice) es la que corresponde
-    a quien pregunta."""
+    a quien pregunta.
+
+    peso_agresividad_candidato (2026-09-04): ver
+    nucleo/disposicion.py:posicion_mas_cercana_por_disposicion -- 0.0 por
+    defecto, sin cambio de comportamiento salvo que el llamador pase un
+    valor real (hoy, los tres consumidores de amenaza: drenaje de
+    seguridad, direccion de huida, deseo de empunar arma -- misma nocion
+    de amenaza en los tres, no una version distinta por sistema)."""
     amenaza_criatura = posicion_mas_cercana_por_disposicion(
         gestor, id_propio, x, y, radio, peso_propio, umbral_disposicion, buscar_mayor=True,
-        zona_idx=zona_idx,
+        zona_idx=zona_idx, peso_agresividad_candidato=peso_agresividad_candidato,
     )
     amenaza_ambiental = celda_percibida(zona, x, y, radio, _es_celda_peligrosa)
 

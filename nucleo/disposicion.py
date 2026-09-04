@@ -38,6 +38,7 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.posicion import Posicion
+from componentes.temperamento import Temperamento
 
 
 def magnitud_disposicion_por_peso(peso_a: float, peso_b: float) -> float:
@@ -57,20 +58,22 @@ def magnitud_disposicion_por_peso(peso_a: float, peso_b: float) -> float:
 
 
 def _candidato_valido(peso_propio: float, peso_candidato: float,
-                       buscar_mayor: bool, umbral: float) -> bool:
+                       buscar_mayor: bool, umbral: float,
+                       bono_magnitud: float = 0.0) -> bool:
     if buscar_mayor:
         if peso_candidato <= peso_propio:
             return False
     else:
         if peso_candidato >= peso_propio:
             return False
-    return magnitud_disposicion_por_peso(peso_propio, peso_candidato) >= umbral
+    return magnitud_disposicion_por_peso(peso_propio, peso_candidato) + bono_magnitud >= umbral
 
 
 def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
                                           radio: int, peso_propio: float,
                                           umbral: float, buscar_mayor: bool,
-                                          zona_idx: int = 0):
+                                          zona_idx: int = 0,
+                                          peso_agresividad_candidato: float = 0.0):
     """Posicion (x, y) del individuo mas cercano, dentro del radio de
     percepcion, cuya magnitud_disposicion_por_peso frente al propio
     supera el umbral -- mas grande si buscar_mayor, mas pequeno si no.
@@ -78,7 +81,21 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
 
     zona_idx: un candidato en otra zona nunca cuenta, con independencia
     de que (x, y) coincida -- distancia Manhattan infinita entre zonas
-    distintas (ver docstring de componentes/posicion.py)."""
+    distintas (ver docstring de componentes/posicion.py).
+
+    peso_agresividad_candidato (2026-09-04, percepcion de amenaza):
+    0.0 por defecto -- SIN efecto para depredacion/pareja/territorio, que
+    no lo pasan. Cuando > 0.0 (hoy, solo nucleo/amenaza.py), se suma
+    Temperamento.agresividad del CANDIDATO (ponderada por este factor) a
+    su magnitud de peso antes de comparar contra el umbral -- coherente
+    con el propio criterio del modulo (arriba, "cada sistema que la
+    consuma la combina con sus propios atributos"): un individuo grande Y
+    agresivo cruza el umbral con menos diferencia de peso que uno grande
+    pero pacifico; uno enorme lo sigue cruzando solo por tamano, con
+    independencia de su agresividad (una bestia mansa pero gigante sigue
+    siendo una amenaza real). Motivado por un caso real: un conejo (~5x
+    el peso de una ardilla, poco agresivo) no deberia asustar a una
+    ardilla igual que un depredador real."""
     mejor = None
     mejor_dist = None
     for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
@@ -88,7 +105,12 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
         if pos_candidato.zona_idx != zona_idx:
             continue
         dimensiones = gestor.obtener_componente(id_candidato, DimensionesFisicas)
-        if not _candidato_valido(peso_propio, dimensiones.peso, buscar_mayor, umbral):
+        bono_magnitud = 0.0
+        if peso_agresividad_candidato > 0.0:
+            temperamento_candidato = gestor.obtener_componente(id_candidato, Temperamento)
+            if temperamento_candidato is not None:
+                bono_magnitud = peso_agresividad_candidato * temperamento_candidato.agresividad
+        if not _candidato_valido(peso_propio, dimensiones.peso, buscar_mayor, umbral, bono_magnitud):
             continue
         dist = abs(pos_candidato.x - x) + abs(pos_candidato.y - y)
         if dist > radio:

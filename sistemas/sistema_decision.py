@@ -442,8 +442,16 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
     cfg_per_emp = config.get("percepcion", {})
     radio_min_empunar = int(cfg_per_emp.get("radio_minimo_celdas", 0))
     radio_max_empunar = int(cfg_per_emp.get("radio_maximo_celdas", 4))
+    # (2026-09-04) umbral y bono de agresividad PROPIOS de la amenaza --
+    # ver el comentario de config/combate.yaml. Misma nocion de amenaza
+    # que usa HUIR (sistema_movimiento.py) y el drenaje de seguridad
+    # (sistema_necesidades.py).
+    cfg_depredacion_amenaza = config.get("depredacion", {})
     umbral_disposicion_amenaza = float(
-        config.get("depredacion", {}).get("umbral_disposicion_caza", 0.5)
+        cfg_depredacion_amenaza.get("umbral_amenaza_percibida", 0.65)
+    )
+    peso_agresividad_amenaza = float(
+        cfg_depredacion_amenaza.get("peso_agresividad_amenaza", 0.3)
     )
     # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/fogata.py y
     # nucleo/fuego.py).
@@ -765,6 +773,7 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         amenaza_ahora = posicion_amenaza_mas_cercana(
             gestor, zona_emp, id_entidad, pos.x, pos.y, radio_amenaza_emp,
             dims.peso, umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
+            peso_agresividad_candidato=peso_agresividad_amenaza,
         ) is not None
         deseo_empunar = amenaza_ahora or (
             (1.0 - necesidades.seguridad)

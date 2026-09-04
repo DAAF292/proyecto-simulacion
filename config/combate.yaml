@@ -11,6 +11,29 @@
 
 depredacion:
   umbral_disposicion_caza: 0.5
+  # umbral_amenaza_percibida / peso_agresividad_amenaza (2026-09-04,
+  # senalado por Diego leyendo la cronica en vivo -- "un conejo asusta a
+  # una ardilla igual que un depredador?"). Hasta ahora la percepcion de
+  # amenaza (drenaje de Necesidades.seguridad, direccion de HUIR, deseo
+  # de empunar arma -- los tres consumidores de nucleo/amenaza.py)
+  # reutilizaba umbral_disposicion_caza sin mas: cualquier candidato mas
+  # pesado que superase ESE umbral (0.5) contaba como amenaza, con
+  # independencia de si era o no un depredador real -- conejo (~5x el
+  # peso de ardilla, magnitud de peso 0.48-0.70 segun el individuo) ya lo
+  # superaba, igual que un lobo de verdad. Ahora la amenaza tiene su
+  # PROPIO umbral (mas alto: 0.65) y ademas suma un bono ponderado por
+  # Temperamento.agresividad del candidato (nucleo/disposicion.py:
+  # posicion_mas_cercana_por_disposicion) -- un individuo grande Y
+  # agresivo cruza el umbral con menos diferencia de peso que uno grande
+  # pero pacifico, y uno realmente enorme (un caballo, aunque no exista
+  # todavia esa especie) lo sigue cruzando solo por tamano. Con los
+  # rangos raciales actuales (config/poblacion.yaml): conejo frente a
+  # ardilla deja de superar el umbral en la mayoria de individuos (solo
+  # los mas pesados/mas agresivos siguen cruzandolo), gnomo y lobo lo
+  # siguen superando con holgura solo por tamano. Ambos valores
+  # PROVISIONAL, sin calibrar contra el harness completo.
+  umbral_amenaza_percibida: 0.65
+  peso_agresividad_amenaza: 0.3
   # RECALIBRADO (2026-08-29, investigacion de sobrepoblacion, confirmado
   # con Diego -- "recalibrar la caza del lobo... hacer que esto sea
   # funcional"). Diagnostico previo contra el motor real (semilla 42,

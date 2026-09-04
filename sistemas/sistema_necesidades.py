@@ -126,12 +126,18 @@ class SistemaNecesidades:
         cfg_per = self.config.get("percepcion", {})
         self.radio_min: int = int(cfg_per.get("radio_minimo_celdas", 0))
         self.radio_max: int = int(cfg_per.get("radio_maximo_celdas", 4))
-        # Mismo umbral de disposicion que usa HUIR en sistema_movimiento.py:
-        # se reutiliza depredacion.umbral_disposicion_caza en vez de
-        # inventar una constante nueva -- misma magnitud (disposicion
-        # logaritmica por peso), aplicada en sentido contrario.
+        # (2026-09-04) umbral y bono de agresividad PROPIOS de la amenaza,
+        # ya no comparten umbral_disposicion_caza -- ver el comentario de
+        # config/combate.yaml. Mismos valores que usa HUIR en
+        # sistema_movimiento.py y el deseo de empunar arma en
+        # sistema_decision.py -- una sola nocion de amenaza en todo el
+        # motor, no una version distinta por sistema.
+        cfg_depredacion = self.config.get("depredacion", {})
         self.umbral_disposicion_amenaza: float = float(
-            self.config.get("depredacion", {}).get("umbral_disposicion_caza", 0.5)
+            cfg_depredacion.get("umbral_amenaza_percibida", 0.65)
+        )
+        self.peso_agresividad_amenaza: float = float(
+            cfg_depredacion.get("peso_agresividad_amenaza", 0.3)
         )
 
         # Bono de defensa en grupo -- ver
@@ -333,6 +339,7 @@ class SistemaNecesidades:
             amenaza_pos = posicion_amenaza_mas_cercana(
                 gestor, zona, eid, pos.x, pos.y, radio_amenaza,
                 dims.peso, self.umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
+                peso_agresividad_candidato=self.peso_agresividad_amenaza,
             )
             if amenaza_pos is not None:
                 # Bono de defensa en grupo: seguridad en numeros --
