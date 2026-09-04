@@ -36,9 +36,10 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
    complejidad, y se valida antes de sumar la siguiente. Desconfía de
    cualquier propuesta que resuelva varios problemas a la vez sin necesidad.
 3. **El motor primero, la presentación después.** Cómo se muestra el mundo
-   (hoy, terminal + vista web con formas geométricas y glifos emoji, sin arte
-   dibujado) es una capa desacoplada y sustituible. No acoples la lógica de
-   simulación a cómo se presenta.
+   (hoy, terminal + vista web — Códice Cartográfico, con biblioteca real de
+   sprites en `presentacion/assets/` desde 2026-09-04, ver más abajo) es una
+   capa desacoplada y sustituible. No acoples la lógica de simulación a cómo
+   se presenta.
 4. **Honestidad sobre lo pendiente.** Ningún sistema se da por cerrado sin
    una necesidad real que lo reclame. Si algo no está resuelto, dilo con
    claridad — nunca improvises una respuesta que aparente más solidez de la
@@ -83,19 +84,18 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- **Tests automatizados (CORREGIDO 2026-09-03, la cifra "22" ya estaba
-  desactualizada)**: `tests/` contiene 18 ficheros / 87 tests reales a
+- **Tests automatizados (CORREGIDO 2026-09-04, la cifra "87" ya estaba
+  desactualizada)**: `tests/` contiene 23 ficheros / 129 tests reales a
   esta fecha (verificado con `pytest`, no de memoria), escritos como
   "ley física" con docstring explicando el comportamiento que validan
   (mismo criterio declarativo que pide este documento para las reglas
-  del motor). La cifra de 22 (fijada 29-08-2026) creció con los arcos de
-  flora (distribución causal + tipos de propagación, ver más abajo) y
-  dos pendientes cerrados de paso (`test_persistencia_entidades_viva.py`,
-  `test_rng_reproduccion.py`) — la afirmación "nada de reproducción ni
-  persistencia tiene test dedicado" ya NO es cierta, aunque la cobertura
-  sigue siendo parcial (nada del bucle principal, la mayoría de sistemas
-  de comportamiento, ni la mayor parte de persistencia). CI/linting
-  sigue sin configurar.
+  del motor). La cifra de 87 (fijada 2026-09-03) creció con armas
+  primitivas v2, cupo de espacio compartido, catálogo ampliado de flora,
+  y esta misma sesión (`test_narrador_genero.py`,
+  `test_amenaza_agresividad.py` -- ver más abajo, dos módulos que hasta
+  hoy no tenían ningún test dedicado). La cobertura sigue siendo parcial
+  (nada del bucle principal, la mayoría de sistemas de comportamiento, ni
+  la mayor parte de persistencia). CI/linting sigue sin configurar.
 
 ## Cómo comportarte al ayudar en este proyecto
 
@@ -226,11 +226,16 @@ implementa directamente, sin pasar por el pipeline**:
 
 ## Límites conocidos y pendientes abiertos a fecha de esta migración (24-08-2026)
 
-- **Sobrepoblación sin techo aparente** (informe técnico, sección 20; informe
-  de implementación, 7.52): tras corregir el bug de regeneración de flora y
-  la purga de memoria agotada, varias semillas de referencia terminan con
-  densidades de hasta 0.45 individuos/celda (referencia: 0.05-0.07). No
-  investigado todavía — es el límite conocido real más urgente a día de hoy.
+- ~~**Sobrepoblación sin techo aparente**~~ (informe técnico, sección 20;
+  informe de implementación, 7.52) -- INVESTIGADO Y MITIGADO 2026-08-31,
+  ver la sección "Sobrepoblación sin techo aparente -- investigado y
+  mitigado con un mecanismo natural de fertilidad por nutrición" más
+  abajo (gate de concepción + tamaño de camada por saciedad materna).
+  10/14 semillas se comportan razonablemente tras el fix; quedan 2 modos
+  de fallo residuales (colapso/extinción, overshoot lento) sin resolver,
+  documentados en esa misma sección -- no es "no investigado todavía",
+  esta entrada quedó desactualizada sin corregir hasta esta nota
+  (2026-09-04).
 - Calibraciones explícitamente provisionales sin validar contra el harness
   completo (15 semillas × 12000 ticks): probabilidad de muerte por vejez
   (techo y exponente), probabilidad de muerte por deshidratación, tasas de
@@ -2691,3 +2696,286 @@ real de `deepseek-v4-flash-0731` contra candidatos como
 tool collaboration"* -- justo el punto débil visto hoy) quedó
 explícitamente aplazado a una conversación futura, sin decidir nada
 todavía.
+
+## Reconstrucción de la biblioteca de sprites + cuatro correcciones reales
+## encontradas verificando contra el visor en marcha (2026-09-04)
+
+Sesión arrancada retomando el estado real de `master`: entre la migración
+del 24-08 y hoy, `presentacion/assets/` (la biblioteca de sprites del
+Códice Cartográfico, ver la Nota de cierre del 29-08-2026 más arriba)
+había quedado **borrada por completo** (commit `20999a4`, "borrados
+assets antiguos") tras un primer intento parcial de recorte manual desde
+`presentacion/nuevosAssets/` (10/12 hojas, commit `f6c3634`) -- ninguno
+de los dos commits es de esta sesión, se encontraron ya en `master` al
+arrancar. `presentacion/vista_web.py` seguía intacto y esperando esa
+carpeta (`RUTA_ASSETS`, `construir_manifiesto_assets()`) sin ningún
+cambio de código -- el visor no estaba roto, estaba huérfano: sin
+ficheros que servir, caía en silencio al dibujo vectorial de siempre
+(diseño ya previsto, "ninguna categoría vacía rompe el visor").
+
+### Extracción de 234 sprites desde `nuevosAssetsDefinitivos/`
+
+Diego pidió reconstruir la biblioteca desde una fuente nueva y más
+reducida, `presentacion/nuevosAssetsDefinitivos/` (10 hojas: pares
+`<bioma>Macro`(tinta)/`<bioma>Micro`(color) por bosque/desierto/pradera/
+tundra, más 4 hojas sueltas de montañas, más 6 hojas de pose por
+criatura). Inspeccionadas una a una (no solo por nombre de fichero)
+antes de tocar nada -- confirmó que el contenido real encaja con la
+convención que el visor ya esperaba (flora/flora_color, relieve/
+relieve_color, agua, criaturas_poses) pero con mapeos NO literales por
+carpeta: el pino "de verdad" (sin nieve) está dibujado en la hoja de
+bosque, no en la de montaña; el liquen está en la hoja de tundra, no en
+la de montaña -- la fuente agrupa por tema visual real, no por especie
+del catálogo del motor.
+
+**Método de extracción** (`presentacion/arnes/extraer_sprites_definitivos.py`,
+nuevo): detección automática de sprites individuales por componentes
+conexas (distancia al fondo estimado de las esquinas + dilatación
+morfológica para fusionar el hachurado disperso de la tinta en un único
+blob por sprite, validada visualmente hoja a hoja con una pasada de
+depuración con cajas numeradas antes de confiar en ella) + recorte con
+alfa de zona muerta + rampa (mismo criterio que ya documentaba la
+biblioteca anterior, evita el halo rectangular que costó un bug real la
+primera vez que se intentó esto). El mapeo índice-de-detección → nombre
+de fichero es una tabla escrita a mano revisando cada hoja, no
+automática.
+
+**Hallazgo real durante la extracción, no anticipado**: el sistema
+`FORMACIONES_POR_BIOMA` de `vista_web.py` (formaciones macro -- un
+cluster entero de celdas contiguas estampado como una sola silueta
+panorámica) ya leía activamente cuatro pools --
+`relieve/cordillera_*`, `relieve/masa_desierto_*`,
+`relieve/masa_tundra_*`, `flora/masa_bosque_*` -- que llevaban vacíos
+desde el borrado (montaña además llegó a estar desconectada de esa
+tabla en su día, según el propio comentario del código). Sin
+saberlo, el borrado de assets no solo quitó sprites individuales,
+dejó inerte un sistema de formación macro entero. Identificadas las
+siluetas panorámicas correctas en las hojas fuente (filas anchas de
+dunas/colinas/skyline de bosque) y extraídas también.
+
+**Aproximaciones provisionales, aprobadas explícitamente por Diego** (sin
+sprite fuente real disponible): `arbusto_montano` y `hierba_artica`
+reutilizan sprites de pradera (mismo criterio que ya aceptaba `liquen`/
+`musgo` en la biblioteca anterior, "sin gemela en tinta todavía");
+`lobo_andar_s` usa un único frame de la pose de carrera frontal en vez de
+un ciclo de 4 (la hoja fuente no trae ciclo de paso hacia cámara para
+lobo). `criaturas_poses/{especie}_andar_{dir}_f2/f3/f4.png` (frames
+extra del ciclo de paso) se extrajeron por decisión explícita de Diego
+pese a no tener consumidor todavía (el visor solo dibuja una pose
+estática, sin animación) -- listos si se añade animación a futuro.
+Documentado completo en `presentacion/assets/README.md` (nuevo,
+reconstruye la convención de nombres que el README anterior --
+borrado junto con la carpeta -- ya documentaba).
+
+**Verificado en tres niveles, no solo "el script no lanzó excepción"**:
+(1) composición de una muestra sobre fondo de color (no blanco) para
+confirmar que el alfa no dejaba halo -- limpio en las 234; (2) servidor
+real (`BOSQUE_MODO_VISUAL=1`) + petición HTTP real a `/assets_manifest.json`
+y a ficheros concretos (`200`, PNG real, dimensiones correctas, guardia
+anti path-traversal intacta); (3) **captura real del canvas con
+Playwright** (headless Chromium, instalado en el sandbox --
+`chrome-headless-shell` necesitaba `libnspr4`/`libnss3` del sistema,
+Diego los instaló entre sesiones) -- confirmó visualmente montañas con
+variantes de color, árboles/cactus/agua renderizando bien.
+
+Commit `d6e4e5a`. Diego afinó el resultado a mano tras verlo (commit
+`2756955`, "ajuste sprites", autor `Prototipo Bosque` -- otra
+herramienta/sesión, no esta): retiró el manzano en tinta (débil, sin
+marcas de fruto distinguibles) y lo reutilizó como `masa_bosque`;
+podó a la mitad las variantes de `formacion_color` y retiró
+`masa_tundra_color`/algunos `pico` de nieve; añadió 7 variantes nuevas
+de `flor_silvestre_color`. Verificado que sus retiros no rompen nada
+(`masa_tundra` siempre lee de `relieve/` con independencia del modo
+color, según la propia tabla `FORMACIONES_POR_BIOMA`).
+
+### Cuatro correcciones reales al visor, encontradas verificando la
+### captura real (no solo leyendo el código)
+
+Pedido explícito de Diego tras ver las primeras capturas ("el mapa
+debería aparecer centrado... el zoom debería ser aún mayor... no veo
+que haya hierba por ningún lado, ni flores"):
+
+1. **Centrado automático al cargar**: `centrarCamara()` solo estaba
+   enlazada al botón "Centrar mapa", nunca se llamaba al arrancar la
+   página -- se dispara ahora una vez, la primera vez que hay datos
+   reales, sin pisar el pan/zoom del usuario después.
+2. **`ZOOM_MAXIMO` 8.0 → 20.0** -- a 8x un conejo (peso real ~1.5kg,
+   `escalaPorPeso` muy bajo contra la referencia de 90kg) medía ~14px de
+   alto en pantalla, casi invisible.
+3. **Marco perimetral de medio/micro retirado por completo**
+   (`dibujarMarco`, función eliminada) -- Diego, viendo una captura real,
+   confirmó que bajo la proyección Caballera no se leía como borde de
+   mapa reconocible (aparecía como una línea/diagonal suelta). El marco
+   de códice a nivel macro (`dibujarMarcoCodice`) no se tocó.
+4. **Bug real de datos, no de sprites -- `plantas_por_celda` solo
+   guardaba UNA planta por celda `(x,y)`** en el DTO de
+   `construir_instantanea` (`presentacion/vista_web.py`): desde "cupo de
+   espacio compartido por celda" (2026-09-03, más arriba) una especie de
+   cobertura (hierba_silvestre, flor_silvestre, liquen, musgo) puede
+   cohabitar la celda con una especie competidora (árbol/arbusto), y la
+   última en sobrescribir la clave ganaba en silencio. Confirmado contra
+   el motor real (semilla 42): **101 celdas con cobertura oculta**.
+   Corregido: pasa a ser una lista; los dos consumidores JS (sello real y
+   fallback vectorial) iteran todas las plantas de la celda, con offset
+   propio por índice para que no coincidan pixel a pixel.
+
+Verificado con Playwright contra el servidor real en cada paso (captura
+sin clicar el botón, flores conviviendo con arbustos, marco ausente) y
+116/116 tests en verde. Commit `280fea9`.
+
+**Pendiente real, explícito, NO resuelto en este círculo -- diseño
+aplazado a conversación futura**: las criaturas pequeñas quedan tapadas
+por árboles/montañas grandes vecinos incluso a zoom alto -- confirmado
+invocando `construirElementoCriatura()`+`el.dibujar()` manualmente sobre
+fondo sólido (el sprite se ve perfecto aislado) y comparando contra el
+render real en contexto (invisible junto a un pico o un manzano grande).
+Causa: el Y-sort por punto de anclaje no tiene en cuenta que el lienzo de
+un sprite grande se desborda visualmente mucho más allá de ese punto --
+la misma limitación que el propio código ya documentaba ("un gnomo tras
+un pico al sur queda oculto tras él"), ahora mucho más notoria porque la
+flora real puebla el mapa de verdad. Diego pidió explícitamente diseñarlo
+en conversación aparte antes de tocar el algoritmo de ordenación.
+
+### Fracción de siembra inicial de flora -- asimetría real entre pista
+### competidora y no-competidora, corregida
+
+Diego, viendo el mapa poblado de verdad por primera vez, señaló que
+"todo el mapa está lleno de arbustos" y preguntó si el motor siembra
+plantas en todas las celdas posibles. Investigado contra el motor real
+(semilla 42, `main.py:sembrar_poblacion_inicial`/`sembrar_flora_inicial`
+llamadas directamente, no solo lectura de código): **sí, casi** -- pero
+solo para la pista COMPETIDORA (árboles/arbustos,
+`compite_espacio_fisico: true`):
+
+| Especie | Compite | Cobertura real de su bioma |
+|---|---|---|
+| arbusto_espinoso | sí | 91.3% |
+| roble / manzano | sí | 80.8% c/u |
+| cactus / arbusto_desertico | sí | 98.6% c/u |
+| arbusto_artico | sí | 100% |
+| hierba_silvestre | no | 3.4% |
+| flor_silvestre | no | 3.8% |
+| liquen | no | 6.7% |
+
+Medido también que la IDONEIDAD de colonización (`idoneidad_colonizacion`)
+no es la causa -- hierba_silvestre y arbusto_espinoso superan el umbral
+en el 100% de las mismas celdas de pradera. La causa real, encontrada
+leyendo `main.py:sembrar_flora_inicial`: la pista no-competidora ya
+pasaba por `fraccion_siembra_inicial` (0.08) desde antes; la pista
+competidora (añadida en "cupo de espacio compartido por celda",
+2026-09-03) sembraba una `Planta` por CADA colocación que
+`colonizar_por_idoneidad` le asignaba, sin ningún muestreo -- una
+asimetría real entre dos mecanismos que evolucionaron por separado, no
+una diferencia de clima.
+
+**Diseño acordado con Diego** (rechazó explícitamente volver al sistema
+de manchas pre-causal: "no volver a la estructura anterior que diseñaba
+las manchas de flora sin causalidad"): sembrar solo individuos
+FUNDADORES dispersos de ambas pistas, y dejar que la propagación diaria
+ya causal por especie (`sistema_flora.py`, caída/viento/zoocoria, arco
+"tipos de propagación de flora" ya cerrado) genere el agrupamiento en
+manchas/bosquecillos de forma emergente -- sin autorar ninguna forma de
+mancha, cumpliendo el principio de leyes neutras.
+
+Implementado: `fraccion_siembra_inicial` 0.08 → 0.35 (cobertura, sube);
+nueva `fraccion_siembra_inicial_competidora` = 0.15 (pista competidora,
+antes sin fracción -- baja). Verificado antes/después: arbusto_espinoso
+91.3%→13.7%, hierba_silvestre 3.4%→14.8%, liquen 6.7%→29.9% -- ambas
+pistas convergen a un rango mucho más parecido, ninguna satura su
+bioma. 116/116 tests en verde, 3000 ticks reales sin excepciones.
+Ambos números PROVISIONAL. Commit `4edd1e3`.
+
+### Concordancia de género en el narrador
+
+Diego, leyendo la crónica en vivo del visor, señaló "un ardilla entra en
+crisis mental" -- "ardilla" es femenino en español con independencia del
+sexo del individuo (igual que "jirafa"), pero las cuatro plantillas de
+`presentacion/narrador.py` (Muerte/Herida/CrisisMental/Nacimiento)
+tenían el artículo "un" fijo en el texto -- nunca delatado por
+gnomo/lobo/conejo, las tres especies restantes, todas masculinas. De
+paso, encontrado el mismo problema en el participio de Herida ("resulta
+herido" → "resulta herida" para ardilla). `_contexto()` calcula ahora
+`articulo`/`terminacion` una vez por evento a partir de un catálogo
+cerrado de especies femeninas (`_ESPECIES_FEMENINAS = {"ardilla"}`), sin
+tocar la función genérica de disposición por peso. Primer test dedicado
+de `narrador.py` (`tests/test_narrador_genero.py`, no tenía ninguno).
+122/122 tests en verde, verificado también contra el servidor real
+corriendo. Commit `18e7862`.
+
+### Percepción de amenaza ponderada por agresividad, no solo por peso
+
+Diego, tras el fix del narrador, notó que la crónica mostraba muchas
+líneas de ardilla en crisis mental/catatonia. Investigado a fondo contra
+el motor real (3000 ticks, semilla 42, eventos `CrisisMental` contados
+por especie): el total agregado en realidad mostraba a CONEJO por
+delante de ardilla (145 vs 78 en 3000 ticks -- 4.8 vs 2.6 crisis por
+individuo inicial), pero repetir la ventana exacta de los primeros ~30
+ticks (la que Diego había visto en pantalla) sí reproducía el patrón
+observado casi exacto (14 de ardilla, 5 de conejo, 1 de gnomo).
+
+**Causa raíz real de la asimetría conejo/ardilla, encontrada en
+`nucleo/disposicion.py`**: la detección de amenaza
+(`posicion_amenaza_mas_cercana` → `posicion_mas_cercana_por_disposicion`,
+`buscar_mayor=True`) es puramente por RATIO DE PESO -- cualquier
+candidato suficientemente más pesado cuenta como amenaza, sin mirar en
+ningún momento si es un depredador real. Conejo (1.5-3.0kg) supera el
+umbral de amenaza frente a ardilla (0.3-0.6kg, magnitud de peso
+0.48-0.70 según el individuo), así que el "pool de amenazas" de ardilla
+incluye gnomo+lobo+conejo (54 individuos), mientras el de conejo es solo
+gnomo+lobo (24) -- ardilla nunca cuenta como amenaza para conejo por ser
+más ligera.
+
+**Primera propuesta de Claude, rechazada por Diego con razón** ("¿tiene
+sentido que un conejo asuste a una ardilla igual que un depredador?"):
+un gate binario "solo depredadores reales" (`medio_alimentacion==
+'cazar'`, hoy solo lobo). Diego la corrigió: un caballo (herbívoro
+grande, no depredador) SÍ debería asustar a una ardilla solo por tamaño
+-- lo que falta no es un filtro binario por especie, es que la
+AGRESIVIDAD del candidato (`Temperamento.agresividad`, ya existe, sorteo
+individual dentro de rango racial) module cuánta amenaza percibida
+genera, además del tamaño. "Una criatura más grande y además agresiva es
+motivo para estar muy insegura" -- pero un conejo (algo más grande, poco
+agresivo) no debería contar como amenaza plena.
+
+**Diseño cerrado y verificado con rangos reales**
+(`config/poblacion.yaml`: agresividad lobo 0.5-0.9, gnomo 0.1-0.4,
+conejo/ardilla 0.05-0.2): puntuación combinada `magnitud_por_peso +
+peso_agresividad × agresividad_candidato`, comparada contra un umbral
+PROPIO de amenaza (antes compartía `depredacion.umbral_disposicion_caza`
+con la disposición de caza -- deja de compartirlo, cada uso con su
+propia calibración). Umbral subido de 0.5 a 0.65 (conejo, magnitud
+0.48-0.70, deja de superarlo en la mayoría de individuos) con
+`peso_agresividad=0.3` (gnomo ~0.76 y lobo ~0.84 lo siguen superando
+solo por tamaño, sin necesitar agresividad -- así un "caballo"
+hipotético seguiría siendo amenaza real). Respeta el principio de
+diseño ya declarado en el propio módulo ("cada sistema que consuma la
+disposición por peso la combina con sus propios atributos... es lo que
+pide el principio de leyes neutras") -- la ponderación por agresividad
+vive en un parámetro opcional nuevo (`peso_agresividad_candidato`,
+0.0 por defecto) de `posicion_mas_cercana_por_disposicion`, sin tocar
+su comportamiento para depredación/pareja/territorio, que no lo pasan.
+
+Los TRES consumidores reales de "amenaza" en el motor (drenaje de
+`Necesidades.seguridad` en `sistema_necesidades.py`, dirección de HUIR
+en `sistema_movimiento.py`, deseo de empuñar arma en
+`sistema_decision.py`) actualizados de forma consistente -- una sola
+noción de amenaza en todo el motor, no una versión distinta por sistema.
+
+**Verificado, resultado honesto y matizado**: a 3000 ticks reales, el
+desequilibrio agregado conejo/ardilla se corrigió con claridad (conejo
+145→84, ardilla 78→86 -- casi a la par). Pero repetida la ventana de los
+primeros ~30 ticks, la ardilla SIGUE dominando (18 vs 3) -- el fix
+corrige exactamente el mecanismo que Diego señaló (conejo-como-amenaza-
+de-ardilla) y mejora el balance agregado, pero no es la explicación
+completa del arranque de partida concreto que motivó la pregunta; gnomo
+(18 individuos, amenaza real solo por tamaño, correctamente) parece
+pesar más en ese arranque específico. Señalado explícitamente a Diego,
+quien decidió dejarlo así por ahora -- investigar el porqué del
+arranque queda como pendiente real, sin decidir si se retoma.
+
+129/129 tests en verde (7 nuevos, `tests/test_amenaza_agresividad.py`,
+primer test dedicado de `nucleo/disposicion.py`/`nucleo/amenaza.py`, no
+tenían ninguno). **Pendiente real: este cambio (`nucleo/disposicion.py`,
+`nucleo/amenaza.py`, `config/combate.yaml`, y los tres sistemas
+consumidores) sigue sin comitear a fecha de esta nota** -- último punto
+de la sesión antes de ponerse a revisar la documentación.
