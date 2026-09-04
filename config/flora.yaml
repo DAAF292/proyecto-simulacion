@@ -105,7 +105,35 @@ flora:
   # directamente, sin depender de ninguna entidad). Valor por defecto sin
   # calibrar contra el motor en marcha todavía -- hipótesis de partida,
   # pendiente de contrastar con el harness de calibración ligera.
-  fraccion_siembra_inicial: 0.08
+  # (2026-09-04) 0.08 -> 0.35: medido contra el motor real (semilla 42)
+  # que esta fraccion dejaba hierba_silvestre/flor_silvestre/liquen/musgo
+  # en 3-8% de cobertura real de su bioma pese a que su idoneidad de
+  # colonizacion supera el umbral en ~100% de esas mismas celdas -- la
+  # escasez era enteramente un efecto de esta fraccion, no de clima. Sigue
+  # PROVISIONAL, sin calibrar contra el harness completo (15 semillas x
+  # 12000 ticks) -- pendiente confirmar que la propagacion diaria no la
+  # empuja mucho mas alla con el tiempo.
+  fraccion_siembra_inicial: 0.35
+  # fraccion_siembra_inicial_competidora (2026-09-04, mismo diagnostico
+  # que arriba pero en sentido contrario): las especies con
+  # compite_espacio_fisico=true (arboles/arbustos) no pasaban por NINGUNA
+  # fraccion -- sembrar_flora_inicial creaba una Planta por cada celda que
+  # colonizar_por_idoneidad les asigno en flora_competidora_inicial, sin
+  # muestreo. Medido: 80-100% de cobertura real de su bioma (arbusto_
+  # espinoso 91.3% de pradera, arbusto_artico 100% de tundra), frente al
+  # 3-8% de la cobertura no-competidora -- asimetria real entre dos pistas
+  # que evolucionaron por separado (la competidora se anadio en la pieza
+  # "cupo de espacio compartido por celda", 2026-09-03, sin heredar el
+  # muestreo que la no-competidora ya tenia). Con esta fraccion, la
+  # siembra inicial deja solo "individuos fundadores" dispersos -- el
+  # agrupamiento en manchas/bosquecillos se espera que EMERJA de la
+  # propagacion diaria ya causal por especie (tipo_propagacion: caida
+  # dispersa cerca de la madre, viento mas lejos), no de una fraccion
+  # objetivo por mancha autorada. PROVISIONAL, sin calibrar contra el
+  # harness completo -- valor mas bajo que la cobertura a proposito
+  # (arboles/arbustos son fisicamente mas grandes y menos numerosos que
+  # briznas de hierba en cualquier ecosistema real).
+  fraccion_siembra_inicial_competidora: 0.15
   # umbral_minimo_idoneidad_colonizacion (2026-09-01, ver docs/superpowers/
   # specs/2026-09-01-distribucion-causal-flora-design.md): idoneidad
   # mínima (nucleo/flora.py:idoneidad_colonizacion) que una especie debe

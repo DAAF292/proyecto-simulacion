@@ -275,22 +275,45 @@ def sembrar_flora_inicial(
     # por celda): a diferencia de la pista no-competidora, la fuente de
     # verdad de estas especies es la entidad Planta, no
     # Celda.tipo_recurso -- y Celda.tipo_recurso/recursos NO se pre-rellenan
-    # para ellas en la generación. Por eso cada colocación competidora que
-    # colonizar_por_idoneidad asignó a esta zona se siembra AQUÍ como
-    # entidad fundadora (etapa=1.0, madura -- mismo criterio que la pista
-    # no-competidora): sin esto no habría ninguna Planta competidora que
-    # sistema_flora.py procesara, y su recurso nunca llegaria a producirse.
-    # El cupo (huella_m2 conjunta ≤ capacidad_construccion_celda_m2) ya
-    # limitó cuántas entran por celda en la generación; sembrar todas las
-    # colocaciones es lo que da la coexistencia real de más de una Planta
-    # competidora en una misma celda tras arrancar.
+    # para ellas en la generación.
+    #
+    # (2026-09-04, corrección real -- ver config/flora.yaml:
+    # fraccion_siembra_inicial_competidora) hasta ahora esta pista sembraba
+    # una Planta por CADA colocación que colonizar_por_idoneidad le asignó,
+    # sin ningún muestreo -- a diferencia de la pista no-competidora
+    # (arriba), que sí pasa por fraccion_siembra_inicial desde el
+    # principio. Medido contra el motor real: eso dejaba árboles/arbustos
+    # cubriendo 80-100% de su bioma entero (alfombra, no vegetación
+    # dispersa), mientras hierba/flor se quedaban en 3-8% pese a superar la
+    # misma idoneidad en casi las mismas celdas -- una asimetría real entre
+    # dos pistas que evolucionaron por separado, no una diferencia de
+    # clima. Ahora se agrupan las colocaciones POR ESPECIE (igual que la
+    # pista no-competidora) y se muestrea una fracción -- deliberadamente
+    # menor que la de cobertura (árboles/arbustos son más grandes y menos
+    # numerosos en cualquier ecosistema real). Solo estos fundadores
+    # dispersos se siembran al arrancar; el agrupamiento en manchas/
+    # bosquecillos se espera que EMERJA de la propagación diaria ya causal
+    # por especie (sistema_flora.py, tipo_propagacion por especie), no de
+    # una mancha objetivo autorada.
     flora_competidora_inicial = getattr(zona, "flora_competidora_inicial", {})
+    fraccion_competidora_por_defecto = float(
+        config.get("flora", {}).get("fraccion_siembra_inicial_competidora", fraccion_por_defecto)
+    )
+    celdas_por_especie_competidora: dict[str, list[tuple[int, int]]] = {}
     for (pos_x, pos_y), especies in flora_competidora_inicial.items():
         celda = zona.obtener_celda(pos_x, pos_y)
         if celda.tiene_agua:
             continue
         for especie in especies:
-            crear_planta(gestor, especie, pos_x, pos_y, etapa=1.0)
+            celdas_por_especie_competidora.setdefault(especie, []).append((pos_x, pos_y))
+
+    for especie_key, celdas in celdas_por_especie_competidora.items():
+        especie_cfg = especies_cfg.get(especie_key, {})
+        fraccion = float(especie_cfg.get("fraccion_siembra_inicial", fraccion_competidora_por_defecto))
+        n_semillas = max(1, round(len(celdas) * fraccion))
+        elegidas = rng_juego.sample(celdas, min(n_semillas, len(celdas)))
+        for pos_x, pos_y in elegidas:
+            crear_planta(gestor, especie_key, pos_x, pos_y, etapa=1.0)
 
 
 def ejecutar_tick(
