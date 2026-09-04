@@ -76,12 +76,14 @@ from componentes.identidad import Identidad
 from componentes.gestacion import Gestacion
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
+from componentes.relaciones import Relaciones
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
 from nucleo.agua import celda_nacimiento_segura
 from nucleo.ciclo_vital import TICKS_POR_ANIO, edad_ticks, es_adulto
 from nucleo.entidad import nacer_criatura
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.reloj import Reloj
 
 
@@ -110,6 +112,47 @@ def _macho_elegible_en_contacto(
             continue
         return id_macho
     return None
+
+
+
+def _escribir_afinidad_concepcion(
+    gestor, config: dict, autor_id: int, otro_id: int, tick_actual: int,
+) -> None:
+    """Escribe afinidad POSITIVA de `autor_id` hacia `otro_id` tras una concepcion.
+
+    (2026-09-04, circulo 4a "afinidad por concepcion") -- reutiliza el
+    cimiento Relaciones (nucleo/relaciones.py) con el MISMO patron que ya
+    usan rencor (sistema_movimiento.py) y amistad (sistema_asentamiento.
+    py): SOLO ESCRIBE afinidad, nunca la lee en ningun punto de decision.
+    Un individuo NO consciente (fauna) nunca ejecuta ajustar_afinidad
+    sobre su propio Relaciones; un consciente SI escribe aunque la otra
+    parte no sea consciente. Cada parte usa su propia capacidad_vinculos.
+    """
+    umbral_consciencia_agencia = float(
+        config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+    )
+    cap_mental = gestor.obtener_componente(autor_id, CapacidadMental)
+    if (
+        cap_mental is None
+        or cap_mental.consciencia < umbral_consciencia_agencia
+    ):
+        return
+    relaciones = gestor.obtener_componente(autor_id, Relaciones)
+    if relaciones is None:
+        return
+    delta = float(
+        config.get("relaciones", {}).get("delta_afinidad_concepcion", 0.15)
+    )
+    if delta <= 0.0:
+        return
+    capacidad = capacidad_vinculos(cap_mental, config)
+    ajustar_afinidad(
+        relaciones,
+        otro_id,
+        delta,
+        tick_actual,
+        capacidad,
+    )
 
 
 def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mundo) -> None:
@@ -306,6 +349,20 @@ def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mun
             necesidades_hembra.impulso_reproductivo = 1.0
         if necesidades_macho is not None:
             necesidades_macho.impulso_reproductivo = 1.0
+        # (2026-09-04, circulo 4a "afinidad por concepcion"): ademas de
+        # Gestacion y del evento Concepcion, la concepcion exitosa deja un
+        # rastro de vinculo entre LOS DOS progenitores -- cada uno
+        # CONSCIENTE escribe afinidad positiva mutua hacia el otro,
+        # reutilizando el cimiento Relaciones (nucleo/relaciones.py),
+        # mismo patron que rencor y amistad. Solamente ESCRIBE, nunca la
+        # lee para cambiar comportamiento. El evento Concepcion no se
+        # modifica ni se re-emite de ninguna forma.
+        _escribir_afinidad_concepcion(
+            gestor, config, id_hembra, id_macho, tick_actual,
+        )
+        _escribir_afinidad_concepcion(
+            gestor, config, id_macho, id_hembra, tick_actual,
+        )
         bus.emitir(
             Evento(
                 tipo="Concepcion",

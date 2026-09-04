@@ -15,9 +15,11 @@ from pathlib import Path
 
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
-from componentes.identidad import Especie
+from componentes.identidad import Especie, Identidad
+from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones, Vinculo
+from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
 from main import cargar_configuracion
 from nucleo.asentamiento import Asentamiento
@@ -27,12 +29,14 @@ from nucleo.entidad import (
     crear_criatura,
     nacer_criatura,
 )
+from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo.persistencia import Persistencia
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.reloj import Reloj
 from sistemas.sistema_asentamiento import SistemaAsentamiento
 from sistemas.sistema_movimiento import SistemaMovimiento
+from sistemas.sistema_reproduccion import actualizar as actualizar_reproduccion
 
 RUTA_CONFIG = Path(__file__).parent.parent / "config"
 
@@ -512,3 +516,94 @@ def test_ley_amistad_respeta_la_purga_fifo_de_capacidad():
         assert len(_rel(gestor, eid).vinculos) <= capacidad
         for vin in _rel(gestor, eid).vinculos.values():
             assert vin.afinidad > 0.0
+
+
+# ---------------------------------------------------------------------------
+# sistema_reproduccion.py -- afinidad por concepcion (circulo 4a)
+# ---------------------------------------------------------------------------
+
+class _RngConcepcion:
+    """Stub que fuerza la concepcion: random() siempre < cualquier
+    probabilidad (0.0) y randint() devuelve el minimo (camada [1,1] gnomo)."""
+
+    def __init__(self) -> None:
+        self.llamadas_random = 0
+
+    def random(self) -> float:
+        self.llamadas_random += 1
+        return 0.0
+
+    def randint(self, a: int, b: int) -> int:
+        return a
+
+
+def _progenitor_adulto(gestor, config, rng, sexo, consciencia, tick_nacimiento=0):
+    """Crea un gnomo adulto reproductor en (0,0) con sexo/consciencia dados.
+
+    Sobrescribe los componentes que crear_criatura sorteo aleatoriamente
+    para fijar el escenario de una concepcion determinista.
+    """
+    eid = crear_criatura(gestor, Especie.GNOMO, 0, 0, config, rng, tick_actual=0)
+    gestor.obtener_componente(eid, Reproduccion).sexo = sexo
+    gestor.obtener_componente(eid, Identidad).tick_nacimiento = tick_nacimiento
+    gestor.obtener_componente(eid, Necesidades).saciedad = 1.0
+    gestor.obtener_componente(eid, CapacidadMental).consciencia = consciencia
+    return eid
+
+
+def _concepcion(gestor, config, hembra, macho, tick_actual):
+    """Ejecuta un tick de reproduccion forzado a concebir."""
+    rng = _RngConcepcion()
+    mundo = Mundo(6, 6, config, random.Random(123))
+    reloj = Reloj()
+    reloj.tick_actual = tick_actual
+    actualizar_reproduccion(gestor, config, rng, BusEventos(), tick_actual, mundo)
+
+
+def test_ley_concepcion_entre_dos_conscientes_escribe_afinidad_positiva_mutua():
+    config = _config()
+    gestor = GestorEntidades()
+    rng = random.Random(71)
+    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8)
+    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.8)
+    tick = 100_000
+    _concepcion(gestor, config, hembra, macho, tick)
+    delta = float(config["relaciones"]["delta_afinidad_concepcion"])
+    # ambos escriben afinidad positiva mutua hacia el otro
+    assert _rel(gestor, hembra).vinculos[macho].afinidad == delta
+    assert _rel(gestor, macho).vinculos[hembra].afinidad == delta
+    assert _rel(gestor, hembra).vinculos[macho].ultima_actualizacion_tick == tick
+    assert _rel(gestor, macho).vinculos[hembra].ultima_actualizacion_tick == tick
+
+
+def test_ley_concepcion_con_progenitor_no_consciente_solo_escribe_el_consciente():
+    config = _config()
+    gestor = GestorEntidades()
+    rng = random.Random(81)
+    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8)
+    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.0)
+    tick = 100_000
+    _concepcion(gestor, config, hembra, macho, tick)
+    delta = float(config["relaciones"]["delta_afinidad_concepcion"])
+    # el consciente escribe hacia el no-consciente...
+    assert _rel(gestor, hembra).vinculos[macho].afinidad == delta
+    # ... pero el no-consciente no escribe nada de vuelta
+    assert _rel(gestor, macho).vinculos == {}
+
+
+def test_ley_concepcion_suma_la_afinidad_sobre_el_rencor_previo():
+    config = _config()
+    gestor = GestorEntidades()
+    rng = random.Random(91)
+    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8)
+    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.8)
+    delta = float(config["relaciones"]["delta_afinidad_concepcion"])
+    # rencor previo de la hembra hacia el macho (mismo cimiento, circulo 2)
+    _rel(gestor, hembra).vinculos[macho] = Vinculo(afinidad=-0.25, ultima_actualizacion_tick=0)
+    tick = 100_000
+    _concepcion(gestor, config, hembra, macho, tick)
+    # -0.25 + 0.15 = -0.10, menos negativo; el del macho parte de 0
+    assert _rel(gestor, hembra).vinculos[macho].afinidad == -0.25 + delta
+    assert _rel(gestor, macho).vinculos[hembra].afinidad == delta
+    # el vinculo previo de la hembra se actualiza al tick de la concepcion
+    assert _rel(gestor, hembra).vinculos[macho].ultima_actualizacion_tick == tick

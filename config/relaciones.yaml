@@ -25,3 +25,10 @@ relaciones:
   # (consumidor: sistema_asentamiento.py). PROVISIONAL, sin calibrar:
   # con 0.05/dia, dos convivientes llegan al tope 1.0 en 20 dias.
   delta_amistad_convivencia_dia: 0.05
+  # Magnitud (POSITIVA) de la afinidad que ganan mutuamente LOS DOS
+  # progenitores en el instante de una concepcion exitosa (consumidor:
+  # sistema_reproduccion.py, circulo 4a -- "afinidad por concepcion").
+  # Reutiliza el mismo cimiento Relaciones que rencor y amistad: un
+  # consciente escribe aunque la otra parte no lo sea. PROVISIONAL, sin
+  # calibrar.
+  delta_afinidad_concepcion: 0.15
