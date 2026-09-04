@@ -70,3 +70,72 @@ def ajustar_afinidad(
         afinidad=max(-1.0, min(1.0, delta)),
         ultima_actualizacion_tick=tick_actual,
     )
+
+
+def son_pareja(
+    rel_a: "Relaciones",
+    rel_b: "Relaciones",
+    id_a: int,
+    id_b: int,
+    umbral: float,
+) -> bool:
+    """True si `id_a` e `id_b` son pareja SEGUN LA AFINIDAD ACUMULADA.
+
+    Dos individuos son pareja cuando la afinidad supera `umbral` en AMBAS
+    direcciones (A hacia B Y B hacia A) -- no basta una sola direccion.
+    Es un HECHO derivado que se lee cada vez que hace falta, no un
+    componente ni una institucion fija: no existe componente `Pareja`,
+    son_pareja() no impone monogamia (si A supera el umbral con dos
+    personas a la vez, ambas relaciones se leen como "pareja" sin
+    conflicto) y no decae con el tiempo por si sola.
+
+    Sin vinculo en alguna direccion (o afinidad por debajo del umbral en
+    alguna) la respuesta es False.
+    """
+    v_ab = rel_a.vinculos.get(id_b)
+    v_ba = rel_b.vinculos.get(id_a)
+    return (
+        v_ab is not None
+        and v_ba is not None
+        and v_ab.afinidad >= umbral
+        and v_ba.afinidad >= umbral
+    )
+
+
+def pareja_presente(
+    gestor: Any,
+    entidad_id: int,
+    relaciones: "Relaciones",
+    pos_x: int,
+    pos_y: int,
+    zona_idx: int,
+    umbral: float,
+) -> bool:
+    """True si la pareja derivada de `entidad_id` esta en la celda EXACTA.
+
+    Busqueda lineal O(N) sobre entidades con (Relaciones, Posicion) en la
+    celda exacta (mismo x, y, zona_idx que hay_refugio_en/fogata_en --
+    sin radio de percepcion), excluyendo la propia. Devuelve True si
+    alguna de esas entidades es realmente pareja segun `son_pareja`
+    (ambas direcciones superan `umbral`).
+
+    Si la entidad no tiene Relaciones (relaciones=None) o no hay nadie
+    mas en la celda, devuelve False.
+    """
+    from componentes.posicion import Posicion
+    from componentes.relaciones import Relaciones
+
+    if relaciones is None:
+        return False
+    for cid in gestor.entidades_con(Relaciones, Posicion):
+        if cid == entidad_id:
+            continue
+        pos = gestor.obtener_componente(cid, Posicion)
+        if pos is None or pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
+            continue
+        rel_otra = gestor.obtener_componente(cid, Relaciones)
+        if rel_otra is None:
+            continue
+        if son_pareja(relaciones, rel_otra, entidad_id, cid, umbral):
+            return True
+    return False
