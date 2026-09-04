@@ -3280,3 +3280,58 @@ fondo de asentamientos casi nunca formándose en juego libre (señalado en
 el círculo 3) sigue pendiente de investigar, y afecta directamente a
 cómo de observable será el círculo 4b si su efecto depende de
 asentamiento.
+
+### Círculo 4b -- Pareja estable derivada + bono de cercanía, cerrado
+### (spec, PR #17, mergeado, 2026-09-04, misma tarde)
+
+Spec: `docs/superpowers/specs/2026-09-04-pareja-estable-design.md`.
+Primer consumidor de todo el arco que LEE `Relaciones` para decidir
+algo (los anteriores solo escribían). Decisiones cerradas con Diego:
+derivación MUTUA (afinidad >= `relaciones.umbral_pareja` en AMBAS
+direcciones, no basta una); efecto mínimo -- bono aditivo de
+confort/seguridad por estar en la misma celda EXACTA que la pareja,
+mismo patrón que `bono_confort_refugio`/`bono_confort_fogata`
+(`sistema_necesidades.py`), sin radio de percepción, sin monogamia, sin
+refugio compartido ni aporte a almacén.
+
+**Implementado**: `nucleo/relaciones.py` gana `son_pareja()` (pura) y
+`pareja_presente()` (búsqueda por celda exacta, mismo patrón que
+`hay_refugio_en`/`fogata_en` de `nucleo/fuego.py`); `sistema_necesidades.py`
+suma `bono_confort_pareja` al objetivo de confort térmico y
+`bono_seguridad_pareja` a la recuperación de seguridad (capado a 1.0),
+ambos solo para consciente con pareja realmente presente.
+`relaciones.umbral_pareja` (0.3) y los dos bonos (0.15/0.05) nuevos,
+todos PROVISIONALES. 179/179 tests (16 nuevos).
+
+**Mismo patrón de honestidad que el círculo 3, misma causa raíz**: el
+motor real (`BOSQUE_AUTO_TICKS=4000`) no confirmó ningún caso real de
+pareja cruzando el umbral -- la población de gnomos volvió a
+extinguirse (0 vivos al final, últimos rastros en tick ~2422) antes de
+que las 5 concepciones registradas pudieran acumular afinidad suficiente
+o coincidir de nuevo en la misma celda. El mecanismo está verificado
+correcto por los 16 tests unitarios; lo que falta observar en vivo es,
+otra vez, una consecuencia del colapso de población ya conocido, no un
+defecto de este círculo. **Tercera vez que el mismo problema de fondo
+bloquea la verificación en vivo de un consumidor de este arco**
+(asentamientos en el círculo 3, pareja aquí) -- refuerza que investigar
+la fragilidad de gnomo es ahora una prioridad real antes de construir
+más piezas que dependan de que la población sobreviva lo suficiente.
+
+**Coste real**: **$0.140223**, un único intento.
+
+**Pendiente real tras esta pieza**: con esto, **5 de las 6 piezas del
+arco "hilo individual" quedan cerradas** (nombre propio, cimiento
+`Relaciones`+rencor, amistad, afinidad por concepción, pareja estable)
+-- solo faltan familia derivada y biografía consultable, ninguna
+empezada. `umbral_pareja`/`bono_confort_pareja`/`bono_seguridad_pareja`
+PROVISIONALES sin calibrar; decaimiento de afinidad sigue sin resolver
+(limitación honesta ya señalada: hoy una pareja no puede "diluirse" solo
+por dejar de convivir); pequeña ineficiencia sin importancia real
+detectada en revisión -- `pareja_presente()` se calcula dos veces por
+tick por entidad (confort y seguridad por separado) en vez de
+reutilizar el resultado, no corregido por no ser un bug ni afectar el
+resultado. **La investigación de por qué los gnomos colapsan/no forman
+asentamientos ni parejas persistentes en juego libre, aplazada por
+Diego hasta terminar de implementar todo lo ya diseñado de este arco,
+sigue siendo el candidato más urgente para la siguiente sesión de
+calibración.**
