@@ -407,6 +407,43 @@ class Persistencia:
             )
             con.commit()
 
+    def biografia_de(self, entidad_id: int) -> list[Evento]:
+        """Círculo 6 del arco "hilo individual" (biografía consultable,
+        2026-09-04) -- reconstruye la crónica de UN individuo a partir de
+        cronica_eventos, en orden cronológico. Pura lectura, sin ningún
+        efecto en la simulación: `persistir_eventos` ya escribe
+        `entidad_id` por fila desde el principio del proyecto, esto solo
+        filtra y reconstruye `Evento`. RUIDO nunca aparece porque
+        `persistir_eventos` ya lo descarta antes de insertar.
+
+        El resultado es directamente consumible por
+        `presentacion.narrador.narrar(eventos, gestor=None)` para obtener
+        texto legible -- sin ningún wrapper nuevo, `narrar()` ya acepta
+        `gestor=None` (no lo usa para nada, mismo patrón que el resto de
+        tests de narrador.py)."""
+        with self._conectar() as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                SELECT tick, tipo, severidad, entidad_id, datos
+                FROM cronica_eventos
+                WHERE entidad_id = ?
+                ORDER BY tick, id
+                """,
+                (entidad_id,),
+            )
+            filas = cur.fetchall()
+        return [
+            Evento(
+                tipo=tipo,
+                severidad=Severidad(severidad),
+                tick=tick,
+                entidad_id=eid,
+                datos=json.loads(datos) if datos else {},
+            )
+            for tick, tipo, severidad, eid, datos in filas
+        ]
+
     def guardar_snapshot(
         self,
         gestor: GestorEntidades,
