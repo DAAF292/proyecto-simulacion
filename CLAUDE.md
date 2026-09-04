@@ -3239,3 +3239,44 @@ en juego libre por el colapso de población) afecta a CUALQUIER
 mecanismo futuro basado en asentamiento, no solo a amistad** -- candidato
 real a investigar antes de construir más piezas que dependan de que un
 asentamiento exista de verdad en una partida.
+
+### Círculo 4a -- Afinidad por concepción, cerrado (spec, PR #16,
+### mergeado, 2026-09-04, misma tarde) -- primera mitad de "pareja
+### estable"
+
+Spec: `docs/superpowers/specs/2026-09-04-afinidad-concepcion-design.md`.
+Diego pidió partir "pareja estable" en dos círculos, mismo criterio ya
+aplicado tres veces en este arco: 4a (este, escritor mínimo -- la
+concepción exitosa también escribe afinidad positiva mutua entre
+progenitores, reutilizando `ajustar_afinidad` tal cual, cero función
+nueva en `nucleo/relaciones.py`) y 4b (lector -- derivar "¿son pareja?"
+de la afinidad acumulada + un efecto de comportamiento, spec propia
+futura, sin empezar). `sistemas/sistema_reproduccion.py` gana
+`_escribir_afinidad_concepcion`, llamada en ambas direcciones justo tras
+construir `Gestacion`, antes de emitir `Concepcion` (sin tocar ese
+evento ni la lógica de reproducción). `config/relaciones.yaml` gana
+`delta_afinidad_concepcion` (0.15, PROVISIONAL). 163/163 tests (9
+nuevos).
+
+**Primera vez en este arco que el motor real SÍ produjo el caso en vivo
+sin intervención**: a diferencia de los círculos 2 y 3 (rencor, amistad
+-- ambos verificados solo por arnés dirigido o tests unitarios porque la
+población colapsó antes de disparar el mecanismo en juego libre), esta
+corrida de `BOSQUE_AUTO_TICKS` confirmó dos gnomos reales, ambos
+conscientes (0.78 y 0.70), con afinidad `0.15` real en
+`Relaciones.vinculos` tras una concepción real -- coherente con que la
+concepción es un evento mucho más frecuente en juego normal que un
+conflicto de refugio ocupado o la formación de un asentamiento de 2+
+conscientes.
+
+**Coste real**: **$0.114074**, un único intento.
+
+**Pendiente real tras esta pieza**: círculo 4b (pareja estable derivada
++ efecto de comportamiento -- qué efecto exacto, PENDIENTE DE DECIDIR
+con Diego, no autorado aquí) es la siguiente pieza real de este arco;
+`delta_afinidad_concepcion` PROVISIONAL sin calibrar; familia derivada y
+biografía consultable, círculos futuros sin empezar; el hallazgo de
+fondo de asentamientos casi nunca formándose en juego libre (señalado en
+el círculo 3) sigue pendiente de investigar, y afecta directamente a
+cómo de observable será el círculo 4b si su efecto depende de
+asentamiento.
