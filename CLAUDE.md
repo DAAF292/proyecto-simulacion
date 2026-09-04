@@ -3335,3 +3335,83 @@ asentamientos ni parejas persistentes en juego libre, aplazada por
 Diego hasta terminar de implementar todo lo ya diseñado de este arco,
 sigue siendo el candidato más urgente para la siguiente sesión de
 calibración.**
+
+### Círculo 5 -- Parentesco derivado, cerrado (spec, IMPLEMENTADO
+### DIRECTAMENTE POR CLAUDE, no por el pipeline, 2026-09-04, misma tarde)
+
+Spec: `docs/superpowers/specs/2026-09-04-parentesco-derivado-design.md`.
+Decisiones cerradas con Diego: hermanos = comparten `id_madre` O
+`id_padre` (medio-hermanos incluidos); solo núcleo directo (madre,
+padre, hijos, hermanos) -- **hallazgo real que descartó abuelos/tíos
+antes de escribir código**: `GestorEntidades.eliminar_entidad` purga
+TODOS los componentes al morir, incluida `Identidad`
+(`nucleo/entidad.py:77-80`), así que un nivel más de ascendencia solo
+sería derivable mientras el progenitor intermedio siguiera vivo en
+memoria -- inviable dada la fragilidad de población ya conocida;
+primer consumidor: `resolver_disputa` trata a la familia directa con
+más cohesión, mismo mecanismo que `mismo_grupo` (bono aditivo, no
+resultado garantizado).
+
+**Excepción real al flujo fijo del proyecto**: los 3 intentos del
+pipeline autónomo fallaron con el MISMO error exacto
+(`RepeatedFormatError` -- el modelo entra en un bucle de respuestas
+vacías `<response> response` sin ninguna llamada a herramienta, en un
+punto distinto cada vez: paso ~7 el primer intento, paso 41 el
+segundo), sin tocar ni una línea de código en ningún intento. Coste
+total: $0.059093 (barato, no llegó a generar diffs). Diagnosticado
+como inestabilidad genuina del modelo, no relacionado con el contenido
+de la spec (ya se había visto esta clase de fallo con `aider` antes de
+la migración a `mini-swe-agent`, se creía resuelto con el ajuste de
+temperatura del proxy -- esta es la primera recurrencia real desde
+entonces). Disyuntor agotado, plan movido a `docs/plans/failed/`. Diego
+pidió explícitamente implementarlo directamente (excepción ya prevista
+en la sección "Flujo de implementación" de este documento: "Diego lo
+pide explícitamente") y anotar el patrón de fallo para evaluaciones
+futuras de modelo -- guardado en memoria persistente
+(`project_evaluar_modelos_pipeline.md`), no solo aquí.
+
+**Implementado**: `nucleo/parentesco.py` nuevo
+(`son_hermanos`/`es_padre_o_madre`/`es_familia_directa`, puras, sin
+persistir nada); `resolver_disputa` gana `son_familia: bool = False`
+(entra en la rama de cohesión igual que `mismo_grupo`, suma
+`bono_cohesion_familia` PROVISIONAL); `sistema_movimiento.py` calcula y
+propaga. 12 tests nuevos (`tests/test_parentesco.py`), 191/191 en
+total.
+
+**Hallazgo real MÁS SERIO de lo anticipado en el spec, verificado con
+dos corridas reales (4000 y 8000 ticks)**: la spec esperaba que
+parentesco fuera "mucho más fácil de observar" que asentamiento/pareja
+porque "existe desde el nacimiento" -- **resultó ser al revés**. En
+ninguna de las dos corridas nació un solo gnomo nuevo, pese a 3
+concepciones reales de gnomo (ticks 243, 495, 620). Causa raíz
+identificada con precisión: la gestación de gnomo son 200-260 DÍAS
+(`config/poblacion.yaml`) × `Reloj.TICKS_POR_DIA=24` = **4800-6240
+ticks** -- las 3 madres murieron (población fundadora completa, 18/18
+muertas al final) antes de completar ese plazo, así que `Gestacion` (un
+componente sobre la propia madre) se purgó con ellas sin llegar a
+`nacer_criatura`. **Esto es una escalada real del problema de
+fragilidad de gnomo ya señalado tres veces en este arco** (círculos 3,
+4b): no es solo que la segunda generación no sobreviva ni conviva lo
+bastante -- en las corridas de hoy, con la semilla por defecto, **la
+segunda generación de gnomo no llega ni a NACER**. El mecanismo de
+parentesco en sí está verificado correcto por los 12 tests (que sí
+construyen madre/hijo reales y confirman la física); lo que no se pudo
+observar en juego libre es la EXISTENCIA de un caso real de parentesco
+completo, un peldaño más grave que "no se disparó el consumidor"
+(círculos 3/4b) -- aquí ni siquiera se completó el nacimiento que lo
+originaría.
+
+**Pendiente real tras esta pieza**: `bono_cohesion_familia`
+PROVISIONAL sin calibrar; abuelos/tíos bloqueados por la limitación
+técnica ya documentada; otros consumidores de parentesco (narrador,
+memoria de agravios) sin construir; **la investigación de fragilidad de
+gnomo, ya la prioridad más urgente tras los círculos 3/4b, gana ahora
+evidencia más grave y concreta -- la gestación (4800-6240 ticks) parece
+exceder sistemáticamente la supervivencia real de una madre gnomo en la
+semilla por defecto**, dato nuevo y específico para cuando se aborde
+esa investigación (no es ya "la población colapsa en general", es "el
+ciclo reproductivo de gnomo no completa una generación completa").
+Con este círculo, quedan 5 de las 6 piezas originalmente numeradas del
+arco cerradas o implementadas -- solo falta biografía consultable
+(círculo 6 original); desarrollo personal sigue aplazado, decisión ya
+tomada.
