@@ -16,16 +16,30 @@ from nucleo.eventos import Evento, Severidad
 
 _PLANTILLA_GENERICA = "Tick {tick}: evento {tipo} (entidad {entidad_id})."
 
+# Genero gramatical del NOMBRE de la especie (no del sexo del individuo --
+# "ardilla" es femenino en español con independencia de si el individuo
+# concreto es macho o hembra, igual que "jirafa" o "persona"). Catalogo
+# cerrado de las 4 especies reales (componentes/identidad.py); una especie
+# nueva que no aparezca aqui cae al masculino por defecto ("un"), mismo
+# criterio permisivo que el resto de tablas de este tipo en el proyecto.
+_ESPECIES_FEMENINAS = {"ardilla"}
+
+
+def _es_femenino(especie: str | None) -> bool:
+    return especie in _ESPECIES_FEMENINAS
+
+
 _PLANTILLAS = {
-    "Muerte": "Tick {tick}: un {especie} ha muerto por {causa}.",
+    "Muerte": "Tick {tick}: {articulo} {especie} ha muerto por {causa}.",
     # Bloque C2 (criatura.docx): una captura ya no siempre mata, puede
     # dejar herida a la presa -- vitalidad_restante viene de
-    # sistema_depredacion.py.
-    "Herida": "Tick {tick}: un {especie} resulta herido por {causa} (vitalidad restante {vitalidad_restante}).",
+    # sistema_depredacion.py. {terminacion} concuerda el participio
+    # (herido/herida) con el mismo genero que {articulo}.
+    "Herida": "Tick {tick}: {articulo} {especie} resulta herid{terminacion} por {causa} (vitalidad restante {vitalidad_restante}).",
     # Bloque F3: solo se emite al ENTRAR en crisis (sistema_decision.py),
     # no en cada tick que dura -- tipo_crisis es el valor del Accion
     # correspondiente (huida_erratica/crisis_violenta/catatonia).
-    "CrisisMental": "Tick {tick}: un {especie} entra en crisis mental ({tipo_crisis}).",
+    "CrisisMental": "Tick {tick}: {articulo} {especie} entra en crisis mental ({tipo_crisis}).",
     # 6.3 Reproduccion, emparejamiento (sistema_reproduccion.py): se emite
     # al concebir. El nacimiento tiene su propio evento/plantilla, mas
     # abajo -- son dos hechos distintos (concepcion vs. parto), separados
@@ -37,7 +51,7 @@ _PLANTILLAS = {
     # id_madre/id_padre viajan en evento.datos para quien quiera
     # narrarlos con mas detalle en el futuro, aunque esta plantilla minima
     # (sin variantes, paso 9) todavia no los usa.
-    "Nacimiento": "Tick {tick}: nace un {especie}.",
+    "Nacimiento": "Tick {tick}: nace {articulo} {especie}.",
     # Fase terreno 1 (sistema_clima.py): se emite solo al ENTRAR en una
     # estacion nueva, no cada dia -- mismo patron que CrisisMental.
     "CambioEstacion": "Tick {tick}: comienza la estacion de {estacion}.",
@@ -55,6 +69,14 @@ def _contexto(evento: Evento) -> dict:
         "entidad_id": evento.entidad_id,
     }
     contexto.update(evento.datos)
+    # (2026-09-04, correccion real -- Diego leyendo la cronica en vivo:
+    # "un ardilla entra en crisis mental" es gramaticalmente incorrecto,
+    # "ardilla" es femenino) -- articulo se calcula aqui, una vez, para
+    # que cualquier plantilla que lo pida ({articulo} {especie}) concuerde
+    # sin repetir la logica en cada entrada de _PLANTILLAS.
+    femenino = _es_femenino(contexto.get("especie"))
+    contexto["articulo"] = "una" if femenino else "un"
+    contexto["terminacion"] = "a" if femenino else "o"
     return contexto
 
 
