@@ -223,7 +223,10 @@ class SistemaMovimiento:
                     gestor, eid, ident.especie, pos.x, pos.y, radio, pos.zona_idx
                 )
             elif accion == Accion.CONSTRUIR:
-                dx, dy = self._calcular_construir(gestor, mundo, eid, pos.x, pos.y, pos.zona_idx)
+                dx, dy = self._calcular_construir(
+                    gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
+                    temperamento, pos.zona_idx,
+                )
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
                     gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
@@ -1053,8 +1056,13 @@ class SistemaMovimiento:
         gestor: GestorEntidades,
         mundo: Mundo,
         entidad_id: int,
+        especie: Especie,
         pos_x: int,
         pos_y: int,
+        radio: int,
+        mem: MemoriaEspacial | None,
+        cap_mental: CapacidadMental | None,
+        temperamento: Temperamento | None,
         zona_idx: int = 0,
     ) -> tuple[int, int]:
         """
@@ -1063,12 +1071,33 @@ class SistemaMovimiento:
         objetivo de construcción actual de esta entidad
         (objetivo_construccion_actual: refugio propio mientras no esté
         terminado, si no el almacén del asentamiento del que sea
-        miembro). Si no existe todavía, lo crea: el refugio en la
-        posición ACTUAL de quien construye (sin lógica de selección de
-        sitio, esa pregunta sigue abierta); el almacén en el CENTRO del
-        asentamiento -- hay que llegar hasta ahí primero, no se crea
+        miembro). Si no existe todavía, lo crea: el almacén en el CENTRO
+        del asentamiento -- hay que llegar hasta ahí primero, no se crea
         donde a cada gnomo le pille. Una vez existe, camina hacia él
         igual que _calcular_dormir camina hacia el refugio recordado.
+
+        SESGO DE AGRUPAMIENTO para un refugio nuevo (2026-09-04, mismo
+        criterio de leyes neutras que ya usa _calcular_dormir -- ninguna
+        regla decide que "debe" formarse un asentamiento, solo se
+        reutilizan dos mecanismos que el motor ya tiene en otro sitio,
+        aplicados aquí por primera vez):
+        1. REFUGIO RECORDADO (individual, `objetivo_recordado(mem,
+           "refugio", ...)`, MISMA memoria que ya usa _calcular_dormir --
+           no distingue de quién es el refugio, se registra en
+           sistema_recursos.py al completar CUALQUIER construcción propia
+           y en sistema_necesidades.py cada vez que la criatura duerme
+           sin amenaza cerca, sea o no su propio refugio). Si hay un
+           recuerdo y está lejos, se camina hacia él en vez de construir
+           donde se esté.
+        2. SIN refugio recordado todavía (individuo joven, recién
+           independizado): mismo sesgo gregario que ya usa
+           _calcular_deambular/_calcular_dormir -- buscar al conspecífico
+           más cercano con probabilidad = sociabilidad propia, sin
+           escalar. Si está lejos, se camina hacia él antes de construir.
+
+        Sin ninguno de los dos (o ya lo bastante cerca), se construye en
+        la posición ACTUAL -- comportamiento original, sin lógica de
+        selección de sitio más allá de este sesgo.
 
         CAPACIDAD POR CELDA (ver config/materiales.yaml sección
         construccion y nucleo/construccion.py:
@@ -1103,6 +1132,24 @@ class SistemaMovimiento:
             return self._acercarse_a(pos_x, pos_y, con_pos.x, con_pos.y)
 
         if tipo == "refugio":
+            objetivo_refugio = None
+            if mem is not None and cap_mental is not None:
+                objetivo_refugio = objetivo_recordado(
+                    mem, "refugio", pos_x, pos_y, cap_mental, self.rng, self.config
+                )
+            if objetivo_refugio is not None:
+                dist = abs(objetivo_refugio[0] - pos_x) + abs(objetivo_refugio[1] - pos_y)
+                if dist > self.dist_deseada_territorio:
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_refugio)
+            elif temperamento is not None and self.rng.random() < temperamento.sociabilidad:
+                objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
+                    gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
+                )
+                if objetivo_conspecifico is not None:
+                    dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
+                    if dist > self.dist_deseada_conspecifico:
+                        return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
+
             if espacio_disponible_para_construir(
                 gestor, pos_x, pos_y, zona_idx, self.config
             ) < huella_m2_para("refugio", self.config_construccion):
