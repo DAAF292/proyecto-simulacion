@@ -37,6 +37,7 @@ from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
+from componentes.relaciones import Relaciones, Vinculo
 from componentes.semillas import Semillas
 from componentes.temperamento import Temperamento
 from nucleo.celda import Celda
@@ -77,7 +78,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.32-fase0"
+VERSION_ESQUEMA = "0.33-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -217,7 +218,12 @@ class Persistencia:
                     -- Semillas.especie_transportada, mismo criterio que
                     -- agarre -- perderla al recargar sería una regresión
                     -- silenciosa en un mecanismo con efecto real conectado.
-                    semillas TEXT
+                    semillas TEXT,
+                    -- relaciones (2026-09-04, ver componentes/relaciones.py):
+                    -- Relaciones.vinculos, mismo criterio que agarre/semillas
+                    -- -- perder los vinculos al recargar seria una regresion
+                    -- silenciosa en un mecanismo con efecto real conectado.
+                    relaciones TEXT
                 )
                 """
             )
@@ -439,6 +445,7 @@ class Persistencia:
                 inv = gestor.obtener_componente(eid, Inventario)
                 agarre = gestor.obtener_componente(eid, Agarre)
                 semillas = gestor.obtener_componente(eid, Semillas)
+                relaciones = gestor.obtener_componente(eid, Relaciones)
 
                 if pos and nec and dims and pf and temp and cm and pm and rep:
                     filas_criaturas.append(
@@ -495,6 +502,15 @@ class Persistencia:
                             pos.zona_idx,
                             json.dumps(agarre.objetos) if agarre else None,
                             semillas.especie_transportada if semillas else None,
+                            json.dumps(
+                                {
+                                    str(oid): {
+                                        "afinidad": v.afinidad,
+                                        "ultima_actualizacion_tick": v.ultima_actualizacion_tick,
+                                    }
+                                    for oid, v in (relaciones.vinculos.items() if relaciones else {}.items())
+                                }
+                            ) if relaciones else None,
                         )
                     )
             cur.executemany(
@@ -502,7 +518,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -720,7 +736,9 @@ class Persistencia:
             # fila[48] -- desplaza en +1 los índices e.especie..e.id_padre
             # de más abajo (fila[49]..fila[53]); semillas se añadió
             # después de agarre, como fila[49], y desplaza en +1 esos
-            # índices una vez más (fila[50]..fila[54]). La columna
+            # índices una vez más (fila[50]..fila[54]); relaciones se
+            # añadió después de semillas, como fila[50], y desplaza en
+            # +1 esos índices otra vez más (fila[51]..fila[55]). La columna
             # inventario (fila[46]) guarda un JSON único con
             # {"contenidos": ..., "objetos": ...} desde armas primitivas v2
             # (2026-09-03) -- ver carga de Inventario más abajo. Ninguno
@@ -816,15 +834,29 @@ class Persistencia:
                 gestor.anadir_componente(eid, Agarre(objetos=agarre_lista))
                 semillas_valor = fila[49] if fila[49] else ""
                 gestor.anadir_componente(eid, Semillas(especie_transportada=str(semillas_valor)))
+                relaciones_json = fila[50] if fila[50] else "{}"
+                relaciones_dict = json.loads(relaciones_json)
+                gestor.anadir_componente(
+                    eid,
+                    Relaciones(
+                        vinculos={
+                            int(oid): Vinculo(
+                                afinidad=float(datos["afinidad"]),
+                                ultima_actualizacion_tick=int(datos["ultima_actualizacion_tick"]),
+                            )
+                            for oid, datos in (relaciones_dict or {}).items()
+                        }
+                    ),
+                )
                 gestor.anadir_componente(eid, Intencion(accion=Accion.DEAMBULAR))
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[50]),
-                        nombre=fila[51],
-                        tick_nacimiento=fila[52],
-                        id_madre=fila[53],
-                        id_padre=fila[54],
+                        especie=Especie(fila[51]),
+                        nombre=fila[52],
+                        tick_nacimiento=fila[53],
+                        id_madre=fila[54],
+                        id_padre=fila[55],
                     ),
                 )
 

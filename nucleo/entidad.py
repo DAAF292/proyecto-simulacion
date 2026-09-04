@@ -27,6 +27,7 @@ from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
+from componentes.relaciones import Relaciones
 from componentes.semillas import Semillas
 from componentes.temperamento import Temperamento
 from nucleo.ciclo_vital import TICKS_POR_ANIO
@@ -377,6 +378,11 @@ def crear_criatura(
     # se usa de verdad depende de con qué especies de flora zoocora
     # coincida el individuo en su vida.
     gestor.anadir_componente(entidad_id, Semillas())
+    # Relaciones (2026-09-04, ver componentes/relaciones.py) -- mismo
+    # criterio que Agarre/Semillas: componente universal, vacío al nacer,
+    # para las 4 especies por igual. Este circulo solo escribe rencor en
+    # individuos conscientes (fauna queda vacío indefinidamente).
+    gestor.anadir_componente(entidad_id, Relaciones())
 
     dur_gest = _sortear_valor(rng, cfg_esp.get("duracion_gestacion_dias", [30.0, 60.0]))
     gestor.anadir_componente(
@@ -586,6 +592,11 @@ def nacer_criatura(
     # se usa de verdad depende de con qué especies de flora zoocora
     # coincida el individuo en su vida.
     gestor.anadir_componente(entidad_id, Semillas())
+    # Relaciones (2026-09-04, ver componentes/relaciones.py) -- mismo
+    # criterio que Agarre/Semillas: componente universal, vacío al nacer,
+    # para las 4 especies por igual. Un recién nacido no hereda los
+    # vínculos de sus progenitores.
+    gestor.anadir_componente(entidad_id, Relaciones())
 
     dur_gestacion = heredar(
         "duracion_gestacion_dias", rep_madre.duracion_gestacion_dias, gestacion.duracion_gestacion_padre
