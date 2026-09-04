@@ -3106,3 +3106,82 @@ de vínculos) es el siguiente círculo real de este arco, sin ninguna
 dependencia de código de este círculo salvo `Identidad.nombre` ya real;
 contenido del catálogo (`config/nombres.yaml`) PROVISIONAL, sin más
 revisión que "sonar razonable".
+
+### Círculo 2 -- Cimiento `Relaciones` + rencor, cerrado (spec, PR #14,
+### mergeado, 2026-09-04, misma tarde)
+
+Spec: `docs/superpowers/specs/2026-09-04-cimiento-relaciones-design.md`.
+Decisiones cerradas con Diego antes de escribir el spec: círculo
+empaquetado con su primer consumidor real (no cimiento aislado, mismo
+criterio que `Agarre`, para poder verificar contra el motor real);
+primer consumidor **rencor**, no amistad (único disparador claro ya
+existente: `nucleo/conflicto.py:resolver_disputa` vía
+`_resolver_posible_intruso`, refugio ocupado); tope de capacidad
+**reutiliza `CapacidadMental.memoria`** (mismo atributo que ya gobierna
+`MemoriaEspacial`, un individuo con buena memoria recuerda tanto sitios
+como personas). **Hallazgo real de paso, corregido**: el docstring de
+`componentes/capacidad_mental.py` decía "memoria... espera el hilo
+individual de nombres propios... sin consumidor todavía" -- desfasado,
+`nucleo/memoria.py:capacidad_memoria()` ya la consumía activamente desde
+antes de esta sesión (memoria espacial); corregido para documentar sus
+DOS consumidores reales.
+
+**Implementado**: `componentes/relaciones.py` (`Vinculo`/`Relaciones`,
+universal en las 4 especies, mismo patrón que `Agarre`/`Semillas`);
+`nucleo/relaciones.py` (`capacidad_vinculos()`, `ajustar_afinidad()` con
+purga FIFO por `ultima_actualizacion_tick` más antiguo, no por
+antigüedad de creación); consumidor en
+`sistema_movimiento.py:_resolver_posible_intruso` -- los cuatro
+desenlaces de `resolver_disputa` (CEDE_A/CEDE_B/ENFRENTAMIENTO/COMPARTE)
+escriben afinidad negativa sobre la parte CONSCIENTE, adicional al
+drenaje de `seguridad` ya existente, sin leer la afinidad en ningún
+punto de decisión todavía; persistencia (`VERSION_ESQUEMA` a
+`0.33-fase0`, mismo molde JSON que `Agarre.objetos`). 154/154 tests
+(14 nuevos, `tests/test_relaciones.py`).
+
+**Hallazgo real del propio proceso del pipeline, no del código**: a
+diferencia del círculo anterior (nombre propio), esta vez el agente
+**se saltó por completo la verificación contra el motor real
+(`BOSQUE_AUTO_TICKS`)** que el spec pedía explícitamente -- solo corrió
+`pytest` y declaró la tarea terminada. No se detectó como fallo del
+disyuntor (los tests SÍ pasaban), así que hizo falta la auditoría manual
+de Claude para notarlo. **Lección para encargos futuros**: el spec por
+sí solo no basta para garantizar que el agente ejecute el paso de
+verificación real -- conviene que el propio encargo (`docs/superpowers/
+encargos/`) lo nombre como paso explícito y obligatorio, no solo como
+parte de una sección de spec que el agente puede decidir omitir.
+
+**Auditoría manual de Claude antes de mergear, dos niveles**: (1) diff
+completo revisado línea a línea -- sin bugs, wiring correcto
+(`tick_actual` plumbing a través de `main.py` → `SistemaMovimiento.
+ejecutar(gestor, mundo, reloj)` → `_calcular_dormir` →
+`_resolver_posible_intruso`, `self.umbral_consciencia_agencia`
+reutilizado correctamente, no inventado). (2) Corrida real
+(`BOSQUE_AUTO_TICKS`, 2000 y 4000 ticks, dos veces): **0 filas de
+`Relaciones` no vacías en ambas** -- diagnosticado, NO es un bug: la
+población de gnomos colapsó en ambas corridas (1 vivo a los 2000 ticks,
+0 a los 4000 -- mismo problema de fragilidad/colapso ya documentado en
+"Sobrepoblación...", no una regresión de este círculo) antes de que dos
+conscientes coincidieran en el refugio completado exacto de uno de
+ellos. Para no dejarlo en "probablemente funciona", se construyó un
+arnés dirigido que fuerza el escenario a través del despacho REAL
+(`Accion.DORMIR` con memoria de refugio ya registrada, no llamando al
+método interno a mano como sí hacen los tests del PR) -- confirmó
+rencor escrito correctamente con el `tick_actual` real del reloj. Mismo
+patrón de verificación que el commit original de `conflicto.py`
+(`2640a82`) ya había aplicado en su día. **Pendiente real, ya conocido
+desde el propio `conflicto.py` original, no nuevo de este círculo**: si
+el disparador de refugio ocupado llega a ocurrir con población real
+corriendo sola sin intervención sigue sin confirmarse -- ahora aún menos
+observable en la práctica por la fragilidad de gnomo, no resuelto aquí.
+
+**Coste real medido**: **$0.189459**, un único intento de 3 posibles,
+sin reintentos.
+
+**Pendiente real tras este círculo**: amistad (afinidad positiva, mismo
+cimiento, círculo futuro); ningún consumidor LEE `Relaciones` todavía
+para cambiar comportamiento (p.ej. modular `indice_asertividad_social`
+por rencor previo); decaimiento del rencor con el tiempo, sin resolver;
+`relaciones.min_vinculos_por_individuo`/`max_vinculos_por_individuo`/
+`delta_rencor_disputa` PROVISIONALES sin calibrar; fauna sigue sin
+`Relaciones` real, aplazado, no descartado.
