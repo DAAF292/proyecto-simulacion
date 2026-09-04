@@ -3464,3 +3464,85 @@ definido, luego depuramos todo lo que hemos encontrado") -- empezar por
 el hallazgo más concreto y accionable (gestación vs. supervivencia de
 gnomo) antes de la pregunta más general de sobrepoblación/colapso ya
 documentada en su propia sección de este archivo.
+
+## Investigación de causas del colapso reproductivo de gnomo (2026-09-04,
+## misma tarde, tras cerrar el arco "hilo individual")
+
+Arranque real: verificado que una hembra gestante NO tiene mayor riesgo
+de morir por tick que cualquier otra hembra adulta (ratio 0.59x,
+gestar es ligeramente MÁS seguro, no menos) -- el 95-96% de fracaso
+reproductivo medido antes es pura matemática de exposición (riesgo de
+fondo compuesto sobre 4800-6240 ticks de gestación). Diego pidió
+investigar la causa de fondo y proponer soluciones; delegado a un fork
+con instrucciones explícitas de no tocar código real, solo medir contra
+el motor (arneses en scratchpad, no en el repo:
+`diagnostico_riesgo_gestacion.py`, `diagnostico_causas_colapso.py`, 5-7
+semillas × 6000-9000 ticks, sin persistencia SQLite para velocidad).
+
+**Hipótesis inicial, refutada por datos reales**: se sospechaba que
+gnomo, al ser consciente, queda exento del "sesgo de territorio"
+(`sistema_movimiento.py:_calcular_deambular`) y por tanto vaga más lejos
+de la comida conocida. Medido: gnomo es la especie MEJOR alimentada de
+las 4 (saciedad media 0.736, solo 9.16% del tiempo en crisis <0.2,
+distancia media a comida 0.32 celdas) -- muy por delante de lobo
+(0.490/27.12%), conejo (0.653/21.93%) y ardilla (0.620/23.63%).
+Descartada esta vía por completo.
+
+**Causa real, medida con dos hallazgos que se combinan**:
+1. **Depredación real y letal**: 67 encuentros lobo-gnomo detectados
+   (radio≤3, 5 semillas × 6000 ticks), **47.76% terminaron en la
+   muerte del gnomo** dentro de los 500 ticks siguientes. Mecánicamente
+   esperable -- `magnitud_disposicion_por_peso` entre lobo (60-90kg) y
+   gnomo (8-15kg) da ~0.65 de disposición de caza solo por la diferencia
+   de masa. Muertes totales en la muestra: gnomo 45 depredación + 44
+   inanición (90 total) frente a conejo 656 y ardilla 168 -- gnomo muere
+   MENOS en términos absolutos que las otras dos especies.
+2. **Sin ningún margen reproductivo que compense ni siquiera esa cifra
+   menor**: comparando gestación/camada/factor_base_concepción de las 4
+   especies (`config/poblacion.yaml`) -- gnomo tiene la PEOR combinación
+   posible de los tres a la vez: gestación más larga con diferencia
+   (200-260 días, 4-13x más que las otras), camada fija en exactamente 1
+   (sin margen), y la tasa de concepción más baja del catálogo (empatada
+   con lobo, 0.0033). Lobo comparte esa misma tasa de concepción baja
+   pero la compensa con gestación 4x más corta (60-75 días) y camada
+   4-6x mayor -- con el riesgo de fondo medido, la supervivencia esperada
+   de una gestación de lobo es ~40% frente al 4% de gnomo. **El
+   rendimiento reproductivo esperado por intento de gnomo es
+   aproximadamente 50 veces menor que el de lobo**, pese a partir de la
+   misma probabilidad de concebir.
+
+**Conclusión causal**: gnomo no muere de forma anormal -- muere a un
+ritmo razonable para su tamaño y la densidad de depredadores. Lo que no
+tiene es NINGÚN margen reproductivo para absorber ese ritmo, porque su
+estrategia (gestación larguísima + camada de 1, un patrón k-estratega
+puro) parece haberse calibrado sin relación real con el riesgo de fondo
+que el resto del motor ya produce -- mientras que conejo/ardilla
+(r-estrategas: gestación corta, camadas grandes, concepción más
+frecuente) sostienen población pese a sufrir MÁS muertes absolutas,
+simplemente porque las reemplazan mucho más rápido.
+
+**Propuestas entregadas por el fork, ninguna implementada, decisión
+pendiente de Diego**:
+- **A (recomendada primero)**: recalibrar conjuntamente gestación/
+  camada/factor_base_concepción de gnomo contra el riesgo de fondo ya
+  medido -- mismo criterio implícito que ya sostiene a lobo, calibración
+  numérica pura, sin mecánica nueva.
+- **B**: reducir el riesgo de fondo general (inanición/depredación) si
+  el harness completo confirma que es demasiado agresivo para cualquier
+  actividad sostenida de miles de ticks -- palanca más neutral (afecta a
+  las 4 especies igual), conecta directamente con "Sobrepoblación..."
+  ya documentada arriba.
+- **C**: ley física de movilidad reducida en gestación avanzada
+  (reencuadre de la idea original de Diego de "pareja que recolecta para
+  la embarazada" -- pero SIN depender de que exista pareja/asentamiento,
+  ambos frágiles hoy; una hembra grávida se mueve/expone menos por la
+  carga física real, ley biológica general aplicable a cualquier
+  especie que gestee). Más superficie de diseño nueva que A/B.
+
+**Pendiente real, explícito**: no se midió encuentro/captura real para
+lobo-conejo ni lobo-ardilla (solo lobo-gnomo) -- no se puede confirmar
+si la letalidad por encuentro de gnomo es anómala frente a otras presas
+o refleja el mismo patrón general; las cifras de riesgo de fondo vienen
+de 5-7 semillas, no del harness completo de 15×12000 ya pendiente desde
+la sección "Sobrepoblación...". Sin decisión tomada sobre cuál de las 3
+propuestas seguir -- pendiente de conversación con Diego.
