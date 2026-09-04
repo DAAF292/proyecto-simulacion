@@ -1,0 +1,27 @@
+# ==============================================================================
+# config/nombres.yaml
+# Catálogo de nombres propios por especie y sexo
+#
+# Primer círculo del arco "hilo individual" (ver docs/superpowers/specs/
+# 2026-09-04-nombre-propio-design.md). Generación por sílabas fijas
+# combinadas al azar: nombre = prefijo + sufijo (concatenación directa, sin
+# separador) -- prefijos terminados en consonante y sufijos que empiezan en
+# vocal, para que la concatenación suene natural.
+#
+# Solo "gnomo" está poblado -- única especie consciente hoy
+# (decision.umbral_consciencia_agencia, config/fisiologia.yaml). El resto de
+# especies queda deliberadamente sin entrada; acceso permisivo por .get() en
+# el código consumidor, sin romper si una especie no tiene catálogo.
+#
+# PROVISIONAL: contenido curado a mano por Diego + Claude (2026-09-04), sin
+# ninguna revisión más allá de que suene razonable -- candidato a ajuste si
+# al verlo en la crónica real algo desentona. Sílabas originales, sin
+# reutilizar nombres reconocibles de ninguna obra existente.
+# ==============================================================================
+
+nombres:
+  gnomo:
+    prefijos_masculinos: [Grod, Thal, Bram, Dorn, Krug, Fenn, Borg, Ulm]
+    sufijos_masculinos: [in, ar, und, eld, ol, ir, un, ash]
+    prefijos_femeninos: [Brin, Isel, Mor, Thal, Sil, Grim, Fenn, Ver]
+    sufijos_femeninos: [a, ia, eda, ith, ora, una, en, elda]

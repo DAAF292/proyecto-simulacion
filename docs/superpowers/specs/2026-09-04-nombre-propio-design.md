@@ -68,26 +68,28 @@ todavía.
 
 ## Arquitectura
 
-### Catálogo (`config/nombres.yaml`)
+### Catálogo (`config/nombres.yaml`) — YA ESCRITO, no forma parte del encargo
 
-Por especie, dos pares prefijo/sufijo por sexo:
+Curado directamente por Diego + Claude en conversación (no es tarea para
+el pipeline: es una calibración de estilo sin criterio de éxito
+verificable mecánicamente, misma categoría que la poda de comentarios
+narrativos que ya falló 2/2 delegada a `mini-swe-agent`). El fichero
+`config/nombres.yaml` ya existe con contenido real:
 
 ```yaml
-gnomo:
-  prefijos_masculinos: [...]
-  sufijos_masculinos: [...]
-  prefijos_femeninos: [...]
-  sufijos_femeninos: [...]
+nombres:
+  gnomo:
+    prefijos_masculinos: [Grod, Thal, Bram, Dorn, Krug, Fenn, Borg, Ulm]
+    sufijos_masculinos: [in, ar, und, eld, ol, ir, un, ash]
+    prefijos_femeninos: [Brin, Isel, Mor, Thal, Sil, Grim, Fenn, Ver]
+    sufijos_femeninos: [a, ia, eda, ith, ora, una, en, elda]
 ```
 
-~8–10 elementos en cada lista (≈70–100 combinaciones por sexo). Solo
-`gnomo` poblado; el resto de especies con listas vacías o ausentes —
-acceso permisivo por `.get()`, mismo criterio que otros catálogos del
-proyecto (`config/materiales.yaml`), sin romper si una especie no tiene
-entrada. Guía de contenido para quien redacte el catálogo final (no una
-validación en código): prefijos que terminen en consonante y sufijos que
-empiecen en vocal, para que la concatenación directa (prefijo+sufijo, sin
-separador) suene natural.
+Solo `gnomo` poblado; el resto de especies sin entrada — acceso permisivo
+por `.get()`, mismo criterio que otros catálogos del proyecto, sin romper
+si una especie no tiene catálogo. El encargo al pipeline debe tratar este
+fichero como dato de entrada ya cerrado — **no generar ni modificar su
+contenido**, solo leerlo desde el código nuevo.
 
 ### Asignación (`nucleo/entidad.py`)
 
