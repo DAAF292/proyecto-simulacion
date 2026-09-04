@@ -35,6 +35,7 @@ from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
 from nucleo.asentamiento import asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
+from nucleo.parentesco import es_familia_directa
 from nucleo.construccion import (
     construccion_propia,
     espacio_disponible_para_construir,
@@ -989,6 +990,11 @@ class SistemaMovimiento:
         bono_arma_propietario = self._bono_arma_empunada(gestor, propietario_id)
         bono_arma_intruso = self._bono_arma_empunada(gestor, intruso_id)
 
+        # Parentesco directo (2026-09-04, nucleo/parentesco.py, círculo 5
+        # del arco "hilo individual"): padre/madre-hijo o hermanos suman
+        # cohesión en resolver_disputa, mismo mecanismo que mismo_grupo.
+        son_familia = es_familia_directa(propietario_id, intruso_id, gestor)
+
         resultado = resolver_disputa(
             temperamento,
             urgencia_propietario,
@@ -998,6 +1004,7 @@ class SistemaMovimiento:
             self.config_conflicto,
             bono_arma_a=bono_arma_propietario,
             bono_arma_b=bono_arma_intruso,
+            son_familia=son_familia,
         )
 
         if resultado == ResultadoDisputa.COMPARTE:

@@ -69,16 +69,18 @@ def resolver_disputa(
     config_conflicto: dict[str, Any],
     bono_arma_a: float = 0.0,
     bono_arma_b: float = 0.0,
+    son_familia: bool = False,
 ) -> ResultadoDisputa:
     """Resuelve una disputa bilateral entre A y B -- función SIMÉTRICA,
     ninguno de los dos es "el que pregunta" (mismo criterio que
     magnitud_disposicion_por_peso: mide la relación, no privilegia un
     lado).
 
-    1. Mismo grupo (mismo asentamiento): alta probabilidad de COMPARTE,
-       modulada por sociabilidad+empatía de AMBOS -- una comunidad
-       cohesionada convive en vez de disputar, pero hace falta que los
-       DOS estén dispuestos, no solo uno.
+    1. Mismo grupo (mismo asentamiento) O familia directa: alta
+       probabilidad de COMPARTE, modulada por sociabilidad+empatía de
+       AMBOS -- una comunidad cohesionada (o dos familiares) convive en
+       vez de disputar, pero hace falta que los DOS estén dispuestos,
+       no solo uno.
     2. Ajenos entre sí: se comparan los índices de asertividad de ambos.
        Diferencia amplia -> cede el de menor índice. Diferencia pequeña
        Y ambos con agresividad alta -> ENFRENTAMIENTO (empate reñido
@@ -90,12 +92,23 @@ def resolver_disputa(
     primer consumidor real de robo/agravio genérico para este
     resolutor. Función simétrica: ningún lado está privilegiado por
     defecto. Si un lado no puede portar armas (p.ej. sin Agarre o sin
-    Temperamento) su bono es 0."""
-    if mismo_grupo:
+    Temperamento) su bono es 0.
+
+    son_familia (2026-09-04, nucleo/parentesco.py, círculo 5 del arco
+    "hilo individual"): True si A y B son padre/madre-hijo o hermanos
+    (calculado por el consumidor, no por esta función). Activa la misma
+    rama de cohesión que mismo_grupo, sumando bono_cohesion_familia a la
+    cohesión calculada -- un sumando que AUMENTA la probabilidad de
+    COMPARTE, no un resultado garantizado (leyes neutras: un familiar
+    muy poco cohesionado puede, en principio, seguir llegando a
+    ENFRENTAMIENTO)."""
+    if mismo_grupo or son_familia:
         cohesion = (
             temperamento_a.sociabilidad + temperamento_a.empatia
             + temperamento_b.sociabilidad + temperamento_b.empatia
         ) / 4.0
+        if son_familia:
+            cohesion += float(config_conflicto.get("bono_cohesion_familia", 0.2))
         umbral_comparte = float(config_conflicto.get("umbral_cohesion_comparte", 0.4))
         if cohesion >= umbral_comparte:
             return ResultadoDisputa.COMPARTE

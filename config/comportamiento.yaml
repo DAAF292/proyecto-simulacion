@@ -135,6 +135,12 @@ conflicto:
   # para que dos miembros del mismo asentamiento compartan en vez de
   # disputar.
   umbral_cohesion_comparte: 0.4
+  # Bono de cohesión (2026-09-04, círculo 5 "hilo individual", ver
+  # nucleo/parentesco.py) sumado a la cohesión cuando A y B son familia
+  # directa (padre/madre-hijo o hermanos) -- se suma con independencia
+  # de si comparten asentamiento. No garantiza COMPARTE, solo lo hace
+  # más probable. PROVISIONAL, sin calibrar.
+  bono_cohesion_familia: 0.2
   # Diferencia de índice de asertividad por debajo de la cual se
   # considera "empate reñido" -- sin retirada limpia si además ambos
   # son agresivos.
