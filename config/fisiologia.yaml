@@ -40,6 +40,14 @@ necesidades:
     # sin calibrar contra el motor en marcha.
     bono_confort_refugio: 0.3
     bono_confort_fogata: 0.3
+    # bono_confort_pareja (2026-09-04, circulo 4b -- ver
+    # nucleo/relaciones.py:pareja_presente y sistema_necesidades.py). SUMAN
+    # al mismo objetivo aditivo que refugio/fogata y al drenaje/recuperacion
+    # de seguridad, solo cuando la pareja derivada (afinidad mutua >=
+    # relaciones.umbral_pareja) esta en la celda EXACTA de la entidad
+    # CONSCIENTE. PROVISIONAL, sin calibrar contra el harness completo.
+    bono_confort_pareja: 0.15
+    bono_seguridad_pareja: 0.05
     tasa_perdida_impulso_reproductivo_por_tick: 0.005
     probabilidad_muerte_saciedad_critica: 0.005
     probabilidad_muerte_deshidratacion: 0.005

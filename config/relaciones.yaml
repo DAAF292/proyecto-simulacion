@@ -32,3 +32,10 @@ relaciones:
   # consciente escribe aunque la otra parte no lo sea. PROVISIONAL, sin
   # calibrar.
   delta_afinidad_concepcion: 0.15
+  # Umbral de "pareja estable" (2026-09-04, circulo 4b -- ver
+  # nucleo/relaciones.py:son_pareja). Dos individuos son pareja si la
+  # afinidad supera este umbral en AMBAS direcciones. PROVISIONAL, sin
+  # calibrar contra el harness completo: una sola concepcion (0.15) no
+  # basta sola; hacen falta dos o mas concepciones/amistad entre la
+  # misma pareja.
+  umbral_pareja: 0.3

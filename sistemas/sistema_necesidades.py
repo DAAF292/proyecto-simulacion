@@ -63,6 +63,7 @@ from componentes.intencion import Accion, Intencion
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
+from componentes.relaciones import Relaciones
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.agua import profundidad_agua_potable
@@ -75,6 +76,7 @@ from nucleo.fuego import fogata_en, hay_refugio_en
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_individual
+from nucleo.relaciones import pareja_presente
 from nucleo.reloj import Reloj
 
 
@@ -116,6 +118,19 @@ class SistemaNecesidades:
         # sustituyen).
         self.bono_confort_refugio: float = float(self.defecto.get("bono_confort_refugio", 0.3))
         self.bono_confort_fogata: float = float(self.defecto.get("bono_confort_fogata", 0.3))
+        # Bono de pareja estable por cercania (2026-09-04, circulo 4b -- ver
+        # nucleo/relaciones.py:pareja_presente). Mismo patr\u00f3n aditivo que
+        # refugio/fogata: se suma al objetivo de confort y a la seguridad solo
+        # cuando la pareja derivada esta en la celda EXACTA de una entidad
+        # CONSCIENTE. PROVISIONAL, sin calibrar contra el harness completo.
+        self.bono_confort_pareja: float = float(self.defecto.get("bono_confort_pareja", 0.15))
+        self.bono_seguridad_pareja: float = float(self.defecto.get("bono_seguridad_pareja", 0.05))
+        self.umbral_pareja: float = float(
+            self.config.get("relaciones", {}).get("umbral_pareja", 0.3)
+        )
+        self.umbral_consciencia_agencia: float = float(
+            self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
         self.tasa_recup_seguridad: float = float(
             self.defecto.get("tasa_recuperacion_seguridad", 0.05)
         )
@@ -236,6 +251,7 @@ class SistemaNecesidades:
             temperamento = gestor.obtener_componente(eid, Temperamento)
             mem = gestor.obtener_componente(eid, MemoriaEspacial)
             cap_mental = gestor.obtener_componente(eid, CapacidadMental)
+            relaciones = gestor.obtener_componente(eid, Relaciones)
 
             if nec is None or pos is None or dims is None or ident is None:
                 continue
@@ -323,6 +339,21 @@ class SistemaNecesidades:
                 obj_termico += self.bono_confort_refugio
             if fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
                 obj_termico += self.bono_confort_fogata
+            # Pareja estable (2026-09-04, circulo 4b): si la pareja
+            # derivada (afinidad mutua >= relaciones.umbral_pareja) esta en
+            # la celda EXACTA y la propia entidad es CONSCIENTE, suma su
+            # bono de confort -- un sumando mas del mismo objetivo, no un
+            # sustituto. La fauna no consulta pareja_presente en absoluto.
+            if (
+                relaciones is not None
+                and cap_mental is not None
+                and cap_mental.consciencia >= self.umbral_consciencia_agencia
+                and pareja_presente(
+                    gestor, eid, relaciones, pos.x, pos.y, pos.zona_idx,
+                    self.umbral_pareja,
+                )
+            ):
+                obj_termico += self.bono_confort_pareja
             obj_termico = max(0.0, min(1.0, obj_termico))
             if nec.confort_termico < obj_termico:
                 nec.confort_termico = min(
@@ -366,6 +397,22 @@ class SistemaNecesidades:
                 nec.seguridad = max(0.0, nec.seguridad - drenaje_efectivo)
             elif nec.seguridad < 1.0:
                 nec.seguridad = min(1.0, nec.seguridad + self.tasa_recup_seguridad)
+
+            # Pareja estable (2026-09-04, circulo 4b): bono aditivo de
+            # seguridad emocional por cercania -- se aplica DESPUES del
+            # drenaje/recuperacion, independiente de si hay una amenaza
+            # drenando este mismo tick, capado a 1.0. Requiere entidad
+            # consciente y pareja realmente presente en la celda exacta.
+            if (
+                relaciones is not None
+                and cap_mental is not None
+                and cap_mental.consciencia >= self.umbral_consciencia_agencia
+                and pareja_presente(
+                    gestor, eid, relaciones, pos.x, pos.y, pos.zona_idx,
+                    self.umbral_pareja,
+                )
+            ):
+                nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_pareja)
 
             # Refugio instintivo (ver docstring de
             # sistema_movimiento.py:_calcular_dormir). Se registra la
