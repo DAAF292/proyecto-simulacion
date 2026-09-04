@@ -14,6 +14,7 @@ from typing import Any
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.posicion import Posicion
+from componentes.reproduccion import Reproduccion
 from nucleo.ciclo_vital import probabilidad_muerte_vejez
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
@@ -94,6 +95,8 @@ class SistemaCicloVital:
                     )
 
                 # 2. Emisión de evento histórico de defunción
+                rep = gestor.obtener_componente(entidad_id, Reproduccion)
+                sexo_valor = rep.sexo.value if rep is not None else None
                 bus_eventos.emitir(
                     Evento(
                         tipo="Muerte",
@@ -104,6 +107,7 @@ class SistemaCicloVital:
                             "causa": "vejez",
                             "especie": identidad.especie.value,
                             "nombre": identidad.nombre,
+                            "sexo": sexo_valor,
                             "x": pos.x if pos else 0,
                             "y": pos.y if pos else 0,
                             "zona_idx": pos.zona_idx if pos else 0,

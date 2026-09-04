@@ -508,6 +508,8 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
                 datos_crisis = {"tipo_crisis": tipo_crisis.value, "especie": identidad.especie.value}
                 if identidad.nombre:
                     datos_crisis["nombre"] = identidad.nombre
+                rep_crisis = gestor.obtener_componente(id_entidad, Reproduccion)
+                datos_crisis["sexo"] = rep_crisis.sexo.value if rep_crisis is not None else None
                 bus.emitir(
                     Evento(
                         tipo="CrisisMental",

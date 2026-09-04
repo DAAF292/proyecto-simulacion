@@ -53,3 +53,63 @@ def test_herida_especie_masculina_sin_cambios():
     assert frases == [
         "Tick 1: un lobo resulta herido por depredacion (vitalidad restante 0.4)."
     ]
+
+
+# --- Nombre propio real (spec 2026-09-04-nombre-propio-design.md) ---
+# Ley: cuando hay nombre propio, el narrador usa ESE nombre como sujeto y
+# concuerda el participio (herido/herida) por el SEXO REAL del individuo;
+# el fallback (genero gramatical de la especie) se mantiene EXACTO para
+# quien no lleva nombre real.
+
+def _evento_con_nombre(nombre, sexo, especie="gnomo", tipo="Herida", **datos):
+    return _evento(tipo, especie, nombre=nombre, sexo=sexo, **datos)
+
+
+def test_sujeto_usa_nombre_propio_en_muerte():
+    frases = narrar(
+        [_evento("Muerte", "gnomo", nombre="Grodin", sexo="macho", causa="vejez")],
+        gestor=None,
+    )
+    assert frases == ["Tick 1: Grodin ha muerto por vejez."]
+
+
+def test_terminacion_por_sexo_real_hembra_con_nombre_propio():
+    frases = narrar(
+        [_evento("Herida", "gnomo", nombre="Brin", sexo="hembra",
+                 causa="depredacion", vitalidad_restante=0.4)],
+        gestor=None,
+    )
+    assert frases == [
+        "Tick 1: Brin resulta herida por depredacion (vitalidad restante 0.4)."
+    ]
+
+
+def test_terminacion_por_sexo_real_macho_con_nombre_propio():
+    frases = narrar(
+        [_evento("Herida", "gnomo", nombre="Grodin", sexo="macho",
+                 causa="depredacion", vitalidad_restante=0.4)],
+        gestor=None,
+    )
+    assert frases == [
+        "Tick 1: Grodin resulta herido por depredacion (vitalidad restante 0.4)."
+    ]
+
+
+def test_nombre_que_coincide_con_fallback_usa_fallback():
+    # Un nombre que reproduce el patron `{especie}_{entidad_id}` (entidad 7)
+    # NO se trata como nombre propio -- vuelve a "{articulo} {especie}".
+    frases = narrar(
+        [_evento("CrisisMental", "gnomo", nombre="gnomo_7", tipo_crisis="catatonia")],
+        gestor=None,
+    )
+    assert frases == ["Tick 1: un gnomo entra en crisis mental (catatonia)."]
+
+
+def test_hembra_con_nombre_propio_en_muerte_no_confunde_con_especie_ardilla():
+    # La ardilla es femenina; un gnomo hembra con nombre propio usa el
+    # nombre (no "una gnomo") y el participio por sexo real.
+    frases = narrar(
+        [_evento("Muerte", "gnomo", nombre="Brin", sexo="hembra", causa="vejez")],
+        gestor=None,
+    )
+    assert frases == ["Tick 1: Brin ha muerto por vejez."]

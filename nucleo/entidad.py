@@ -211,6 +211,29 @@ def crear_fogata(
     return fid
 
 
+def _generar_nombre(
+    rng: random.Random,
+    catalogo_especie: dict[str, Any],
+    sexo: Sexo,
+) -> str | None:
+    """Construye un nombre propio real (prefijo + sufijo concatenados) para
+    una especie consciente, o None si el catalogo de ese sexo esta vacio o
+    no existe entrada para la especie (fauna: lobo/conejo/ardilla siguen sin
+    nombre, con el fallback `especie_id` actual). Sin chequeo de unicidad:
+    dos gnomos pueden compartir nombre (spec 2026-09-04)."""
+    if not catalogo_especie:
+        return None
+    if sexo == Sexo.MACHO:
+        prefijos = catalogo_especie.get("prefijos_masculinos") or []
+        sufijos = catalogo_especie.get("sufijos_masculinos") or []
+    else:
+        prefijos = catalogo_especie.get("prefijos_femeninos") or []
+        sufijos = catalogo_especie.get("sufijos_femeninos") or []
+    if not prefijos or not sufijos:
+        return None
+    return rng.choice(prefijos) + rng.choice(sufijos)
+
+
 def crear_criatura(
     gestor: GestorEntidades,
     especie: Especie,
@@ -242,6 +265,29 @@ def crear_criatura(
     cfg_esp = config.get("rangos_raciales", {}).get(especie.value, {})
     entidad_id = gestor.crear_entidad()
 
+    # Sexo y consciencia se sortean ANTES que Identidad (2026-09-04): el
+    # nombre propio real depende de ambos (spec
+    # 2026-09-04-nombre-propio-design.md), así que se resuelven en una
+    # sola pasada y se reutilizan aquí abajo sin re-sortear.
+    sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
+    consciencia_individual = _sortear_valor(rng, cfg_esp.get("consciencia", [0.0, 0.5]))
+
+    # Nombre propio real para conscientes con catálogo poblado por sexo
+    # (solo gnomo hoy; lobo/conejo/ardilla siguen con el fallback
+    # `especie_id`). Sin chequeo de unicidad: dos gnomos pueden compartir
+    # nombre.
+    umbral_consciencia = float(
+        config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+    )
+    if nombre:
+        nombre_entidad = nombre
+    elif consciencia_individual >= umbral_consciencia:
+        nombre_entidad = _generar_nombre(
+            rng, config.get("nombres", {}).get(especie.value, {}), sexo
+        ) or f"{especie.value}_{entidad_id}"
+    else:
+        nombre_entidad = f"{especie.value}_{entidad_id}"
+
     # 2. Dimensiones Físicas (se sortea ANTES que Identidad porque
     # tick_nacimiento depende de dims.longevidad cuando hay edad inicial).
     dims = DimensionesFisicas(
@@ -268,7 +314,7 @@ def crear_criatura(
         entidad_id,
         Identidad(
             especie=especie,
-            nombre=nombre if nombre else f"{especie.value}_{entidad_id}",
+            nombre=nombre_entidad,
             tick_nacimiento=tick_nacimiento,
         ),
     )
@@ -294,7 +340,7 @@ def crear_criatura(
         voluntad=_sortear_valor(rng, cfg_esp.get("voluntad", [0.2, 0.6])),
         resiliencia=_sortear_valor(rng, cfg_esp.get("resiliencia", [0.3, 0.7])),
         estabilidad_mental_maxima=_sortear_valor(rng, cfg_esp.get("estabilidad_mental_maxima", [0.4, 0.8])),
-        consciencia=_sortear_valor(rng, cfg_esp.get("consciencia", [0.0, 0.5])),
+        consciencia=consciencia_individual,
     )
     gestor.anadir_componente(entidad_id, mental)
 
@@ -332,7 +378,6 @@ def crear_criatura(
     # coincida el individuo en su vida.
     gestor.anadir_componente(entidad_id, Semillas())
 
-    sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gest = _sortear_valor(rng, cfg_esp.get("duracion_gestacion_dias", [30.0, 60.0]))
     gestor.anadir_componente(
         entidad_id,
@@ -394,6 +439,8 @@ def nacer_criatura(
     gestacion: Gestacion,
     mutacion_fraccion: float,
     zona_idx: int = 0,
+    nombres: dict[str, Any] | None = None,
+    umbral_consciencia_agencia: float = 0.3,
 ) -> int:
     """
     Fábrica ECS de nacimiento por reproducción -- herencia de atributos y
@@ -422,12 +469,36 @@ def nacer_criatura(
     capacidad_madre = gestor.obtener_componente(id_madre, CapacidadMental)
     rep_madre = gestor.obtener_componente(id_madre, Reproduccion)
     rango_racial = rangos_raciales[especie.value]
+    # El padre viaja en la instantánea de Gestacion (nunca en vivo): se
+    # lee aqui para heredar la consciencia ANTES que Identidad, mismo
+    # criterio que el nombre propio (spec 2026-09-04).
+    capacidad_padre = gestacion.capacidad_mental_padre
 
     def heredar(nombre_campo: str, valor_madre_campo: float, valor_padre_campo: float) -> float:
         minimo, maximo = rango_racial[nombre_campo]
         return _heredar_valor(rng, valor_madre_campo, valor_padre_campo, minimo, maximo, mutacion_fraccion)
 
     entidad_id = gestor.crear_entidad()
+
+    # Sexo y consciencia se sortean ANTES que Identidad (2026-09-04): el
+    # nombre propio real depende de ambos (spec
+    # 2026-09-04-nombre-propio-design.md), así que se resuelven en una
+    # sola pasada y se reutilizan aquí abajo sin re-sortear.
+    sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
+    consciencia_heredada = heredar(
+        "consciencia", capacidad_madre.consciencia, capacidad_padre.consciencia
+    )
+
+    # Nombre propio real para conscientes con catálogo poblado por sexo
+    # (solo gnomo hoy; lobo/conejo/ardilla siguen con el fallback
+    # `especie_id`). Sin chequeo de unicidad: dos gnomos pueden compartir
+    # nombre.
+    if consciencia_heredada >= umbral_consciencia_agencia:
+        nombre_nacido = _generar_nombre(
+            rng, (nombres or {}).get(especie.value, {}), sexo
+        ) or f"{especie.value}_{entidad_id}"
+    else:
+        nombre_nacido = f"{especie.value}_{entidad_id}"
 
     dims_padre = gestacion.dimensiones_padre
     dims = DimensionesFisicas(
@@ -458,7 +529,7 @@ def nacer_criatura(
         entidad_id,
         Identidad(
             especie=especie,
-            nombre=f"{especie.value}_{entidad_id}",
+            nombre=nombre_nacido,
             tick_nacimiento=tick_actual,
             id_madre=id_madre,
             id_padre=gestacion.id_padre,
@@ -479,7 +550,6 @@ def nacer_criatura(
     )
     gestor.anadir_componente(entidad_id, temp)
 
-    capacidad_padre = gestacion.capacidad_mental_padre
     mental = CapacidadMental(
         inteligencia=heredar("inteligencia", capacidad_madre.inteligencia, capacidad_padre.inteligencia),
         memoria=heredar("memoria", capacidad_madre.memoria, capacidad_padre.memoria),
@@ -490,7 +560,7 @@ def nacer_criatura(
             capacidad_madre.estabilidad_mental_maxima,
             capacidad_padre.estabilidad_mental_maxima,
         ),
-        consciencia=heredar("consciencia", capacidad_madre.consciencia, capacidad_padre.consciencia),
+        consciencia=consciencia_heredada,
     )
     gestor.anadir_componente(entidad_id, mental)
 
@@ -517,7 +587,6 @@ def nacer_criatura(
     # coincida el individuo en su vida.
     gestor.anadir_componente(entidad_id, Semillas())
 
-    sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
     dur_gestacion = heredar(
         "duracion_gestacion_dias", rep_madre.duracion_gestacion_dias, gestacion.duracion_gestacion_padre
     )

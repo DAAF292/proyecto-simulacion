@@ -30,16 +30,17 @@ def _es_femenino(especie: str | None) -> bool:
 
 
 _PLANTILLAS = {
-    "Muerte": "Tick {tick}: {articulo} {especie} ha muerto por {causa}.",
+    "Muerte": "Tick {tick}: {sujeto} ha muerto por {causa}.",
     # Bloque C2 (criatura.docx): una captura ya no siempre mata, puede
     # dejar herida a la presa -- vitalidad_restante viene de
     # sistema_depredacion.py. {terminacion} concuerda el participio
-    # (herido/herida) con el mismo genero que {articulo}.
-    "Herida": "Tick {tick}: {articulo} {especie} resulta herid{terminacion} por {causa} (vitalidad restante {vitalidad_restante}).",
+    # (herido/herida) por el sexo REAL cuando hay nombre propio, y por el
+    # genero gramatical de la especie en el fallback (spec 2026-09-04).
+    "Herida": "Tick {tick}: {sujeto} resulta herid{terminacion} por {causa} (vitalidad restante {vitalidad_restante}).",
     # Bloque F3: solo se emite al ENTRAR en crisis (sistema_decision.py),
     # no en cada tick que dura -- tipo_crisis es el valor del Accion
     # correspondiente (huida_erratica/crisis_violenta/catatonia).
-    "CrisisMental": "Tick {tick}: {articulo} {especie} entra en crisis mental ({tipo_crisis}).",
+    "CrisisMental": "Tick {tick}: {sujeto} entra en crisis mental ({tipo_crisis}).",
     # 6.3 Reproduccion, emparejamiento (sistema_reproduccion.py): se emite
     # al concebir. El nacimiento tiene su propio evento/plantilla, mas
     # abajo -- son dos hechos distintos (concepcion vs. parto), separados
@@ -51,7 +52,7 @@ _PLANTILLAS = {
     # id_madre/id_padre viajan en evento.datos para quien quiera
     # narrarlos con mas detalle en el futuro, aunque esta plantilla minima
     # (sin variantes, paso 9) todavia no los usa.
-    "Nacimiento": "Tick {tick}: nace {articulo} {especie}.",
+    "Nacimiento": "Tick {tick}: nace {sujeto}.",
     # Fase terreno 1 (sistema_clima.py): se emite solo al ENTRAR en una
     # estacion nueva, no cada dia -- mismo patron que CrisisMental.
     "CambioEstacion": "Tick {tick}: comienza la estacion de {estacion}.",
@@ -69,14 +70,36 @@ def _contexto(evento: Evento) -> dict:
         "entidad_id": evento.entidad_id,
     }
     contexto.update(evento.datos)
-    # (2026-09-04, correccion real -- Diego leyendo la cronica en vivo:
-    # "un ardilla entra en crisis mental" es gramaticalmente incorrecto,
-    # "ardilla" es femenino) -- articulo se calcula aqui, una vez, para
-    # que cualquier plantilla que lo pida ({articulo} {especie}) concuerde
-    # sin repetir la logica en cada entrada de _PLANTILLAS.
-    femenino = _es_femenino(contexto.get("especie"))
-    contexto["articulo"] = "una" if femenino else "un"
-    contexto["terminacion"] = "a" if femenino else "o"
+    especie = contexto.get("especie")
+    nombre = contexto.get("nombre")
+    # Nombre propio real (spec 2026-09-04): es "real" cuando NO coincide
+    # con el patron de fallback `{especie}_{entidad_id}` que producen las
+    # fabricas ECS para quien no tiene catalogo poblado (fauna). Sin
+    # chequeo de unicidad -- dos gnomos pueden compartir nombre.
+    if especie is not None and evento.entidad_id is not None:
+        nombre_fallback = f"{especie}_{evento.entidad_id}"
+    else:
+        nombre_fallback = None
+    tiene_nombre_propio = bool(nombre) and nombre != nombre_fallback
+    contexto["tiene_nombre_propio"] = tiene_nombre_propio
+    if tiene_nombre_propio:
+        # Concordancia por SEXO REAL del individuo: macho -> "herido",
+        # hembra -> "herida"; cualquier valor inesperado cae a "herida"
+        # (hembra), mismo criterio permisivo que _es_femenino abajo.
+        contexto["sujeto"] = nombre
+        contexto["terminacion"] = "o" if contexto.get("sexo") == "macho" else "a"
+    else:
+        # Fallback exacto de siempre: "{articulo} {especie}", con el
+        # genero gramatical del NOMBRE de la especie (no del sexo del
+        # individuo -- "ardilla" es femenino en espanol). La correccion
+        # "un ardilla" -> "una ardilla" (2026-09-04, Diego leyendo la
+        # cronica en vivo) se mantiene EXACTA aqui para quien no tiene
+        # nombre propio.
+        femenino = _es_femenino(especie)
+        articulo = "una" if femenino else "un"
+        contexto["articulo"] = articulo
+        contexto["terminacion"] = "a" if femenino else "o"
+        contexto["sujeto"] = f"{articulo} {especie}" if especie is not None else ""
     return contexto
 
 

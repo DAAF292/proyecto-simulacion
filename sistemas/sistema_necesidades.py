@@ -63,6 +63,7 @@ from componentes.intencion import Accion, Intencion
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
+from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.agua import profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
@@ -448,6 +449,8 @@ class SistemaNecesidades:
         zona_idx: int = 0,
     ) -> None:
         """Instancia la necromasa, emite el evento Muerte con coordenadas y purga la entidad."""
+        rep = gestor.obtener_componente(entidad_id, Reproduccion)
+        sexo_valor = rep.sexo.value if rep is not None else None
         masas, agua_tisular = componer_necromasa(
             dims.peso, self.fraccion_masa_seca, self.fraccion_hueso, self.fraccion_agua_tisular
         )
@@ -473,6 +476,7 @@ class SistemaNecesidades:
                     "causa": causa,
                     "especie": ident.especie.value,
                     "nombre": ident.nombre,
+                    "sexo": sexo_valor,
                     "x": pos_x,
                     "y": pos_y,
                     "zona_idx": zona_idx,
