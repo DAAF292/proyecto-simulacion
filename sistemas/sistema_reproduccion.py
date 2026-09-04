@@ -136,6 +136,10 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
                 gestor, rng, posicion_madre.x, posicion_madre.y, identidad_madre.especie,
                 rangos_raciales, tick_actual, id_madre, gestacion, mutacion_fraccion,
                 zona_idx=posicion_madre.zona_idx,
+                nombres=config.get("nombres", {}),
+                umbral_consciencia_agencia=float(
+                    config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+                ),
             )
             # El parto no coloca a la criatura en agua mas honda que su
             # propia altura (ver nucleo/agua.py:celda_nacimiento_segura):
@@ -156,6 +160,7 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
             # nombre/tick_nacimiento; sin estas dos claves quedarían
             # siempre en None/0 para TODA cría nacida en partida.
             identidad_hijo = gestor.obtener_componente(id_hijo, Identidad)
+            rep_hijo = gestor.obtener_componente(id_hijo, Reproduccion)
             bus.emitir(
                 Evento(
                     tipo="Nacimiento",
@@ -165,6 +170,7 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
                     datos={
                         "especie": identidad_madre.especie.value,
                         "nombre": identidad_hijo.nombre,
+                        "sexo": rep_hijo.sexo.value if rep_hijo is not None else None,
                         "tick_nacimiento": identidad_hijo.tick_nacimiento,
                         "id_madre": id_madre,
                         "id_padre": gestacion.id_padre,

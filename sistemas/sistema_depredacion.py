@@ -19,6 +19,7 @@ from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
+from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposicion_por_tamano
@@ -197,6 +198,7 @@ class SistemaDepredacion:
         nec_cazador = gestor.obtener_componente(cazador_id, Necesidades)
         ident_cazador = gestor.obtener_componente(cazador_id, Identidad)
         ident_presa = gestor.obtener_componente(presa_id, Identidad)
+        rep_presa = gestor.obtener_componente(presa_id, Reproduccion)
 
         if (
             dims_cazador is None
@@ -264,6 +266,9 @@ class SistemaDepredacion:
                     entidad_id=presa_id,
                     datos={
                         "atacante_id": cazador_id,
+                        "especie": ident_presa.especie.value,
+                        "nombre": ident_presa.nombre,
+                        "sexo": rep_presa.sexo.value if rep_presa is not None else None,
                         "vitalidad_restante": pool_presa.vitalidad,
                     },
                 )
@@ -327,6 +332,7 @@ class SistemaDepredacion:
                     "cazador_id": cazador_id,
                     "especie": ident_presa.especie.value,
                     "nombre": ident_presa.nombre,
+                    "sexo": rep_presa.sexo.value if rep_presa is not None else None,
                     "x": pos_x,
                     "y": pos_y,
                     "zona_idx": zona_idx,
