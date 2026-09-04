@@ -26,6 +26,7 @@ from componentes.construccion import Construccion
 from componentes.identidad import Identidad
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.posicion import Posicion
+from componentes.relaciones import Relaciones
 from nucleo.asentamiento import (
     Asentamiento,
     agrupar_por_proximidad,
@@ -36,6 +37,7 @@ from nucleo.asentamiento import (
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
+from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 
@@ -49,6 +51,9 @@ class SistemaAsentamiento:
             self.config_asentamiento.get("poblacion_minima_asentamiento", 3)
         )
         self.radio_cluster: int = int(self.config_asentamiento.get("radio_cluster_celdas", 6))
+        self.umbral_consciencia_agencia: float = float(
+            self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
         self._miembros_vistos_ayer: set[frozenset[int]] = set()
 
     def ejecutar(
@@ -155,3 +160,80 @@ class SistemaAsentamiento:
 
         mundo.asentamientos = nuevos
         self._miembros_vistos_ayer = miembros_hoy
+
+        # Acreción diaria de amistad por convivencia (2026-09-04,
+        # nucleo/relaciones.py): justo después de recalcular
+        # mundo.asentamientos, cada par de miembros CONSCIENTES del
+        # mismo asentamiento gana afinidad positiva. Efecto colateral
+        # de vivir juntos, sin ninguna acción de la Utility AI.
+        self._acrecion_amistad_convivencia(gestor, mundo, reloj)
+
+    def _acrecion_amistad_convivencia(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+    ) -> None:
+        """(2026-09-04, nucleo/relaciones.py) Acreci\u00f3n diaria de amistad.
+
+        Afinidad POSITIVA emergente de convivencia real en el mismo
+        asentamiento, sin ninguna acci\u00f3n nueva de la Utility AI \u2014 efecto
+        colateral de vivir juntos, no una decisi\u00f3n consciente de
+        "hacerse amigos". Solamente ESCRIBE afinidad, nunca la lee para
+        cambiar comportamiento.
+
+        Mismo patr\u00f3n que el rencor (sistema_movimiento.py
+        :_ajustar_afinidad_rencor): un individuo NO consciente no
+        escribe ni recibe nada; cada parte usa su propia
+        capacidad_vinculos.
+        """
+        delta = float(
+            self.config.get("relaciones", {}).get("delta_amistad_convivencia_dia", 0.05)
+        )
+        if delta <= 0.0:
+            return
+        for asentamiento in mundo.asentamientos.values():
+            conscientes: list[int] = []
+            for mid in asentamiento.miembros:
+                cap_mental = gestor.obtener_componente(mid, CapacidadMental)
+                if (
+                    cap_mental is not None
+                    and cap_mental.consciencia >= self.umbral_consciencia_agencia
+                ):
+                    conscientes.append(mid)
+            # Cada PAR distinto, una sola vez; ambas direcciones.
+            for i in range(len(conscientes)):
+                for j in range(i + 1, len(conscientes)):
+                    self._ajustar_amistad(
+                        gestor, conscientes[i], conscientes[j], delta, reloj.tick_actual
+                    )
+                    self._ajustar_amistad(
+                        gestor, conscientes[j], conscientes[i], delta, reloj.tick_actual
+                    )
+
+    def _ajustar_amistad(
+        self,
+        gestor: GestorEntidades,
+        autor_id: int,
+        otro_id: int,
+        delta: float,
+        tick_actual: int,
+    ) -> None:
+        """Escribe afinidad POSITIVA de `autor_id` hacia `otro_id`."""
+        cap_mental = gestor.obtener_componente(autor_id, CapacidadMental)
+        if (
+            cap_mental is None
+            or cap_mental.consciencia < self.umbral_consciencia_agencia
+        ):
+            return
+        relaciones = gestor.obtener_componente(autor_id, Relaciones)
+        if relaciones is None:
+            return
+        capacidad = capacidad_vinculos(cap_mental, self.config)
+        ajustar_afinidad(
+            relaciones,
+            otro_id,
+            delta,
+            tick_actual,
+            capacidad,
+        )

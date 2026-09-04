@@ -4,8 +4,10 @@ docs/superpowers/specs/2026-09-04-cimiento-relaciones-design.md).
 
 Cada test es una "ley fisica" del comportamiento real que se valida, no
 una descripcion de que hace el codigo -- misma convencion que el resto
-del proyecto. Este circulo SOLO escribe afinidad NEGATIVA (rencor) y
-nunca la lee en ningun punto de decision.
+del proyecto. El cimiento escribe afinidad en AMBOS signos: NEGATIVA
+(rencor, sistema_movimiento.py) y POSITIVA (amistad por convivencia,
+sistema_asentamiento.py, tercer circulo). Nunca la lee en ningun punto
+de decision.
 """
 import random
 import tempfile
@@ -29,6 +31,7 @@ from nucleo.mundo import Mundo
 from nucleo.persistencia import Persistencia
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.reloj import Reloj
+from sistemas.sistema_asentamiento import SistemaAsentamiento
 from sistemas.sistema_movimiento import SistemaMovimiento
 
 RUTA_CONFIG = Path(__file__).parent.parent / "config"
@@ -384,3 +387,128 @@ def test_ley_rencor_real_sobrevive_roundtrip_por_bd():
         assert intr in rest.vinculos
         assert rest.vinculos[intr].afinidad < 0.0
         assert rest.vinculos[intr].ultima_actualizacion_tick == 50
+
+
+# ---------------------------------------------------------------------------
+# sistema_asentamiento.py -- acreci\u00f3n diaria de amistad por convivencia
+# ---------------------------------------------------------------------------
+
+def _escenario_asentamiento(config, rng, por_asentamiento):
+    """Crea un SistemaAsentamiento y puebla mundo.asentamientos.
+
+    por_asentamiento: dict id_asentamiento -> lista de especificaciones de
+    miembros, cada una (consciencia) para crear un gnomo.
+    Devuelve (gestor, mundo, sistema, mapa ids -> eid, reloj).
+    """
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(123))
+    sistema = SistemaAsentamiento(config, rng)
+    ids = {}
+    for aid, specs in por_asentamiento.items():
+        eids = []
+        for (consciencia,) in specs:
+            eid = _gnomo(gestor, config, rng, _temp(), _cap(consciencia=consciencia))
+            eids.append(eid)
+        mundo.asentamientos[aid] = Asentamiento(
+            id=aid, centro=(0, 0), miembros=frozenset(eids), zona_idx=0
+        )
+        ids[aid] = eids
+    reloj = Reloj()
+    reloj.tick_actual = 100
+    return gestor, mundo, sistema, ids, reloj
+
+
+def test_ley_convivencia_escribe_afinidad_positiva_mutua():
+    config = _config()
+    rng = random.Random(11)
+    gestor, mundo, sistema, ids, reloj = _escenario_asentamiento(
+        config, rng, {1: [(0.8,), (0.8,)]}
+    )
+    a, b = ids[1]
+    sistema._acrecion_amistad_convivencia(gestor, mundo, reloj)
+    delta = float(config["relaciones"]["delta_amistad_convivencia_dia"])
+    assert _rel(gestor, a).vinculos[b].afinidad == delta
+    assert _rel(gestor, b).vinculos[a].afinidad == delta
+    assert _rel(gestor, a).vinculos[b].ultima_actualizacion_tick == 100
+    assert _rel(gestor, b).vinculos[a].ultima_actualizacion_tick == 100
+
+
+def test_ley_no_consciente_no_escribe_ni_recibe_nada():
+    config = _config()
+    rng = random.Random(21)
+    gestor, mundo, sistema, ids, reloj = _escenario_asentamiento(
+        config, rng, {1: [(0.8,), (0.0,)]}
+    )
+    cons, no_cons = ids[1]
+    sistema._acrecion_amistad_convivencia(gestor, mundo, reloj)
+    # los pares se forman solo entre CONSCIENTES: un no-consciente no
+    # escribe ni recibe nada, y el consciente no se empareja con él.
+    assert _rel(gestor, cons).vinculos == {}
+    assert _rel(gestor, no_cons).vinculos == {}
+
+
+def test_ley_asentamientos_distintos_no_ganan_nada_entre_si():
+    config = _config()
+    rng = random.Random(31)
+    gestor, mundo, sistema, ids, reloj = _escenario_asentamiento(
+        config, rng, {1: [(0.8,)], 2: [(0.8,)]}
+    )
+    a = ids[1][0]
+    b = ids[2][0]
+    sistema._acrecion_amistad_convivencia(gestor, mundo, reloj)
+    assert _rel(gestor, a).vinculos == {}
+    assert _rel(gestor, b).vinculos == {}
+
+
+def test_ley_asentamiento_con_un_unico_consciente_no_genera_pares():
+    config = _config()
+    rng = random.Random(41)
+    gestor, mundo, sistema, ids, reloj = _escenario_asentamiento(
+        config, rng, {1: [(0.8,)]}
+    )
+    a = ids[1][0]
+    # no debe lanzar excepci\u00f3n ni escribir nada
+    sistema._acrecion_amistad_convivencia(gestor, mundo, reloj)
+    assert _rel(gestor, a).vinculos == {}
+
+
+def test_ley_amistad_subela_el_rencor_existente():
+    config = _config()
+    rng = random.Random(51)
+    gestor, mundo, sistema, ids, reloj = _escenario_asentamiento(
+        config, rng, {1: [(0.8,), (0.8,)]}
+    )
+    a, b = ids[1]
+    # rencor previo de a hacia b (mismo consumidor que el c\u00edrculo 2)
+    relaciones_a = _rel(gestor, a)
+    relaciones_a.vinculos[b] = Vinculo(afinidad=-0.25, ultima_actualizacion_tick=0)
+    sistema._acrecion_amistad_convivencia(gestor, mundo, reloj)
+    delta = float(config["relaciones"]["delta_amistad_convivencia_dia"])
+    # -0.25 + 0.05 = -0.20, menos negativo; el de b hacia a parte de 0
+    assert _rel(gestor, a).vinculos[b].afinidad == -0.25 + delta
+    assert _rel(gestor, b).vinculos[a].afinidad == delta
+
+
+def test_ley_amistad_respeta_la_purga_fifo_de_capacidad():
+    config = _config()
+    rng = random.Random(61)
+    # memoria 0 => capacidad_vinculos = min (2): un gnomo con 3
+    # convivientes purga el v\u00ednculo m\u00e1s antiguo.
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(123))
+    sistema = SistemaAsentamiento(config, rng)
+    # tick actual 200; los v\u00ednculos existentes se marcan viejos (tick 0)
+    miembros = [_gnomo(gestor, config, rng, _temp(), _cap(memoria=0.0)) for _ in range(3)]
+    mundo.asentamientos[1] = Asentamiento(
+        id=1, centro=(0, 0), miembros=frozenset(miembros), zona_idx=0
+    )
+    reloj = Reloj()
+    reloj.tick_actual = 200
+    sistema._acrecion_amistad_convivencia(gestor, mundo, reloj)
+    delta = float(config["relaciones"]["delta_amistad_convivencia_dia"])
+    capacidad = capacidad_vinculos(_cap(memoria=0.0), config)
+    for eid in miembros:
+        # a lo sumo `capacidad` v\u00ednculos, todos positivos
+        assert len(_rel(gestor, eid).vinculos) <= capacidad
+        for vin in _rel(gestor, eid).vinculos.values():
+            assert vin.afinidad > 0.0

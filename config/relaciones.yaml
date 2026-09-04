@@ -4,8 +4,10 @@
 # componentes/relaciones.py, nucleo/relaciones.py y
 # docs/superpowers/specs/2026-09-04-cimiento-relaciones-design.md.
 #
-# Este circulo solo escribe rencor (afinidad negativa); amistad
-# (afinidad positiva) es un circulo futuro sobre el mismo cimiento.
+# Este circulo (2026-09-04) escribe afinidad en AMBOS signos:
+# negativa por rencor (consumidor sistema_movimiento.py) y positiva por
+# amistad de convivencia (consumidor sistema_asentamiento.py). Nadie
+# LEE Relaciones para cambiar comportamiento todavia.
 # ==============================================================================
 
 relaciones:
@@ -18,3 +20,8 @@ relaciones:
   # ocupado (consumidor: sistema_movimiento.py:_resolver_posible_intruso).
   # PROVISIONAL.
   delta_rencor_disputa: -0.25
+  # Magnitud (POSITIVA) de la amistad que gana cada dia un par de
+  # miembros CONSCIENTES del mismo asentamiento por convivencia
+  # (consumidor: sistema_asentamiento.py). PROVISIONAL, sin calibrar:
+  # con 0.05/dia, dos convivientes llegan al tope 1.0 en 20 dias.
+  delta_amistad_convivencia_dia: 0.05
