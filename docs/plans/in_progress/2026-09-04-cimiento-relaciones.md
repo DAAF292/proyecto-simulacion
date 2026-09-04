@@ -1,31 +1,59 @@
-# Cimiento de relaciones interpersonales (Relaciones) + rencor
+# Plan: Cimiento de relaciones interpersonales (Relaciones) + rencor
 
-Implementa la spec completa que está en
-`docs/superpowers/specs/2026-09-04-cimiento-relaciones-design.md` —
-léela por completo primero. Es la única fuente de verdad de qué
-construir.
+Spec de referencia: docs/superpowers/specs/2026-09-04-cimiento-relaciones-design.md
+(pieza 2 del arco "hilo individual", segundo círculo).
 
-## Qué NO tocar
+## Objetivo
+Construir el componente universal `Relaciones` (vacío, las 4 especies), su
+lógica de capacidad/purga (`nucleo/relaciones.py`), el primer consumidor real
+de rencor (afinidad NEGATIVA) en `_resolver_posible_intruso`
+(`sistema_movimiento.py`), su persistencia, y la corrección del docstring
+desactualizado de `componentes/capacidad_mental.py` campo `memoria`.
 
-- No implementes amistad ni ningún vínculo de afinidad POSITIVA — este
-  círculo solo produce afinidad negativa (rencor). El campo `afinidad`
-  admite el rango completo `[-1.0, 1.0]` por diseño, pero ningún camino
-  de código de esta tarea debe generar un valor positivo.
-- No añadas ningún consumidor que LEA `Relaciones` para cambiar
-  comportamiento (p.ej. modular `indice_asertividad_social` por rencor
-  previo) — este círculo solo ESCRIBE afinidad, nunca la lee en ningún
-  punto de decisión.
-- No implementes decaimiento del rencor con el tiempo — no hace falta
-  para esta tarea.
-- No toques nada de familia, linaje (`id_madre`/`id_padre`) ni
-  asentamiento/convivencia — fuera de alcance por completo.
-- No añadas nombre ni `Relaciones` con contenido real para fauna
-  (lobo/conejo/ardilla) — deben llevar el componente vacío y nunca
-  escribir en él en esta tarea.
-- No cambies la magnitud del drenaje de `Necesidades.seguridad` que
-  `_resolver_posible_intruso` ya aplica — el rencor es un efecto
-  ADICIONAL, no sustituye nada existente.
-- No toques `config/nombres.yaml`, `presentacion/narrador.py`, ni nada
-  del círculo anterior (nombre propio, ya cerrado y mergeado).
-- No modifiques `CLAUDE.md`, nada bajo `informes/`, ni ningún
-  `docs/historial_*.md`.
+## Ficheros a tocar (en orden)
+
+1. **`componentes/relaciones.py`** (nuevo): dataclasses `Vinculo`
+   (`afinidad`, `ultima_actualizacion_tick`) y `Relaciones`
+   (`vinculos: dict[int, Vinculo]`), dato puro. Rango afinidad [-1.0, 1.0].
+
+2. **`nucleo/relaciones.py`** (nuevo): `capacidad_vinculos()` (interpola
+   min/max por `CapacidadMental.memoria`) y `ajustar_afinidad()` (suma y
+   clampa a [-1.0,1.0]; si al tope, purga el vínculo con
+   `ultima_actualizacion_tick` más antiguo; vínculo existente se actualiza
+   sin purgar). Mismo patrón que `nucleo/memoria.py`.
+
+3. **`config/relaciones.yaml`** (nuevo): sección `relaciones` con
+   `min_vinculos_por_individuo: 2`, `max_vinculos_por_individuo: 6`,
+   `delta_rencor_disputa: -0.25` (PROVISIONALES).
+
+4. **`nucleo/entidad.py`**: añadir `Relaciones()` vacío en `crear_criatura`
+   y `nacer_criatura` (4 especies), mismo criterio que Agarre/Semillas.
+
+5. **`sistemas/sistema_movimiento.py`**:
+   - `ejecutar` recibe `reloj` opcional → deriva `tick_actual`.
+   - `_calcular_dormir` propaga `tick_actual`.
+   - `_resolver_posible_intruso` acepta `tick_actual`; tras el drenaje de
+     seguridad ya existente en cada desenlace (COMPARTE sin cambio;
+     CEDE_A: A hacia B si A consciente; CEDE_B: B hacia A si B consciente;
+     ENFRENTAMIENTO: cada parte hacia la otra si ES consciente), aplica
+     `ajustar_afinidad` con `delta_rencor_disputa` sobre el `Relaciones`
+     del consciente. Fauna (no consciente) nunca escribe.
+
+6. **`nucleo/persistencia.py`**: columna `relaciones TEXT` en
+   `componentes_estado`, serialización {entidad_id_str: {"afinidad": ..,
+   "ultima_actualizacion_tick": ..}}; carga y guardado. Subir
+   `VERSION_ESQUEMA`.
+
+7. **`componentes/capacidad_mental.py`**: corregir docstring de `memoria`
+   (documentar sus DOS consumidores reales: MemoriaEspacial y Relaciones).
+
+8. **`tests/test_relaciones.py`** (nuevo): leyes físicas (capacidad,
+   ajustar/purga, 4 desenlaces en movimiento, fábricas ECS añaden vacío,
+   roundtrip persistencia, verificación motor real via BOSQUE_AUTO_TICKS).
+
+9. **`main.py`**: `sistemas["movimiento"].ejecutar(gestor, mundo, reloj)`.
+
+## Fuera de alcance
+- Afinidad positiva (amistad), decaimiento, consumidores que LEAN
+  Relaciones, familia/linaje/asentamiento, fauna con nombre/Relaciones
+  real. No tocar nombres.yaml/narrador.py/CLAUDE.md/informes/historiales.
