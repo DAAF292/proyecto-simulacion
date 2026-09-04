@@ -1,39 +1,51 @@
-# Amistad por convivencia en el asentamiento
+# Plan: Amistad por convivencia en el asentamiento
 
-Implementa la spec completa que está en
-`docs/superpowers/specs/2026-09-04-amistad-convivencia-design.md` —
-léela por completo primero. Es la única fuente de verdad de qué
-construir.
+Spec: `docs/superpowers/specs/2026-09-04-amistad-convivencia-design.md`
+(única fuente de verdad). Tercer círculo del arco "hilo individual" —
+solamente ESCRIBE afinidad POSITIVA; ningún consumidor lee `Relaciones`
+en este círculo.
 
-## Paso OBLIGATORIO antes de dar la tarea por terminada
+## Qué construyo
 
-Además de que los tests unitarios pasen, **debes ejecutar el motor real
-con `BOSQUE_AUTO_TICKS` (varios miles de ticks) e inspeccionar la base
-de datos resultante** para confirmar que al menos un par de miembros
-conscientes del mismo asentamiento terminó con una entrada de afinidad
-POSITIVA real en `Relaciones.vinculos` (columna `relaciones` de
-`componentes_estado`). No declares la tarea completa solo con
-`pytest` en verde — la spec lo pide explícitamente y en la tarea
-anterior de este mismo arco se te olvidó hacerlo. Si tras una corrida
-razonable no aparece ningún caso real (por ejemplo, porque no llegó a
-formarse ningún asentamiento con 2+ miembros conscientes), dilo
-explícitamente en tu resumen final en vez de omitirlo.
+1. **Config** (`config/relaciones.yaml`): añadir
+   `relaciones.delta_amistad_convivencia_dia: 0.05` (PROVISIONAL).
+   Actualizar el comentario de cabecera (dice que la amistad es un
+   círculo futuro). No toco nada de `docs/historial_*.md` ni `CLAUDE.md`.
 
-## Qué NO tocar
+2. **`sistemas/sistema_asentamiento.py`**: nueva acreción diaria de
+   amistad, llamada justo después de recalcular `mundo.asentamientos`
+   (fin de `ejecutar`). Para cada `Asentamiento`:
+   - Filtrar miembros a conscientes (`CapacidadMental.consciencia >=
+     decision.umbral_consciencia_agencia`).
+   - Para cada PAR distinto de conscientes, llamar `ajustar_afinidad`
+     en AMBAS direcciones con `delta = relaciones.delta_amistad_convivencia_dia`,
+     usando `capacidad_vinculos(cap_mental, config)` de cada uno
+     respectivamente.
+   - `tick_actual = reloj.tick_actual` para `ultima_actualizacion_tick`.
+   Reutilizo `ajustar_afinidad`/`capacidad_vinculos` tal cual están
+   (sin cambios) y el umbral de consciencia genérico.
 
-- No implementes ningún consumidor que LEA `Relaciones` para cambiar
-  comportamiento (p.ej. modular `indice_asertividad_social` por
-  amistad) — este círculo solo ESCRIBE afinidad positiva, igual que el
-  anterior solo escribía negativa.
-- No añadas ninguna exclusión por parentesco (`id_madre`/`id_padre`,
-  hermanos) — el mecanismo no debe consultar parentesco en absoluto.
-- No implementes decaimiento de amistad ni de rencor con el tiempo.
-- No añadas ningún límite de tamaño de asentamiento para esta acreción.
-- No toques nada de `sistema_movimiento.py` ni del consumidor de rencor
-  ya existente (`_resolver_posible_intruso`) — círculo ya cerrado, sin
-  relación con esta tarea salvo reutilizar `ajustar_afinidad`/
-  `capacidad_vinculos` tal cual están.
-- No toques pareja estable, familia derivada, ni biografía — círculos
-  futuros, fuera de esta tarea.
-- No modifiques `CLAUDE.md`, nada bajo `informes/`, ni ningún
-  `docs/historial_*.md`.
+3. **Tests** (`tests/test_relaciones.py`, mismo estilo "ley física"):
+   - pares conscientes del mismo asentamiento ganan afinidad positiva
+     mutua tras un día;
+   - miembro no-consciente no escribe ni recibe nada;
+   - individuos de asentamientos DISTINTOS no ganan nada entre sí;
+   - asentamiento con un único consciente no genera ningún par (sin
+     errores);
+   - rencor previo sube (menos negativo o positivo) tras la acreción;
+   - tope de capacidad: la acreción respeta la misma purga FIFO de
+     `ajustar_afinidad`.
+
+## Qué NO toco (por spec)
+- Nada de `sistema_movimiento.py` ni `_resolver_posible_intruso`; sin
+  parentesco; sin decaimiento; sin límite de tamaño; sin lecturas de
+  `Relaciones`; ni pareja estable/familia/biografía; ni CLAUDE.md /
+  informes / docs/historial_*.md.
+
+## Verificación final OBLIGATORIA
+Además de `pytest`, ejecutar el motor real con `BOSQUE_AUTO_TICKS`
+(varios miles de ticks) e inspeccionar la BD
+(`datos/bosque.db`, tabla `componentes_estado`, columna `relaciones`)
+confirmando al menos un par de miembros conscientes del mismo
+asentamiento con afinidad POSITIVA. Si no aparece ningún caso real,
+declararlo explícitamente.
