@@ -3415,3 +3415,52 @@ Con este círculo, quedan 5 de las 6 piezas originalmente numeradas del
 arco cerradas o implementadas -- solo falta biografía consultable
 (círculo 6 original); desarrollo personal sigue aplazado, decisión ya
 tomada.
+
+### Círculo 6 -- Biografía consultable, cierra el arco "hilo
+### individual" (implementado directamente por Claude, 2026-09-04)
+
+Diego confirmó explícitamente que esta pieza no encaja en la regla fija
+"Claude diseña, el pipeline implementa" -- no es funcionalidad nueva del
+MOTOR de simulación, es una consulta de solo lectura sobre
+`cronica_eventos` (ya persistida con `entidad_id` por fila desde el
+principio del proyecto), sin componente, sistema, ni efecto en ninguna
+decisión o tick. `Persistencia.biografia_de(entidad_id) -> list[Evento]`
+(`nucleo/persistencia.py`) reconstruye la crónica de un individuo en
+orden cronológico; RUIDO nunca aparece porque `persistir_eventos` ya lo
+descartaba desde antes de esta pieza. El resultado es directamente
+consumible por `presentacion/narrador.py:narrar(eventos, gestor=None)`
+YA EXISTENTE -- sin ningún wrapper nuevo, confirmado con un test
+dedicado y con una consulta real contra `datos/bosque.db` de una corrida
+de hoy ("Tick 422: Dorneld ha muerto por inanición."). 4 tests nuevos,
+195/195 en total. Sin coste de pipeline (implementación directa).
+
+**Con esto, el arco "hilo individual" completo queda cerrado**: nombre
+propio real, cimiento `Relaciones` + rencor, amistad por convivencia,
+afinidad por concepción, pareja estable derivada, parentesco derivado, y
+ahora biografía consultable -- 6 de 6 piezas originalmente planteadas en
+el informe de alternativas del 2026-09-04 (desarrollo personal con
+mutación causal de rasgos queda deliberadamente aplazado, decisión ya
+tomada al inicio del arco). Coste total medido del arco:
+`0.155374+0.189459+0.078748+0.114074+0.140223+0(círculo 5, implementado
+directamente)+0(círculo 6, implementado directamente) = $0.677878` de
+pipeline, más el trabajo directo de Claude en los círculos 5 y 6.
+
+**Pendiente real que el arco entero deja abierto, explícito**: ningún
+consumidor lee `Relaciones` salvo pareja estable (círculo 4b) todavía;
+decaimiento de afinidad sin resolver; fauna sin nombre/relaciones reales
+(aplazado, no descartado); abuelos/tíos bloqueados por limitación
+técnica real (purga de `Identidad` al morir); desarrollo personal con
+mutación causal, aplazado. **El hallazgo más importante que deja este
+arco no es sobre el hilo individual en sí, sino sobre la simulación de
+base**: tres círculos distintos (amistad/asentamiento, pareja,
+parentesco) no pudieron verificarse en juego libre por la misma causa de
+fondo -- la población de gnomo colapsa antes de tiempo, y en el círculo
+5 se descubrió que ni siquiera el ciclo reproductivo básico
+(concepción→nacimiento) se está completando con la semilla por defecto,
+porque la gestación (4800-6240 ticks) parece exceder sistemáticamente la
+supervivencia de una madre. **Esta es ahora la investigación prioritaria
+real**, según lo acordado con Diego ("primero implementamos todo lo
+definido, luego depuramos todo lo que hemos encontrado") -- empezar por
+el hallazgo más concreto y accionable (gestación vs. supervivencia de
+gnomo) antes de la pregunta más general de sobrepoblación/colapso ya
+documentada en su propia sección de este archivo.
