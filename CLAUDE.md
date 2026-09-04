@@ -3185,3 +3185,57 @@ por rencor previo); decaimiento del rencor con el tiempo, sin resolver;
 `relaciones.min_vinculos_por_individuo`/`max_vinculos_por_individuo`/
 `delta_rencor_disputa` PROVISIONALES sin calibrar; fauna sigue sin
 `Relaciones` real, aplazado, no descartado.
+
+### Círculo 3 -- Amistad por convivencia, cerrado (spec, PR #15,
+### mergeado, 2026-09-04, misma tarde)
+
+Spec: `docs/superpowers/specs/2026-09-04-amistad-convivencia-design.md`.
+Decisión real de Diego, contra mi propia recomendación: en vez del
+disparador más pequeño posible (reutilizar la rama `COMPARTE` de
+`_resolver_posible_intruso`, ya wireada, cero disparador nuevo), eligió
+el mecanismo más fiel a "amistad emerge de tiempo compartido" -- acreción
+DIARIA de afinidad positiva entre todo par de miembros CONSCIENTES del
+mismo asentamiento (`sistemas/sistema_asentamiento.py`, misma cadencia
+que ya recalcula membresía/liderazgo/almacén), sin excluir parentesco
+(un padre y su hijo adulto conviviendo SÍ acumulan amistad además de su
+vínculo de sangre ya existente por separado -- capas distintas por
+diseño, decisión ya cerrada). O(N²) por asentamiento y día, aceptado a
+la escala actual.
+
+**Implementado**: `_acrecion_amistad_convivencia`/`_ajustar_amistad` en
+`SistemaAsentamiento`, reutilizando `ajustar_afinidad`/
+`capacidad_vinculos` de `nucleo/relaciones.py` sin ningún cambio --
+mismo cimiento, segundo consumidor real, sin tocar
+`sistema_movimiento.py` ni el rencor ya existente.
+`config/relaciones.yaml` gana `delta_amistad_convivencia_dia` (0.05,
+PROVISIONAL -- 20 días de convivencia para llegar al tope). 160/160
+tests (6 nuevos), incluida la interacción con rencor ya existente
+(afinidad que ya era negativa sube hacia positivo sin ningún caso
+especial en el código) y el respeto al mismo tope/purga FIFO.
+
+**La lección del círculo anterior funcionó**: esta vez el encargo pedía
+`BOSQUE_AUTO_TICKS` como paso OBLIGATORIO, no solo el spec -- el agente
+sí lo ejecutó (15000 ticks, ~445 días simulados) y reportó con
+precisión un hallazgo honesto: **0 asentamientos con 2+ miembros
+conscientes llegaron a formarse en juego libre** con la semilla por
+defecto -- la población de 18 gnomos se extinguió (depredación +
+inanición + vejez) antes de que 3+ refugios quedaran lo bastante cerca
+para fundar un asentamiento (11 refugios construidos, todos dispersos).
+Causa ecológica ya conocida (mismo problema de fragilidad de gnomo /
+colapso de población documentado en "Sobrepoblación..."), no un defecto
+de este círculo -- el propio mecanismo está verificado correcto por los
+6 tests unitarios (que sí construyen asentamientos reales y confirman
+la física), simplemente no llegó a dispararse solo en esta corrida.
+Coste real: **$0.078748**, un único intento -- el más barato de los tres
+círculos de este arco hasta ahora.
+
+**Pendiente real tras esta pieza**: ningún consumidor lee la afinidad
+(positiva o negativa) todavía para cambiar comportamiento; decaimiento
+de amistad/rencor con el tiempo, sin resolver; `delta_amistad_
+convivencia_dia` PROVISIONAL sin calibrar; pareja estable, familia
+derivada, biografía -- círculos futuros del mismo arco, sin empezar;
+**el hallazgo de fondo (asentamientos que casi nunca llegan a formarse
+en juego libre por el colapso de población) afecta a CUALQUIER
+mecanismo futuro basado en asentamiento, no solo a amistad** -- candidato
+real a investigar antes de construir más piezas que dependan de que un
+asentamiento exista de verdad en una partida.
