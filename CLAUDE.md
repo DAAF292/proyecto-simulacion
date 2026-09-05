@@ -3743,3 +3743,100 @@ coordinación de caza en grupo, sin precedente en el motor actual.
 independiente; la caza en manada queda aparcada para una sesión
 dedicada aparte** -- ver la sección siguiente para el diseño real de
 "caballo", si llegó a cerrarse esa misma sesión.
+
+## Especie caballo + techo de presa por manada -- cerrado el mismo día,
+## implementado directamente por Claude tras un fallo real del pipeline
+## (2026-09-05, madrugada)
+
+Spec: `docs/superpowers/specs/2026-09-05-especie-caballo-design.md`.
+Caballo: herbívoro grande (400-500kg) en pradera, gestación
+deliberadamente corta (60-90 días, no los ~340 reales) por decisión
+consciente de sostenibilidad -- evita a propósito la misma trampa
+(gestación larga + cría única) que ya causa el colapso de gnomo.
+`Especie.CABALLO` nuevo, entrada completa en `rangos_raciales`,
+`caballos_iniciales: 9` en `sembrar_poblacion_inicial`.
+
+**El pipeline falló su único intento por una causa externa, no de
+contenido**: el proxy `litellm` agotó su presupuesto diario (~$1/día,
+mismo tipo de límite ya visto en incidentes anteriores del proyecto) y
+el modelo se quedó reintentando contra ese muro hasta agotar el timeout
+de 45 min sin tocar una sola línea de código (coste real $0.216,
+íntegro en reintentos fallidos). Diego pidió implementarlo
+directamente (excepción ya prevista: "Diego lo pide explícitamente").
+
+**Dos hallazgos reales, no anticipados en el spec, que cambiaron el
+alcance de la pieza durante la propia implementación**:
+
+1. **El filtro de búsqueda de presa dejaba a caballo completamente
+   inerte, no "difícil de cazar"**. `sistema_movimiento.py:_calcular_caza`
+   excluía CUALQUIER candidato que pesara igual o más que el propio
+   cazador (`dims_p.peso >= peso_cazador`) -- con caballo siempre más
+   pesado que lobo, un lobo NUNCA habría llegado siquiera a perseguirlo,
+   independientemente de lo difícil o fácil que fuera derribarlo. El
+   spec original asumía "difícil pero posible" (aceptable para este
+   círculo); la realidad era "imposible, cero interacción".
+2. Ante la pregunta directa de Diego ("hay que definir el paradigma de
+   depredador solitario frente a un conjunto que trabaja junto"), se
+   reencuadró como concepto real en vez de parche puntual: **techo de
+   presa por manada**. Un cazador SOLITARIO (sin conespecíficos cazando
+   activamente cerca) sigue limitado a su propio peso -- comportamiento
+   original, sin cambios, un lobo solo nunca va a por un caballo. Con
+   aliados cazando cerca (mismo dato y mismo radio -- `social.
+   radio_apoyo_grupal`, `contar_conspecificos_cercanos(...,
+   solo_cazando=True)` -- que YA usaba el bono de éxito existente en
+   `_resolver_ataque`, descubierto durante esta misma investigación que
+   YA había un germen de cooperación de caza en el motor, contradiciendo
+   lo que se había dicho antes de "sin precedente en el motor actual"),
+   el techo sube proporcionalmente
+   (`peso_cazador * (1 + aliados * factor_ampliacion_techo_manada)`,
+   factor=1.0 PROVISIONAL -- con eso, un lobo necesita ~5-8 aliados
+   cazando cerca para poder perseguir un caballo, del orden real de un
+   grupo de caza). Aplicado en los DOS puntos donde el motor decide "es
+   presa válida" -- `_calcular_caza` (hacia dónde caminar) y
+   `_es_presa_valida` (contacto directo en la misma celda) -- para que
+   el mecanismo funcione de punta a punta, no solo a medias.
+
+**Bug real, latente hasta este momento, expuesto y corregido de
+paso**: `magnitud_disposicion_por_peso` es SIMÉTRICA por diseño (mide
+cuánto pesa la diferencia, no quién tiene ventaja -- documentado así
+desde su creación). Hasta ahora esto nunca fue un problema porque el
+filtro de arriba garantizaba que el cazador SIEMPRE fuera el más
+pesado, así que "disposición alta" siempre coincidía con "ventaja del
+cazador". Al permitir perseguir presa más pesada, ese acoplamiento
+implícito se rompía: sin corrección, un lobo pequeño "atacando" un
+caballo enorme habría obtenido una disposición ALTA (por la gran
+diferencia de peso) interpretada como ventaja para el cazador --
+exactamente al revés de lo correcto. Corregido en
+`sistema_depredacion.py:_resolver_ataque`: se invierte el signo de
+`disp` cuando la presa pesa más que el cazador. Verificado que esto NO
+cambia nada del comportamiento actual con gnomo/conejo/ardilla (donde
+el cazador ya era siempre el más pesado por construcción) -- 209/209
+tests en verde, incluidos los existentes, sin ninguna regresión.
+
+**Verificado contra el motor real**: `BOSQUE_AUTO_TICKS=4000` sin
+excepciones. Caballo sostiene población de verdad -- 9 fundadores → 14
+creados, 9 vivos al final, reproducción funcionando tal como se diseñó
+para sostenibilidad. **Ningún caballo murió por depredación en esta
+corrida** -- honesto, no ocultado: lobo se extinguió (0/6 vivos) antes
+del tick 4000, así que nunca llegó a formarse ningún grupo de caza real
+que lo intentara. Mismo patrón que ya se ha visto varias veces hoy
+(mecanismo verificado correcto por tests dirigidos, pero su disparo
+real en juego libre bloqueado por la fragilidad de lobo, el mismo
+problema de fondo que motivó toda esta investigación).
+
+10 tests nuevos (`tests/test_especie_caballo.py`): especie distinta,
+fábricas ECS completas, siembra en pradera, techo de presa por manada
+(solitario rechaza, manada acepta, en ambos puntos de chequeo),
+corrección de signo (probabilidad de éxito baja para un lobo solo
+contra un caballo, confirmado estadísticamente sobre 200 intentos), y
+ratio de saciedad (una captura de caballo alimenta más del triple que
+una de conejo).
+
+**Pendiente real, explícito**: todo el catálogo de caballo y
+`factor_ampliacion_techo_manada=1.0` son PROVISIONALES, sin calibrar;
+la caza en manada real (varios lobos cazando juntos con éxito contra
+caballo) sigue sin observarse en juego libre -- necesita que lobo
+sobreviva lo bastante para formar un grupo, lo cual depende de resolver
+primero las propuestas A'/B' de la investigación de fragilidad (riesgo
+de fondo de inanición, relación depredador-presa de lobo) todavía sin
+empezar; sin representación visual, motor primero.
