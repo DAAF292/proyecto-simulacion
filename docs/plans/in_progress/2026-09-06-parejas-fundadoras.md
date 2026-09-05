@@ -1,41 +1,68 @@
-# Encargo: parejas fundadoras en la siembra de población inicial
+# Plan: parejas fundadoras en la siembra de población inicial
 
-**Spec completa**: `docs/superpowers/specs/2026-09-06-parejas-fundadoras-design.md`
--- léela entera antes de diseñar tu plan de implementación, contiene el
-diagnóstico, el diseño exacto de los dos cambios (firma nueva de
-`crear_criatura`, reestructuración del bucle de `sembrar_poblacion_inicial`)
-y el plan de verificación acordado con Diego.
+## Objetivo
 
-## Qué NO tocar
+Reducir la distancia de partida a cero para una fracción de la población
+fundadora sembrando parejas (macho + hembra) en la misma celda desde tick 0.
+Los dos únicos cambios son los que fija el spec (ver
+`docs/superpowers/specs/2026-09-06-parejas-fundadoras-design.md`):
+la firma de `crear_criatura` y el bucle de `sembrar_poblacion_inicial`.
+No se toca ningún sistema del motor ni ninguna tasa de
+`config/fisiologia.yaml`.
 
-- No modifiques `sistemas/sistema_reproduccion.py`, `sistemas/sistema_movimiento.py`,
-  `sistemas/sistema_necesidades.py` ni ningún otro sistema del motor --
-  este círculo es exclusivamente sobre cómo se siembra la población
-  fundadora en tick 0 (`nucleo/entidad.py`, `main.py`), nada de las
-  reglas que rigen el resto de la partida.
-- No toques `techo_fraccion_edad_inicial_longevidad`,
-  `factor_base_concepcion` de ninguna especie, ni ninguna tasa de
-  `config/fisiologia.yaml` -- ya investigadas hoy por separado, fuera de
-  alcance de este círculo.
-- No modifiques ninguna aserción de los tests ya existentes en `tests/`.
-- No declares `CLAUDE.md` como fichero a modificar.
+## Ficheros a modificar
 
-## Verificación obligatoria, explícita (no opcional)
+### 1. `nucleo/entidad.py` — `crear_criatura`
 
-1. Suite completa de tests en verde (`pytest`).
-2. `BOSQUE_AUTO_TICKS=3000` sin intervención, sin ninguna excepción.
-3. Comparación dirigida y PEQUEÑA contra el motor real: 5 semillas
-   nuevas (no reutilices semillas de ejecuciones anteriores) × 4000
-   ticks cada una, sin persistencia SQLite (arnés directo con
-   `main.py:cargar_configuracion`/`instanciar_sistemas`/
+- Añadir parámetro opcional al final de la firma:
+  `sexo_forzado: Sexo | None = None`.
+- Sustituir la línea
+  `sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])` por
+  `sexo = sexo_forzado if sexo_forzado is not None else rng.choice([Sexo.MACHO, Sexo.HEMBRA])`.
+- Con `sexo_forzado=None` (todo llamador existente) el comportamiento es
+  bit-a-bit idéntico: la línea de sorteo sigue ejecutándose igual, solo se
+  usa su resultado cuando no hay valor forzado.
+- No tocar `nacer_criatura` (el otro `rng.choice([Sexo.MACHO, Sexo.HEMBRA])`
+  del fichero, línea ~493): los nacimientos en partida siguen sorteando
+  sexo 50/50, explícitamente fuera de alcance.
+
+### 2. `main.py` — `sembrar_poblacion_inicial`
+
+- Importar `Sexo` desde `componentes.reproduccion`.
+- Reestructurar el bucle por especie (hoy `for _ in range(cantidad)`):
+  - `cantidad // 2` parejas: por cada pareja, UNA sola celda sorteada con
+    `rng_juego.choice(celdas_candidatas)` (mismo mecanismo que hoy), y dos
+    llamadas a `crear_criatura` con esa misma `(pos_x, pos_y)` —
+    `sexo_forzado=Sexo.MACHO` la primera, `sexo_forzado=Sexo.HEMBRA` la
+    segunda.
+  - Si `cantidad` es impar: el sobrante se siembra exactamente como hoy
+    (celda propia sorteada de forma independiente, `sexo_forzado=None`).
+- El resto de la función no cambia: registro en
+  `persistencia.registrar_entidad_nueva`, filtro de celdas, fallback
+  bosque→pradera, `techo_fraccion_edad_inicial_longevidad`.
+
+## Orden de implementación
+
+1. `nucleo/entidad.py` (firma + línea de sexo).
+2. `main.py` (import + bucle de parejas).
+3. Tests dirigidos de los ficheros afectados
+   (`tests/test_especie_caballo.py`, `tests/test_nombre_propio.py`,
+   `tests/test_parentesco.py`, `tests/test_relaciones.py`).
+4. Verificación completa (ver abajo).
+
+## Verificación
+
+1. `pytest` — suite completa en verde (216/216 esperados).
+2. `BOSQUE_AUTO_TICKS=3000` sin intervención, sin excepción.
+3. Comparación dirigida pequeña contra el motor real: 5 semillas NUEVAS ×
+   4000 ticks, sin persistencia SQLite (arnés directo con
+   `cargar_configuracion`/`instanciar_sistemas`/
    `sembrar_poblacion_inicial`/`sembrar_flora_inicial`/`ejecutar_tick`,
-   llamando `bus.limpiar()` cada tick), midiendo población final y
-   extinción por especie (gnomo, lobo, conejo, ardilla, caballo) CON el
-   cambio. No hace falta un lote más grande ni comparar contra un
-   baseline aparte para este círculo -- reporta los números tal cual
-   salgan como parte de tu resumen final. Si algún resultado es
-   ambiguo, dilo explícitamente en vez de forzar una conclusión.
+   `bus.limpiar()` cada tick), midiendo población final y extinción por
+   especie (gnomo, lobo, conejo, ardilla, caballo) CON el cambio. Reportar
+   los números tal cual en el resumen final.
 
-Escribe tu propio plan de implementación real (sobrescribiendo este
-fichero, ya movido a `docs/plans/in_progress/`) antes de tocar código,
-como siempre.
+## Fuera de alcance
+
+Sistemas del motor, `fisiologia.yaml`, `nacer_criatura`, tests existentes,
+`CLAUDE.md`.
