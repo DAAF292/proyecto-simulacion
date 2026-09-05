@@ -293,6 +293,21 @@ class SistemaNecesidades:
                     self.defecto.get("tasa_perdida_energia_por_tick", 0.01),
                 )
             )
+            # (2026-09-05, fragilidad de lobo) probabilidad_muerte_saciedad_critica
+            # gana el MISMO patron de override por especie que ya usan las
+            # tasas de decaimiento de arriba -- hasta ahora se leia una
+            # unica vez en __init__ desde self.defecto, sin ninguna
+            # especie poder anularla (asimetria real frente al resto de
+            # esta seccion). Sin override (gnomo/conejo/ardilla/caballo,
+            # sin entrada propia en config/fisiologia.yaml necesidades.*)
+            # el valor es identico al de siempre -- comportamiento sin
+            # cambios para las especies que ya estaban sanas.
+            prob_muerte_inanicion = float(
+                cfg_esp.get(
+                    "probabilidad_muerte_saciedad_critica",
+                    self.prob_muerte_inanicion,
+                )
+            )
 
             # 1. Decaimiento continuo de Saciedad, Hidratación y Aliviado,
             #    cada uno con su PERIODO DE PLENITUD (ver
@@ -457,7 +472,7 @@ class SistemaNecesidades:
                 if self.rng.random() < self.prob_muerte_ahogamiento:
                     causa_muerte = "ahogamiento"
             elif nec.saciedad <= 0.0:
-                if self.rng.random() < self.prob_muerte_inanicion:
+                if self.rng.random() < prob_muerte_inanicion:
                     causa_muerte = "inanicion"
             elif nec.hidratacion <= 0.0:
                 if self.rng.random() < self.prob_muerte_deshidratacion:

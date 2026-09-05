@@ -3946,3 +3946,131 @@ corregir que `impulso_reproductivo` no se resetea, compartido con el
 mismo problema de gnomo) siguen sin abordar, deliberadamente
 despriorizadas detrás de esta pieza -- candidatas naturales para
 retomar la investigación de fragilidad de lobo.
+
+## Fragilidad de lobo -- mejora real y medida (12/12 → 8/12 extinción),
+## NO una solución completa, y un hallazgo nuevo: vejez, no solo inanición
+## (2026-09-05, mismo día, tras "pero hay que solucionar eso")
+
+Diego, tras cerrar el fix de valentía de arriba, pidió explícitamente
+resolver de una vez la fragilidad de fondo de lobo, no solo seguir
+documentándola como pendiente. Se lanzó un fork con instrucciones de
+investigar a fondo (presupuesto calórico real, las dos propuestas A'/B'
+ya apuntadas, y los dos hallazgos menores sin detalle preservado de la
+investigación anterior) e implementar un fix verificado -- **el fork
+murió a mitad de camino por un límite de sesión (rate limit)**, dejando
+cambios reales pero sin comitear en el árbol de trabajo. Se auditaron y
+continuaron directamente en la sesión principal en vez de relanzar el
+fork.
+
+**Lo que el fork dejó, verificado y encontrado INSUFICIENTE al
+reprobar**: `config/fisiologia.yaml` sección `lobo` con
+`tasa_perdida_saciedad_por_tick` 8x más lento (0.012→0.0015) y
+`probabilidad_muerte_saciedad_critica` 5x más bajo (0.005→0.001), tras
+medir que el presupuesto calórico medio de lobo estaba casi exactamente
+en el punto de equilibrio (margen ~1.3%) y que subir
+`eficiencia_biomasa_saciedad` un 50% NO cambiaba nada (el problema no es
+cuánto alimenta cada captura, es el tiempo a saciedad exactamente 0
+entre capturas). El propio fork medía una mejora real (6 semillas × 5000
+ticks: extinción 6/6→4/6) -- **pero al reprobar esa misma configuración
+contra 12 semillas NUEVAS (501-512, nunca vistas) × 8000 ticks, dio
+12/12 EXTINCIÓN** -- la mejora original no generalizaba, muestra clásica
+de sobreajuste a un puñado de semillas. Un comentario del fork además
+decía "decaimiento a la mitad" cuando el valor real escrito (0.0015) es
+un 8x, no un 2x -- inconsistencia de documentación corregida de paso.
+
+**Llevar las mismas dos palancas al extremo tampoco bastaba**: probado
+0.0008/0.0004 (15x/12.5x más lento/bajo que el universal) sobre las
+mismas 12 semillas -- 9/12 extinción, con los 3 supervivientes en 1-2
+individuos (no poblaciones reales sostenidas). Confirma que la
+inanición NUNCA fue la única causa de fondo, por agresiva que se hiciera
+la mitigación.
+
+**HALLAZGO REAL, no visto en las investigaciones anteriores de este
+mismo día**: con la inanición casi neutralizada por esos valores
+extremos, un desglose de causas de muerte reales (8 semillas × 8000
+ticks) dio **VEJEZ como causa dominante (65.6%)**, inanición en segundo
+lugar (32.8%) -- antes quedaba completamente enmascarada bajo el 90% de
+muertes por inanición del config original (medido en la investigación
+de esa misma tarde, sección "Investigación de causas del colapso
+reproductivo de gnomo"). Causa raíz identificada:
+`poblacion.techo_fraccion_edad_inicial_longevidad` (0.7) siembra a TODA
+la población fundadora con edad inicial de hasta el 70% de su
+longevidad individual, aplicado por igual a especies con longevidades
+absolutas muy distintas (gnomo 45-65 años, lobo solo 8-14). Para lobo,
+la ventana de una corrida de 8000 ticks (~0.91 años) consume una
+fracción mucho mayor de vida restante que para gnomo, exponiendo a la
+población fundadora entera a la zona final de la curva de vejez
+(`nucleo/ciclo_vital.py`, exponente=8) casi desde el principio de la
+partida. Conejo/ardilla comparten la MISMA regla de siembra y
+longevidades igual de cortas (1-3, 2-5 años) pero la compensan con
+reproducción mucho más rápida -- lobo no, pese a tener gestación corta
+(60-75 días) y camada grande (4-6), un perfil de r-estratega que nunca
+llegó a aprovecharse porque `factor_base_concepcion` (0.0033) seguía
+copiado del peor valor del catálogo, compartido con gnomo (que sí
+necesita una tasa baja porque cada intento ya es carísimo por sí solo:
+gestación larguísima, camada fija en 1) -- probablemente un valor
+heredado sin revisar nunca, no una decisión deliberada.
+
+**Fix real, dos piezas combinadas, verificado en las MISMAS 12 semillas
+nuevas**: `factor_base_concepcion` de lobo subido a 0.015 (x4.5,
+`config/poblacion.yaml`) manteniendo los valores extremos de saciedad de
+arriba (0.0008/0.0004, `config/fisiologia.yaml`) -- extinción bajó de
+9/12 (solo la mitigación de inanición) a **8/12**, con población final
+media de lobo subiendo de ~0.25 a 1.33, y una semilla alcanzando **11
+individuos** (población real sostenida, no un superviviente aislado).
+Probar x9 (0.03) no mejoró más allá del ruido (también 8/12, media
+1.08) -- rendimientos decrecientes, descartado como sobre-ajuste
+innecesario frente a x4.5.
+
+**Honestidad explícita sobre el alcance real**: esto es una mejora
+sustancial y medida (de colapso total garantizado a 1 de cada 3 semillas
+nuevas sosteniendo una población real de lobo), **NO una solución
+completa** -- 8 de 12 semillas nuevas siguen terminando en extinción de
+lobo. Comparado contra el mismo conjunto de 12 semillas con solo la
+mitigación de inanición del fork (sin subir concepción), gnomo/conejo/
+caballo muestran algo de variación en sus medias agregadas, pero dentro
+del rango ya esperado de ruido por desplazamiento de secuencia de rng
+(cambiar la tasa de éxito de concepción cambia cuántas tiradas
+`rng.randint` de tamaño de camada ocurren, perturbando la secuencia de
+aleatoriedad de todo lo demás en el mismo tick para el resto del motor
+-- mismo fenómeno ya documentado en "Sobrepoblación...") -- no se
+detectó ninguna regresión clara y sistemática, pero tampoco se puede
+descartar con la certeza que daría un harness limpio dedicado.
+
+**Verificado**: 216/216 tests en verde (sin tests nuevos dedicados a
+este fix -- es calibración numérica pura sobre parámetros ya cubiertos
+por tests existentes de reproducción/necesidades), 3000 ticks de
+`BOSQUE_AUTO_TICKS` sin excepciones.
+
+**Pendiente real, explícito, esta es ahora la investigación prioritaria
+si se retoma**: 8/12 semillas nuevas siguen extinguiendo lobo -- el
+problema de fondo sigue sin resolverse del todo. Candidatos para la
+siguiente vuelta, en orden de sospecha: (1) revisar
+`techo_fraccion_edad_inicial_longevidad` de forma relativa a la
+longevidad absoluta de cada especie en vez de una fracción universal
+fija (0.7 para todas) -- palanca más general y mejor justificada que
+seguir subiendo la concepción de lobo específicamente; (2) las dos
+propuestas A'/B' de la investigación anterior (revisar inanición de
+forma universal para las 4 especies; investigar específicamente la
+relación depredador-presa de lobo) siguen sin abordarse; (3) los dos
+hallazgos menores del fork original (agotamiento/resistencia del perfil
+cazador, reseteo de `impulso_reproductivo`) nunca llegaron a
+verificarse con datos reales en esta vuelta -- se investigó el gate de
+`BUSCAR_PAREJA` en su lugar (ver más abajo) y se descartó como causa
+significativa. Todos los valores tocados hoy
+(`tasa_perdida_saciedad_por_tick`, `probabilidad_muerte_saciedad_
+critica`, `factor_base_concepcion` de lobo) PROVISIONALES, sin calibrar
+contra el harness completo.
+
+**Vía descartada explícitamente, con datos**: se sospechó que el gate de
+`BUSCAR_PAREJA` (exige las CUATRO necesidades físicas >= `umbral_
+atencion_pareja`=0.5 simultáneamente, a diferencia del gate de
+concepción en sí, que solo exige saciedad desde la corrección de
+"Sobrepoblación..." de 2026-08-31) pudiera ser un cuello de botella
+adicional real para una especie que vive con saciedad crónicamente baja.
+Medido directamente (3 semillas × 8000 ticks, contando qué necesidad
+bloquea el gate en cada muestra): saciedad es responsable del 44-52% de
+los bloqueos, energía/hidratación/aliviado apenas 2-5% cada una --
+relajar el gate a saciedad-únicamente apenas habría cambiado nada.
+Descartado por evidencia real, no se tocó `sistema_decision.py` para
+esto.

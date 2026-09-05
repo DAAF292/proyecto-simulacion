@@ -74,7 +74,25 @@ rangos_raciales:
     duracion_gestacion_dias: [60, 75]
     camada: [4, 6]
     fraccion_madurez: 0.2
-    factor_base_concepcion: 0.0033
+    # RECALIBRADO 2026-09-05 (investigacion de fragilidad de lobo, ver
+    # CLAUDE.md). Compartia 0.0033 con gnomo -- el peor valor del
+    # catalogo -- pese a NO compartir su perfil reproductivo: gnomo tiene
+    # gestacion larguisima y camada fija en 1 (necesita una tasa de
+    # concepcion baja porque cada intento ya es muy costoso de por si);
+    # lobo tiene gestacion corta (60-75 dias) y camada grande (4-6), un
+    # perfil de r-estratega que la tasa baja nunca llego a aprovechar --
+    # probablemente un valor heredado sin revisar, no una decision
+    # deliberada. Medido contra el motor real (12 semillas x 8000 ticks,
+    # ya con la mitigacion de inanicion de abajo aplicada): subir a 0.015
+    # (x4.5) bajo la extincion de lobo de 12/12 a 8/12, con poblacion
+    # final media de 0.0 a 1.33 (una semilla llego a 11 individuos, una
+    # poblacion real sostenida, no solo un superviviente aislado). Probar
+    # 0.03 (x9) no mejoro mas alla del ruido (tambien 8/12, media 1.08) --
+    # rendimientos decrecientes, se descarta como sobre-ajuste
+    # innecesario. PROVISIONAL, sin calibrar contra el harness completo
+    # -- mejora real y medida, NO una solucion completa (sigue habiendo
+    # extincion en 8 de 12 semillas nuevas).
+    factor_base_concepcion: 0.015
     puntos_agarre: 1  # boca
     fuerza: [0.5, 0.9]
     agilidad: [0.5, 0.9]

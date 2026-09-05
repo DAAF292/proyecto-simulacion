@@ -62,7 +62,64 @@ necesidades:
     # 3000 ticks).
     ticks_plenitud: 12
   lobo:
-    tasa_perdida_saciedad_por_tick: 0.003
+    # RECALIBRADO 2026-09-05 (investigacion de fragilidad de lobo -- ver
+    # CLAUDE.md, "Investigacion de causas del colapso reproductivo de
+    # gnomo" y siguientes). Medido contra el motor real: el presupuesto
+    # calorico medio de lobo (ingreso por captura vs decaimiento) estaba
+    # casi exactamente en el punto de equilibrio (margen ~1.3% sobre el
+    # decaimiento, con eficiencia_biomasa_saciedad=12.0 ya vigente) --
+    # una media que apenas no es negativa deja CERO margen frente a la
+    # varianza real de rachas sin captura, y el 90% de las muertes reales
+    # de lobo eran por inanicion. Subir eficiencia_biomasa_saciedad un
+    # 50% (12->18) NO cambio nada medible (6/6 extincion en ambos casos,
+    # 10 semillas x 8000 ticks) -- descartado empiricamente: el problema
+    # NO es cuanto alimenta cada captura, es el TIEMPO que un lobo pasa a
+    # saciedad exactamente 0 esperando la siguiente.
+    #
+    # CORRECCION 2026-09-05, MISMO DIA: una primera version de este
+    # override (decay a 0.0015, muerte a 0.001 -- "decaimiento a la
+    # mitad" decia el comentario, aunque el numero real ya era un 8x, no
+    # un 2x -- inconsistencia real detectada al releer esto, corregida
+    # aqui) SE REPROBO contra 12 semillas NUEVAS (501-512, nunca vistas
+    # antes) x 8000 ticks y resulto en 12/12 EXTINCION -- la mejora
+    # medida originalmente (6 semillas x 5000 ticks, extincion 6/6->4/6)
+    # NO generalizaba. Ademas, INCLUSO llevando estas dos palancas al
+    # extremo (decay 0.0008, muerte 0.0004 -- valores de esta entrada)
+    # solo se llego a 9/12 extincion (3/12 supervivientes, con 1-2
+    # individuos, poblaciones no realmente sostenidas) -- la inanicion
+    # NUNCA fue la unica causa de fondo.
+    #
+    # HALLAZGO REAL, no visto antes: con la inanicion casi neutralizada
+    # por estos valores extremos, el desglose real de causas de muerte
+    # (8 semillas x 8000 ticks) dio VEJEZ como causa DOMINANTE (65.6%),
+    # con inanicion en segundo lugar (32.8%) -- antes quedaba enmascarada
+    # bajo el 90% de muertes por inanicion del config original. Causa
+    # raiz: `poblacion.techo_fraccion_edad_inicial_longevidad` (0.7)
+    # siembra a TODA la poblacion fundadora con edad inicial de hasta el
+    # 70% de su longevidad individual, aplicado por igual a especies con
+    # longevidades absolutas muy distintas (gnomo 45-65 anios, lobo solo
+    # 8-14) -- para lobo, la ventana de la simulacion (8000 ticks ~ 0.91
+    # anios) consume una fraccion mucho mayor de vida restante que para
+    # gnomo, exponiendo a la poblacion fundadora entera a la zona final
+    # de la curva de vejez (nucleo/ciclo_vital.py, exponente=8) casi
+    # desde el principio. Conejo/ardilla comparten la misma regla de
+    # siembra Y longevidades igual de cortas (1-3, 2-5 anios) pero la
+    # compensan con reproduccion mucho mas rapida -- lobo NO, ver el
+    # arreglo real en poblacion.rangos_raciales.lobo.factor_base_concepcion
+    # (config/poblacion.yaml) para la otra mitad de este fix.
+    #
+    # Con AMBOS arreglos juntos (estos dos valores + factor_base_concepcion
+    # x4.5), medido en las MISMAS 12 semillas nuevas: extincion de lobo
+    # bajo de 12/12 (sin nada) o 9/12 (solo estos dos valores, sin subir
+    # concepcion) a 8/12 -- mejora real, sustancial, pero NO una solucion
+    # completa: sigue habiendo extincion en 8 de 12 semillas nuevas.
+    # PROVISIONALES, sin calibrar contra el harness completo. Alcance
+    # deliberadamente limitado a lobo via este mismo override por especie
+    # que ya usaba tasa_perdida_saciedad_por_tick -- gnomo/conejo/ardilla/
+    # caballo, sin entrada propia aqui, siguen usando el valor universal
+    # de necesidades.defecto sin ningun cambio de comportamiento.
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
 
 consumo:
   tasa_consumo_al_comer: 0.5
