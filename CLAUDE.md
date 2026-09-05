@@ -3868,3 +3868,81 @@ Refuerza con más fuerza todavía que A'/B' (riesgo de fondo de
 inanición, relación depredador-presa de lobo) siguen siendo el único
 camino real -- no hay atajo de calibración de población inicial que lo
 resuelva.
+
+## Valentía propia también modula la percepción de amenaza -- segundo
+## eje del mismo mecanismo, cierra una regresión real introducida por
+## caballo (2026-09-05, mismo día)
+
+Diego, tras la investigación de fragilidad de lobo (secciones
+anteriores), pidió específicamente investigar por qué lobo muere
+siempre y proponer soluciones -- delegado a un fork. Su hallazgo
+dominante no fue ninguna de las causas ya conocidas (inanición,
+ratio de saciedad por presa), sino un efecto secundario NUEVO
+introducido por la propia especie `caballo` esa misma sesión: lobo
+(depredador, `Temperamento.valentia` alto por rango racial, 0.5-0.9)
+percibía a caballo (herbívoro grande y pacífico, 400-500kg) como
+amenaza real solo por la diferencia de peso, disparando
+`CRISIS_VIOLENTA` un 18.9% de su tiempo de vida (0% sin caballo,
+medido en un arnés dirigido, `diagnostico_caballo_amenaza_lobo.py`,
+scratchpad) -- consumiendo estabilidad mental sin que ningún ataque
+real estuviera ocurriendo.
+
+Diego generalizó el diagnóstico antes de que se propusiera ningún
+parche: "para muchas interacciones el tamaño es consecuente respecto a
+que un animal grande sea una amenaza para uno pequeño, pero hay otros
+casos que no" -- la fórmula de amenaza de la sección anterior (ronda de
+agresividad del candidato, 2026-09-04) seguía siendo una ley
+incompleta, no un caso particular de caballo: nunca miraba la
+naturaleza de quien PERCIBE, solo la del candidato.
+
+**Diseño cerrado, mismo patrón exacto que `peso_agresividad_candidato`
+de la sección anterior**: `Temperamento.valentia` PROPIA (de quien
+percibe, no del candidato) eleva el UMBRAL efectivo de amenaza en vez
+de sumarse a la magnitud del candidato -- `umbral_efectivo =
+umbral_amenaza_percibida + valentia_propia * factor_valentia_amenaza`
+(`nucleo/disposicion.py:_candidato_valido`/
+`posicion_mas_cercana_por_disposicion`, propagado por
+`nucleo/amenaza.py:posicion_amenaza_mas_cercana`). Un individuo
+valiente necesita más diferencia de tamaño/agresividad para sentirse
+amenazado que uno tímido, ante la MISMA pareja de pesos -- ley general,
+sin ninguna excepción de código por especie: `valentia_propia`/
+`factor_valentia_amenaza` son parámetros opcionales con default 0.0 en
+ambas funciones núcleo, sin cambiar depredación/pareja/territorio, que
+no los pasan.
+
+`factor_valentia_amenaza: 0.2` (PROVISIONAL, `config/combate.yaml`),
+calculado contra los rangos raciales reales para que lobo (valentia
+0.5-0.9) deje de percibir caballo como amenaza en la práctica (umbral
+efectivo 0.75-0.83, por encima del score máximo real ~0.74) mientras
+ardilla/conejo (valentia 0.2-0.45, presa) solo suben su umbral
+levemente (0.686-0.731) -- sin dejar de percibir a gnomo/lobo como
+amenaza real (score cercano a 1.0 por la enorme diferencia de peso).
+Los TRES consumidores actualizados de forma consistente (mismo
+criterio de siempre): drenaje de `Necesidades.seguridad`
+(`sistema_necesidades.py`), dirección de HUIR (`sistema_movimiento.py`,
+`_calcular_huida` gana un parámetro `temperamento` nuevo), deseo de
+empuñar arma (`sistema_decision.py`) -- los tres ya tenían
+`Temperamento` de la propia entidad disponible en el mismo scope, sin
+necesidad de ninguna consulta ECS adicional.
+
+**Verificado contra el motor real, repitiendo el mismo arnés que había
+encontrado el problema** (no uno nuevo): `crisis_violenta` de lobo con
+caballo presente vuelve a 0.0% (antes 18.9%), idéntico al baseline sin
+caballo, con las mismas muertes de lobo en ambas condiciones (18 vs 18,
+3 semillas × 3000 ticks) -- confirma que el fix corrige exactamente el
+mecanismo señalado sin ningún efecto colateral sobre la mortalidad real
+de lobo (la fragilidad de fondo de lobo, investigada en la sección
+anterior, sigue sin resolver -- esto solo cierra la regresión que el
+propio caballo había introducido, no el problema de fondo). 216/216
+tests en verde (8 nuevos, `tests/test_amenaza_valentia.py`), 3000
+ticks de `BOSQUE_AUTO_TICKS` sin excepciones.
+
+**Pendiente real, explícito**: `factor_valentia_amenaza=0.2` sigue
+PROVISIONAL, sin calibrar contra el harness completo; la fragilidad de
+fondo de lobo (por qué muere siempre, más allá de esta falsa amenaza)
+sigue sin solución -- las otras dos propuestas del fork que investigó
+esa fragilidad (recalibrar agotamiento/resistencia del perfil cazador;
+corregir que `impulso_reproductivo` no se resetea, compartido con el
+mismo problema de gnomo) siguen sin abordar, deliberadamente
+despriorizadas detrás de esta pieza -- candidatas naturales para
+retomar la investigación de fragilidad de lobo.
