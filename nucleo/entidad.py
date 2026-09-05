@@ -246,6 +246,7 @@ def crear_criatura(
     nombre: str | None = None,
     techo_fraccion_edad_inicial: float = 0.0,
     zona_idx: int = 0,
+    sexo_forzado: Sexo | None = None,
 ) -> int:
     """
     Fábrica ECS: Instancia un organismo vivo completo con sus 12 componentes de datos.
@@ -262,6 +263,12 @@ def crear_criatura(
     simulación (sistemas/sistema_reproduccion.py) NUNCA la pasan -- usan
     el valor por defecto 0.0, de modo que un recién nacido real sigue
     naciendo con edad cero, como corresponde.
+
+    sexo_forzado (spec 2026-09-06-parejas-fundadoras): único uso en la
+    siembra de la población fundadora, que coloca un macho y una hembra
+    en la misma celda desde tick 0. Con None (todo llamador que no lo
+    pase) el sexo se sortea 50/50 exactamente como siempre -- la línea
+    de sorteo se ejecuta igual, solo se salta cuando hay valor forzado.
     """
     cfg_esp = config.get("rangos_raciales", {}).get(especie.value, {})
     entidad_id = gestor.crear_entidad()
@@ -270,7 +277,11 @@ def crear_criatura(
     # nombre propio real depende de ambos (spec
     # 2026-09-04-nombre-propio-design.md), así que se resuelven en una
     # sola pasada y se reutilizan aquí abajo sin re-sortear.
-    sexo = rng.choice([Sexo.MACHO, Sexo.HEMBRA])
+    sexo = (
+        sexo_forzado
+        if sexo_forzado is not None
+        else rng.choice([Sexo.MACHO, Sexo.HEMBRA])
+    )
     consciencia_individual = _sortear_valor(rng, cfg_esp.get("consciencia", [0.0, 0.5]))
 
     # Nombre propio real para conscientes con catálogo poblado por sexo

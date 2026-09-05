@@ -24,6 +24,7 @@ import yaml
 
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
+from componentes.reproduccion import Sexo
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
@@ -173,12 +174,68 @@ def sembrar_poblacion_inicial(
         poblacion_cfg.get("techo_fraccion_edad_inicial_longevidad", 0.0)
     )
 
+    def _registrar_fundador(eid: int, especie: Especie) -> None:
+        # Registro en la tabla histórica 'entidades': la población
+        # fundadora necesita entrar aquí igual que los nacimientos en
+        # partida (evento Nacimiento, ver sistema_reproduccion.py) --
+        # el INNER JOIN de Persistencia.cargar_snapshot() con
+        # 'entidades' descarta en silencio a todo fundador que no
+        # tenga fila ahí. id_madre/id_padre quedan en None -- un
+        # fundador no tiene progenitores que persistir.
+        identidad_fundador = gestor.obtener_componente(eid, Identidad)
+        persistencia.registrar_entidad_nueva(
+            eid,
+            {
+                "especie": especie.value,
+                "nombre": identidad_fundador.nombre,
+                "tick_nacimiento": identidad_fundador.tick_nacimiento,
+                "id_madre": None,
+                "id_padre": None,
+            },
+        )
+
     for especie, cantidad, celdas_candidatas in especies_spawn:
         if not celdas_candidatas:
             continue
-        for _ in range(cantidad):
+        # Parejas fundadoras (spec 2026-09-06-parejas-fundadoras): los
+        # primeros cantidad // 2 machos/hembras se siembran por parejas en
+        # una misma celda, para que una fracción de la población fundadora
+        # arranque con distancia de partida cero al conespecífico de sexo
+        # opuesto. Cada llamada sigue sorteando su propia edad inicial y el
+        # resto de atributos; solo la celda y el sexo se comparten dentro de
+        # la pareja.
+        for _ in range(cantidad // 2):
             pos_x, pos_y = rng_juego.choice(celdas_candidatas)
-            eid = crear_criatura(
+            eid_macho = crear_criatura(
+                gestor,
+                especie,
+                pos_x,
+                pos_y,
+                config,
+                rng_juego,
+                tick_actual=0,
+                techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+                sexo_forzado=Sexo.MACHO,
+            )
+            _registrar_fundador(eid_macho, especie)
+            eid_hembra = crear_criatura(
+                gestor,
+                especie,
+                pos_x,
+                pos_y,
+                config,
+                rng_juego,
+                tick_actual=0,
+                techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+                sexo_forzado=Sexo.HEMBRA,
+            )
+            _registrar_fundador(eid_hembra, especie)
+        # Si cantidad es impar: el individuo sobrante se siembra como
+        # siempre (celda propia sorteada de forma independiente, sexo sin
+        # forzar) -- no hay con quién emparejarlo.
+        if cantidad % 2:
+            pos_x, pos_y = rng_juego.choice(celdas_candidatas)
+            eid_sobrante = crear_criatura(
                 gestor,
                 especie,
                 pos_x,
@@ -188,24 +245,7 @@ def sembrar_poblacion_inicial(
                 tick_actual=0,
                 techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
             )
-            # Registro en la tabla histórica 'entidades': la población
-            # fundadora necesita entrar aquí igual que los nacimientos en
-            # partida (evento Nacimiento, ver sistema_reproduccion.py) --
-            # el INNER JOIN de Persistencia.cargar_snapshot() con
-            # 'entidades' descarta en silencio a todo fundador que no
-            # tenga fila ahí. id_madre/id_padre quedan en None -- un
-            # fundador no tiene progenitores que persistir.
-            identidad_fundador = gestor.obtener_componente(eid, Identidad)
-            persistencia.registrar_entidad_nueva(
-                eid,
-                {
-                    "especie": especie.value,
-                    "nombre": identidad_fundador.nombre,
-                    "tick_nacimiento": identidad_fundador.tick_nacimiento,
-                    "id_madre": None,
-                    "id_padre": None,
-                },
-            )
+            _registrar_fundador(eid_sobrante, especie)
 
 
 def sembrar_flora_inicial(
