@@ -3869,6 +3869,122 @@ inanición, relación depredador-presa de lobo) siguen siendo el único
 camino real -- no hay atajo de calibración de población inicial que lo
 resuelva.
 
+## Reestructuración de la siembra fundadora: "parejas fundadoras" --
+## mejora drástica, verificada, cierra la investigación de estabilidad
+## de población del 2026-09-05/06
+
+Diego pidió seguir intentando estabilizar la población general (más
+allá del fix específico de lobo de la sección anterior). La
+investigación exhaustiva contra el motor real (84 semillas nuevas × 8000
+ticks, varios lotes independientes) mostró que el problema era mucho más
+general de lo que parecía: **TODAS** las palancas tácticas probadas
+fallaron o empeoraron las cosas --
+
+- Ardilla se extinguió en las 84 semillas probadas, sin excepción, bajo
+  cualquier combinación de: población base, muerte por hambre universal
+  a la mitad, población fundadora x1.5, ambas combinadas, concepción
+  propia de ardilla x2.24 (igualando a conejo) o x4.5.
+- Reducir la muerte por hambre universal a la mitad EMPEORÓ a gnomo
+  (extinción 8/12→11/12) y conejo (4/12→8/12) -- alargar la agonía de
+  individuos casi muertos de hambre aumenta la competencia sin
+  compensar con más supervivencia (misma lección de "Sobrepoblación...",
+  2026-08-31).
+- Subir la población fundadora x1.5 tampoco ayudó, empeoró ligeramente a
+  conejo.
+- Un primer prototipo de "siembra agrupada" (grupos de 4 fundadores
+  cerca entre sí, sin garantizar sexo opuesto adyacente) empeoró a
+  gnomo y lobo -- concentrar individuos de la misma especie concentra
+  también la demanda de comida local.
+
+**Hallazgo real que explicó por qué**: medido directamente en la siembra
+fundadora (sin ningún tick transcurrido), la distancia media al
+conespecífico de sexo opuesto más cercano es de 5.4-9.9 celdas (gnomo),
+11.5-18.8 celdas (lobo), 3.4-4.9 celdas (ardilla) -- casi cero contactos
+inmediatos (misma celda, el requisito EXACTO que exige la concepción,
+`sistemas/sistema_reproduccion.py:_macho_elegible_en_contacto`). Toda la
+población fundadora dependía enteramente del sesgo gregario de deambular
+para cerrar esa distancia, compitiendo contra el riesgo combinado desde
+el segundo cero -- una carrera entre "tiempo hasta el primer contacto
+reproductivo viable" y "tiempo hasta que el riesgo acumulado mate al
+fundador" que ninguna palanca de magnitud podía cambiar si la distancia
+de partida seguía siendo grande.
+
+**Diego, ante esto**: "esto es un problema general, igual hay que
+plantear una reestructuración de algún tipo porque no estamos
+encontrando una solución" -- se invocó `superpowers:brainstorming`
+(camino arquitectónico) para diseñarlo formalmente en vez de seguir
+probando parámetros sueltos. Tres enfoques propuestos: (A) **parejas
+fundadoras** -- sembrar la población inicial como parejas macho+hembra
+en la misma celda desde tick 0, en vez de individuos independientes; (B)
+ventana de resiliencia temprana en el modelo de mortalidad; (C) búsqueda
+activa de pareja más fuerte en movimiento. Diego aprobó empezar por A --
+el círculo más pequeño y barato de verificar de los tres, sin tocar
+ningún sistema del motor en marcha, solo cómo nace la población en tick
+0.
+
+**Diseño** (spec:
+`docs/superpowers/specs/2026-09-06-parejas-fundadoras-design.md`):
+`nucleo/entidad.py:crear_criatura` gana un parámetro opcional
+`sexo_forzado: Sexo | None = None` (sin él, comportamiento idéntico bit
+a bit -- ningún llamador existente lo pasa). `main.py:
+sembrar_poblacion_inicial` reestructura su bucle por especie: en vez de
+`cantidad` individuos con celda y sexo sorteados de forma completamente
+independiente, forma `cantidad // 2` parejas -- una celda sorteada por
+pareja (mismo mecanismo de elección de celda de siempre), un macho y una
+hembra creados ahí. El sobrante impar (si lo hay) se siembra como
+siempre. Cada miembro sigue sorteando su propia edad inicial por
+separado -- pueden acabar con edades muy distintas, variación real, no
+un problema. Ley general aplicada por igual a las 5 especies, sin
+ninguna excepción de código por especie.
+
+**Implementado por el pipeline en el primer intento** (`mini-swe-agent`,
+PR #18, diff idéntico al spec -- 0 corrupción, 0 desviación). Auditoría
+manual de Claude antes de fusionar: diff completo revisado línea a
+línea, sin bugs; 216/216 tests en verde; `BOSQUE_AUTO_TICKS=3000` sin
+excepciones; verificación dirigida independiente (5 semillas nuevas ×
+4000 ticks, arnés sin persistencia, tal como pedía el encargo -- Diego
+pidió explícitamente no lanzar baterías largas esta vez, ver
+`feedback_diagnosticos_rapidos` en memoria persistente).
+
+**Resultado, con solo 5 semillas nunca vistas**:
+
+| Especie | Extinción (de 5) | Media | Antes de este círculo |
+|---|---|---|---|
+| gnomo | 0/5 | 1.6 | 58-92% extinción |
+| lobo | 0/5 | 11.0 | 58-92% extinción |
+| conejo | 2/5 | 23.8 | ya razonable |
+| ardilla | 4/5 | 0.2 | 100% (84/84) |
+| caballo | 0/5 | 4.4 | 58-83% extinción |
+
+**Mejora drástica**: gnomo, lobo y caballo con CERO extinción en esta
+muestra (0/5 cada uno), conejo con solo 2/5, y lobo alcanzando una media
+de 11 individuos -- igualando el máximo aislado (11) visto en cualquier
+intento previo del mismo día, ahora como promedio de la muestra
+completa. Ardilla, la especie más obstinada de toda la investigación
+(100% de extinción en 84 semillas antes de este cambio),
+tuvo su **primera supervivencia real en todo el día** (1 de 5 semillas).
+Con n=5 no se puede afirmar una solución completa y cerrada -- pero el
+salto de magnitud frente a CUALQUIER otra palanca probada hoy (incluida
+la mejora específica de lobo de la sección anterior, que solo llegó al
+33% de supervivencia) confirma que el diagnóstico de fondo (distancia de
+partida, no magnitud de riesgo) era el correcto.
+
+**Pendiente real, explícito**: ardilla sigue siendo la especie más
+frágil (4/5 extinta incluso con parejas fundadoras) -- candidata directa
+para el Enfoque B o C si se retoma esta investigación, o para
+investigar si su problema estructural (comparte bosque con gnomo Y
+lobo, dieta subconjunto de la de gnomo) necesita algo más que resolver
+la distancia de partida. Ninguna cifra de esta verificación (n=5) tiene
+la resolución del harness completo (15 semillas × 12000 ticks) que el
+proyecto tiene pendiente desde "Sobrepoblación..." -- el resultado es
+prometedor, no una calibración cerrada. Los Enfoques B (ventana de
+resiliencia temprana) y C (búsqueda activa de pareja) quedan aparcados,
+no descartados, como candidatos de un segundo círculo si hace falta más
+mejora. `techo_fraccion_edad_inicial_longevidad`, todas las tasas de
+lobo, y `factor_base_concepcion` de cualquier especie siguen
+PROVISIONALES, sin relación con este cambio -- este círculo no tocó
+ningún valor numérico, solo la disposición espacial de la siembra.
+
 ## Valentía propia también modula la percepción de amenaza -- segundo
 ## eje del mismo mecanismo, cierra una regresión real introducida por
 ## caballo (2026-09-05, mismo día)
