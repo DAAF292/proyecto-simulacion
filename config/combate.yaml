@@ -133,3 +133,16 @@ depredacion:
   # calibración ligera comprobando que NO cambian la dinámica de hoy.
   fraccion_minima_peso_presa: 0.001
   peso_referencia_deteccion_plena: 0.1
+
+  # Techo de presa por manada (2026-09-05, ver
+  # docs/superpowers/specs/2026-09-05-especie-caballo-design.md y
+  # CLAUDE.md "Por qué lobo se muere de hambre pese a cazar más que
+  # nadie"): un cazador con N conespecíficos cazando activamente cerca
+  # (mismo dato y mismo radio -- social.radio_apoyo_grupal -- que ya usa
+  # el bono de éxito de _resolver_ataque) puede perseguir presa hasta
+  # peso_cazador * (1 + N * este_factor). Con factor=1.0, un lobo (~75kg)
+  # necesita ~4-5 aliados cazando para poder perseguir un caballo
+  # (~400-500kg) -- del orden de un grupo de caza real, no calibrado
+  # contra el motor en marcha. Un cazador SOLITARIO (N=0) no cambia su
+  # comportamiento actual.
+  factor_ampliacion_techo_manada: 1.0

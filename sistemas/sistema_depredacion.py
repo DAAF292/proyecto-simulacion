@@ -72,6 +72,13 @@ class SistemaDepredacion:
         self.fraccion_minima_peso_presa: float = float(
             cfg_dep.get("fraccion_minima_peso_presa", 0.001)
         )
+        # Techo de presa por manada (2026-09-05) -- ver
+        # sistema_movimiento.py:_calcular_caza para el razonamiento
+        # completo. Mismo valor, misma clave de config, un solo criterio
+        # en todo el motor de "cuánto puede perseguir un grupo".
+        self.factor_ampliacion_techo_manada: float = float(
+            cfg_dep.get("factor_ampliacion_techo_manada", 1.0)
+        )
         self.eficiencia_biomasa_saciedad: float = float(
             cfg_dep.get("eficiencia_biomasa_saciedad", 1.5)
         )
@@ -137,7 +144,7 @@ class SistemaDepredacion:
                     eid for eid in entidades
                     if eid != cazador_id
                     and eid not in entidades_eliminadas
-                    and self._es_presa_valida(gestor, cazador_id, eid)
+                    and self._es_presa_valida(gestor, cazador_id, eid, x, y, zona_idx)
                 ]
 
                 if not presas_candidatas:
@@ -157,16 +164,33 @@ class SistemaDepredacion:
         return intencion is not None and intencion.accion == Accion.CAZAR
 
     def _es_presa_valida(
-        self, gestor: GestorEntidades, cazador_id: int, presa_id: int
+        self, gestor: GestorEntidades, cazador_id: int, presa_id: int,
+        pos_x: int, pos_y: int, zona_idx: int = 0,
     ) -> bool:
-        """Evalúa si la presa es sustancialmente menor según la ley logarítmica de peso."""
+        """Evalúa si la presa es sustancialmente menor según la ley logarítmica de peso.
+
+        Techo de presa por manada (2026-09-05, mismo criterio que
+        sistema_movimiento.py:_calcular_caza -- ver su docstring para el
+        razonamiento completo): un cazador solitario sigue limitado a
+        presas más ligeras que él mismo; con aliados cazando cerca, el
+        techo sube. Este chequeo resuelve el caso de contacto directo
+        (misma celda); _calcular_caza ya filtra el mismo techo al decidir
+        hacia dónde caminar."""
         dims_cazador = gestor.obtener_componente(cazador_id, DimensionesFisicas)
         dims_presa = gestor.obtener_componente(presa_id, DimensionesFisicas)
+        ident_cazador = gestor.obtener_componente(cazador_id, Identidad)
 
-        if dims_cazador is None or dims_presa is None:
+        if dims_cazador is None or dims_presa is None or ident_cazador is None:
             return False
 
-        if dims_cazador.peso <= dims_presa.peso:
+        aliados_cazando = contar_conspecificos_cercanos(
+            gestor, cazador_id, ident_cazador.especie, pos_x, pos_y,
+            self.radio_apoyo_grupal, solo_cazando=True, zona_idx=zona_idx,
+        )
+        peso_maximo_presa = dims_cazador.peso * (
+            1.0 + aliados_cazando * self.factor_ampliacion_techo_manada
+        )
+        if dims_presa.peso >= peso_maximo_presa:
             return False
 
         if dims_presa.peso < dims_cazador.peso * self.fraccion_minima_peso_presa:
@@ -210,7 +234,23 @@ class SistemaDepredacion:
             return False
 
         # 1. Probabilidad estocástica de éxito del ataque
+        #
+        # magnitud_disposicion_por_tamano es SIMETRICA (mide cuánto pesa
+        # la diferencia, no quién tiene ventaja -- ver su propio
+        # docstring). Hasta el círculo de "caza en manada" (2026-09-05),
+        # esto nunca fue un problema porque sistema_movimiento.py:
+        # _calcular_caza garantizaba que un cazador solitario NUNCA
+        # perseguía nada más pesado que él mismo, así que "disp alto"
+        # siempre coincidía con "el cazador es el más grande". Con el
+        # techo de presa ahora ampliable en manada, un cazador puede
+        # perseguir presa más pesada que él -- si no se corrige el
+        # signo, una gran diferencia de peso favorecería erróneamente al
+        # cazador aunque sea la presa quien es más grande. Se invierte
+        # el signo cuando la presa pesa más: la diferencia de tamaño
+        # favorece a quien REALMENTE es más grande, sea cazador o presa.
         disp = magnitud_disposicion_por_tamano(dims_cazador.peso, dims_presa.peso)
+        if dims_presa.peso > dims_cazador.peso:
+            disp = -disp
         agr = temp_cazador.agresividad if temp_cazador else 0.5
         val = temp_presa.valentia if temp_presa else 0.5
 

@@ -159,6 +159,11 @@ def sembrar_poblacion_inicial(
             poblacion_cfg.get("conejos_iniciales", 30),
             celdas_pradera if celdas_pradera else candidatas_bosque,
         ),
+        (
+            Especie.CABALLO,
+            poblacion_cfg.get("caballos_iniciales", 9),
+            celdas_pradera if celdas_pradera else candidatas_bosque,
+        ),
     ]
 
     # Edad inicial variable de la población fundadora (ver

@@ -35,6 +35,7 @@ from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
 from nucleo.asentamiento import asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
+from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.parentesco import es_familia_directa
 from nucleo.construccion import (
     construccion_propia,
@@ -149,6 +150,22 @@ class SistemaMovimiento:
         self.peso_agresividad_amenaza: float = float(
             cfg_dep.get("peso_agresividad_amenaza", 0.3)
         )
+        # Techo de presa por manada (2026-09-05, ver
+        # docs/superpowers/specs/2026-09-05-especie-caballo-design.md):
+        # un cazador SOLITARIO sigue limitado a presas mas ligeras que el
+        # mismo (comportamiento original, sin cambios). Un cazador con
+        # aliados cazando activamente cerca (mismo dato y mismo radio que
+        # ya usa el bono de exito de sistema_depredacion.py) puede
+        # perseguir presas mas pesadas -- el GRUPO decide que vale la
+        # pena perseguir, no el individuo solo. radio_apoyo_grupal
+        # reutilizado tal cual (misma clave de config, un solo radio de
+        # cooperacion en todo el motor).
+        self.radio_apoyo_grupal: int = int(
+            self.config.get("social", {}).get("radio_apoyo_grupal", 3)
+        )
+        self.factor_ampliacion_techo_manada: float = float(
+            cfg_dep.get("factor_ampliacion_techo_manada", 1.0)
+        )
 
     def ejecutar(
         self,
@@ -208,7 +225,7 @@ class SistemaMovimiento:
                 )
             elif accion == Accion.CAZAR:
                 dx, dy = self._calcular_caza(
-                    gestor, eid, pos.x, pos.y, dims.peso, radio, pos.zona_idx
+                    gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio, pos.zona_idx
                 )
             elif accion == Accion.COMER:
                 dx, dy = self._calcular_forrajeo(
@@ -442,6 +459,7 @@ class SistemaMovimiento:
         self,
         gestor: GestorEntidades,
         cazador_id: int,
+        especie: Especie,
         pos_x: int,
         pos_y: int,
         peso_cazador: float,
@@ -451,7 +469,7 @@ class SistemaMovimiento:
         """
         Avanza hacia la presa válida más cercana dentro del radio sensorial.
 
-        Dos filtros de "presa válida", ambos PROVISIONALES:
+        Tres filtros de "presa válida", todos PROVISIONALES:
 
         1. Viabilidad energética (fraccion_minima_peso_presa=0.001): una
            presa por debajo de ese porcentaje del peso del cazador no
@@ -475,8 +493,30 @@ class SistemaMovimiento:
            0.1kg está por debajo de la ardilla (0.3-0.6kg), así que hoy
            este filtro no cambia nada observable, solo prepara el
            terreno para fauna mucho más pequeña.
+
+        3. Techo de presa por manada (2026-09-05, ver CLAUDE.md, "Por qué
+           lobo se muere de hambre pese a cazar más que nadie" +
+           docs/superpowers/specs/2026-09-05-especie-caballo-design.md):
+           un cazador SOLITARIO (sin ningún conespecífico cazando
+           activamente cerca) sigue limitado a presas más ligeras que él
+           mismo -- comportamiento original, sin cambios. Con aliados
+           cazando cerca (mismo dato -- `contar_conspecificos_cercanos`,
+           `solo_cazando=True` -- y mismo radio -- `radio_apoyo_grupal`
+           -- que ya usa el bono de éxito en `sistema_depredacion.py`),
+           el techo sube proporcionalmente: el GRUPO decide qué vale la
+           pena perseguir, no el individuo solo. Es una ley general
+           (cualquier especie con conespecíficos cazando cerca se
+           beneficia igual, no una regla especial de lobo), coherente con
+           el resto de usos ya existentes de esta misma función.
         """
         peso_minimo_viable = peso_cazador * self.fraccion_minima_peso_presa
+        aliados_cazando = contar_conspecificos_cercanos(
+            gestor, cazador_id, especie, pos_x, pos_y,
+            self.radio_apoyo_grupal, solo_cazando=True, zona_idx=zona_idx,
+        )
+        peso_maximo_presa = peso_cazador * (
+            1.0 + aliados_cazando * self.factor_ampliacion_techo_manada
+        )
         presas = []
         for eid in gestor.entidades_con(Posicion, DimensionesFisicas):
             if eid == cazador_id:
@@ -485,7 +525,7 @@ class SistemaMovimiento:
             dims_p = gestor.obtener_componente(eid, DimensionesFisicas)
             if not (pos_p and dims_p) or pos_p.zona_idx != zona_idx:
                 continue
-            if dims_p.peso >= peso_cazador or dims_p.peso < peso_minimo_viable:
+            if dims_p.peso >= peso_maximo_presa or dims_p.peso < peso_minimo_viable:
                 continue
             dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
             radio_efectivo = radio_efectivo_por_peso(

@@ -14,6 +14,7 @@ poblacion:
   lobos_iniciales: 6
   conejos_iniciales: 30
   ardillas_iniciales: 30
+  caballos_iniciales: 9  # PROVISIONAL -- ver 2026-09-05-especie-caballo-design.md
   techo_fraccion_edad_inicial_longevidad: 0.7
 
 rangos_raciales:
@@ -167,6 +168,53 @@ rangos_raciales:
     curiosidad: [0.4, 0.8]
     inteligencia: [0.15, 0.35]
     memoria: [0.25, 0.55]
+    voluntad: [0.1, 0.3]
+    resiliencia: [0.3, 0.6]
+    estabilidad_mental_maxima: [0.4, 0.6]
+    consciencia: [0.0, 0.1]
+
+  # CABALLO (2026-09-05, ver docs/superpowers/specs/
+  # 2026-09-05-especie-caballo-design.md): herbivoro grande de pradera,
+  # presa sostenible de lobo por ratio de masa favorable en la formula
+  # de saciedad por captura (sistema_depredacion.py). Todo PROVISIONAL,
+  # sin calibrar contra el harness completo.
+  caballo:
+    medio_alimentacion: recolectar
+    dieta: [hierba, raices]
+    peso: [400, 500]
+    altura: [1.4, 1.8]
+    longevidad: [15, 25]
+    # Gestacion deliberadamente corta frente a los ~340 dias de un
+    # caballo real -- decision de sostenibilidad: la misma combinacion
+    # de gestacion larga + cria unica ya causa el colapso reproductivo
+    # de gnomo bajo el riesgo de fondo medido hoy.
+    duracion_gestacion_dias: [60, 90]
+    camada: [1, 2]
+    fraccion_madurez: 0.2
+    factor_base_concepcion: 0.005
+    puntos_agarre: 0  # un caballo no sujeta objetos
+    fuerza: [0.6, 0.9]
+    agilidad: [0.4, 0.7]
+    velocidad: [0.4, 0.7]
+    resistencia_enfermedad: [0.3, 0.6]
+    agudeza_sensorial: [0.4, 0.7]
+    vitalidad_maxima: [0.5, 0.8]
+    resistencia_maxima: [0.5, 0.8]
+    curacion: [0.01, 0.03]
+    recuperacion: [0.08, 0.15]
+    # Valentia baja a proposito -- prefiere huir antes que pelear,
+    # reutilizando Accion.HUIR ya existente (depende de valentia/
+    # urgencia), sin ninguna mecanica nueva de velocidad/deteccion.
+    valentia: [0.1, 0.3]
+    sociabilidad: [0.7, 0.95]  # animal de manada
+    agresividad: [0.05, 0.2]
+    dominancia: [0.2, 0.5]
+    empatia: [0.4, 0.7]
+    lealtad: [0.4, 0.7]
+    fe: [0.0, 0.1]
+    curiosidad: [0.2, 0.5]
+    inteligencia: [0.1, 0.3]
+    memoria: [0.2, 0.5]
     voluntad: [0.1, 0.3]
     resiliencia: [0.3, 0.6]
     estabilidad_mental_maxima: [0.4, 0.6]

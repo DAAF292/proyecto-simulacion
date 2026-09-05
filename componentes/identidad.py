@@ -41,6 +41,12 @@ class Especie(Enum):
     # rango racial de consciencia bajo/cero), no una tercera categoría.
     CONEJO = "conejo"
     ARDILLA = "ardilla"
+    # CABALLO: herbivoro grande en pradera, presa sostenible de lobo por
+    # ratio de masa favorable en la formula de saciedad por captura --
+    # ver CLAUDE.md, "Por que lobo se muere de hambre pese a cazar mas
+    # que nadie" (2026-09-04/05). Sin caza en manada todavia -- un lobo
+    # solo lo abate con dificultad, resultado esperado, no un bug.
+    CABALLO = "caballo"
 
 
 @dataclass
