@@ -3840,3 +3840,31 @@ sobreviva lo bastante para formar un grupo, lo cual depende de resolver
 primero las propuestas A'/B' de la investigación de fragilidad (riesgo
 de fondo de inanición, relación depredador-presa de lobo) todavía sin
 empezar; sin representación visual, motor primero.
+
+### Intento descartado: subir `lobos_iniciales` no arregla nada
+### (2026-09-05, mismo día, medido antes de tocar config real)
+
+Diego propuso, ante la extinción de lobo bloqueando la caza en manada,
+simplemente subir `lobos_iniciales` (hoy 6) para que sobrevivieran más
+simultáneamente. Probado empíricamente ANTES de tocar
+`config/poblacion.yaml` (7 semillas nuevas × 6000 ticks, comparando
+6 vs 18 lobos fundadores, arnés en scratchpad
+`diagnostico_mas_lobos.py`): **lobo se extinguió (0 vivos al final) en
+las 7 semillas con AMBAS configuraciones, sin ninguna excepción** --
+triplicar la población fundadora no cambió la trayectoria en ningún
+caso. 0 capturas de caballo por depredación en las 14 corridas
+combinadas (7 semillas × 2 configuraciones). El único efecto real
+medido fue NEGATIVO: con 18 lobos, la población final media de gnomo
+bajó de 0.9 a 0.1 -- más depredadores cazando acelera el colapso de una
+presa ya frágil, sin producir ningún beneficio a cambio.
+
+**Conclusión, con datos reales, no solo intuición**: el problema de
+lobo NO es cuántos individuos empiezan la partida -- es que casi
+ningún individuo sobrevive lo bastante (mismo hallazgo ya medido: 90%
+de sus muertes son por inanición). Subir la población fundadora solo
+multiplica cuántos mueren, no cambia si sobreviven. **Descartado como
+vía de solución** -- no se cambió `lobos_iniciales` en el config real.
+Refuerza con más fuerza todavía que A'/B' (riesgo de fondo de
+inanición, relación depredador-presa de lobo) siguen siendo el único
+camino real -- no hay atajo de calibración de población inicial que lo
+resuelva.
