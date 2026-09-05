@@ -150,6 +150,11 @@ class SistemaMovimiento:
         self.peso_agresividad_amenaza: float = float(
             cfg_dep.get("peso_agresividad_amenaza", 0.3)
         )
+        # (2026-09-05) valentia PROPIA del que percibe -- ver
+        # nucleo/disposicion.py. Mismo valor en los tres consumidores.
+        self.factor_valentia_amenaza: float = float(
+            cfg_dep.get("factor_valentia_amenaza", 0.0)
+        )
         # Techo de presa por manada (2026-09-05, ver
         # docs/superpowers/specs/2026-09-05-especie-caballo-design.md):
         # un cazador SOLITARIO sigue limitado a presas mas ligeras que el
@@ -221,7 +226,8 @@ class SistemaMovimiento:
                 )
             elif accion == Accion.HUIR:
                 dx, dy = self._calcular_huida(
-                    gestor, zona, eid, pos.x, pos.y, dims.peso, radio, pos.zona_idx
+                    gestor, zona, eid, pos.x, pos.y, dims.peso, radio, pos.zona_idx,
+                    temperamento,
                 )
             elif accion == Accion.CAZAR:
                 dx, dy = self._calcular_caza(
@@ -366,12 +372,15 @@ class SistemaMovimiento:
         peso_propio: float,
         radio: int,
         zona_idx: int = 0,
+        temperamento: Temperamento | None = None,
     ) -> tuple[int, int]:
         """Calcula el vector opuesto a la amenaza más cercana percibida."""
         amenaza_pos = posicion_amenaza_mas_cercana(
             gestor, zona, entidad_id, pos_x, pos_y, radio,
             peso_propio, self.umbral_disposicion_amenaza, zona_idx=zona_idx,
             peso_agresividad_candidato=self.peso_agresividad_amenaza,
+            valentia_propia=temperamento.valentia if temperamento is not None else 0.0,
+            factor_valentia_amenaza=self.factor_valentia_amenaza,
         )
         if amenaza_pos is None:
             return self._paso_aleatorio()

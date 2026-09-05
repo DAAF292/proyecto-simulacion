@@ -453,6 +453,11 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
     peso_agresividad_amenaza = float(
         cfg_depredacion_amenaza.get("peso_agresividad_amenaza", 0.3)
     )
+    # (2026-09-05) valentia PROPIA del que percibe -- ver
+    # nucleo/disposicion.py. Mismo valor en los tres consumidores.
+    factor_valentia_amenaza = float(
+        cfg_depredacion_amenaza.get("factor_valentia_amenaza", 0.0)
+    )
     # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/fogata.py y
     # nucleo/fuego.py).
     piedras_necesarias_fuego = int(config.get("fuego", {}).get("piedras_necesarias", 2))
@@ -776,6 +781,8 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             gestor, zona_emp, id_entidad, pos.x, pos.y, radio_amenaza_emp,
             dims.peso, umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
             peso_agresividad_candidato=peso_agresividad_amenaza,
+            valentia_propia=temperamento.valentia if temperamento is not None else 0.0,
+            factor_valentia_amenaza=factor_valentia_amenaza,
         ) is not None
         deseo_empunar = amenaza_ahora or (
             (1.0 - necesidades.seguridad)

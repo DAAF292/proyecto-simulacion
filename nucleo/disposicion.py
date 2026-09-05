@@ -59,21 +59,25 @@ def magnitud_disposicion_por_peso(peso_a: float, peso_b: float) -> float:
 
 def _candidato_valido(peso_propio: float, peso_candidato: float,
                        buscar_mayor: bool, umbral: float,
-                       bono_magnitud: float = 0.0) -> bool:
+                       bono_magnitud: float = 0.0,
+                       bono_umbral_propio: float = 0.0) -> bool:
     if buscar_mayor:
         if peso_candidato <= peso_propio:
             return False
     else:
         if peso_candidato >= peso_propio:
             return False
-    return magnitud_disposicion_por_peso(peso_propio, peso_candidato) + bono_magnitud >= umbral
+    umbral_efectivo = umbral + bono_umbral_propio
+    return magnitud_disposicion_por_peso(peso_propio, peso_candidato) + bono_magnitud >= umbral_efectivo
 
 
 def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
                                           radio: int, peso_propio: float,
                                           umbral: float, buscar_mayor: bool,
                                           zona_idx: int = 0,
-                                          peso_agresividad_candidato: float = 0.0):
+                                          peso_agresividad_candidato: float = 0.0,
+                                          valentia_propia: float = 0.0,
+                                          factor_valentia_amenaza: float = 0.0):
     """Posicion (x, y) del individuo mas cercano, dentro del radio de
     percepcion, cuya magnitud_disposicion_por_peso frente al propio
     supera el umbral -- mas grande si buscar_mayor, mas pequeno si no.
@@ -95,7 +99,22 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
     independencia de su agresividad (una bestia mansa pero gigante sigue
     siendo una amenaza real). Motivado por un caso real: un conejo (~5x
     el peso de una ardilla, poco agresivo) no deberia asustar a una
-    ardilla igual que un depredador real."""
+    ardilla igual que un depredador real.
+
+    valentia_propia/factor_valentia_amenaza (2026-09-05, percepcion de
+    amenaza): mismo criterio, esta vez del lado de quien PERCIBE en vez
+    del candidato -- 0.0 por defecto, sin efecto para depredacion/pareja/
+    territorio. Cuando ambos son > 0.0 (hoy, solo nucleo/amenaza.py), se
+    suma Temperamento.valentia PROPIA (ponderada por este factor) al
+    UMBRAL en vez de a la magnitud -- un individuo valiente necesita una
+    diferencia de tamaño/agresividad mayor para sentirse amenazado que
+    uno timido, con la misma diferencia objetiva de tamaño frente al
+    candidato. Motivado por un caso real: un caballo (herbivoro grande,
+    sin intencion de atacar a nadie) no deberia asustar a un lobo (alta
+    valentia, depredador el mismo) igual que asusta a una ardilla o un
+    conejo (valentia baja) -- la MISMA pareja de pesos, distinto umbral
+    segun quien mira, sin ninguna excepcion por especie."""
+    bono_umbral_propio = valentia_propia * factor_valentia_amenaza
     mejor = None
     mejor_dist = None
     for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
@@ -110,7 +129,9 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
             temperamento_candidato = gestor.obtener_componente(id_candidato, Temperamento)
             if temperamento_candidato is not None:
                 bono_magnitud = peso_agresividad_candidato * temperamento_candidato.agresividad
-        if not _candidato_valido(peso_propio, dimensiones.peso, buscar_mayor, umbral, bono_magnitud):
+        if not _candidato_valido(
+            peso_propio, dimensiones.peso, buscar_mayor, umbral, bono_magnitud, bono_umbral_propio
+        ):
             continue
         dist = abs(pos_candidato.x - x) + abs(pos_candidato.y - y)
         if dist > radio:

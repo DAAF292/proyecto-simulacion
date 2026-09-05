@@ -43,7 +43,8 @@ def _es_celda_peligrosa(celda) -> bool:
 
 def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
                                   radio: int, peso_propio: float, umbral_disposicion: float,
-                                  zona_idx: int = 0, peso_agresividad_candidato: float = 0.0):
+                                  zona_idx: int = 0, peso_agresividad_candidato: float = 0.0,
+                                  valentia_propia: float = 0.0, factor_valentia_amenaza: float = 0.0):
     """Posición (x, y) de la amenaza más cercana -- por criatura o
     ambiental -- dentro del radio de percepción. None si no se percibe
     ninguna.
@@ -58,10 +59,16 @@ def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
     defecto, sin cambio de comportamiento salvo que el llamador pase un
     valor real (hoy, los tres consumidores de amenaza: drenaje de
     seguridad, direccion de huida, deseo de empunar arma -- misma nocion
-    de amenaza en los tres, no una version distinta por sistema)."""
+    de amenaza en los tres, no una version distinta por sistema).
+
+    valentia_propia/factor_valentia_amenaza (2026-09-05): mismo criterio,
+    ver nucleo/disposicion.py:posicion_mas_cercana_por_disposicion -- la
+    valentia del que PERCIBE eleva el umbral efectivo, no la magnitud del
+    candidato. 0.0 por defecto, mismos tres consumidores."""
     amenaza_criatura = posicion_mas_cercana_por_disposicion(
         gestor, id_propio, x, y, radio, peso_propio, umbral_disposicion, buscar_mayor=True,
         zona_idx=zona_idx, peso_agresividad_candidato=peso_agresividad_candidato,
+        valentia_propia=valentia_propia, factor_valentia_amenaza=factor_valentia_amenaza,
     )
     amenaza_ambiental = celda_percibida(zona, x, y, radio, _es_celda_peligrosa)
 

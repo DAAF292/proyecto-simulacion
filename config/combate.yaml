@@ -34,6 +34,34 @@ depredacion:
   # PROVISIONAL, sin calibrar contra el harness completo.
   umbral_amenaza_percibida: 0.65
   peso_agresividad_amenaza: 0.3
+  # factor_valentia_amenaza (2026-09-05, senalado por Diego: "para muchas
+  # interacciones el tamano es consecuente respecto a que un animal
+  # grande sea una amenaza para uno pequeno, pero hay otros casos que
+  # no"). Hallazgo real que lo motiva: con caballo ya en el motor
+  # (400-500kg), un lobo solitario (60-90kg) lo percibia como amenaza
+  # real con la formula de arriba (score ~0.62-0.74, cruzando el umbral
+  # 0.65 con frecuencia) pese a ser una presa/vecino pacifico, no un
+  # depredador de lobo -- crisis_violenta ocupaba el 18.9% del tiempo de
+  # vida de lobo frente al 0% sin caballo. La formula anterior solo
+  # miraba tamano/agresividad del CANDIDATO, nunca la naturaleza de quien
+  # PERCIBE -- ley incompleta, no un caso de caballo en concreto. Ahora
+  # Temperamento.valentia PROPIA (de quien percibe, no del candidato)
+  # eleva el UMBRAL efectivo (umbral_efectivo = umbral_amenaza_percibida
+  # + valentia_propia * factor_valentia_amenaza) -- un individuo valiente
+  # necesita una diferencia de tamano/agresividad mayor para sentirse
+  # amenazado que uno timido, ante la MISMA pareja de pesos. Con los
+  # rangos raciales actuales: lobo (valentia 0.5-0.9, depredador) deja de
+  # percibir caballo como amenaza en la practica (umbral efectivo
+  # 0.75-0.83, por encima del score maximo real ~0.74); ardilla/conejo
+  # (valentia 0.2-0.45, presa) suben su umbral solo levemente (0.686-
+  # 0.731), sin dejar de percibir a gnomo/lobo como amenaza real (score
+  # cercano a 1.0 por la enorme diferencia de peso). Universal, sin
+  # ninguna excepcion por especie en el codigo -- 0.0 en nucleo/
+  # disposicion.py y nucleo/amenaza.py mantiene el comportamiento
+  # anterior por defecto salvo que el llamador pase un valor real (los
+  # mismos tres consumidores de siempre). PROVISIONAL, sin calibrar
+  # contra el harness completo.
+  factor_valentia_amenaza: 0.2
   # RECALIBRADO (2026-08-29, investigacion de sobrepoblacion, confirmado
   # con Diego -- "recalibrar la caza del lobo... hacer que esto sea
   # funcional"). Diagnostico previo contra el motor real (semilla 42,

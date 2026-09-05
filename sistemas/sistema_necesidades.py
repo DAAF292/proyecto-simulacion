@@ -155,6 +155,12 @@ class SistemaNecesidades:
         self.peso_agresividad_amenaza: float = float(
             cfg_depredacion.get("peso_agresividad_amenaza", 0.3)
         )
+        # (2026-09-05) valentia PROPIA del que percibe -- eleva el umbral
+        # efectivo, ver nucleo/disposicion.py. Mismo valor en los tres
+        # consumidores de amenaza.
+        self.factor_valentia_amenaza: float = float(
+            cfg_depredacion.get("factor_valentia_amenaza", 0.0)
+        )
 
         # Bono de defensa en grupo -- ver
         # nucleo/disposicion.py:contar_conspecificos_cercanos. Generico
@@ -372,6 +378,8 @@ class SistemaNecesidades:
                 gestor, zona, eid, pos.x, pos.y, radio_amenaza,
                 dims.peso, self.umbral_disposicion_amenaza, zona_idx=pos.zona_idx,
                 peso_agresividad_candidato=self.peso_agresividad_amenaza,
+                valentia_propia=temperamento.valentia if temperamento is not None else 0.0,
+                factor_valentia_amenaza=self.factor_valentia_amenaza,
             )
             if amenaza_pos is not None:
                 # Bono de defensa en grupo: seguridad en numeros --
