@@ -4596,3 +4596,123 @@ calibración que se quiera dar por cerrada; el PR #19 (radio de pareja
 ampliado) sigue sin fusionar, su destino sin decidir. Próximo círculo de
 desarrollo, distinto de esta investigación de calibración, pendiente de
 plantear con Diego.
+
+## Capa de comunicación — arco completo cerrado, 5/5 piezas (2026-09-06)
+
+Diego trajo un informe externo completo de "capa de comunicación"
+(sonido físico, memoria espacial compartida, comunicación social/ocio/
+conflicto/reputación) pidiendo analizar su viabilidad. Auditado contra
+el código real antes de opinar (mismo criterio de siempre): el informe
+tenía piezas sólidas pero también un problema serio de fondo —
+proponía un componente `MemoriaSocial` nuevo que **ya existía** con
+otro nombre (`componentes/relaciones.py:Relaciones`, cerrado el
+2026-09-04 en el arco "hilo individual", con cuatro consumidores reales
+ya construidos), y describía el visor como cliente **pygame-ce**
+cuando en realidad es un servidor web con canvas HTML/JS desde hacía
+semanas (mismo patrón de "informe externo con afirmaciones
+desactualizadas" ya visto con la "Propuesta de profundidad" de
+agosto). Descompuesto en 5 piezas independientes en brainstorming,
+cada una su propio spec y su propio círculo de verificación contra el
+motor real — **las 5 quedaron cerradas el mismo día**:
+
+1. **Conflicto verbal** (PR #20) — en vez de inventar un disparador
+   nuevo de "provocación" (redundante con la condición que ya activa
+   `CRISIS_VIOLENTA`), se le dio consecuencia real a ese estado, que el
+   propio código documentaba como "gesto de movimiento, sin mecánica de
+   daño todavía": al contacto real, resuelve con `resolver_disputa`
+   (refactor `_resolver_conflicto_entre`, compartido con el conflicto
+   por refugio ocupado ya existente). Segundo disparador, más
+   frecuente, pedido explícitamente por Diego tras notar que
+   CRISIS_VIOLENTA por sí sola apenas haría fluctuar `Relaciones`: roce
+   social probabilístico entre conscientes, modulado por agresividad
+   combinada + gradiente de estrés (`1 - PoolMental.estabilidad`).
+   Verificado en juego real: 131 roces + 3x más fluctuación de
+   `Relaciones` en 1500 ticks frente a antes de la pieza.
+2. **Memoria espacial compartida** (PR #21) — dos conscientes que
+   coinciden pueden transferirse el sitio de comida/agua/refugio/
+   asentamiento más cercano que conocen. Hallazgo de Diego que cambió
+   el diseño en marcha: *"¿una memoria compartida tiene el mismo peso
+   que un recuerdo propio?"* — resuelto sin campo de "confianza" nuevo,
+   degradando la coordenada en el momento de compartir (pasa por
+   `objetivo_recordado()` desde la perspectiva del emisor antes de
+   registrarse en el receptor) en vez de al recordar. Verificado: 12490
+   transferencias reales en 1500 ticks, coordenadas confirmadas en la
+   BD que un individuo nunca visitó directamente.
+3. **Ocio consciente / `Accion.SOCIALIZAR`** (PR #22) — nueva acción
+   que compite con `DEAMBULAR`, primer consumidor real de
+   `Temperamento.curiosidad` (sin uso hasta entonces). Se evaluó y
+   descartó extender el sesgo gregario ya existente de `DEAMBULAR` (más
+   barato pero mezclaba "vagar sin rumbo" con "socializar" en una sola
+   acción) a favor de una Accion nueva, más fiel al informe original.
+   Incidente de infraestructura real (no de la pieza): el modelo movió
+   su propio plan a `done/` por iniciativa propia, rompiendo el `mv`
+   hardcoded de `ejecutar-encargo.sh` justo antes de abrir el PR —
+   corregido en la raíz (`mv` defensivo) y terminado el resto a mano.
+4. **Sonido físico** (PR #23 + #24, partido en 4a/4b por tamaño —
+   comparable a "armas primitivas v2", la única pieza que había agotado
+   los 3 intentos del pipeline). Hallazgo de diseño clave: el informe
+   proponía sonido como `Evento(severidad=RUIDO)`, descartado porque
+   `bus_eventos.limpiar()` se ejecuta al cierre de cada tick — necesita
+   buffer propio (dos campos efímeros en `Celda`, sin persistir:
+   ventana de solo 5 ticks). Se conectó como TERCERA fuente de
+   `nucleo/amenaza.py:posicion_amenaza_mas_cercana`, heredando gratis
+   los tres consumidores reales ya existentes (seguridad, HUIR, empuñar
+   arma) sin cablear nada nuevo. Idea de Diego que amplió el alcance:
+   un depredador debería poder USAR el sonido para cazar, no solo huir
+   de él — 4b añade un fallback en `_calcular_caza` que reutiliza el
+   carroñeo (`_calcular_forrajeo`/`Necromasa`) ya existente sin
+   tocarlo. Verificado 4a: 714 sonidos, 2862 amenazas detectadas
+   específicamente por sonido en 3000 ticks. 4b: mecanismo correcto por
+   9 tests dirigidos, pero 0 usos reales en la misma ventana — mismo
+   patrón de "correcto pero invisible" ya visto con asentamiento/
+   pareja/parentesco.
+5. **Rumor + liderazgo con inercia real** (PR #25 + #26, partido en
+   5a/5b). Diego reencuadró la pieza dos veces en conversación: primero
+   como cimiento genérico de confianza reutilizable a futuro
+   (mercadería, encargos, confiar en alguien), después cuestionando que
+   un líder pudiera cambiar de un día para otro sin ningún "proceso" ni
+   "adeptos acumulados". **Hallazgo que resolvió el diseño sin inventar
+   estado nuevo**: `Asentamiento.id` se reasigna desde 1 cada día (sin
+   identidad estable entre recálculos), pero `Relaciones` SÍ persiste
+   en cada individuo — "tener seguidores" no necesita un contador de
+   días en el poder, es literalmente afinidad acumulada. 5a: un
+   consciente comparte su opinión sobre un tercero con quien coincide
+   (degradación de segunda mano, mismo espíritu que memoria
+   compartida), cero funciones nuevas en `nucleo/relaciones.py`. 5b:
+   lealtad diaria miembro→líder (mismo patrón que amistad por
+   convivencia) + `calcular_liderazgo` lee reputación para descalificar
+   candidatos dominantes mal valorados y desempatar antes de llegar a
+   valentía. Verificado: 441 aplicaciones de lealtad real en 3000
+   ticks (asentamientos SÍ llegaron a formarse en esta corrida); los
+   efectos específicos de reputación (descalificación, cambio de
+   desempate) en 0 en la misma ventana — mecanismo correcto por 7 tests
+   dirigidos, payoff observable bajo, señalado con honestidad desde el
+   propio diseño.
+
+**Patrón operativo de toda la sesión**: cada pieza siguió el flujo fijo
+completo (brainstorming → spec escrito y aprobado por Diego → encargo
+mínimo al pipeline → auditoría manual del diff + verificación
+independiente contra `BOSQUE_AUTO_TICKS` reproduciendo las cifras
+exactas del pipeline → merge manual). Ninguna pieza se mergeó sin esa
+segunda verificación independiente. Piezas grandes (sonido, rumor+
+liderazgo) se partieron en sub-círculos por decisión explícita de
+Diego cuando el tamaño se acercaba al de "armas primitivas v2".
+
+**Pendiente real, explícito, tras cerrar el arco completo**:
+- Todas las constantes nuevas de las 5 piezas (`probabilidad_base_
+  roce_social`, `radio_sonido_base`, `peso_credibilidad_rumor`,
+  `delta_lealtad_liderazgo`, `umbral_reputacion_descalificante`, y el
+  resto) siguen PROVISIONALES, sin calibrar contra el harness completo.
+- El fallback de sonido como pista de caza (4b) y los efectos de
+  reputación en liderazgo (5b) están verificados correctos por tests
+  dirigidos pero no se ha observado su disparo real en juego libre
+  todavía — mismo patrón de fondo ya documentado varias veces
+  (asentamiento/pareja/parentesco): dependen de que la población
+  sobreviva lo bastante para que esas condiciones compuestas ocurran.
+- Ideas mencionadas por Diego como consumidores futuros del mismo
+  primitivo de `Relaciones`/rumor — mercadería, encargos, confianza
+  para pedir o confiar algo a alguien — ninguna diseñada todavía.
+- Créditos de licencia de PyxelSpace (pendiente desde la migración del
+  24-08, ver arriba) y el harness completo de 15×12000 siguen sin
+  abordarse — sin relación con este arco, solo recordatorio de que
+  siguen en la lista.
