@@ -161,6 +161,14 @@ class SistemaNecesidades:
         self.factor_valentia_amenaza: float = float(
             cfg_depredacion.get("factor_valentia_amenaza", 0.0)
         )
+        # Sonido fisico (2026-09-06, circulo 4a -- ver
+        # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
+        # techo de escaneo (no el alcance real) para la tercera fuente de
+        # amenaza. PROVISIONAL, mismo valor cacheado en los tres
+        # consumidores de nucleo/amenaza.py.
+        self.radio_busqueda_maxima_sonido: int = int(
+            self.config.get("sonido", {}).get("radio_busqueda_maxima_sonido", 0)
+        )
 
         # Bono de defensa en grupo -- ver
         # nucleo/disposicion.py:contar_conspecificos_cercanos. Generico
@@ -395,6 +403,10 @@ class SistemaNecesidades:
                 peso_agresividad_candidato=self.peso_agresividad_amenaza,
                 valentia_propia=temperamento.valentia if temperamento is not None else 0.0,
                 factor_valentia_amenaza=self.factor_valentia_amenaza,
+                tick_actual=reloj.tick_actual,
+                agudeza_sensorial=dims.agudeza_sensorial,
+                radio_busqueda_sonido=self.radio_busqueda_maxima_sonido,
+                config=self.config,
             )
             if amenaza_pos is not None:
                 # Bono de defensa en grupo: seguridad en numeros --

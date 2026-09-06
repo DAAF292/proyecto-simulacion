@@ -31,6 +31,8 @@ from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
+from nucleo import amenaza as nucleo_amenaza
+from nucleo import sonido as nucleo_sonido
 from nucleo.persistencia import Persistencia
 from nucleo.reloj import Reloj
 from presentacion.narrador import narrar
@@ -383,7 +385,7 @@ def ejecutar_tick(
     # ---------------------------------------------------------
     sistemas["movimiento"].ejecutar(gestor, mundo, reloj)
     sistemas["desastres"].procesar_fuego_tick(gestor, mundo, reloj, bus_eventos)
-    sistemas["depredacion"].ejecutar(gestor, bus_eventos)
+    sistemas["depredacion"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
     # ---------------------------------------------------------
     # FASE 3: METABOLISMO, RECURSOS Y RESOLUCIÓN VITAL
@@ -555,6 +557,24 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] Relaciones vinculos dirigidos positivos: "
                 f"{pares_positivos_totales} totales, "
                 f"{pares_socializar_positivos} atribuibles a SOCIALIZAR"
+            )
+            # Verificacion obligatoria de sonido fisico (2026-09-06, circulo
+            # 4a -- ver docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
+            # medir explicitamente cuantos sonidos se emitieron de verdad
+            # durante la tanda, y cuantas veces la amenaza detectada por
+            # cualquiera de los tres consumidores reales fue
+            # ESPECIFICAMENTE por sonido (no por criatura ni ambiental) --
+            # evidencia directa de "deteccion sin linea de vision", el
+            # objetivo central del informe original. Solo observacion, no
+            # cambia la simulacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] sonido emitido: "
+                f"{nucleo_sonido.SONIDOS_EMITIDOS_TOTALES} sonidos en total"
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] amenaza por sonido: "
+                f"{nucleo_amenaza.AMENAZAS_POR_SONIDO} veces la amenaza "
+                "detectada fue especificamente por sonido"
             )
 
     except KeyboardInterrupt:

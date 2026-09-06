@@ -174,3 +174,13 @@ depredacion:
   # contra el motor en marcha. Un cazador SOLITARIO (N=0) no cambia su
   # comportamiento actual.
   factor_ampliacion_techo_manada: 1.0
+
+# Sonido fisico -- infraestructura y deteccion temprana de amenaza
+# (2026-09-06, circulo 4a -- ver
+# docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md).
+# PROVISIONAL, sin calibrar contra el harness completo.
+sonido:
+  radio_sonido_base: 3  # PROVISIONAL -- alcance en celdas a peso_referencia_sonido exacto y agudeza sensorial media (factor 0.75)
+  peso_referencia_sonido: 90.0  # PROVISIONAL -- mismo orden que la referencia visual de 90kg ya usada en el visor; NO reutilizar peso_referencia_deteccion_plena (0.1kg), que sirve para el proposito opuesto (floor de detectabilidad de presas diminutas)
+  duracion_sonido_ticks: 5  # PROVISIONAL -- ventana corta, sobrevive al menos un ciclo de decision del tick siguiente
+  radio_busqueda_maxima_sonido: 12  # PROVISIONAL -- techo de escaneo (no el alcance real), generoso para no recortar eventos grandes

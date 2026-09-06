@@ -53,6 +53,7 @@ from nucleo.memoria import (
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
+from nucleo.sonido import emitir_sonido
 from nucleo.relieve import costo_resistencia_por_pendiente, pendiente_maxima_transitable
 
 
@@ -223,6 +224,14 @@ class SistemaMovimiento:
         self.factor_ampliacion_techo_manada: float = float(
             cfg_dep.get("factor_ampliacion_techo_manada", 1.0)
         )
+        # Sonido fisico (2026-09-06, circulo 4a -- ver
+        # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
+        # techo de escaneo (no el alcance real) para la tercera fuente de
+        # amenaza. PROVISIONAL, mismo valor cacheado en los tres
+        # consumidores de nucleo/amenaza.py.
+        self.radio_busqueda_maxima_sonido: int = int(
+            self.config.get("sonido", {}).get("radio_busqueda_maxima_sonido", 0)
+        )
 
     def ejecutar(
         self,
@@ -294,7 +303,7 @@ class SistemaMovimiento:
             elif accion == Accion.HUIR:
                 dx, dy = self._calcular_huida(
                     gestor, zona, eid, pos.x, pos.y, dims.peso, radio, pos.zona_idx,
-                    temperamento,
+                    temperamento, tick_actual, dims.agudeza_sensorial,
                 )
             elif accion == Accion.CAZAR:
                 dx, dy = self._calcular_caza(
@@ -445,14 +454,25 @@ class SistemaMovimiento:
         radio: int,
         zona_idx: int = 0,
         temperamento: Temperamento | None = None,
+        tick_actual: int = 0,
+        agudeza_sensorial: float = 0.0,
     ) -> tuple[int, int]:
-        """Calcula el vector opuesto a la amenaza más cercana percibida."""
+        """Calcula el vector opuesto a la amenaza más cercana percibida.
+
+        tick_actual/agudeza_sensorial (2026-09-06, circulo 4a -- sonido
+        fisico): se reenvian a posicion_amenaza_mas_cercana para la
+        tercera fuente de amenaza (sonido), junto con el radio de busqueda
+        cacheado y la config."""
         amenaza_pos = posicion_amenaza_mas_cercana(
             gestor, zona, entidad_id, pos_x, pos_y, radio,
             peso_propio, self.umbral_disposicion_amenaza, zona_idx=zona_idx,
             peso_agresividad_candidato=self.peso_agresividad_amenaza,
             valentia_propia=temperamento.valentia if temperamento is not None else 0.0,
             factor_valentia_amenaza=self.factor_valentia_amenaza,
+            tick_actual=tick_actual,
+            agudeza_sensorial=agudeza_sensorial,
+            radio_busqueda_sonido=self.radio_busqueda_maxima_sonido,
+            config=self.config,
         )
         if amenaza_pos is None:
             return self._paso_aleatorio()
@@ -621,6 +641,7 @@ class SistemaMovimiento:
                 self._resolver_conflicto_entre(
                     gestor, mundo, entidad_id, objetivo_id,
                     temperamento, tempe_objetivo, tick_actual,
+                    pos_x, pos_y, zona_idx,
                 )
                 self._stats_crisis_violenta_contacto += 1
             return (0, 0)
@@ -723,7 +744,7 @@ class SistemaMovimiento:
         if por_celda is None:
             por_celda = self._agrupar_conscientes_por_celda(gestor)
 
-        for ids in por_celda.values():
+        for (celda_x, celda_y, celda_zona_idx), ids in por_celda.items():
             if len(ids) < 2:
                 continue
             for i in range(len(ids)):
@@ -750,6 +771,7 @@ class SistemaMovimiento:
                     if self.rng.random() < prob:
                         self._resolver_conflicto_entre(
                             gestor, mundo, a_id, b_id, temp_a, temp_b, tick_actual,
+                            celda_x, celda_y, celda_zona_idx,
                         )
                         self._stats_roce_social_resueltos += 1
 
@@ -1321,6 +1343,9 @@ class SistemaMovimiento:
         temperamento_a: Temperamento,
         temperamento_b: Temperamento,
         tick_actual: int,
+        pos_x: int = 0,
+        pos_y: int = 0,
+        zona_idx: int = 0,
     ) -> ResultadoDisputa:
         """Extraido de _resolver_posible_intruso (conflicto por refugio
         ocupado, 2026-08-31) -- 2026-09-06, conflicto verbal: lo usa el
@@ -1410,6 +1435,16 @@ class SistemaMovimiento:
         # acumule nada de vuelta.
         self._aplicar_rencor(gestor, a_id, b_id, tick_actual)
         self._aplicar_rencor(gestor, b_id, a_id, tick_actual)
+        # Sonido fisico (2026-09-06, circulo 4a): SOLO el desenlace
+        # ENFRENTAMIENTO emite sonido -- CEDE_A/CEDE_B/COMPARTE no son
+        # pelea real y no emiten nada. Magnitud = peso combinado de ambas
+        # partes (DimensionesFisicas, no se consultaba antes en esta
+        # funcion).
+        dims_a = gestor.obtener_componente(a_id, DimensionesFisicas)
+        dims_b = gestor.obtener_componente(b_id, DimensionesFisicas)
+        if dims_a is not None and dims_b is not None:
+            celda_encuentro = mundo.territorio.zonas[zona_idx].obtener_celda(pos_x, pos_y)
+            emitir_sonido(celda_encuentro, tick_actual, dims_a.peso + dims_b.peso)
         return resultado
 
     def _resolver_posible_intruso(
@@ -1492,6 +1527,7 @@ class SistemaMovimiento:
         self._resolver_conflicto_entre(
             gestor, mundo, propietario_id, intruso_id,
             temperamento, temperamento_intruso, tick_actual,
+            pos_x, pos_y, zona_idx,
         )
 
     def _calcular_construir(

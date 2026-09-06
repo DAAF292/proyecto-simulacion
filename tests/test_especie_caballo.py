@@ -229,6 +229,7 @@ def test_lobo_solo_contra_caballo_tiene_probabilidad_de_exito_baja():
     config = _config()
     gestor = GestorEntidades()
     rng_setup = random.Random(8)
+    mundo = Mundo(6, 6, config, random.Random(123))
     exitos = 0
     intentos = 200
     for i in range(intentos):
@@ -238,7 +239,11 @@ def test_lobo_solo_contra_caballo_tiene_probabilidad_de_exito_baja():
         g.anadir_componente(lobo, Intencion(accion=Accion.CAZAR))
         g.anadir_componente(lobo, Necesidades())
         sistema = SistemaDepredacion(config, random.Random(i))
-        resultado = sistema._resolver_ataque(g, __import__("nucleo.eventos", fromlist=["BusEventos"]).BusEventos(), lobo, caballo, 0, 0, 0)
+        resultado = sistema._resolver_ataque(
+            g, mundo, 0,
+            __import__("nucleo.eventos", fromlist=["BusEventos"]).BusEventos(),
+            lobo, caballo, 0, 0, 0,
+        )
         if resultado:
             exitos += 1
     tasa_exito = exitos / intentos
