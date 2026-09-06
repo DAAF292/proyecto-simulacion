@@ -20,6 +20,16 @@ relaciones:
   # ocupado (consumidor: sistema_movimiento.py:_resolver_posible_intruso).
   # PROVISIONAL.
   delta_rencor_disputa: -0.25
+  # Magnitud (POSITIVA) de la lealtad diaria de un miembro NO-lider hacia
+  # su(s) lider(es) actual(es) por gobernar (2026-09-06, circulo 5b -- ver
+  # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md).
+  # Consumidor: sistema_asentamiento.py:_acrecion_lealtad_liderazgo. Mismo
+  # patron que delta_amistad_convivencia_dia (0.05/dia) pero dirigido
+  # especificamente miembro->lider (los seguidores admiran al lider, no
+  # necesariamente al reves -- no se autora reciprocidad). PROVISIONAL, sin
+  # calibrar: algo menor que la amistad de convivencia porque admirar a un
+  # lider es mas especifico que la convivencia general del grupo.
+  delta_lealtad_liderazgo: 0.03
   # Magnitud (POSITIVA) de la amistad que gana cada dia un par de
   # miembros CONSCIENTES del mismo asentamiento por convivencia
   # (consumidor: sistema_asentamiento.py). PROVISIONAL, sin calibrar:
