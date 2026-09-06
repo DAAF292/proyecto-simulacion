@@ -120,6 +120,38 @@ necesidades:
     # de necesidades.defecto sin ningun cambio de comportamiento.
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+  ardilla:
+    # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
+    # ver CLAUDE.md -- ardilla se extinguio en el 100% de mas de 90
+    # semillas probadas ese dia, insensible a "parejas fundadoras",
+    # radio de pareja ampliado, subir su propia concepcion sola, y a
+    # eliminar gnomo del mundo por completo (descarta competencia de
+    # comida). Desglose de causas de muerte: inanicion 65.6%, vejez
+    # 18.0%, depredacion 16.4% -- consistente en varias mediciones,
+    # vejez NUNCA domino como en lobo (extincion demasiado temprana,
+    # tick 1500-3700, para que la poblacion llegue a envejecer). Un
+    # ajuste ANTERIOR de este mismo par de valores (0.0008/0.0004,
+    # identico al de lobo) probado EN SOLITARIO (sin tocar concepcion)
+    # dio resultado inconsistente entre dos lotes de 5 semillas nuevas
+    # (60% extincion en uno, 100% en el otro) -- no bastaba por si solo.
+    #
+    # HALLAZGO REAL: la combinacion de este par de valores CON subir
+    # factor_base_concepcion (poblacion.rangos_raciales.ardilla, ver
+    # config/poblacion.yaml) x4.5 -- la misma combinacion que ya
+    # funciono para lobo, nunca antes probada junta para ardilla
+    # (se habian probado por separado, cada una sin efecto o
+    # inconsistente en solitario) -- si funciono: 3 de 3 semillas
+    # probadas con poblacion de ardilla real y sostenida (11, 3, y 412
+    # individuos -- esta ultima disparo el tope de seguridad del propio
+    # arnes de diagnostico). Contraste crudo frente a las mas de 90
+    # semillas previas del mismo dia, todas con ardilla extinta.
+    #
+    # PROVISIONAL, sin calibrar contra el harness completo (15 semillas
+    # x 12000 ticks) ni contra un lote mayor de semillas nuevas todavia
+    # -- verificacion adicional pendiente antes de darlo por cerrado del
+    # todo, mismo criterio de honestidad que el resto del proyecto.
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
 
 consumo:
   tasa_consumo_al_comer: 0.5

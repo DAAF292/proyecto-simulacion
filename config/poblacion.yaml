@@ -165,7 +165,15 @@ rangos_raciales:
     duracion_gestacion_dias: [18, 28]
     camada: [2, 4]
     fraccion_madurez: 0.4
-    factor_base_concepcion: 0.0067
+    # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
+    # ver CLAUDE.md y config/fisiologia.yaml:necesidades.ardilla para el
+    # hallazgo completo). Subir esto SOLO (x2.24, igualando a conejo, o
+    # x4.5) no tuvo ningun efecto medible en solitario -- ardilla seguia
+    # extinguiendose al 100%. Combinado con la mitigacion de hambre letal
+    # de fisiologia.yaml (nunca antes probadas juntas), 3 de 3 semillas
+    # de verificacion dieron poblacion real y sostenida. PROVISIONAL, sin
+    # calibrar contra el harness completo.
+    factor_base_concepcion: 0.03
     puntos_agarre: 2  # patas delanteras
     fuerza: [0.05, 0.2]
     agilidad: [0.7, 0.95]
