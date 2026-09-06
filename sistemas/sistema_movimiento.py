@@ -53,7 +53,7 @@ from nucleo.memoria import (
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
-from nucleo.sonido import emitir_sonido
+from nucleo.sonido import emitir_sonido, sonido_mas_cercano
 from nucleo.relieve import costo_resistencia_por_pendiente, pendiente_maxima_transitable
 
 
@@ -91,6 +91,17 @@ class SistemaMovimiento:
         # concepcion. Solo observacion, ningun camino de decision los lee.
         self._stats_socializar_contacto: int = 0
         self._stats_socializar_afinidad_pares: set[tuple[int, int]] = set()
+        # Sonido fisico como pista de caza (2026-09-06, circulo 4b -- ver
+        # spec docs/superpowers/specs/2026-09-06-sonido-fisico-caza-design.md):
+        # cuantas veces el fallback de sonido dentro de _calcular_caza dirigio
+        # el movimiento, y de esas cuantas apuntaban a una presa real (caza),
+        # a una Necromasa comestible (carroña) o a nada (pista falsa) -- para
+        # la verificacion obligatoria contra BOSQUE_AUTO_TICKS. Solo
+        # observacion, ningun camino de decision los lee.
+        self._stats_sonido_caza_fallback_usos: int = 0
+        self._stats_sonido_caza_fallback_caza: int = 0
+        self._stats_sonido_caza_fallback_carrona: int = 0
+        self._stats_sonido_caza_fallback_nulo: int = 0
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -307,7 +318,8 @@ class SistemaMovimiento:
                 )
             elif accion == Accion.CAZAR:
                 dx, dy = self._calcular_caza(
-                    gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio, pos.zona_idx
+                    gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio, pos.zona_idx,
+                    zona=zona, tick_actual=tick_actual, agudeza_sensorial=dims.agudeza_sensorial,
                 )
             elif accion == Accion.COMER:
                 dx, dy = self._calcular_forrajeo(
@@ -840,6 +852,9 @@ class SistemaMovimiento:
         peso_cazador: float,
         radio: int,
         zona_idx: int = 0,
+        zona: Any | None = None,
+        tick_actual: int = 0,
+        agudeza_sensorial: float = 0.0,
     ) -> tuple[int, int]:
         """
         Avanza hacia la presa válida más cercana dentro del radio sensorial.
@@ -883,6 +898,16 @@ class SistemaMovimiento:
            (cualquier especie con conespecíficos cazando cerca se
            beneficia igual, no una regla especial de lobo), coherente con
            el resto de usos ya existentes de esta misma función.
+        Fallback de sonido (2026-09-06, circulo 4b): si no queda ninguna
+        presa valida, se intenta primero sonido_mas_cercano (consumido tal
+        cual de nucleo/sonido.py) con radio_busqueda_maxima_sonido, tick_actual
+        y agudeza_sensorial -- el cazador avanza hacia el sonido audible mas
+        cercano con _acercarse_a. Incertidumbre real: al llegar puede haber una
+        presa todavia cerca, un cadaver de una caza ajena (carroñeo automatico
+        via _calcular_forrajeo) o nada. `zona` distingue la llamada nueva desde
+        ejecutar() (pasa la ZonaBioma) de las llamadas legacy sin zona: sin
+        zona el fallback se desactiva y el comportamiento es identico a antes.
+        Si hay presa valida el sonido NUNCA se consulta -- presa real > sonido.
         """
         peso_minimo_viable = peso_cazador * self.fraccion_minima_peso_presa
         aliados_cazando = contar_conspecificos_cercanos(
@@ -910,11 +935,87 @@ class SistemaMovimiento:
                 presas.append((dist, pos_p.x, pos_p.y))
 
         if not presas:
+            # Fallback de sonido como pista de caza (2026-09-06, circulo
+            # 4b -- ver spec docs/superpowers/specs/2026-09-06-sonido-fisico-caza-design.md):
+            # sin presa valida en la percepcion normal, se intenta primero seguir
+            # el sonido audible mas cercano en vez de caer directo al paso
+            # aleatorio. Incertidumbre real aceptada: al llegar al punto puede
+            # haber una presa todavia cerca (encuentro de caza genuino), un
+            # cadaver de una caza ajena (carroneo automatico via
+            # _calcular_forrajeo), o nada (pista falsa). `zona is not None`
+            # distingue la llamada nueva desde ejecutar() de las llamadas legacy
+            # (tests antiguos) que no disponen de zona: sin zona no hay sonido,
+            # identico a antes.
+            if zona is not None:
+                objetivo_sonido = sonido_mas_cercano(
+                    zona, pos_x, pos_y, self.radio_busqueda_maxima_sonido,
+                    tick_actual, agudeza_sensorial, self.config,
+                )
+                if objetivo_sonido is not None:
+                    self._stats_sonido_caza_fallback_usos += 1
+                    destino = self._clasificar_destino_sonido(
+                        gestor, cazador_id, *objetivo_sonido,
+                        radio, zona_idx, peso_minimo_viable, peso_maximo_presa,
+                    )
+                    if destino == "caza":
+                        self._stats_sonido_caza_fallback_caza += 1
+                    elif destino == "carrona":
+                        self._stats_sonido_caza_fallback_carrona += 1
+                    else:
+                        self._stats_sonido_caza_fallback_nulo += 1
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_sonido)
             return self._paso_aleatorio()
 
         presas.sort()
         _, px, py = presas[0]
         return self._acercarse_a(pos_x, pos_y, px, py)
+
+    def _clasificar_destino_sonido(
+        self,
+        gestor: GestorEntidades,
+        cazador_id: int,
+        tx: int,
+        ty: int,
+        radio: int,
+        zona_idx: int,
+        peso_minimo_viable: float,
+        peso_maximo_presa: float,
+    ) -> str:
+        """Clasifica que encontraria el cazador en la celda del sonido --
+        solo observacion para la verificacion obligatoria contra
+        BOSQUE_AUTO_TICKS (spec 4b): "caza" si hay una presa valida (mismos
+        filtros de peso y zona que _calcular_caza) dentro del radio de
+        percepcion efectivo del destino, "carrona" si hay una Necromasa
+        comestible dentro del radio, "nada" si no hay ninguna. Ningun camino
+        de juego lee este resultado: son solo contadores de observacion.
+        """
+        for eid in gestor.entidades_con(Posicion, DimensionesFisicas):
+            if eid == cazador_id:
+                continue
+            pos_p = gestor.obtener_componente(eid, Posicion)
+            dims_p = gestor.obtener_componente(eid, DimensionesFisicas)
+            if not (pos_p and dims_p) or pos_p.zona_idx != zona_idx:
+                continue
+            if dims_p.peso >= peso_maximo_presa or dims_p.peso < peso_minimo_viable:
+                continue
+            dist = abs(pos_p.x - tx) + abs(pos_p.y - ty)
+            radio_efectivo = radio_efectivo_por_peso(
+                radio, dims_p.peso, self.peso_referencia_deteccion_plena
+            )
+            if dist <= radio_efectivo:
+                return "caza"
+
+        for nid in gestor.entidades_con(Necromasa, Posicion):
+            pos_n = gestor.obtener_componente(nid, Posicion)
+            nec_comp = gestor.obtener_componente(nid, Necromasa)
+            if (
+                pos_n and nec_comp and pos_n.zona_idx == zona_idx
+                and nec_comp.masas.get("tejido_blando", 0.0) > 0.05
+            ):
+                dist = abs(pos_n.x - tx) + abs(pos_n.y - ty)
+                if dist <= radio:
+                    return "carrona"
+        return "nada"
 
     def _calcular_forrajeo(
         self,

@@ -576,6 +576,20 @@ def main() -> None:
                 f"{nucleo_amenaza.AMENAZAS_POR_SONIDO} veces la amenaza "
                 "detectada fue especificamente por sonido"
             )
+            # Verificacion obligatoria de sonido fisico como pista de caza
+            # (2026-09-06, circulo 4b -- ver
+            # docs/superpowers/specs/2026-09-06-sonido-fisico-caza-design.md):
+            # medir explicitamente cuantas veces el fallback de sonido dentro de
+            # _calcular_caza dirigio el movimiento, y de esas cuantas apuntaban a
+            # una presa real (caza), a una Necromasa comestible (carroneo) o a
+            # nada (pista falsa). Solo observacion, no cambia la simulacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] caza fallback por sonido: "
+                f"{sistemas['movimiento']._stats_sonido_caza_fallback_usos} usos, "
+                f"{sistemas['movimiento']._stats_sonido_caza_fallback_caza} caza real, "
+                f"{sistemas['movimiento']._stats_sonido_caza_fallback_carrona} carroñeo real, "
+                f"{sistemas['movimiento']._stats_sonido_caza_fallback_nulo} pista falsa"
+            )
 
     except KeyboardInterrupt:
         pass
