@@ -59,6 +59,18 @@ class Accion(Enum):
     # materiales crudos apto_arma de Inventario.objetos y produce un arma
     # de nivel >= 2 (ver config/armas.yaml:recetas) en Inventario.objetos.
     FABRICAR_ARMA = "fabricar_arma"
+    # SOCIALIZAR (2026-09-06, ocio consciente -- ver
+    # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
+    # accion nueva e INDEPENDIENTE del sesgo gregario de DEAMBULAR (que se
+    # queda exactamente igual). Compite por el tiempo de ocio cuando ninguna
+    # necesidad fisica esta bajo decision.umbral_atencion_pareja; utilidad
+    # modulada por Temperamento.sociabilidad/curiosidad (primer consumidor
+    # real de curiosidad). Exclusiva de conscientes
+    # (consciencia >= decision.umbral_consciencia_agencia). Busca a
+    # CUALQUIER consciente cercano (no solo misma especie, a diferencia del
+    # sesgo gregario) y al contacto a distancia 0 escribe afinidad POSITIVA
+    # MUTUA en Relaciones -- ver sistema_movimiento.py:_calcular_socializar.
+    SOCIALIZAR = "socializar"
     # Crisis mental: anulan la Utility AI normal mientras
     # PoolMental.estabilidad esté en crisis -- ver sistema_decision.py
     # para el disparador y sistema_movimiento.py para la resolución de
