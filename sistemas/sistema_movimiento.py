@@ -45,7 +45,11 @@ from nucleo.construccion import (
     objetivo_construccion_actual,
 )
 from nucleo.entidad import GestorEntidades, crear_construccion
-from nucleo.memoria import objetivo_recordado
+from nucleo.memoria import (
+    capacidad_memoria,
+    objetivo_recordado,
+    registrar_recuerdo,
+)
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
@@ -67,6 +71,15 @@ class SistemaMovimiento:
         # ningun camino de decision los lee.
         self._stats_roce_social_resueltos: int = 0
         self._stats_crisis_violenta_contacto: int = 0
+        # Memoria espacial compartida (2026-09-06, ver spec
+        # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md):
+        # cuantos recuerdos de verdad se transfirieron entre conscientes y
+        # el detalle (receptor, tipo, x, y) para poder confirmar contra la
+        # BD (componentes_estado) que algun consciente termino con una
+        # coordenada que el mismo nunca visito directamente. Solo
+        # observacion, ningun camino de decision los lee.
+        self._stats_memoria_compartida_transferencias: int = 0
+        self._stats_memoria_transferida_detalle: set[tuple[int, str, int, int]] = set()
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -212,14 +225,19 @@ class SistemaMovimiento:
         """
         tick_actual: int = reloj.tick_actual if reloj is not None else 0
 
-        # Roce social (2026-09-06, conflicto verbal): UNA VEZ por tick, no
-        # por entidad, sobre las posiciones tal como quedaron al cierre del
-        # tick anterior -- mismo criterio que el conflicto por refugio
-        # ocupado (ambos resuelven sobre la posicion vigente al empezar el
-        # tick, no sobre una posicion a medio actualizar por el propio
-        # bucle). No compite por ninguna Accion: es un chequeo pasivo
-        # independiente de que este haciendo cada consciente ese tick.
-        self._procesar_roce_social(gestor, mundo, tick_actual)
+        # Roce social y memoria compartida (2026-09-06, ver
+        # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md):
+        # UNA VEZ por tick, no por entidad, sobre las posiciones tal como
+        # quedaron al cierre del tick anterior -- mismo criterio que el
+        # conflicto por refugio ocupado (ambos resuelven sobre la posicion
+        # vigente al empezar el tick, no sobre una posicion a medio
+        # actualizar por el propio bucle). No compiten por ninguna Accion:
+        # son chequeos pasivos independientes de que este haciendo cada
+        # consciente ese tick. La agrupacion por celda se construye UNA
+        # sola vez y se comparte entre ambos procesadores.
+        por_celda = self._agrupar_conscientes_por_celda(gestor)
+        self._procesar_roce_social(gestor, mundo, tick_actual, por_celda)
+        self._procesar_memoria_compartida(gestor, por_celda)
 
         entidades = sorted(
             gestor.entidades_con(Intencion, Posicion, DimensionesFisicas, Identidad)
@@ -551,14 +569,35 @@ class SistemaMovimiento:
             return (0, 0)
         return self._acercarse_a(pos_x, pos_y, *objetivo_pos)
 
+    def _agrupar_conscientes_por_celda(
+        self, gestor: GestorEntidades,
+    ) -> dict[tuple[int, int, int], list[int]]:
+        """Agrupa entidades conscientes por (x, y, zona_idx) exacta.
+        Extraido de _procesar_roce_social (2026-09-06) para reutilizarse
+        tambien en _procesar_memoria_compartida -- filtra solo por
+        Posicion/Temperamento/CapacidadMental + umbral_consciencia_agencia;
+        NO exige PoolMental/Necesidades aqui (requisitos propios de roce
+        social, comprobados por el llamador que los necesite)."""
+        por_celda: dict[tuple[int, int, int], list[int]] = {}
+        for eid in gestor.entidades_con(Posicion, Temperamento, CapacidadMental):
+            cap_mental = gestor.obtener_componente(eid, CapacidadMental)
+            if cap_mental is None or cap_mental.consciencia < self.umbral_consciencia_agencia:
+                continue
+            pos = gestor.obtener_componente(eid, Posicion)
+            if pos is None:
+                continue
+            por_celda.setdefault((pos.x, pos.y, pos.zona_idx), []).append(eid)
+        return por_celda
+
     def _procesar_roce_social(
         self,
         gestor: GestorEntidades,
         mundo: Mundo,
         tick_actual: int,
+        por_celda: dict[tuple[int, int, int], list[int]] | None = None,
     ) -> None:
-        """Una vez por ejecutar(), no por entidad -- agrupa conscientes por
-        celda+zona exacta, sortea friccion para cada par que coincide.
+        """Una vez por ejecutar(), no por entidad -- sortea friccion para
+        cada par de conscientes que comparte celda+zona exacta.
 
         Disparador 2 del conflicto verbal (2026-09-06, ver
         docs/superpowers/specs/2026-09-06-conflicto-verbal-design.md):
@@ -571,21 +610,18 @@ class SistemaMovimiento:
         compartido _resolver_conflicto_entre. Un mismo par no se procesa
         dos veces en el mismo tick (bucles i<j sobre cada celda, y cada
         par aparece en una unica celda por construccion).
+
+        Refactor 2026-09-06 (memoria espacial compartida): recibe
+        por_celda ya construido por _agrupar_conscientes_por_celda -- el
+        filtro base ya NO exige PoolMental/Necesidades (requisitos
+        propios del roce social), asi que se comprueban por pareja con el
+        mismo resultado observable que antes, cuando se filtraban en la
+        agrupacion: ningun par que los necesite llega a sortearse. El
+        parametro es opcional para compatibilidad con los tests dirigidos,
+        que llaman al metodo sin por_celda (entonces se construye aqui).
         """
-        por_celda: dict[tuple[int, int, int], list[int]] = {}
-        for eid in gestor.entidades_con(
-            Posicion, Temperamento, CapacidadMental, PoolMental, Necesidades
-        ):
-            cap_mental = gestor.obtener_componente(eid, CapacidadMental)
-            if (
-                cap_mental is None
-                or cap_mental.consciencia < self.umbral_consciencia_agencia
-            ):
-                continue
-            pos = gestor.obtener_componente(eid, Posicion)
-            if pos is None:
-                continue
-            por_celda.setdefault((pos.x, pos.y, pos.zona_idx), []).append(eid)
+        if por_celda is None:
+            por_celda = self._agrupar_conscientes_por_celda(gestor)
 
         for ids in por_celda.values():
             if len(ids) < 2:
@@ -597,7 +633,13 @@ class SistemaMovimiento:
                     temp_b = gestor.obtener_componente(b_id, Temperamento)
                     pm_a = gestor.obtener_componente(a_id, PoolMental)
                     pm_b = gestor.obtener_componente(b_id, PoolMental)
-                    if temp_a is None or temp_b is None or pm_a is None or pm_b is None:
+                    nec_a = gestor.obtener_componente(a_id, Necesidades)
+                    nec_b = gestor.obtener_componente(b_id, Necesidades)
+                    if (
+                        temp_a is None or temp_b is None
+                        or pm_a is None or pm_b is None
+                        or nec_a is None or nec_b is None
+                    ):
                         continue
                     estres = max(1.0 - pm_a.estabilidad, 1.0 - pm_b.estabilidad)
                     prob = (
@@ -610,6 +652,61 @@ class SistemaMovimiento:
                             gestor, mundo, a_id, b_id, temp_a, temp_b, tick_actual,
                         )
                         self._stats_roce_social_resueltos += 1
+
+    def _procesar_memoria_compartida(
+        self,
+        gestor: GestorEntidades,
+        por_celda: dict[tuple[int, int, int], list[int]],
+    ) -> None:
+        """Disparador 2 del informe de comunicacion (2026-09-06, ver
+        docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md):
+        para cada par de conscientes que comparte celda, cada direccion se
+        sortea por separado con la sociabilidad de quien comparte (misma
+        linea que el sesgo gregario de _calcular_deambular). Si dispara, por
+        cada categoria de MemoriaEspacial.recuerdos del emisor se comparte el
+        sitio mas cercano que el emisor conoce (objetivo_recordado desde SU
+        posicion/capacidad mental -- ya perturbado por su propia imprecision)
+        hacia el receptor, via registrar_recuerdo()."""
+        for ids in por_celda.values():
+            if len(ids) < 2:
+                continue
+            for i in range(len(ids)):
+                for j in range(len(ids)):
+                    if i == j:
+                        continue
+                    emisor_id, receptor_id = ids[i], ids[j]
+                    self._compartir_memoria(gestor, emisor_id, receptor_id)
+
+    def _compartir_memoria(
+        self, gestor: GestorEntidades, emisor_id: int, receptor_id: int
+    ) -> None:
+        """Una direccion de transferencia de memoria: sortea con la
+        sociabilidad del emisor y, si dispara, comparte por cada categoria
+        de recuerdos del emisor el sitio mas cercano que el conoce desde SU
+        posicion (una unica llamada a objetivo_recordado por categoria -- ya
+        combina 'mas cercano' + 'perturbar', llamarla por coordenada seria
+        redundante), registrado en el receptor con su propia capacidad."""
+        temp_emisor = gestor.obtener_componente(emisor_id, Temperamento)
+        if temp_emisor is None or self.rng.random() >= temp_emisor.sociabilidad:
+            return
+        mem_emisor = gestor.obtener_componente(emisor_id, MemoriaEspacial)
+        mem_receptor = gestor.obtener_componente(receptor_id, MemoriaEspacial)
+        cap_emisor = gestor.obtener_componente(emisor_id, CapacidadMental)
+        cap_receptor = gestor.obtener_componente(receptor_id, CapacidadMental)
+        pos_emisor = gestor.obtener_componente(emisor_id, Posicion)
+        if mem_emisor is None or mem_receptor is None or cap_emisor is None or cap_receptor is None or pos_emisor is None:
+            return
+        capacidad_receptor = capacidad_memoria(cap_receptor, self.config)
+        for tipo in mem_emisor.recuerdos:
+            objetivo = objetivo_recordado(
+                mem_emisor, tipo, pos_emisor.x, pos_emisor.y, cap_emisor, self.rng, self.config,
+            )
+            if objetivo is not None:
+                registrar_recuerdo(mem_receptor, tipo, objetivo[0], objetivo[1], capacidad_receptor)
+                self._stats_memoria_compartida_transferencias += 1
+                self._stats_memoria_transferida_detalle.add(
+                    (receptor_id, tipo, objetivo[0], objetivo[1])
+                )
 
     def _calcular_caza(
         self,
