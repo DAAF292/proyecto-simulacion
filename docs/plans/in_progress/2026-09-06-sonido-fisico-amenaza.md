@@ -1,52 +1,98 @@
-# Sonido físico — infraestructura y detección temprana de amenaza (4a)
+# Plan: Sonido físico — infraestructura y detección temprana de amenaza (4a)
 
-Implementa la spec completa que está en
-`docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md` —
-léela por completo primero. Es la única fuente de verdad de qué
-construir, incluido el pseudocódigo de `nucleo/sonido.py` y de la
-extensión de `nucleo/amenaza.py:posicion_amenaza_mas_cercana`.
+## Fuente de verdad
+`docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md` (leída
+completa). No se implementa el círculo 4b (pista de caza), ni reputación,
+ni decaimiento gradual, ni sonido desde acciones no violentas.
 
-Esta pieza cambia la firma de tres funciones ya existentes
-(`SistemaDepredacion.ejecutar`, `posicion_amenaza_mas_cercana`,
-`_resolver_conflicto_entre`) y sus call sites reales — la spec ya
-detalla cuáles son y qué hay que actualizar en cada uno.
+## Ficheros a tocar (en este orden)
 
-## Paso obligatorio, no opcional
+1. `nucleo/celda.py`
+   - Dos campos nuevos al final de `Celda` (mismo patrón que `en_llamas`):
+     `sonido_tick_emitido: int = -1` (sentinel "nunca") y
+     `sonido_magnitud: float = 0.0`. Sin migración de esquema: son estado
+     efímero, no se persisten; los defaults ya son los correctos al cargar.
 
-Además de la suite de tests, corre `BOSQUE_AUTO_TICKS` (unos pocos
-miles de ticks) con población real y **mide explícitamente**: cuántos
-sonidos se emitieron de verdad, y cuántas veces la amenaza detectada
-por cualquiera de los tres consumidores reales fue específicamente por
-sonido (no por criatura ni por celda en llamas). Repórtalo en el
-mensaje de commit final aunque el resultado sea bajo o nulo — no lo
-omitas ni lo des por hecho solo porque los tests unitarios pasan.
+2. `nucleo/sonido.py` (NUEVO módulo, genérico)
+   - `emitir_sonido(celda, tick_actual, magnitud)` — sobrescribe.
+   - `_sonido_activo(celda, tick_actual, duracion_ticks)` — ventana binaria.
+   - `_radio_audible(magnitud, agudeza_sensorial, config)` — escala lineal
+     con `radios_sonido_base * (magnitud / peso_referencia_sonido) *
+     (0.5 + 0.5*agudeza_sensorial)`.
+   - `sonido_mas_cercano(zona, pos_x, pos_y, radio_busqueda_maxima,
+     tick_actual, agudeza_sensorial, config)` — patrón del pseudocódigo de
+     la spec. Devuelve `tuple[int,int] | None`.
+   - Contador de observación `SONIDOS_EMITIDOS_TOTALES` para la
+     verificación `BOSQUE_AUTO_TICKS` (solo observación).
 
-## Qué NO tocar
+3. `config/combate.yaml`
+   - Sección nueva `sonido:` al final (PROVISIONAL):
+     `radio_sonido_base: 3`, `peso_referencia_sonido: 90.0`,
+     `duracion_sonido_ticks: 5`, `radio_busqueda_maxima_sonido: 12`.
+     NO reutiliza `peso_referencia_deteccion_plena`.
 
-- No implementes el círculo 4b (pista de caza para depredadores,
-  cambios en `_calcular_caza`) — es un círculo aparte, con su propia
-  spec (`docs/superpowers/specs/2026-09-06-sonido-fisico-caza-design.md`),
-  que depende de que ESTA pieza esté ya mergeada. `nucleo/sonido.py`
-  debe quedar genérico (sin saber nada de amenaza ni de caza) para que
-  ese círculo futuro lo reutilice sin tocarlo.
-- No emitas sonido desde ninguna acción que no sea un intento de
-  depredación (`sistema_depredacion.py:_resolver_ataque`) o un
-  `ResultadoDisputa.ENFRENTAMIENTO` de conflicto verbal — nada de
-  locomoción normal, construcción, fuego, ni ninguna otra acción.
-- No añadas decaimiento gradual de la señal ni permitas varios sonidos
-  superpuestos por celda — `emitir_sonido` sobrescribe, ventana binaria
-  (dentro o fuera de `duracion_sonido_ticks`), tal como pide la spec.
-- No reutilices `peso_referencia_deteccion_plena` (0.1kg,
-  `config/combate.yaml`) como referencia de sonido — es semánticamente
-  distinta (floor de detectabilidad visual de presas diminutas). Usa la
-  constante nueva `peso_referencia_sonido` que pide la spec.
-- No toques `_calcular_forrajeo`, `Necromasa`, ni el mecanismo de
-  carroñeo — sin relación con esta pieza.
-- No implementes reputación/rumor sobre liderazgo — pieza independiente
-  del mismo informe, sin relación con esta.
-- No modifiques `CLAUDE.md`, nada bajo `informes/`, ni ningún
-  `docs/historial_*.md`.
-- No cambies ningún esquema de persistencia SQLite — los dos campos
-  nuevos de `Celda` siguen el mismo patrón que `en_llamas`, que ya se
-  persiste tal cual dentro de `celdas_estado`; confirma que encajan ahí
-  sin necesitar una migración nueva de esquema.
+4. `nucleo/amenaza.py`
+   - `posicion_amenaza_mas_cercana` gana parámetros opcionales
+     `tick_actual=0, agudeza_sensorial=0.0, radio_busqueda_sonido=0,
+     config=None` (default sin efecto, backward-compatible).
+   - Añade candidato por sonido (`sonido_mas_cercano(...)`) cuando
+     `radio_busqueda_sonido > 0 and config is not None`.
+   - Combina los TRES candidatos por distancia Manhattan; desempate:
+     criatura > ambiental/sonido (sonido se trata como ambiental).
+   - Contador de observación `AMENAZAS_POR_SONIDO` para `BOSQUE_AUTO_TICKS`
+     (se incrementa cuando el candidato devuelto ES el de sonido).
+
+5. `sistemas/sistema_depredacion.py`
+   - `ejecutar(self, gestor, mundo, reloj, bus_eventos)` — firma ampliada.
+   - `_resolver_ataque(...)` gana `mundo` y `tick_actual`; en TODO intento
+     de ataque (éxito o fallo) emite sonido en la celda del encuentro con
+     magnitud `dims_cazador.peso + dims_presa.peso`.
+
+6. `sistemas/sistema_movimiento.py`
+   - `_resolver_conflicto_entre(...)` gana `pos_x, pos_y, zona_idx`; en la
+     rama `ENFRENTAMIENTO` emite sonido con la celda del encuentro y la suma
+     de pesos de ambas partes (obtener `DimensionesFisicas`).
+   - Actualizar sus 3 call sites (`_resolver_posible_intruso`,
+     `_procesar_roce_social`, `_calcular_crisis_violenta`) pasando la
+     posición de contacto (los tres ya la conocen en su scope).
+   - `_calcular_huida` gana `tick_actual` y `agudeza_sensorial` y pasa los
+     parámetros nuevos a `posicion_amenaza_mas_cercana`.
+   - Cachear `self.radio_busqueda_maxima_sonido` en `__init__`.
+
+7. `sistemas/sistema_necesidades.py`
+   - Call site de `posicion_amenaza_mas_cercana` pasa `tick_actual`,
+     `dims.agudeza_sensorial`, `self.radio_busqueda_maxima_sonido`,
+     `self.config`.
+   - Cachear `self.radio_busqueda_maxima_sonido` en `_cachear_configuracion`.
+
+8. `sistemas/sistema_decision.py`
+   - Call site de `posicion_amenaza_mas_cercana` en `actualizar()` pasa
+     `tick_actual`, `dims.agudeza_sensorial`, el radio cacheado en
+     `SistemaDecision` (o fallback a config si `sistema_decision` es None)
+     y `config`.
+
+9. `main.py`
+   - Actualizar `sistemas["depredacion"].ejecutar(gestor, mundo, reloj,
+     bus_eventos)`.
+   - Bloque `BOSQUE_AUTO_TICKS`: reportar `SONIDOS_EMITIDOS_TOTALES` y
+     `AMENAZAS_POR_SONIDO`.
+
+10. `tests/test_sonido_fisico_amenaza.py` (NUEVO)
+    - Tests de `emitir_sonido`/`_sonido_activo`/`_radio_audible`/
+      `sonido_mas_cercano`.
+    - Depredación emite sonido en la celda correcta con magnitud correcta
+      (éxito y fallo).
+    - `ENFRENTAMIENTO` emite sonido; CEDE_A/CEDE_B/COMPARTE no emiten nada.
+    - Amenaza: sonido reciente y fuerte devuelto como amenaza sin criatura
+      visible; sin sonido activo comportamiento idéntico a antes.
+
+11. `tests/test_especie_caballo.py`
+    - Actualizar la única llamada directa a `_resolver_ataque` (pasa
+      `mundo` y `tick_actual`).
+
+## Verificación
+- `pytest tests/test_sonido_fisico_amenaza.py -v` (y el resto de tests
+  tocados) durante desarrollo.
+- Suite completa una vez al final.
+- `BOSQUE_AUTO_TICKS` con población real: medir `SONIDOS_EMITIDOS_TOTALES`
+  y `AMENAZAS_POR_SONIDO`; reportar en el commit final con honestidad.
