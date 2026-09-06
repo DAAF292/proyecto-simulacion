@@ -32,6 +32,7 @@ from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo import amenaza as nucleo_amenaza
+from nucleo import asentamiento as nucleo_asentamiento
 from nucleo import sonido as nucleo_sonido
 from nucleo.persistencia import Persistencia
 from nucleo.reloj import Reloj
@@ -614,6 +615,25 @@ def main() -> None:
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_caza} caza real, "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_carrona} carroñeo real, "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_nulo} pista falsa"
+            )
+            # Verificacion obligatoria de lealtad y liderazgo (2026-09-06,
+            # circulo 5b -- ver
+            # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md):
+            # medir explicitamente cuantas veces se aplico lealtad diaria,
+            # cuantas veces la reputacion descalifico a un candidato
+            # dominante, y cuantas veces cambio el desenlace del desempate
+            # final respecto a la formula anterior (dominancia+valentia sin
+            # reputacion). Solo observacion, no cambia la simulacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] lealtad diaria aplicada: "
+                f"{sistemas['asentamiento']._stats_lealtad_aplicada} aplicaciones miembro->lider"
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] reputacion en liderazgo: "
+                f"{nucleo_asentamiento.STATS_REPUTACION_DESCALIFICADOS} candidatos dominantes "
+                "descalificados, "
+                f"{nucleo_asentamiento.STATS_DESEMPATE_REPUTACION_CAMBIO} desempates finales "
+                "cambiados"
             )
 
     except KeyboardInterrupt:

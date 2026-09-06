@@ -55,6 +55,12 @@ class SistemaAsentamiento:
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
         )
         self._miembros_vistos_ayer: set[frozenset[int]] = set()
+        # Observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b -- ver
+        # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md):
+        # cuántas aplicaciones reales de lealtad diaria miembro->líder se
+        # escribieron durante la tanda. Solo observación, no cambia la
+        # simulación.
+        self._stats_lealtad_aplicada: int = 0
 
     def ejecutar(
         self,
@@ -167,6 +173,12 @@ class SistemaAsentamiento:
         # mismo asentamiento gana afinidad positiva. Efecto colateral
         # de vivir juntos, sin ninguna acción de la Utility AI.
         self._acrecion_amistad_convivencia(gestor, mundo, reloj)
+        # Acreción diaria de lealtad de seguidor hacia líder (2026-09-06,
+        # círculo 5b -- ver docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md):
+        # misma cadencia que la amistad por convivencia, pero dirigida
+        # específicamente miembro->líder: los seguidores admiran al líder,
+        # no necesariamente al revés (no se autora reciprocidad).
+        self._acrecion_lealtad_liderazgo(gestor, mundo, reloj)
 
     def _acrecion_amistad_convivencia(
         self,
@@ -211,6 +223,33 @@ class SistemaAsentamiento:
                         gestor, conscientes[j], conscientes[i], delta, reloj.tick_actual
                     )
 
+    def _acrecion_lealtad_liderazgo(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+    ) -> None:
+        """Lealtad diaria de seguidor hacia lider (2026-09-06, circulo 5b --
+        ver docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md):
+        mismo patron que _acrecion_amistad_convivencia, dirigido
+        especificamente miembro->lider. Es literalmente como se construyen
+        "seguidores" -- sin contador de dias en el poder, la propia
+        Relaciones acumulada hace ese papel."""
+        delta = float(self.config.get("relaciones", {}).get("delta_lealtad_liderazgo", 0.0))
+        if delta <= 0.0:
+            return
+        for asentamiento in mundo.asentamientos.values():
+            if not asentamiento.lideres:
+                continue
+            for miembro_id in asentamiento.miembros:
+                if miembro_id in asentamiento.lideres:
+                    continue
+                for lider_id in asentamiento.lideres:
+                    if self._ajustar_amistad(
+                        gestor, miembro_id, lider_id, delta, reloj.tick_actual,
+                    ):
+                        self._stats_lealtad_aplicada += 1
+
     def _ajustar_amistad(
         self,
         gestor: GestorEntidades,
@@ -218,17 +257,23 @@ class SistemaAsentamiento:
         otro_id: int,
         delta: float,
         tick_actual: int,
-    ) -> None:
-        """Escribe afinidad POSITIVA de `autor_id` hacia `otro_id`."""
+    ) -> bool:
+        """Escribe afinidad POSITIVA de `autor_id` hacia `otro_id`.
+
+        Devuelve True si la afinidad se escribió de verdad (el autor es
+        consciente y tiene Relaciones), False si el gate de consciencia u
+        otro motivo impidió la escritura -- solo se usa para los stats de
+        observación de BOSQUE_AUTO_TICKS; los llamadores de convivencia
+        ignoran el retorno."""
         cap_mental = gestor.obtener_componente(autor_id, CapacidadMental)
         if (
             cap_mental is None
             or cap_mental.consciencia < self.umbral_consciencia_agencia
         ):
-            return
+            return False
         relaciones = gestor.obtener_componente(autor_id, Relaciones)
         if relaciones is None:
-            return
+            return False
         capacidad = capacidad_vinculos(cap_mental, self.config)
         ajustar_afinidad(
             relaciones,
@@ -237,3 +282,4 @@ class SistemaAsentamiento:
             tick_actual,
             capacidad,
         )
+        return True

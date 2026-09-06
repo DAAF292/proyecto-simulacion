@@ -108,6 +108,15 @@ asentamiento:
   # miembros cuya dominancia está a menos de este margen del máximo del
   # grupo.
   margen_dominancia_elite: 0.1
+  # Descalificación por reputación (Círculo 5b, 2026-09-06 -- ver
+  # nucleo/asentamiento.py:calcular_liderazgo y spec
+  # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md): un
+  # candidato dominante cuya afinidad MEDIA recibida del resto del grupo
+  # cae por debajo de este umbral (negativo) queda fuera de la elección
+  # aunque sea el más dominante. Actúa DESPUÉS del filtro de dominancia;
+  # si todos los candidatos quedan descalificados, el asentamiento se
+  # queda sin líder ese día. PROVISIONAL, sin calibrar.
+  umbral_reputacion_descalificante: -0.4
   # Consejo vs. líder único: se forma consejo cuando
   # (cohesión_social - agresividad_media) de los candidatos supera este
   # umbral, ajustado a la baja por población (más miembros, más fácil

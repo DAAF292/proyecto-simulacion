@@ -25,6 +25,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from componentes.relaciones import Relaciones
+
+
+# Contadores de observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b
+# -- ver docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md). Mismo
+# patrón que nucleo/sonido.py:SONIDOS_EMITIDOS_TOTALES: solo lectura/
+# observación, no cambian la simulación. Se incrementan dentro de
+# calcular_liderazgo (los descalificados por reputación y los desempates
+# finales cuyo desenlace cambió respecto a la fórmula anterior
+# dominancia+valentía sin reputación).
+STATS_REPUTACION_DESCALIFICADOS: int = 0
+STATS_DESEMPATE_REPUTACION_CAMBIO: int = 0
+
 
 @dataclass
 class Asentamiento:
@@ -107,9 +120,44 @@ def calcular_liderazgo(gestor: Any, miembros: set[int], config_asentamiento: dic
     if not temperamentos:
         return set()
 
+    global STATS_REPUTACION_DESCALIFICADOS, STATS_DESEMPATE_REPUTACION_CAMBIO
+
     max_dominancia = max(t.dominancia for t in temperamentos.values())
     margen = float(config_asentamiento.get("margen_dominancia_elite", 0.1))
     candidatos = [mid for mid, t in temperamentos.items() if t.dominancia >= max_dominancia - margen]
+
+    # Reputación (2026-09-06, círculo 5b -- ver
+    # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md): la
+    # afinidad MEDIA que el resto del grupo le tiene, calculada SOLO sobre
+    # quienes YA tienen un vínculo formado hacia el candidato dentro de
+    # Relaciones.vinculos. Sin datos, reputación neutra 0.0 (comportamiento
+    # idéntico a antes de esta pieza). Actúa DESPUÉS del filtro de
+    # dominancia, nunca lo sustituye ni lo amplía.
+    umbral_descalifica = float(
+        config_asentamiento.get("umbral_reputacion_descalificante", -0.4)
+    )
+
+    def _reputacion(candidato_id: int) -> float:
+        opiniones = []
+        for otro_id in miembros:
+            if otro_id == candidato_id:
+                continue
+            rel = gestor.obtener_componente(otro_id, Relaciones)
+            if rel is not None and candidato_id in rel.vinculos:
+                opiniones.append(rel.vinculos[candidato_id].afinidad)
+        return sum(opiniones) / len(opiniones) if opiniones else 0.0
+
+    reputaciones = {c: _reputacion(c) for c in candidatos}
+    candidatos_previos = len(candidatos)
+    candidatos = [c for c in candidatos if reputaciones[c] >= umbral_descalifica]
+    if len(candidatos) < candidatos_previos:
+        # Observación (solo stats): reposición de los candidatos
+        # dominantes que la reputación descalificó este día.
+        STATS_REPUTACION_DESCALIFICADOS += candidatos_previos - len(candidatos)
+    if not candidatos:
+        # Sin líder ese día: resultado legítimo de la descalificación,
+        # no un caso especial que evitar con una regla de respaldo.
+        return set()
 
     if len(candidatos) == 1:
         return set(candidatos)
@@ -128,9 +176,24 @@ def calcular_liderazgo(gestor: Any, miembros: set[int], config_asentamiento: dic
     if (cohesion_social - agresividad_media) > umbral_ajustado:
         return set(candidatos)  # consejo: comparten poder
 
-    # Líder único: se impone el de mayor dominancia, desempate por
-    # valentía (quién sostiene la asertividad hasta el final).
-    ganador = max(candidatos, key=lambda mid: (temperamentos[mid].dominancia, temperamentos[mid].valentia))
+    # Líder único: se impone el de mayor dominancia; la reputación entra
+    # en el desempate ANTES que la valentía (orden nuevo:
+    # (dominancia, reputacion, valentia)) -- un aspirante igual de dominante
+    # no desplaza a un incumbente con reputación ya construida, porque esa
+    # reputación tardó días reales de partida en formarse.
+    ganador = max(
+        candidatos,
+        key=lambda mid: (temperamentos[mid].dominancia, reputaciones[mid], temperamentos[mid].valentia),
+    )
+    ganador_sin_reputacion = max(
+        candidatos,
+        key=lambda mid: (temperamentos[mid].dominancia, temperamentos[mid].valentia),
+    )
+    if ganador != ganador_sin_reputacion:
+        # Observación (solo stats): la reputación cambió el desenlace del
+        # desempate final respecto a la fórmula anterior
+        # (dominancia+valentía sin reputación).
+        STATS_DESEMPATE_REPUTACION_CAMBIO += 1
     return {ganador}
 
 
