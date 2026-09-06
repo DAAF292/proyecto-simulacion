@@ -102,6 +102,17 @@ class SistemaMovimiento:
         self._stats_sonido_caza_fallback_caza: int = 0
         self._stats_sonido_caza_fallback_carrona: int = 0
         self._stats_sonido_caza_fallback_nulo: int = 0
+        # Rumor social (2026-09-06, circulo 5a -- ver spec
+        # docs/superpowers/specs/2026-09-06-rumor-social-design.md): cuantos
+        # rumores se propagaron de verdad (cada direccion emisor->receptor que
+        # disparo con la sociabilidad del emisor y encontro un tercero candidato)
+        # y que pares (receptor, tercero) recibieron una opinion sobre un tercero
+        # que el receptor NO tenia antes (evidencia de "opinion de segunda mano"
+        # pura, nunca formada directamente) -- para la verificacion obligatoria
+        # contra BOSQUE_AUTO_TICKS. Solo observacion, ningun camino de decision
+        # los lee.
+        self._stats_rumores_propagados: int = 0
+        self._stats_rumor_terceros_nuevos: set[tuple[int, int]] = set()
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -193,6 +204,14 @@ class SistemaMovimiento:
         self.delta_afinidad_socializar: float = float(
             self.config_relaciones.get("delta_afinidad_socializar", 0.02)
         )
+        # Peso de credibilidad del rumor (2026-09-06, rumor social -- ver
+        # config/relaciones.yaml y spec
+        # docs/superpowers/specs/2026-09-06-rumor-social-design.md): fraccion
+        # del camino que el receptor recorre hacia la opinion reportada del
+        # emisor, no una sustitucion completa. PROVISIONAL, sin calibrar.
+        self.peso_credibilidad_rumor: float = float(
+            self.config_relaciones.get("peso_credibilidad_rumor", 0.15)
+        )
 
         # Coste de forrajeo vs. beneficio -- ver docstring de
         # _calcular_caza.
@@ -260,19 +279,21 @@ class SistemaMovimiento:
         """
         tick_actual: int = reloj.tick_actual if reloj is not None else 0
 
-        # Roce social y memoria compartida (2026-09-06, ver
-        # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md):
+        # Roce social, memoria compartida y rumor social (2026-09-06, ver
+        # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md
+        # y docs/superpowers/specs/2026-09-06-rumor-social-design.md):
         # UNA VEZ por tick, no por entidad, sobre las posiciones tal como
         # quedaron al cierre del tick anterior -- mismo criterio que el
-        # conflicto por refugio ocupado (ambos resuelven sobre la posicion
+        # conflicto por refugio ocupado (los tres resuelven sobre la posicion
         # vigente al empezar el tick, no sobre una posicion a medio
         # actualizar por el propio bucle). No compiten por ninguna Accion:
         # son chequeos pasivos independientes de que este haciendo cada
         # consciente ese tick. La agrupacion por celda se construye UNA
-        # sola vez y se comparte entre ambos procesadores.
+        # sola vez y se comparte entre los tres procesadores.
         por_celda = self._agrupar_conscientes_por_celda(gestor)
         self._procesar_roce_social(gestor, mundo, tick_actual, por_celda)
         self._procesar_memoria_compartida(gestor, por_celda)
+        self._procesar_rumor(gestor, por_celda, tick_actual)
 
         entidades = sorted(
             gestor.entidades_con(Intencion, Posicion, DimensionesFisicas, Identidad)
@@ -841,6 +862,66 @@ class SistemaMovimiento:
                 self._stats_memoria_transferida_detalle.add(
                     (receptor_id, tipo, objetivo[0], objetivo[1])
                 )
+
+    def _procesar_rumor(
+        self, gestor: GestorEntidades, por_celda: dict[tuple[int, int, int], list[int]],
+        tick_actual: int,
+    ) -> None:
+        """Tercera pasada sobre la agrupacion de conscientes por celda
+        (2026-09-06, rumor social -- ver
+        docs/superpowers/specs/2026-09-06-rumor-social-design.md): cada
+        direccion (emisor->receptor) se sortea por separado con la
+        sociabilidad del emisor, mismo patron que _procesar_memoria_compartida.
+        Un mismo par se procesa DOS veces (una por direccion) porque cada
+        direccion es un camino de efecto independiente: A puede contarle a B
+        su opinion sobre C sin que B le cuente nada a A ese mismo tick."""
+        for ids in por_celda.values():
+            if len(ids) < 2:
+                continue
+            for i in range(len(ids)):
+                for j in range(len(ids)):
+                    if i == j:
+                        continue
+                    self._compartir_rumor(gestor, ids[i], ids[j], tick_actual)
+
+    def _compartir_rumor(
+        self, gestor: GestorEntidades, emisor_id: int, receptor_id: int, tick_actual: int,
+    ) -> None:
+        """Una direccion de rumor: sortea con la sociabilidad del emisor y,
+        si dispara, elige un TERCERO al azar de los vinculos del emisor
+        (excluyendo al receptor: contarle a alguien su opinion sobre EL no es
+        un rumor, es confrontacion directa, fuera de alcance). El receptor NO
+        adopta la opinion del emisor de golpe: su afinidad hacia ese tercero
+        se desplaza una FRACCION (peso_credibilidad_rumor) hacia la del
+        emisor, via ajustar_afinidad (ninguna funcion nueva en
+        nucleo/relaciones.py). Sin opinion previa, parte de neutral (0.0)."""
+        temp_emisor = gestor.obtener_componente(emisor_id, Temperamento)
+        if temp_emisor is None or self.rng.random() >= temp_emisor.sociabilidad:
+            return
+        rel_emisor = gestor.obtener_componente(emisor_id, Relaciones)
+        rel_receptor = gestor.obtener_componente(receptor_id, Relaciones)
+        cap_receptor = gestor.obtener_componente(receptor_id, CapacidadMental)
+        if rel_emisor is None or rel_receptor is None or cap_receptor is None:
+            return
+        candidatos = [tid for tid in rel_emisor.vinculos if tid != receptor_id]
+        if not candidatos:
+            return
+        tercero_id = self.rng.choice(candidatos)
+        # Defensivo (spec): el emisor nunca deberia aparecer en su propio
+        # vinculos, pero si ocurriera no es un rumor valido -- excluirlo.
+        if emisor_id == tercero_id:
+            return
+        opinion_emisor = rel_emisor.vinculos[tercero_id].afinidad
+        opinion_actual = (
+            rel_receptor.vinculos[tercero_id].afinidad
+            if tercero_id in rel_receptor.vinculos else 0.0
+        )
+        delta = self.peso_credibilidad_rumor * (opinion_emisor - opinion_actual)
+        capacidad = capacidad_vinculos(cap_receptor, self.config)
+        if tercero_id not in rel_receptor.vinculos:
+            self._stats_rumor_terceros_nuevos.add((receptor_id, tercero_id))
+        ajustar_afinidad(rel_receptor, tercero_id, delta, tick_actual, capacidad)
+        self._stats_rumores_propagados += 1
 
     def _calcular_caza(
         self,
