@@ -1,41 +1,53 @@
-# Rumor social — propagación de opiniones sobre terceros (5a)
+# Plan: Rumor social (5a) — propagación de opiniones sobre terceros
 
-Implementa la spec completa que está en
-`docs/superpowers/specs/2026-09-06-rumor-social-design.md` — léela por
-completo primero. Es la única fuente de verdad de qué construir,
-incluido el pseudocódigo de `_procesar_rumor`/`_compartir_rumor`.
+Fuente de verdad: `docs/superpowers/specs/2026-09-06-rumor-social-design.md`
+(pseudocódigo literal de `_procesar_rumor`/`_compartir_rumor` en las líneas
+90-134). No se toca 5b, `nucleo/relaciones.py` no gana funciones, ni
+`nucleo/asentamiento.py`/`sistemas/sistema_asentamiento.py`.
 
-## Paso obligatorio, no opcional
+## Ficheros a tocar (orden)
 
-Además de la suite de tests, corre `BOSQUE_AUTO_TICKS` (unos pocos
-miles de ticks) con población real y **mide explícitamente**: cuántos
-rumores se propagaron de verdad, y si algún consciente terminó con una
-opinión sobre un tercero que él mismo nunca formó directamente (mirando
-la BD o un contador de observación equivalente). Repórtalo en el
-mensaje de commit final aunque el resultado sea bajo o nulo — no lo
-omitas ni lo des por hecho solo porque los tests unitarios pasan.
+1. **`config/relaciones.yaml`** — añadir clave PROVISIONAL
+   `peso_credibilidad_rumor: 0.15` (fracción del camino que recorre el
+   receptor hacia la opinión reportada, no sustitución).
 
-## Qué NO tocar
+2. **`sistemas/sistema_movimiento.py`**
+   - `__init__`: añadir contadores de observación tipo memoria/socializar:
+     `_stats_rumores_propagados: int = 0` y
+     `_stats_rumor_terceros_nuevos: set[tuple[int, int]]` (pares
+     (receptor, tercero) donde el rumor creó una opinión que el receptor
+     no tenía antes — evidencia de "nunca formó directamente").
+   - `_cachear_configuracion`: cachear `self.peso_credibilidad_rumor`
+     desde `config_relaciones` (default 0.15).
+   - `ejecutar()`: tercera pasada `_procesar_rumor(gestor, por_celda,
+     tick_actual)` sobre el mismo `por_celda`, sin tocar las otras dos.
+   - Nuevos métodos `_procesar_rumor` y `_compartir_rumor` copiando el
+     pseudocódigo de la spec + comprobación defensiva
+     `emisor_id == tercero_id` (spec líneas 141-144). `_compartir_rumor`
+     cuenta `_stats_rumores_propagados` y registra en
+     `_stats_rumor_terceros_nuevos` cuando el tercero no estaba en
+     `rel_receptor.vinculos` antes de `ajustar_afinidad`.
 
-- No implementes el círculo 5b (lealtad + liderazgo) — es un círculo
-  aparte, con su propia spec
-  (`docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md`),
-  que depende de que ESTA pieza esté ya mergeada. No toques
-  `nucleo/asentamiento.py` ni `sistemas/sistema_asentamiento.py`.
-- No añadas ninguna función nueva a `nucleo/relaciones.py` — el
-  desplazamiento de opinión se calcula como un delta normal en
-  `sistema_movimiento.py` y se pasa a `ajustar_afinidad`, ya existente,
-  sin tocarla.
-- No implementes distorsión, exageración, ni "rumor de rumor" — la
-  degradación de segunda mano ya prevista (fracción hacia la opinión
-  reportada) es suficiente para este círculo.
-- No toques `_procesar_roce_social` ni `_procesar_memoria_compartida` —
-  `_procesar_rumor` es una tercera pasada independiente sobre la misma
-  agrupación (`_agrupar_conscientes_por_celda`), sin modificar las
-  otras dos.
-- No implementes mercadería, encargos, ni ningún otro consumidor futuro
-  del rumor — quedan fuera, mencionados solo como motivación.
-- No modifiques `CLAUDE.md`, nada bajo `informes/`, ni ningún
-  `docs/historial_*.md`.
-- No cambies ningún esquema de persistencia SQLite — `Relaciones` ya
-  se persiste tal cual, sin campos nuevos que guardar.
+3. **`main.py`** — bloque `BOSQUE_AUTO_TICKS`: reportar rumores
+   propagados y cuántos pares (receptor, tercero) tienen hoy una opinión
+   que el rumor creó (verificando en el gestor vivo que esos vinculos
+   siguen existiendo).
+
+4. **`tests/test_rumor_social.py`** (nuevo) — leyes físicas dirigidas:
+   - `_compartir_rumor` dispara → transfiere y desplaza; sin efecto si
+     falla la tirada; sin efecto si el emisor no conoce a nadie más que
+     al receptor; el tercero nunca es el receptor; receptor sin opinión
+     previa parte de 0.0 (valor exacto); receptor con opinión previa
+     contraria se desplaza fracción, no sobrescribe (valor exacto).
+   - `_procesar_rumor`: direcciones independientes (A→B sí, B→A no).
+   - `ejecutar()` invoca la pasada una vez por tick.
+
+## Verificación obligatoria (no opcional)
+
+- `pytest tests/test_rumor_social.py -v`
+- Suite completa una vez al final: `pytest -q`
+- `BOSQUE_AUTO_TICKS=2000 python main.py` (población real) midiendo
+  rumores propagados de verdad y si algún consciente terminó con opinión
+  sobre un tercero que nunca formó directamente (via
+  `_stats_rumor_terceros_nuevos` + gestor vivo / BD). Reportar la cifra
+  en el mensaje de commit final aunque sea baja o nula.
