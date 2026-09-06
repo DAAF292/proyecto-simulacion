@@ -80,6 +80,16 @@ class SistemaMovimiento:
         # observacion, ningun camino de decision los lee.
         self._stats_memoria_compartida_transferencias: int = 0
         self._stats_memoria_transferida_detalle: set[tuple[int, str, int, int]] = set()
+        # Ocio consciente / SOCIALIZAR (2026-09-06, ver spec
+        # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
+        # cuantas resoluciones de contacto a distancia 0 aplico esta pieza, y
+        # que pares DIRIGIDOS (autor -> otro) recibieron afinidad positiva por
+        # ella -- para la verificacion obligatoria contra BOSQUE_AUTO_TICKS:
+        # confirmar que Relaciones muestra ganancias positivas atribuibles a
+        # SOCIALIZAR, distintas de amistad por convivencia / afinidad por
+        # concepcion. Solo observacion, ningun camino de decision los lee.
+        self._stats_socializar_contacto: int = 0
+        self._stats_socializar_afinidad_pares: set[tuple[int, int]] = set()
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -165,6 +175,11 @@ class SistemaMovimiento:
         self.config_relaciones: dict[str, Any] = self.config.get("relaciones", {})
         self.delta_rencor_disputa: float = float(
             self.config_relaciones.get("delta_rencor_disputa", -0.2)
+        )
+        # Afinidad POSITIVA de SOCIALIZAR al contacto (2026-09-06, ocio
+        # consciente -- ver config/relaciones.yaml). PROVISIONAL.
+        self.delta_afinidad_socializar: float = float(
+            self.config_relaciones.get("delta_afinidad_socializar", 0.02)
         )
 
         # Coste de forrajeo vs. beneficio -- ver docstring de
@@ -306,6 +321,10 @@ class SistemaMovimiento:
                 dx, dy = self._calcular_deambular(
                     gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
                     temperamento, pos.zona_idx,
+                )
+            elif accion == Accion.SOCIALIZAR:
+                dx, dy = self._calcular_socializar(
+                    gestor, mundo, eid, pos.x, pos.y, radio, pos.zona_idx, tick_actual,
                 )
             elif accion == Accion.HUIDA_ERRATICA:
                 dx, dy = self._calcular_huida_erratica(
@@ -508,6 +527,44 @@ class SistemaMovimiento:
                 mejor_dist = dist
         return mejor_id, mejor
 
+    def _consciente_mas_cercano_con_id(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+        zona_idx: int = 0,
+    ) -> tuple[int | None, tuple[int, int] | None]:
+        """Variante de _entidad_cercana_cualquiera_con_id filtrada a
+        CONSCIENTES -- cualquier especie, no solo la propia (a diferencia
+        de _buscar_conspecifico_mas_cercano, que sí filtra por especie).
+        Es el molde de _entidad_cercana_cualquiera_con_id (conflicto
+        verbal) con el filtro de consciencia en vez de "cualquier tipo"
+        (2026-09-06, ocio consciente / SOCIALIZAR). Excluye a quien
+        busca; requiere CapacidadMental.consciencia >=
+        self.umbral_consciencia_agencia (mismo umbral que gatea la agencia
+        en la decisión). Devuelve (id, posicion) del mas cercano dentro
+        del radio o (None, None) si no hay ningun consciente."""
+        mejor_id: int | None = None
+        mejor: tuple[int, int] | None = None
+        mejor_dist = radio + 1
+        for otro_id in gestor.entidades_con(Posicion, CapacidadMental):
+            if otro_id == entidad_id:
+                continue
+            cap_otro = gestor.obtener_componente(otro_id, CapacidadMental)
+            if cap_otro is None or cap_otro.consciencia < self.umbral_consciencia_agencia:
+                continue
+            pos_o = gestor.obtener_componente(otro_id, Posicion)
+            if pos_o is None or pos_o.zona_idx != zona_idx:
+                continue
+            dist = abs(pos_o.x - pos_x) + abs(pos_o.y - pos_y)
+            if dist <= radio and dist < mejor_dist:
+                mejor_id = otro_id
+                mejor = (pos_o.x, pos_o.y)
+                mejor_dist = dist
+        return mejor_id, mejor
+
     def _calcular_huida_erratica(
         self,
         gestor: GestorEntidades,
@@ -566,6 +623,49 @@ class SistemaMovimiento:
                     temperamento, tempe_objetivo, tick_actual,
                 )
                 self._stats_crisis_violenta_contacto += 1
+            return (0, 0)
+        return self._acercarse_a(pos_x, pos_y, *objetivo_pos)
+
+    def _calcular_socializar(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+        zona_idx: int = 0,
+        tick_actual: int = 0,
+    ) -> tuple[int, int]:
+        """SOCIALIZAR (2026-09-06, ocio consciente -- ver spec): acto
+        consciente e independiente del sesgo gregario de DEAMBULAR.
+
+        Busca al consciente mas cercano de CUALQUIER especie (sin la
+        restriccion biologica de _buscar_conspecifico_mas_cercano -- hoy
+        solo hay una especie consciente, pero el mecanismo no debe
+        asumirlo). Si no hay ninguno, cae a paso aleatorio (ocio sin
+        mas nadie cerca). Si el mas cercano ya esta a distancia 0
+        (misma celda: contacto real), resuelve una ganancia de afinidad
+        MUTUA (ambas direcciones, incondicional al contacto -- no depende
+        de que la otra parte tambien este "eligiendo" SOCIALIZAR ese tick,
+        mismo criterio que CRISIS_VIOLENTA) y devuelve (0, 0): no sigue
+        moviendose tras "conseguir" socializar. A distancia > 0 se acerca
+        sin resolver nada, igual que CRISIS_VIOLENTA."""
+        objetivo_id, objetivo_pos = self._consciente_mas_cercano_con_id(
+            gestor, entidad_id, pos_x, pos_y, radio, zona_idx
+        )
+        if objetivo_id is None:
+            return self._paso_aleatorio()
+        if objetivo_pos == (pos_x, pos_y):  # contacto real, no solo cercania
+            self._aplicar_afinidad(
+                gestor, entidad_id, objetivo_id, self.delta_afinidad_socializar, tick_actual,
+            )
+            self._aplicar_afinidad(
+                gestor, objetivo_id, entidad_id, self.delta_afinidad_socializar, tick_actual,
+            )
+            self._stats_socializar_contacto += 1
+            self._stats_socializar_afinidad_pares.add((entidad_id, objetivo_id))
+            self._stats_socializar_afinidad_pares.add((objetivo_id, entidad_id))
             return (0, 0)
         return self._acercarse_a(pos_x, pos_y, *objetivo_pos)
 
@@ -1153,17 +1253,22 @@ class SistemaMovimiento:
         )
         return bono_ofensivo_arma(nivel, temp.agresividad, self.config_armas)
 
-    def _aplicar_rencor(
+    def _aplicar_afinidad(
         self,
         gestor: GestorEntidades,
         autor_id: int,
         otro_id: int,
+        delta: float,
         tick_actual: int,
     ) -> None:
-        """Ajusta la afinidad (rencor) de `autor_id` hacia `otro_id`.
+        """Generico: ajusta la afinidad de `autor_id` hacia `otro_id` en
+        `delta` (positivo o negativo).
 
-        (2026-09-04, nucleo/relaciones.py) -- SOLO ESCRIBE afinidad, nunca
-        la lee en ningun punto de decision (no modula comportamiento aqui).
+        Extraido de _aplicar_rencor (2026-09-06, ocio consciente) para
+        reutilizarse tambien en SOCIALIZAR -- ver spec
+        docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md.
+        SOLO ESCRIBE afinidad, nunca la lee en ningun punto de decision (no
+        modula comportamiento aqui).
 
         Mismo criterio que el nombre propio: un individuo NO consciente
         (fauna) nunca ejecuta ajustar_afinidad sobre su propio Relaciones
@@ -1184,9 +1289,27 @@ class SistemaMovimiento:
         ajustar_afinidad(
             relaciones,
             otro_id,
-            self.delta_rencor_disputa,
+            delta,
             tick_actual,
             capacidad,
+        )
+
+    def _aplicar_rencor(
+        self,
+        gestor: GestorEntidades,
+        autor_id: int,
+        otro_id: int,
+        tick_actual: int,
+    ) -> None:
+        """Ajusta la afinidad (rencor) de `autor_id` hacia `otro_id`.
+
+        (2026-09-04, nucleo/relaciones.py) -- wrapper delgado de
+        _aplicar_afinidad con el delta negativo del rencor por refugio
+        ocupado (refactor 2026-09-06, ocio consciente -- el comportamiento
+        es exactamente el de antes).
+        """
+        self._aplicar_afinidad(
+            gestor, autor_id, otro_id, self.delta_rencor_disputa, tick_actual,
         )
 
     def _resolver_conflicto_entre(

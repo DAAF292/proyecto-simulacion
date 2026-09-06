@@ -199,6 +199,18 @@ consumo:
 
 decision:
   utilidad_deambular_base: 0.1
+  # utilidad_socializar_base (2026-09-06, ocio consciente -- ver
+  # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
+  # utilidad FIJA de Accion.SOCIALIZAR antes de modular por
+  # Temperamento.sociabilidad/curiosidad (la utilidad final es
+  # base * (sociabilidad + curiosidad) / 2). Mismo criterio que
+  # utilidad_deambular_base: un valor constante para un comportamiento de
+  # fondo en vez de una magnitud derivada de una Necesidades que no existe
+  # para esto (expresamente SIN drive dinamico nuevo). PROVISIONAL: por
+  # encima de deambular (0.1) para que un consciente muy sociable/curioso
+  # prefiera socializar sobre vagar sin rumbo cuando ambas compiten con
+  # necesidades ya cubiertas, sin calibrar contra el harness completo.
+  utilidad_socializar_base: 0.3
   # umbral_crisis_interrupcion (2026-08-29, ley B de compromiso de
   # satisfaccion -- ver sistemas/sistema_decision.py): por debajo de este
   # valor en CUALQUIER necesidad fisica distinta de la que la accion

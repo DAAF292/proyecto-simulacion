@@ -403,12 +403,25 @@ class SistemaDecision:
         self.config = config
         self.rng = rng  # sin consumidor en actualizar() hoy -- se conserva
         # por si una futura decisión estocástica (p.ej. desempate) lo necesita.
+        # Contador de observacion para la verificacion obligatoria contra el
+        # motor real (BOSQUE_AUTO_TICKS, 2026-09-06, ocio consciente): cuantas
+        # veces el argmax eligio de verdad Accion.SOCIALIZAR en la accion FINAL
+        # (tras el compromiso de satisfaccion, ley B). Solo observacion, ningun
+        # camino de decision lo lee -- mismo patron que los _stats_* de
+        # SistemaMovimiento.
+        self._stats_socializar_elegidas: int = 0
 
     def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos) -> None:
-        actualizar(gestor, mundo, self.config, bus_eventos, reloj.tick_actual)
+        actualizar(gestor, mundo, self.config, bus_eventos, reloj.tick_actual, self)
 
 
-def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -> None:
+def actualizar(
+    gestor, mundo, config: dict, bus: BusEventos, tick_actual: int,
+    sistema_decision=None,
+) -> None:
+    # sistema_decision: opcional (SistemaDecision). Solo observacion -- se
+    # pasa la instancia para incrementar _stats_socializar_elegidas en la
+    # verificacion BOSQUE_AUTO_TICKS. Ningun camino de decision lo lee.
     base_deambular = config["decision"]["utilidad_deambular_base"]
     config_crisis = config["crisis_mental"]
     umbral_crisis = config_crisis["umbral_estabilidad_crisis"]
@@ -423,6 +436,11 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
     # es agencia consciente, no instinto.
     umbral_consciencia_agencia = float(config["decision"].get("umbral_consciencia_agencia", 0.3))
     utilidad_construir_base = float(config["decision"].get("utilidad_construir_base", 0.3))
+    # utilidad_socializar_base (2026-09-06, ocio consciente -- ver
+    # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
+    # base FIJA de Accion.SOCIALIZAR antes de modular por sociabilidad/
+    # curiosidad. PROVISIONAL.
+    utilidad_socializar_base = float(config["decision"].get("utilidad_socializar_base", 0.3))
     utilidad_recolectar_base = float(config["decision"].get("utilidad_recolectar_base", 0.35))
     catalogo_materiales = config.get("materiales", {})
     config_construccion = config.get("construccion", {})
@@ -557,6 +575,22 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
         utilidad_buscar_pareja = (
             0.0 if (not adulto or gestando or fisica_bajo_umbral)
             else (1.0 - necesidades.impulso_reproductivo)
+        )
+
+        # SOCIALIZAR (2026-09-06, ocio consciente -- ver spec): compite por
+        # el tiempo de ocio (hoy ganado por DEAMBULAR, utilidad fija) cuando
+        # las necesidades estan cubiertas. Utilidad =
+        # utilidad_socializar_base * (sociabilidad + curiosidad) / 2, gateada
+        # a 0.0 si no es consciente o si CUALQUIER necesidad fisica esta bajo
+        # umbral_atencion_pareja (mismo gate que BUSCAR_PAREJA, reutilizando
+        # la variable fisica_bajo_umbral ya calculada). Primer consumidor real
+        # de Temperamento.curiosidad, modulando en pie de igualdad con
+        # sociabilidad. Sin drive dinamico nuevo: usa directamente los rasgos
+        # fijos de Temperamento.
+        utilidad_socializar = (
+            0.0
+            if (cap_mental.consciencia < umbral_consciencia_agencia or fisica_bajo_umbral)
+            else utilidad_socializar_base * (temperamento.sociabilidad + temperamento.curiosidad) / 2.0
         )
 
         # CONSTRUIR / RECOLECTAR (ver docstring del modulo,
@@ -719,6 +753,14 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             (utilidad_recolectar, Accion.RECOLECTAR),
             (utilidad_construir, Accion.CONSTRUIR),
             (utilidad_encender_fuego, Accion.ENCENDER_FUEGO),
+            # SOCIALIZAR va delante de DEAMBULAR a proposito: es la accion de
+            # ocio consciente que compite con el vagabundeo sin rumbo; cuando
+            # su compuerta se cierra (0.0 por no-consciente o necesidad fisica
+            # baja) gana DEAMBULAR por ser la unica candidata de ocio con
+            # utilidad > 0, igual que antes. Con sociabilidad+curiosidad muy
+            # bajas su utilidad puede quedar por debajo de 0.1 y DEAMBULAR
+            # gana el argmax -- la decision es continua, no una regla de zona.
+            (utilidad_socializar, Accion.SOCIALIZAR),
             (base_deambular, Accion.DEAMBULAR),
         )
         # max() con esta lista respeta el orden de prioridad en empates
@@ -755,6 +797,11 @@ def actualizar(gestor, mundo, config: dict, bus: BusEventos, tick_actual: int) -
             )
         if not mantiene:
             intencion.accion = elegida
+        # Observacion BOSQUE_AUTO_TICKS (ocio consciente): contar la accion
+        # FINAL tras el compromiso de satisfaccion -- si el compromiso (ley B)
+        # mantuvo otro curso, el argmax no se ejecuto y no debe contar.
+        if sistema_decision is not None and intencion.accion == Accion.SOCIALIZAR:
+            sistema_decision._stats_socializar_elegidas += 1
         # Vuelca a Intencion la causalidad del RECOLECTAR (armas
         # primitivas v2): solo se recolecta material de arma a
         # Inventario.objetos cuando RECOLECTAR se eligio por el eslabon

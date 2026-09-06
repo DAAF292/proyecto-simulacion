@@ -26,6 +26,7 @@ from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.reproduccion import Sexo
 from componentes.posicion import Posicion
+from componentes.relaciones import Relaciones
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
@@ -521,6 +522,39 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] memoria compartida: "
                 f"{sistemas['movimiento']._stats_memoria_compartida_transferencias} "
                 "transferencias"
+            )
+            # Verificacion obligatoria de ocio consciente (2026-09-06, ver
+            # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
+            # medir explicitamente cuantas veces se eligio SOCIALIZAR, cuantas
+            # resoluciones de contacto a distancia 0 ocurrieron, y si Relaciones
+            # termina con vinculos dirigidos de afinidad positiva atribuibles a
+            # esta pieza (pares que recibieron delta_afinidad_socializar) frente
+            # al total de positivos (amistad por convivencia / afinidad por
+            # concepcion ya existian antes de esta pieza). Solo observacion, no
+            # cambia la simulacion.
+            pares_socializar_positivos = 0
+            pares_positivos_totales = 0
+            for eid in gestor.entidades_con(Relaciones):
+                rel = gestor.obtener_componente(eid, Relaciones)
+                if rel is None:
+                    continue
+                for otro_id, vinculo in rel.vinculos.items():
+                    if vinculo.afinidad > 0.0:
+                        pares_positivos_totales += 1
+                        if (eid, otro_id) in sistemas["movimiento"]._stats_socializar_afinidad_pares:
+                            pares_socializar_positivos += 1
+            print(
+                "[BOSQUE_AUTO_TICKS] socializar elegidas: "
+                f"{sistemas['decision']._stats_socializar_elegidas}"
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] socializar contactos resueltos: "
+                f"{sistemas['movimiento']._stats_socializar_contacto}"
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] Relaciones vinculos dirigidos positivos: "
+                f"{pares_positivos_totales} totales, "
+                f"{pares_socializar_positivos} atribuibles a SOCIALIZAR"
             )
 
     except KeyboardInterrupt:
