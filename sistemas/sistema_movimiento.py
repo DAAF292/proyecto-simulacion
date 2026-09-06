@@ -22,6 +22,7 @@ from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.pool_fisico import PoolFisico
+from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
 # Gestacion vive en su propio módulo (componentes/gestacion.py, ver su
@@ -59,6 +60,13 @@ class SistemaMovimiento:
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
         self.config = config
         self.rng = rng
+        # Contadores de actividad para la verificacion contra el motor real
+        # (BOSQUE_AUTO_TICKS) y los tests dirigidos: cuantas veces este
+        # sistema resolvio un roce social y cuantas un CRISIS_VIOLENTA con
+        # contacto real (2026-09-06, conflicto verbal). Solo observacion,
+        # ningun camino de decision los lee.
+        self._stats_roce_social_resueltos: int = 0
+        self._stats_crisis_violenta_contacto: int = 0
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -110,6 +118,22 @@ class SistemaMovimiento:
         )
         self.drenaje_seguridad_enfrentamiento: float = float(
             self.config_conflicto.get("drenaje_seguridad_enfrentamiento", 0.2)
+        )
+        # Roce social (2026-09-06, conflicto verbal -- ver
+        # docs/superpowers/specs/2026-09-06-conflicto-verbal-design.md):
+        # probabilidad base de friccion entre dos conscientes que comparten
+        # celda, mas los pesos de agresividad combinada y de estres
+        # (1 - PoolMental.estabilidad del mas inestable de los dos) como
+        # moduladores continuos -- mismo pool que dispara la crisis, aqui
+        # sin umbral binario. PROVISIONAL, sin calibrar.
+        self.probabilidad_base_roce_social: float = float(
+            self.config_conflicto.get("probabilidad_base_roce_social", 0.01)
+        )
+        self.peso_agresividad_roce: float = float(
+            self.config_conflicto.get("peso_agresividad_roce", 0.05)
+        )
+        self.peso_estres_roce: float = float(
+            self.config_conflicto.get("peso_estres_roce", 0.05)
         )
         # Capacidad de construcción por celda -- ver
         # config/materiales.yaml sección construccion y
@@ -187,6 +211,16 @@ class SistemaMovimiento:
         tick 0.
         """
         tick_actual: int = reloj.tick_actual if reloj is not None else 0
+
+        # Roce social (2026-09-06, conflicto verbal): UNA VEZ por tick, no
+        # por entidad, sobre las posiciones tal como quedaron al cierre del
+        # tick anterior -- mismo criterio que el conflicto por refugio
+        # ocupado (ambos resuelven sobre la posicion vigente al empezar el
+        # tick, no sobre una posicion a medio actualizar por el propio
+        # bucle). No compite por ninguna Accion: es un chequeo pasivo
+        # independiente de que este haciendo cada consciente ese tick.
+        self._procesar_roce_social(gestor, mundo, tick_actual)
+
         entidades = sorted(
             gestor.entidades_con(Intencion, Posicion, DimensionesFisicas, Identidad)
         )
@@ -261,7 +295,8 @@ class SistemaMovimiento:
                 )
             elif accion == Accion.CRISIS_VIOLENTA:
                 dx, dy = self._calcular_crisis_violenta(
-                    gestor, eid, pos.x, pos.y, radio, pos.zona_idx
+                    gestor, mundo, eid, pos.x, pos.y, radio, pos.zona_idx,
+                    temperamento, tick_actual,
                 )
             # Accion.CATATONIA: sin rama a proposito, mismo criterio que
             # Accion.ALIVIARSE (arriba, tampoco tiene rama) -- dx=dy=0 por
@@ -423,6 +458,38 @@ class SistemaMovimiento:
                 mejor_dist = dist
         return mejor
 
+    def _entidad_cercana_cualquiera_con_id(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+        zona_idx: int = 0,
+    ) -> tuple[int | None, tuple[int, int] | None]:
+        """Variante de _entidad_cercana_cualquiera que ademas devuelve el
+        ID de la entidad mas cercana, no solo su posicion -- CRISIS_VIOLENTA
+        la necesita desde 2026-09-06 (conflicto verbal): con contacto real
+        (distancia 0) el resolutor compartido _resolver_conflicto_entre
+        exige los DOS ids, no basta la celda. _calcular_huida_erratica
+        sigue usando la variante original sin id, intacta -- un vuelco
+        no necesita saber a quien huye, solo en que direccion."""
+        mejor_id: int | None = None
+        mejor: tuple[int, int] | None = None
+        mejor_dist = radio + 1
+        for otro_id in gestor.entidades_con(Posicion):
+            if otro_id == entidad_id:
+                continue
+            pos_o = gestor.obtener_componente(otro_id, Posicion)
+            if pos_o is None or pos_o.zona_idx != zona_idx:
+                continue
+            dist = abs(pos_o.x - pos_x) + abs(pos_o.y - pos_y)
+            if dist <= radio and dist < mejor_dist:
+                mejor_id = otro_id
+                mejor = (pos_o.x, pos_o.y)
+                mejor_dist = dist
+        return mejor_id, mejor
+
     def _calcular_huida_erratica(
         self,
         gestor: GestorEntidades,
@@ -448,21 +515,101 @@ class SistemaMovimiento:
     def _calcular_crisis_violenta(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
         entidad_id: int,
         pos_x: int,
         pos_y: int,
         radio: int,
         zona_idx: int = 0,
+        temperamento: Temperamento | None = None,
+        tick_actual: int = 0,
     ) -> tuple[int, int]:
-        """CRISIS_VIOLENTA: se acerca a cualquiera cercano -- sin
-        mecanica de dano todavia, deliberado (componentes/intencion.py):
-        es un gesto de movimiento, no una resolucion de ataque. Captura
-        real sigue exigiendo Intencion.CAZAR en sistema_depredacion.py,
-        sin cambios aqui."""
-        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio, zona_idx)
-        if objetivo is None:
+        """CRISIS_VIOLENTA + contacto real (2026-09-06, conflicto verbal):
+        se acerca a cualquiera cercano, como antes, PERO cuando el mas
+        cercano ya esta a distancia 0 (misma celda: contacto real, no
+        solo aproximacion) resuelve la disputa con el resolutor compartido
+        _resolver_conflicto_entre en vez de seguir devolviendo movimiento
+        hacia el -- el estado que antes era un gesto vacio (ver
+        docstring anterior) ahora tiene consecuencia. A distancia > 0 el
+        comportamiento es exactamente el de antes: acercarse sin resolver.
+        No es una fuente nueva de riesgo: CRISIS_VIOLENTA ya ocurría a la
+        misma frecuencia; esta pieza solo le da consecuencia. Devuelve
+        (0, 0) tras resolver (no se mueve en el tick del contacto)."""
+        objetivo_id, objetivo_pos = self._entidad_cercana_cualquiera_con_id(
+            gestor, entidad_id, pos_x, pos_y, radio, zona_idx
+        )
+        if objetivo_id is None:
             return self._paso_aleatorio()
-        return self._acercarse_a(pos_x, pos_y, *objetivo)
+        if objetivo_pos == (pos_x, pos_y):  # contacto real, no solo cercania
+            tempe_objetivo = gestor.obtener_componente(objetivo_id, Temperamento)
+            if temperamento is not None and tempe_objetivo is not None:
+                self._resolver_conflicto_entre(
+                    gestor, mundo, entidad_id, objetivo_id,
+                    temperamento, tempe_objetivo, tick_actual,
+                )
+                self._stats_crisis_violenta_contacto += 1
+            return (0, 0)
+        return self._acercarse_a(pos_x, pos_y, *objetivo_pos)
+
+    def _procesar_roce_social(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        tick_actual: int,
+    ) -> None:
+        """Una vez por ejecutar(), no por entidad -- agrupa conscientes por
+        celda+zona exacta, sortea friccion para cada par que coincide.
+
+        Disparador 2 del conflicto verbal (2026-09-06, ver
+        docs/superpowers/specs/2026-09-06-conflicto-verbal-design.md):
+        SOLO entre conscientes (gnomo hoy, umbral_consciencia_agencia);
+        la probabilidad de roce se modula por proximidad real (compartir
+        celda), agresividad combinada de ambos y gradiente de estres
+        (1 - PoolMental.estabilidad del mas inestable de los dos -- el
+        mismo pool que dispara la crisis, aqui como modulador continuo,
+        no umbral binario). Cuando dispara, resuelve con el resolutor
+        compartido _resolver_conflicto_entre. Un mismo par no se procesa
+        dos veces en el mismo tick (bucles i<j sobre cada celda, y cada
+        par aparece en una unica celda por construccion).
+        """
+        por_celda: dict[tuple[int, int, int], list[int]] = {}
+        for eid in gestor.entidades_con(
+            Posicion, Temperamento, CapacidadMental, PoolMental, Necesidades
+        ):
+            cap_mental = gestor.obtener_componente(eid, CapacidadMental)
+            if (
+                cap_mental is None
+                or cap_mental.consciencia < self.umbral_consciencia_agencia
+            ):
+                continue
+            pos = gestor.obtener_componente(eid, Posicion)
+            if pos is None:
+                continue
+            por_celda.setdefault((pos.x, pos.y, pos.zona_idx), []).append(eid)
+
+        for ids in por_celda.values():
+            if len(ids) < 2:
+                continue
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    a_id, b_id = ids[i], ids[j]
+                    temp_a = gestor.obtener_componente(a_id, Temperamento)
+                    temp_b = gestor.obtener_componente(b_id, Temperamento)
+                    pm_a = gestor.obtener_componente(a_id, PoolMental)
+                    pm_b = gestor.obtener_componente(b_id, PoolMental)
+                    if temp_a is None or temp_b is None or pm_a is None or pm_b is None:
+                        continue
+                    estres = max(1.0 - pm_a.estabilidad, 1.0 - pm_b.estabilidad)
+                    prob = (
+                        self.probabilidad_base_roce_social
+                        + self.peso_agresividad_roce * (temp_a.agresividad + temp_b.agresividad) / 2.0
+                        + self.peso_estres_roce * estres
+                    )
+                    if self.rng.random() < prob:
+                        self._resolver_conflicto_entre(
+                            gestor, mundo, a_id, b_id, temp_a, temp_b, tick_actual,
+                        )
+                        self._stats_roce_social_resueltos += 1
 
     def _calcular_caza(
         self,
@@ -945,6 +1092,106 @@ class SistemaMovimiento:
             capacidad,
         )
 
+    def _resolver_conflicto_entre(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        a_id: int,
+        b_id: int,
+        temperamento_a: Temperamento,
+        temperamento_b: Temperamento,
+        tick_actual: int,
+    ) -> ResultadoDisputa:
+        """Extraido de _resolver_posible_intruso (conflicto por refugio
+        ocupado, 2026-08-31) -- 2026-09-06, conflicto verbal: lo usa el
+        refugio ocupado (wrapper), CRISIS_VIOLENTA con contacto real y el
+        roce social. Calcula urgencia (1 - Necesidades.seguridad),
+        mismo_grupo (via asentamiento_de), son_familia (via
+        es_familia_directa) y bono_arma (via _bono_arma_empunada) para
+        ambas partes, resuelve con resolver_disputa, y aplica las
+        consecuencias (drenaje de Necesidades.seguridad + rencor via
+        _aplicar_rencor) segun el desenlace -- CEDE_A/CEDE_B/ENFRENTAMIENTO/
+        COMPARTE, mismas cuatro ramas que _resolver_posible_intruso ya
+        tenia. Simetrico: no importa cual de los dos se pase como 'a' o
+        'b', el resultado y las consecuencias son coherentes en ambos
+        sentidos. Devuelve el ResultadoDisputa para que el llamador decida
+        si necesita reaccionar a el (hoy ninguno lo hace, pero se expone
+        por si un disparador futuro lo necesita)."""
+        nec_a = gestor.obtener_componente(a_id, Necesidades)
+        nec_b = gestor.obtener_componente(b_id, Necesidades)
+        urgencia_a = 1.0 - (nec_a.seguridad if nec_a else 1.0)
+        urgencia_b = 1.0 - (nec_b.seguridad if nec_b else 1.0)
+
+        asen_a = asentamiento_de(mundo, a_id)
+        mismo_grupo = asen_a is not None and b_id in asen_a.miembros
+
+        # Armas primitivas v2 (2026-09-03, ver nucleo/armas.py): el
+        # componente ofensivo del arma EMPUNIADA de cada parte se suma al
+        # indice de asertividad de quien la porte -- primer consumidor
+        # real de robo/agravio generico para nucleo/conflicto.py. Quien
+        # sujeta el refugio con un hacha_primitiva en la mano se impone
+        # mas; la ley es neutra, el arma no impone un caracter, modula la
+        # magnitud de la disputa.
+        bono_arma_a = self._bono_arma_empunada(gestor, a_id)
+        bono_arma_b = self._bono_arma_empunada(gestor, b_id)
+
+        # Parentesco directo (2026-09-04, nucleo/parentesco.py, circulo 5
+        # del arco "hilo individual"): padre/madre-hijo o hermanos suman
+        # cohesion en resolver_disputa, mismo mecanismo que mismo_grupo.
+        son_familia = es_familia_directa(a_id, b_id, gestor)
+
+        resultado = resolver_disputa(
+            temperamento_a,
+            urgencia_a,
+            temperamento_b,
+            urgencia_b,
+            mismo_grupo,
+            self.config_conflicto,
+            bono_arma_a=bono_arma_a,
+            bono_arma_b=bono_arma_b,
+            son_familia=son_familia,
+        )
+
+        if resultado == ResultadoDisputa.COMPARTE:
+            return resultado
+        if resultado == ResultadoDisputa.CEDE_B:
+            # B cede: A se impone, B paga el coste de la intimidacion.
+            if nec_b is not None:
+                nec_b.seguridad = max(
+                    0.0, nec_b.seguridad - self.drenaje_seguridad_perdedor
+                )
+            # Rencor (2026-09-04): B (perdedor) cedio; B, si es consciente,
+            # acumula rencor hacia A. A no cambia.
+            self._aplicar_rencor(gestor, b_id, a_id, tick_actual)
+            return resultado
+        if resultado == ResultadoDisputa.CEDE_A:
+            # A cede: paga el coste, no reclama nada este tick.
+            if nec_a is not None:
+                nec_a.seguridad = max(
+                    0.0, nec_a.seguridad - self.drenaje_seguridad_perdedor
+                )
+            # Rencor (2026-09-04): A (perdedor) cedio; A, si es consciente,
+            # acumula rencor hacia B. B no cambia.
+            self._aplicar_rencor(gestor, a_id, b_id, tick_actual)
+            return resultado
+        # ENFRENTAMIENTO: empate renido entre dos partes asertivas,
+        # ambos pagan el coste del enfrentamiento.
+        if nec_a is not None:
+            nec_a.seguridad = max(
+                0.0, nec_a.seguridad - self.drenaje_seguridad_enfrentamiento
+            )
+        if nec_b is not None:
+            nec_b.seguridad = max(
+                0.0, nec_b.seguridad - self.drenaje_seguridad_enfrentamiento
+            )
+        # Rencor (2026-09-04): ambas partes acumulan rencor mutuo, cada una
+        # solo si ES consciente -- un gnomo consciente que se enfrenta a un
+        # lobo no-consciente acumula rencor hacia el aunque el lobo no
+        # acumule nada de vuelta.
+        self._aplicar_rencor(gestor, a_id, b_id, tick_actual)
+        self._aplicar_rencor(gestor, b_id, a_id, tick_actual)
+        return resultado
+
     def _resolver_posible_intruso(
         self,
         gestor: GestorEntidades,
@@ -964,30 +1211,28 @@ class SistemaMovimiento:
         NEGATIVA sobre el Relaciones de la parte CONSCIENTE.
         tick_actual: para ultima_actualizacion_tick de los vinculos.
 
-        Solo aplica a un refugio CONSTRUIDO propio y
-        ya habitado alguna vez (Construccion real con
-        completado_alguna_vez, no un punto de memoria instintivo sin
-        dueño) -- un refugio instintivo es solo un sitio vacío recordado,
-        no hay nada que "ocupar" en sentido de propiedad. Nada impide
-        físicamente a otro gnomo o a un animal entrar (es una
-        construcción sencilla, sin cerradura) -- esta función no capa esa
-        posibilidad, solo le da consecuencia.
+        Desde 2026-09-06 (conflicto verbal) es un wrapper DELGADO: conserva
+        integra la localizacion del refugio propio (Construccion real con
+        completado_alguna_vez, no un punto de memoria instintivo sin dueno)
+        y del intruso en la misma celda+zona; en cuanto identifica
+        `intruso_id`, delega el resto en `_resolver_conflicto_entre`, el
+        resolutor compartido con CRISIS_VIOLENTA y el roce social.
 
         zona_idx: "misma celda" no basta con comparar (x, y) -- con
         varias zonas (superficie + cuevas) dos entidades en zonas
-        DISTINTAS pueden compartir coordenadas numéricas por pura
-        coincidencia, mismo hallazgo que ya obligó a filtrar
+        DISTINTAS pueden compartir coordenadas numericas por pura
+        coincidencia, mismo hallazgo que ya obligo a filtrar
         almacen_cercano/agrupar_por_proximidad por zona. Se filtra tanto
         la propia Construccion como cualquier candidato a intruso.
 
-        No desplaza al intruso directamente: esta función resuelve el
-        movimiento de UNA sola entidad por iteración (el propietario),
-        no puede mover a otra desde aquí. La consecuencia de perder es
+        No desplaza al intruso directamente: esta funcion resuelve el
+        movimiento de UNA sola entidad por iteracion (el propietario),
+        no puede mover a otra desde aqui. La consecuencia de perder es
         un drenaje de Necesidades.seguridad -- el MISMO campo que ya
         drena cualquier amenaza (nucleo/amenaza.py) -- que sube la
-        utilidad_huir del perdedor en su propia próxima decisión: el
-        perdedor tiende a irse por su cuenta a través del mecanismo de
-        huida ya existente, sin teletransportarlo desde aquí.
+        utilidad_huir del perdedor en su propia proxima decision: el
+        perdedor tiende a irse por su cuenta a traves del mecanismo de
+        huida ya existente, sin teletransportarlo desde aqui.
         """
         cid = construccion_propia(gestor, propietario_id, "refugio")
         if cid is None:
@@ -1024,81 +1269,10 @@ class SistemaMovimiento:
         if temperamento_intruso is None:
             return
 
-        nec_propietario = gestor.obtener_componente(propietario_id, Necesidades)
-        nec_intruso = gestor.obtener_componente(intruso_id, Necesidades)
-        urgencia_propietario = 1.0 - (nec_propietario.seguridad if nec_propietario else 1.0)
-        urgencia_intruso = 1.0 - (nec_intruso.seguridad if nec_intruso else 1.0)
-
-        asen_propietario = asentamiento_de(mundo, propietario_id)
-        mismo_grupo = asen_propietario is not None and intruso_id in asen_propietario.miembros
-
-        # Armas primitivas v2 (2026-09-03, ver nucleo/armas.py): el
-        # componente ofensivo del arma EMPUÑADA de cada parte se suma al
-        # índice de asertividad de quien la porte -- primer consumidor
-        # real de robo/agravio genérico para nucleo/conflicto.py. Quien
-        # sujeta el refugio con un hacha_primitiva en la mano se impone
-        # más; la ley es neutra, el arma no impone un carácter, modula la
-        # magnitud de la disputa.
-        bono_arma_propietario = self._bono_arma_empunada(gestor, propietario_id)
-        bono_arma_intruso = self._bono_arma_empunada(gestor, intruso_id)
-
-        # Parentesco directo (2026-09-04, nucleo/parentesco.py, círculo 5
-        # del arco "hilo individual"): padre/madre-hijo o hermanos suman
-        # cohesión en resolver_disputa, mismo mecanismo que mismo_grupo.
-        son_familia = es_familia_directa(propietario_id, intruso_id, gestor)
-
-        resultado = resolver_disputa(
-            temperamento,
-            urgencia_propietario,
-            temperamento_intruso,
-            urgencia_intruso,
-            mismo_grupo,
-            self.config_conflicto,
-            bono_arma_a=bono_arma_propietario,
-            bono_arma_b=bono_arma_intruso,
-            son_familia=son_familia,
+        self._resolver_conflicto_entre(
+            gestor, mundo, propietario_id, intruso_id,
+            temperamento, temperamento_intruso, tick_actual,
         )
-
-        if resultado == ResultadoDisputa.COMPARTE:
-            return
-        if resultado == ResultadoDisputa.CEDE_B:
-            # El intruso cede: el propietario se impone, el intruso paga
-            # el coste de la intimidación.
-            if nec_intruso is not None:
-                nec_intruso.seguridad = max(
-                    0.0, nec_intruso.seguridad - self.drenaje_seguridad_perdedor
-                )
-            # Rencor (2026-09-04): B (intruso) cedio; B, si es consciente,
-            # acumula rencor hacia A. A no cambia.
-            self._aplicar_rencor(gestor, intruso_id, propietario_id, tick_actual)
-            return
-        if resultado == ResultadoDisputa.CEDE_A:
-            # El propietario cede en su propio refugio: paga el coste,
-            # no lo reclama de verdad este tick.
-            if nec_propietario is not None:
-                nec_propietario.seguridad = max(
-                    0.0, nec_propietario.seguridad - self.drenaje_seguridad_perdedor
-                )
-            # Rencor (2026-09-04): A (propietario) cedio; A, si es
-            # consciente, acumula rencor hacia B. B no cambia.
-            self._aplicar_rencor(gestor, propietario_id, intruso_id, tick_actual)
-            return
-        # ENFRENTAMIENTO: empate reñido entre dos partes asertivas,
-        # ambos pagan el coste del enfrentamiento.
-        if nec_propietario is not None:
-            nec_propietario.seguridad = max(
-                0.0, nec_propietario.seguridad - self.drenaje_seguridad_enfrentamiento
-            )
-        if nec_intruso is not None:
-            nec_intruso.seguridad = max(
-                0.0, nec_intruso.seguridad - self.drenaje_seguridad_enfrentamiento
-            )
-        # Rencor (2026-09-04): ambas partes acumulan rencor mutuo, cada una
-        # solo si ES consciente -- un gnomo consciente que se enfrenta a un
-        # lobo no-consciente acumula rencor hacia el aunque el lobo no
-        # acumule nada de vuelta.
-        self._aplicar_rencor(gestor, propietario_id, intruso_id, tick_actual)
-        self._aplicar_rencor(gestor, intruso_id, propietario_id, tick_actual)
 
     def _calcular_construir(
         self,

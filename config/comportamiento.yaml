@@ -154,3 +154,15 @@ conflicto:
   # forzado escrito aquí.
   drenaje_seguridad_perdedor: 0.3
   drenaje_seguridad_enfrentamiento: 0.2
+  # Roce social (2026-09-06, Conflicto verbal -- ver
+  # docs/superpowers/specs/2026-09-06-conflicto-verbal-design.md):
+  # probabilidad de friccion entre dos conscientes que comparten celda
+  # exacta, modulada por agresividad combinada y por el gradiente de
+  # estres (1 - PoolMental.estabilidad del mas inestable de ambos) --
+  # el mismo pool que dispara la crisis, aqui como modulador continuo.
+  # Elegidas para ser sensiblemente mas frecuentes que CRISIS_VIOLENTA
+  # (estado raro) sin disparar cada tick entre todo par que conviva en
+  # un asentamiento. PROVISIONAL, sin calibrar contra el harness.
+  probabilidad_base_roce_social: 0.01
+  peso_agresividad_roce: 0.05
+  peso_estres_roce: 0.05
