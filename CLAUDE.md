@@ -4420,3 +4420,68 @@ según mejoran las demás especies); (c) el harness completo (15 semillas
 verdad. Todos los valores tocados hoy (`tasa_perdida_saciedad_por_tick`,
 `probabilidad_muerte_saciedad_critica`, `factor_base_concepcion` de
 lobo/ardilla/gnomo) siguen PROVISIONALES.
+
+### Medición directa del criterio real de Diego, con ambos fixes ya en
+### `master` -- 0/4 semillas nuevas, pero cerca, y conejo emerge como el
+### siguiente eslabón débil (2026-09-06, mismo cierre de sesión)
+
+Con los fixes de ardilla y gnomo ya en `master` (commits `f42c5a6` y
+`c5697a7`), se corrió un lote de semillas nuevas (8001-8008, 6000 ticks,
+cortado en 4 completas por tiempo) midiendo directamente el criterio
+real que Diego fijó -- no la extinción por especie por separado, sino
+cuántas semillas terminan con las 5 especies vivas SIMULTÁNEAMENTE:
+
+| Semilla | gnomo | lobo | conejo | ardilla | caballo | Especies vivas |
+|---|---|---|---|---|---|---|
+| 8001 | 2 | 3 | 0 | 41 | 0 | 3/5 |
+| 8002 | 5 | 1 | 0 | 0 | 0 | 2/5 |
+| 8003 | 0 | 7 | 0 | 14 | 5 | 3/5 |
+| 8004 | 0 | 6 | 8 | 22 | 11 | 4/5 |
+
+**0 de 4 semillas cumplen el criterio del 50% con las 5 especies vivas a
+la vez** -- el objetivo de Diego sigue sin alcanzarse, con la muestra
+disponible hasta ahora. Pero hay progreso real y visible: la semilla
+8004 le faltó únicamente gnomo, y en ninguna de las 4 semillas fallan
+más de 3 especies a la vez (frente al colapso casi total que era la
+norma al principio del día).
+
+**Hallazgo nuevo, no anticipado**: **conejo está en 0 en 3 de las 4
+semillas** -- antes una de las especies más robustas del catálogo
+(nunca recibió ningún ajuste en toda la sesión), podría estar
+convirtiéndose en el siguiente eslabón débil precisamente PORQUE las
+demás especies mejoraron (más competencia real por el mismo espacio/
+comida, o simplemente que conejo nunca tuvo su propio ajuste mientras
+lobo/ardilla/gnomo sí). No investigado a fondo -- candidato directo si
+se retoma esta investigación.
+
+**Decisión de cierre de la sesión (Diego)**: documentar todo el estado
+real y parar aquí, dado el tiempo ya invertido, en vez de seguir
+iterando sin límite. Progreso neto del día, medido con honestidad: se
+pasó de "ardilla y gnomo se extinguen en el 100% de las semillas,
+0/10+ con las 5 especies vivas a la vez" a "ardilla y gnomo sobreviven
+la mayoría de las veces individualmente, la combinación conjunta de las
+5 especies vivas sigue sin lograrse en la muestra medida, con conejo
+como nuevo candidato a investigar". El objetivo del 50% de Diego NO
+está cumplido -- se documenta así explícitamente, sin inflar el
+resultado.
+
+**Pendiente real, en orden de prioridad si se retoma**:
+1. Investigar por qué conejo, nunca tocado, empieza a fallar ahora --
+   confirmar si es un efecto real de que las demás especies compitan
+   más (más gnomos/ardillas vivos = más presión sobre el mismo espacio
+   de pradera/bosque) o una coincidencia de estas 4 semillas concretas.
+2. Correr un lote bastante mayor (15-20 semillas) para medir el %
+   real del criterio de las 5 especies vivas con más confianza
+   estadística que las 4 semillas de esta comprobación.
+3. Si conejo se confirma como problema real, aplicar el mismo
+   recetario (hambre + concepción combinadas) ya validado tres veces
+   hoy (lobo, ardilla, gnomo) -- aunque conejo nunca mostró síntomas de
+   este tipo antes, así que convendría diagnosticar primero, no asumir
+   la misma causa sin medirla.
+4. El PR #19 (radio de pareja ampliado) sigue sin fusionar -- su
+   trade-off conocido (ayuda a gnomo, perjudica a caballo) puede haber
+   quedado superado por el fix directo de gnomo de hoy; revisar si
+   sigue mereciendo la pena antes de decidir su destino.
+5. Harness completo (15 semillas × 12000 ticks) sigue siendo la
+   referencia de rigor pendiente desde "Sobrepoblación..." para
+   cualquier calibración que se quiera dar por cerrada de verdad.
