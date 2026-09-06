@@ -444,7 +444,11 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 if [ "$TEST_PASSED" = true ]; then
-    mv "docs/plans/in_progress/$PLAN_NAME.md" "docs/plans/in_review/$PLAN_NAME.md"
+    if [ -f "docs/plans/in_progress/$PLAN_NAME.md" ]; then
+        mv "docs/plans/in_progress/$PLAN_NAME.md" "docs/plans/in_review/$PLAN_NAME.md"
+    else
+        echo "[AVISO] docs/plans/in_progress/$PLAN_NAME.md ya no existe -- el propio agente pudo haberlo movido/renombrado por su cuenta (visto por primera vez en 2026-09-06-ocio-consciente-socializar). No es un fallo real, se omite el mv."
+    fi
     git add .
     
     if ! git diff-index --quiet HEAD; then
