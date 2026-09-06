@@ -12,6 +12,8 @@
 percepcion:
   radio_minimo_celdas: 0
   radio_maximo_celdas: 4
+  radio_minimo_pareja_celdas: 3
+  radio_maximo_pareja_celdas: 12
 
 movimiento:
   coste_resistencia_pendiente: 0.05

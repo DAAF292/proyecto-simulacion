@@ -66,6 +66,8 @@ class SistemaMovimiento:
         cfg_per = self.config.get("percepcion", {})
         self.radio_min: int = int(cfg_per.get("radio_minimo_celdas", 0))
         self.radio_max: int = int(cfg_per.get("radio_maximo_celdas", 4))
+        self.radio_min_pareja: int = int(cfg_per.get("radio_minimo_pareja_celdas", 3))
+        self.radio_max_pareja: int = int(cfg_per.get("radio_maximo_pareja_celdas", 12))
 
         cfg_rel = self.config.get("relieve", {})
         self.pend_min: float = float(cfg_rel.get("pendiente_minima_transitable", 0.05))
@@ -242,8 +244,11 @@ class SistemaMovimiento:
                     zona, pos.x, pos.y, dims.altura, radio, mem, cap_mental
                 )
             elif accion == Accion.BUSCAR_PAREJA:
+                radio_pareja = radio_individual(
+                    dims.agudeza_sensorial, self.radio_min_pareja, self.radio_max_pareja
+                )
                 dx, dy = self._calcular_pareja(
-                    gestor, eid, ident.especie, pos.x, pos.y, radio, pos.zona_idx
+                    gestor, eid, ident.especie, pos.x, pos.y, radio_pareja, pos.zona_idx
                 )
             elif accion == Accion.CONSTRUIR:
                 dx, dy = self._calcular_construir(
