@@ -4344,3 +4344,79 @@ por dónde seguir -- no repite el detalle ya documentado arriba, apunta a
 4. Enfoque B (ventana de resiliencia) como complemento de bajo riesgo si
    los anteriores no bastan -- no ataca la causa confirmada hoy, pero
    sigue siendo un margen adicional razonable de bajo coste.
+
+## Cierre real del día: fix directo de ardilla y gnomo (hambre +
+## concepción combinadas) -- mejora sustancial confirmada, el objetivo
+## del 50% con las 5 especies vivas a la vez SIGUE sin alcanzarse
+## (2026-09-06, misma tarde, tras "tenemos que solucionar estos
+## problemas para poder seguir desarrollando")
+
+Diego fijó un criterio de éxito concreto y exigente: al menos el 50% de
+las semillas deberían terminar con las 5 especies vivas SIMULTÁNEAMENTE,
+no solo con alguna sobreviviendo. Medido contra el estado del motor tras
+"radio de pareja": 0 de 10 semillas probadas cumplían ese criterio,
+bloqueadas siempre por ardilla (100% de extinción, sin excepción, en
+más de 90 semillas del día). Ante la insistencia explícita de Diego
+("no tiene sentido meter mecánicas nuevas si las poblaciones se
+extinguen"), se investigó hasta encontrar una solución real, en vez de
+seguir reportando hallazgos negativos.
+
+**Ardilla, resuelto** (commit `f42c5a6`): ninguna de las hipótesis
+específicas de ardilla probadas por separado funcionaba (competencia
+con gnomo: descartada tras eliminar gnomo del mundo por completo, misma
+extinción; concepción sola: cero efecto; mitigación de hambre sola:
+inconsistente entre lotes). **El hallazgo real**: la combinación de
+ambas -- el mismo recetario que ya había funcionado para lobo, nunca
+antes probado junto para ardilla porque cada pieza se había probado por
+separado -- sí funciona. `config/fisiologia.yaml:necesidades.ardilla`
+gana `tasa_perdida_saciedad_por_tick=0.0008`/
+`probabilidad_muerte_saciedad_critica=0.0004` (idéntico a lobo);
+`config/poblacion.yaml:rangos_raciales.ardilla.factor_base_concepcion`
+sube de 0.0067 a 0.03 (x4.5). Verificado en dos lotes independientes de
+semillas nuevas: **6 de 8 semillas con población de ardilla real y
+sostenida** (11, 3, 412, 78, 16, 7 individuos), frente al 0 sistemático
+de antes -- una de ellas (412 individuos) disparó el tope de seguridad
+del propio arnés de diagnóstico.
+
+**Gnomo, mismo recetario aplicado a continuación** (commit `c5697a7`):
+con ardilla resuelta, gnomo pasó a ser el bloqueo dominante (80% de
+extinción en la verificación más reciente, nunca tocado hasta ese
+momento). Mismo par de valores en `necesidades.gnomo`;
+`factor_base_concepcion` sube de 0.0033 (el peor del catálogo) a 0.015.
+Diferencia real señalada en el propio comentario del config, no
+resuelta del todo: la gestación de gnomo (4800-6240 ticks) es del mismo
+orden que la ventana de verificación completa (6000-8000 ticks), y su
+camada está fija en 1 sin ninguna compensación posible (a diferencia de
+lobo 4-6 y ardilla 2-4) -- el efecto podría ser estructuralmente más
+limitado aquí. Verificado con 3 semillas nuevas completadas antes de
+cortar por tiempo (7001-7003): gnomo sobrevivió con población real en
+las 3 (4, 4, 2 individuos) frente al 80% de extinción previo -- mejora
+clara y consistente en la muestra parcial disponible.
+
+**Honestidad sobre el objetivo real de Diego, todavía sin alcanzar**:
+en las mismas 3 semillas donde gnomo mejoró (7001-7003), **ardilla
+estuvo en 0 en las tres** -- su tasa de éxito medida (~75% en 8 semillas
+distintas) es alta pero no garantizada semilla a semilla, y no coincidió
+con las semillas donde se verificó el fix de gnomo. Ninguna de las
+semillas probadas hoy, tras ambos fixes, ha mostrado todavía las 5
+especies vivas simultáneamente -- el criterio del 50% de Diego sigue sin
+confirmarse. Esto no invalida el progreso real (ambas especies
+individualmente pasaron de "extinción sistemática" a "supervivencia
+frecuente"), pero es la métrica que de verdad importa y todavía no se ha
+medido de forma conjunta con un lote suficientemente grande.
+
+**Pendiente real, inmediato**: correr un lote de verificación conjunto
+(gnomo + ardilla + lobo + caballo, todos con sus fixes ya aplicados) el
+tiempo suficiente para medir directamente el criterio real de Diego (%
+de semillas con las 5 especies vivas a la vez) antes de dar esto por
+cerrado. Candidatos si ese lote muestra que sigue sin alcanzarse: (a) el
+mismo recetario podría necesitar un tercer ingrediente para gnomo
+específicamente, dado el problema estructural de gestación larga/camada
+fija ya señalado; (b) revisar si conejo (nunca recibido este recetario,
+su extinción parcial en varias de las corridas de hoy -60-100% en
+algunos lotes- podría estar convirtiéndose en el nuevo cuello de botella
+según mejoran las demás especies); (c) el harness completo (15 semillas
+× 12000 ticks) sigue pendiente para cualquier calibración cerrada de
+verdad. Todos los valores tocados hoy (`tasa_perdida_saciedad_por_tick`,
+`probabilidad_muerte_saciedad_critica`, `factor_base_concepcion` de
+lobo/ardilla/gnomo) siguen PROVISIONALES.
