@@ -4191,6 +4191,55 @@ lobo, y `factor_base_concepcion` de cualquier especie siguen
 PROVISIONALES, sin relación con este cambio -- este círculo no tocó
 ningún valor numérico, solo la disposición espacial de la siembra.
 
+### CORRECCIÓN el mismo día -- la "mejora drástica" de arriba era real
+### pero PARCIAL: a más plazo (6000 ticks), gnomo y ardilla vuelven a
+### extinguirse al 100%
+
+Diego pidió confirmar si la mejora se sostenía más allá de los 4000
+ticks ya probados -- exactamente el "límite real a vigilar" que el
+párrafo de arriba ya señalaba como no confirmado. Medido (5 semillas
+nuevas, 1001-1005, × 6000 ticks, mismo criterio de lote pequeño):
+
+| Especie | Extinción (de 5) | Media |
+|---|---|---|
+| gnomo | **5/5 (100%)** | 0.0 |
+| lobo | 0/5 | 3.2 |
+| conejo | 2/5 | 28.6 |
+| ardilla | **5/5 (100%)** | 0.0 |
+| caballo | 0/5 | 3.2 |
+
+**Gnomo y ardilla vuelven exactamente a su tasa de fallo de antes del
+fix** -- el buen resultado a 4000 ticks era real pero temporal para
+estas dos especies, no una solución duradera. Lobo y caballo, en
+cambio, SÍ se sostienen con solidez a 6000 ticks (0/5 extinción en
+ambos) -- la mejora para ellos es real y duradera.
+
+**Hipótesis causal, no confirmada con más profundidad todavía**: la
+pareja fundadora resuelve el arranque de la PRIMERA generación, pero las
+crías siguen dispersándose y buscando pareja por el mismo mecanismo
+lento de siempre (sesgo gregario de deambular) -- exactamente el hueco
+que el Enfoque C (búsqueda activa de pareja) estaba pensado para cerrar.
+Lobo (concepción ya subida x4.5 hoy mismo) y caballo (camada/gestación
+ya diseñadas para sostenibilidad) tienen tasa de reproducción suficiente
+para construir densidad de población real antes de que la generación
+fundadora muera de vieja; gnomo (peor tasa de concepción del catálogo,
+camada fija en 1) y ardilla (concepción baja, dieta y bioma compartidos
+con dos competidores/depredadores) no llegan a tiempo -- cuando el
+impulso inicial se apaga, la población remanente vuelve al mismo
+problema de partida disperso, esta vez sin el colchón de una generación
+fundadora completa.
+
+**Conclusión honesta**: "parejas fundadoras" NO es una solución completa
+para la estabilidad general -- es una mejora real y duradera para
+especies con reproducción ya razonablemente rápida (lobo, caballo), pero
+solo un aplazamiento temporal para las de reproducción lenta (gnomo,
+ardilla). El Enfoque C (búsqueda activa de pareja, ya aparcado arriba)
+deja de ser un "candidato futuro" y pasa a ser la pieza que probablemente
+hace falta para cerrar esto de verdad -- confirmado con datos, no solo
+teorizado. Enfoque B (ventana de resiliencia) sigue como complemento de
+menor alcance. Ninguna cifra tiene la resolución del harness completo
+-- n=5 por config, misma limitación que arriba.
+
 ## Síntesis: investigación de estabilidad de población del 2026-09-05/06
 ## -- qué se averiguó, qué se corrigió, y qué enfoques quedan para seguir
 
@@ -4229,67 +4278,69 @@ por dónde seguir -- no repite el detalle ya documentado arriba, apunta a
    contra el riesgo que la población fundadora no tenía ninguna ventaja
    estructural para ganar.
 5. **Reestructuración de la siembra ("parejas fundadoras")**: corrige el
-   punto 4 directamente -- salto de magnitud frente a todo lo anterior
-   (gnomo/lobo/caballo con 0/5 extinción, lobo con media 11, ardilla con
-   su primera supervivencia real del día).
+   punto 4 directamente, pero solo PARCIALMENTE -- ver el punto 6.
+6. **CORRECCIÓN, mismo día**: a 4000 ticks, salto de magnitud frente a
+   todo lo anterior (gnomo/lobo/caballo con 0/5 extinción). Pero
+   confirmado a 6000 ticks que gnomo y ardilla vuelven al 100% de
+   extinción -- la mejora era real pero temporal para ellas, mientras
+   que lobo y caballo (reproducción ya razonablemente rápida) SÍ se
+   sostienen con solidez. Causa probable: "parejas fundadoras" arregla
+   el arranque de la generación fundadora, pero las crías posteriores
+   siguen dependiendo del mismo mecanismo lento de encuentro (sesgo
+   gregario) -- especies de reproducción lenta (gnomo, ardilla) no
+   construyen suficiente densidad antes de que ese impulso inicial se
+   apague.
 
 ### Qué queda genuinamente abierto
 
-- **Ardilla sigue siendo la especie más frágil** (4/5 extinta incluso
-  con parejas fundadoras). Comparte bosque con gnomo (compite por
-  manzanas/raíces, dieta subconjunto de la suya) y con lobo (expuesta a
-  depredación) -- a diferencia de conejo, aislado en pradera. No se ha
-  determinado si esto exige un enfoque propio o si basta con B/C de
-  abajo aplicados de forma general.
-- **Enfoque B, aparcado**: ventana de resiliencia temprana en el modelo
-  de mortalidad (un individuo recién adulto con más margen antes de que
-  el riesgo actúe con toda su fuerza) -- atacaría la carrera desde el
-  lado del riesgo en vez del encuentro. Riesgo de diseño señalado en su
-  momento: hay que enmarcarlo como un rasgo físico neutral (reserva/
-  resiliencia que decae con la edad), no atado al estado reproductivo,
-  para no rozar ser teleológico.
-- **Enfoque C, aparcado**: búsqueda activa de pareja más fuerte y de
-  mayor alcance, con lógica dedicada (como ya tienen CAZAR o HUIR) en
-  vez de depender del sesgo gregario genérico de deambular. Es la ley
-  más "correcta" a largo plazo, pero toca el motor de movimiento en
-  marcha, mayor superficie que A.
-- **Límite real de "parejas fundadoras" a vigilar, no confirmado ni
-  refutado todavía**: el fix garantiza un buen arranque para la
-  GENERACIÓN FUNDADORA, pero los nacimientos posteriores durante la
-  partida siguen dispersándose y buscando pareja por el mismo mecanismo
-  de siempre (sesgo gregario genérico). La verificación de hoy (4000
-  ticks) muestra que el arranque fuerte parece bastar para que la
-  densidad poblacional resultante sostenga el ciclo por sí sola, pero
-  esto no está confirmado a más largo plazo (8000+ ticks, o el harness
-  completo) -- si una población cae de nuevo a pocos individuos
-  dispersos en una partida larga, podría reproducir el mismo problema
-  de origen para lo que quede vivo. Candidato real para el Enfoque C si
-  se observa este patrón.
+- **Gnomo Y ardilla, no solo ardilla, siguen siendo las especies
+  frágiles a más de 4000 ticks** (100% de extinción a 6000 ticks, pese a
+  las parejas fundadoras). Ardilla además comparte bosque con gnomo
+  (compite por manzanas/raíces, dieta subconjunto de la suya) y con lobo
+  (expuesta a depredación) -- a diferencia de conejo, aislado en
+  pradera; gnomo no tiene ese problema de bioma, su fragilidad es pura
+  cuestión de tasa de reproducción (peor concepción del catálogo,
+  camada fija en 1).
+- **Enfoque C ya no es un candidato especulativo -- los datos apuntan
+  directamente a él**: búsqueda activa de pareja más fuerte y de mayor
+  alcance, con lógica dedicada (como ya tienen CAZAR o HUIR) en vez de
+  depender del sesgo gregario genérico de deambular, para que las
+  generaciones POSTERIORES a la fundadora (no solo la primera) puedan
+  encontrarse a tiempo. Mayor superficie que "parejas fundadoras" (toca
+  el motor de movimiento en marcha), pero es el candidato mejor
+  respaldado por evidencia real hoy.
+- **Enfoque B, aparcado, menor prioridad tras el hallazgo de 6000
+  ticks**: ventana de resiliencia temprana en el modelo de mortalidad --
+  ataca la carrera desde el lado del riesgo, no del encuentro; sigue
+  siendo un complemento válido pero no ataca la causa recién confirmada
+  (crías sin mecanismo de encuentro efectivo). Riesgo de diseño ya
+  señalado: enmarcarlo como rasgo físico neutral, no atado al estado
+  reproductivo, para no rozar ser teleológico.
 - **A'/B' de la investigación de fragilidad de lobo, nunca abordadas**:
-  revisar la mecánica de inanición de forma universal (más allá de la
-  mitigación específica de lobo), e investigar en profundidad la
-  relación depredador-presa de lobo con las demás presas además de
-  gnomo. Parcialmente superadas por el hallazgo de "parejas fundadoras"
-  (que resultó ser una palanca mucho más potente que cualquier ajuste de
-  inanición), pero no descartadas -- podrían seguir aportando si se
-  combinan con la reestructuración ya hecha.
+  revisar la mecánica de inanición de forma universal, e investigar en
+  profundidad la relación depredador-presa de lobo con las demás presas
+  además de gnomo. Menos urgentes ahora que lobo ya se sostiene con
+  solidez a 6000 ticks gracias a la combinación de su propio fix más
+  parejas fundadoras.
 - **Harness completo (15 semillas × 12000 ticks), pendiente desde
   "Sobrepoblación..." (2026-08-31)**: sigue siendo la referencia de
   rigor real que el proyecto nunca ha corrido para nada de esto. Todas
-  las cifras de hoy (incluida la tabla de "parejas fundadoras", n=5) son
-  direccionales, no una calibración cerrada.
+  las cifras de hoy (incluidas ambas tablas de "parejas fundadoras",
+  n=5 cada una) son direccionales, no una calibración cerrada -- aunque
+  la de 6000 ticks ya dio una señal binaria clara (100% vs 0%), no un
+  resultado ambiguo que necesite más resolución para interpretarse.
 
 ### Recomendación de orden si se retoma
 
-1. Confirmar el límite de largo plazo de "parejas fundadoras" con una
-   corrida más larga (8000-12000 ticks, lote pequeño primero) antes de
-   decidir si hace falta el Enfoque C.
-2. Si ardilla sigue siendo la especie fragil tras eso, investigar su
-   caso específico (comparte bioma con dos especies, dieta subconjunto)
-   antes de asumir que B/C bastan sin más.
-3. Enfoque B (ventana de resiliencia) como complemento de bajo riesgo si
-   hace falta más margen general, dado que no toca movimiento ni
-   reproducción.
-4. Enfoque C (búsqueda activa de pareja) como el cambio de mayor alcance
-   si los anteriores no bastan -- mayor superficie, pero la ley más
-   "correcta" a largo plazo según lo discutido en brainstorming.
+1. **Diseñar el Enfoque C** (búsqueda activa de pareja, lógica dedicada
+   más allá del sesgo gregario genérico) -- ya no es "si hace falta más
+   mejora", es el paso confirmado como necesario por el hallazgo de 6000
+   ticks. Mismo proceso de brainstorming que parejas fundadoras.
+2. Al verificarlo, comprobar específicamente si soluciona gnomo Y
+   ardilla a 6000+ ticks, no solo repetir la mejora ya vista a 4000.
+3. Si ardilla sigue rezagada tras eso, investigar su caso específico
+   (comparte bioma con dos especies, dieta subconjunto) como una
+   segunda capa, no como sustituto de C.
+4. Enfoque B (ventana de resiliencia) como complemento de bajo riesgo si
+   los anteriores no bastan -- no ataca la causa confirmada hoy, pero
+   sigue siendo un margen adicional razonable de bajo coste.
