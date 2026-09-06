@@ -512,6 +512,17 @@ def main() -> None:
             if guardar_cada_ticks > 0 and reloj.tick_actual % guardar_cada_ticks == 0:
                 persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla, rng_reproduccion)
 
+        if auto_ticks > 0:
+            # Verificacion obligatoria contra el motor real (2026-09-06,
+            # memoria espacial compartida): reportar cuantas transferencias
+            # de memoria ocurrieron de verdad durante la tanda
+            # BOSQUE_AUTO_TICKS. Solo observacion, no cambia la simulacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] memoria compartida: "
+                f"{sistemas['movimiento']._stats_memoria_compartida_transferencias} "
+                "transferencias"
+            )
+
     except KeyboardInterrupt:
         pass
     finally:
