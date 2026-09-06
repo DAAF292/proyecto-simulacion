@@ -141,7 +141,15 @@ rangos_raciales:
     altura: [0.2, 0.3]
     longevidad: [1, 3]
     duracion_gestacion_dias: [15, 25]
-    camada: [3, 7]
+    # camada REBAJADA 2026-09-06 (de [3, 7] a [3, 5]) -- mitigacion
+    # explicita de Diego junto al alivio de hambre nuevo en
+    # fisiologia.yaml:necesidades.conejo (ver ese comentario y CLAUDE.md,
+    # "conejo confirmado como nuevo eslabon debil"): el alivio de hambre
+    # en solitario disparaba a 500-700 individuos sin estabilizarse en la
+    # prueba A/B. Techo del rango bajado (7->5) para recortar el caso mas
+    # extremo de camada sin tocar el mínimo -- PROVISIONAL, sin volver a
+    # correr el motor con este cambio combinado.
+    camada: [3, 5]
     fraccion_madurez: 0.3
     factor_base_concepcion: 0.015
     # 0: un conejo real no sujeta objetos de forma activa (a diferencia

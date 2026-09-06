@@ -4571,21 +4571,28 @@ la ventana completa, termine en un ciclo boom-bust (mismo patrón ya
 documentado en "Sobrepoblación...") o que la explosión de conejo presione
 por comida a las demás especies de pradera (caballo).
 
-**Decisión explícita de Diego: dejarlo documentado, sin tocar
-`config/fisiologia.yaml` en esta sesión** -- ningún valor de conejo
-cambiado en el repo real, el hallazgo queda para retomar en un futuro
-círculo de calibración, no para arreglar ahora mismo con una cifra a
-ojo. Candidato razonado para cuando se retome: un ajuste de MENOR
-magnitud que el de lobo/ardilla/gnomo (a medio camino entre el valor
-`defecto` y `0.0008`/`0.0004`), dado que conejo no necesita compensación
-de concepción como las otras tres.
+**ACTUALIZACIÓN, mismo día, tras discutir el hallazgo con Diego -- SÍ
+aplicado a `master`**: en vez de dejarlo solo documentado, Diego pidió
+subir el mismo alivio de hambre (`0.0008`/`0.0004`,
+`fisiologia.yaml:necesidades.conejo`, nueva entrada) combinado con una
+mitigación explícita de la sobrecorrección -- rebajar levemente el techo
+de camada de conejo (`poblacion.yaml`, `camada: [3, 7]` → `[3, 5]`, solo
+el máximo, sin tocar el mínimo), **sin volver a correr el motor tras este
+cambio combinado** ("si quieres haz un pequeño ajuste... no hace falta
+que lo testees" -- decisión explícita de Diego de aceptar el riesgo de un
+valor sin reverificar, a cambio de no gastar otra ronda larga de
+diagnóstico el mismo día). 216/216 tests en verde (sanity de que el
+config sigue cargando y nada se rompe mecánicamente -- no es una
+verificación de que la sobrecorrección quede resuelta).
 
-**Pendiente real, explícito**: `config/fisiologia.yaml` de conejo sigue
-sin ningún override -- el hallazgo de sobrecorrección queda documentado,
-no resuelto; el criterio del 50% de Diego (5 especies vivas a la vez)
-sigue sin alcanzarse con la calibración actual (12% medido, n=8); el
-harness completo (15×12000) sigue pendiente para cualquier calibración
-que se quiera dar por cerrada; el PR #19 (radio de pareja ampliado)
-sigue sin fusionar, su destino sin decidir. Próximo círculo de
+**Pendiente real, explícito, ahora distinto del párrafo original de
+arriba**: el efecto real de la combinación (hambre aliviada + camada
+recortada) sobre conejo NO está verificado contra el motor -- candidato
+directo a revisar en el próximo círculo de calibración que se retome,
+antes de dar el ajuste por bueno; el criterio del 50% de Diego (5
+especies vivas a la vez) sigue sin remedirse con este cambio ya aplicado;
+el harness completo (15×12000) sigue pendiente para cualquier
+calibración que se quiera dar por cerrada; el PR #19 (radio de pareja
+ampliado) sigue sin fusionar, su destino sin decidir. Próximo círculo de
 desarrollo, distinto de esta investigación de calibración, pendiente de
 plantear con Diego.

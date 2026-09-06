@@ -168,6 +168,30 @@ necesidades:
     # verificar contra el motor real antes de darlo por suficiente.
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+  conejo:
+    # AÑADIDO 2026-09-06 (misma investigacion de estabilidad de poblacion,
+    # ver CLAUDE.md -- "conejo confirmado como nuevo eslabon debil"). A
+    # diferencia de lobo/ardilla/gnomo, conejo nunca tuvo entrada propia
+    # aqui -- seguia con los valores universales de `defecto` mientras las
+    # otras tres ya bajaron a este mismo par. Medido en 8 semillas nuevas:
+    # 50% de extincion, inanicion como causa dominante (73%) -- mismo
+    # patron que las otras tres antes de su fix.
+    #
+    # A diferencia de lobo/ardilla/gnomo (que necesitaban tambien subir su
+    # concepcion, la peor del catalogo), la de conejo ya era la mejor
+    # (factor_base_concepcion=0.015, poblacion.yaml) -- no se toca aqui.
+    # Probado en aislamiento (A/B, 5 semillas nuevas x hasta 6000 ticks):
+    # quita la extincion (0/5) pero SOBRECORRIGE con fuerza, disparando a
+    # 500-700 individuos sin estabilizarse dentro de la ventana medida --
+    # conejo ya tenia la mejor reproduccion del catalogo (camada 3-7,
+    # gestacion 15-25 dias) antes de aliviarle el hambre, asi que quitar
+    # el freno de mortalidad sin ningun otro freno que compense dispara la
+    # poblacion. Mitigado aqui bajando tambien el techo de camada (ver
+    # poblacion.rangos_raciales.conejo.camada) en vez de revertir este
+    # ajuste de hambre -- decision de Diego, sin volver a correr el motor
+    # tras este cambio combinado (PROVISIONAL, sin verificar).
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
 
 consumo:
   tasa_consumo_al_comer: 0.5
