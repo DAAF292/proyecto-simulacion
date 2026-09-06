@@ -28,6 +28,9 @@ from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposi
 # (magnitud_disposicion_por_tamano) para no reescribir las llamadas de
 # abajo, sin cambiar ningún comportamiento.
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
+from nucleo.sonido import emitir_sonido
+from nucleo.mundo import Mundo
+from nucleo.reloj import Reloj
 from nucleo.armas import bono_defensivo_arma, mayor_nivel_arma
 from nucleo.eventos import BusEventos, Evento, Severidad
 
@@ -107,10 +110,19 @@ class SistemaDepredacion:
         )
         self.bono_caza_maximo: float = float(cfg_dep.get("bono_caza_maximo", 0.0))
 
-    def ejecutar(self, gestor: GestorEntidades, bus_eventos: BusEventos) -> None:
+    def ejecutar(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        bus_eventos: BusEventos,
+    ) -> None:
         """
         Procesa los encuentros de depredación en el tick actual.
         Debe invocarse en la Fase 2, posterior a SistemaMovimiento.
+
+        mundo/reloj (2026-09-06, circulo 4a -- sonido fisico): la celda
+        del encuentro y el tick actual para emitir el sonido del ataque.
         """
         # La clave de agrupacion incluye zona_idx -- dos entidades con el
         # mismo (x, y) en zonas distintas NO comparten celda (ver
@@ -152,7 +164,8 @@ class SistemaDepredacion:
 
                 presa_id = min(presas_candidatas)
                 muerte_presa = self._resolver_ataque(
-                    gestor, bus_eventos, cazador_id, presa_id, x, y, zona_idx
+                    gestor, mundo, reloj.tick_actual, bus_eventos,
+                    cazador_id, presa_id, x, y, zona_idx,
                 )
 
                 if muerte_presa:
@@ -202,6 +215,8 @@ class SistemaDepredacion:
     def _resolver_ataque(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
+        tick_actual: int,
         bus_eventos: BusEventos,
         cazador_id: int,
         presa_id: int,
@@ -232,6 +247,18 @@ class SistemaDepredacion:
             or ident_presa is None
         ):
             return False
+
+        # 0. Sonido fisico (2026-09-06, circulo 4a -- ver
+        # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
+        # TODO intento de ataque, exito o no, emite sonido en la celda del
+        # encuentro con la magnitud del peso combinado de ambos
+        # participantes. Los fallidos son mas frecuentes que los exitosos y
+        # tambien generan sonido real -- seran la base de las "pistas
+        # falsas" que el circulo 4b (pista de caza) explota
+        # deliberadamente.
+        zona_encuentro = mundo.territorio.zonas[zona_idx]
+        celda_encuentro = zona_encuentro.obtener_celda(pos_x, pos_y)
+        emitir_sonido(celda_encuentro, tick_actual, dims_cazador.peso + dims_presa.peso)
 
         # 1. Probabilidad estocástica de éxito del ataque
         #

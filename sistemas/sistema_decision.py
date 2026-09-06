@@ -410,6 +410,15 @@ class SistemaDecision:
         # camino de decision lo lee -- mismo patron que los _stats_* de
         # SistemaMovimiento.
         self._stats_socializar_elegidas: int = 0
+        # Sonido fisico (2026-09-06, circulo 4a -- ver
+        # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
+        # techo de escaneo (no el alcance real) para la tercera fuente de
+        # amenaza. PROVISIONAL, mismo valor cacheado en los tres
+        # consumidores de nucleo/amenaza.py. Se lee desde actualizar con
+        # fallback a config para las llamadas directas sin instancia.
+        self.radio_busqueda_maxima_sonido: int = int(
+            self.config.get("sonido", {}).get("radio_busqueda_maxima_sonido", 0)
+        )
 
     def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos) -> None:
         actualizar(gestor, mundo, self.config, bus_eventos, reloj.tick_actual, self)
@@ -476,6 +485,16 @@ def actualizar(
     factor_valentia_amenaza = float(
         cfg_depredacion_amenaza.get("factor_valentia_amenaza", 0.0)
     )
+    # Sonido fisico (2026-09-06, circulo 4a): techo de escaneo para la
+    # tercera fuente de amenaza. Con instancia de sistema se usa la
+    # cacheada; en llamadas directas a actualizar (tests) se lee de
+    # config con el mismo default.
+    if sistema_decision is not None:
+        radio_busqueda_sonido = int(sistema_decision.radio_busqueda_maxima_sonido)
+    else:
+        radio_busqueda_sonido = int(
+            config.get("sonido", {}).get("radio_busqueda_maxima_sonido", 0)
+        )
     # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/fogata.py y
     # nucleo/fuego.py).
     piedras_necesarias_fuego = int(config.get("fuego", {}).get("piedras_necesarias", 2))
@@ -830,6 +849,10 @@ def actualizar(
             peso_agresividad_candidato=peso_agresividad_amenaza,
             valentia_propia=temperamento.valentia if temperamento is not None else 0.0,
             factor_valentia_amenaza=factor_valentia_amenaza,
+            tick_actual=tick_actual,
+            agudeza_sensorial=dims.agudeza_sensorial,
+            radio_busqueda_sonido=radio_busqueda_sonido,
+            config=config,
         ) is not None
         deseo_empunar = amenaza_ahora or (
             (1.0 - necesidades.seguridad)

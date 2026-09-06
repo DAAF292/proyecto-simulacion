@@ -185,3 +185,16 @@ class Celda:
     persiste -- estado mutado por la partida real, NO el mismo motivo
     que profundidad_agua/tiene_agua (esos son deterministas de la
     semilla; esto no)."""
+    sonido_tick_emitido: int = -1
+    """Tick del sonido mas reciente emitido en esta celda (ver
+    nucleo/sonido.py) -- -1 = nunca hubo sonido aqui. NO se persiste:
+    es estado EFIMERO (ventana de `duracion_sonido_ticks` ticks), asi que
+    al recargar una partida el sonido ya expiro y la celda debe volver a
+    "nunca" por defecto. Mismo patron de campo-vivo-en-el-mundo que
+    en_llamas, pero sin persistencia porque el sonido no sobrevive a la
+    escritura/lectura de un snapshot."""
+    sonido_magnitud: float = 0.0
+    """Magnitud del sonido mas reciente de esta celda, en kg (peso
+    combinado de los participantes del evento violento que lo emitio).
+    Sin significado si sonido_tick_emitido == -1 o si el sonido ya
+    expiro. NO se persiste, mismo motivo que sonido_tick_emitido."""
