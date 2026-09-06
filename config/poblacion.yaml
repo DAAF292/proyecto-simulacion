@@ -27,7 +27,23 @@ rangos_raciales:
     duracion_gestacion_dias: [200, 260]
     camada: [1, 1]
     fraccion_madurez: 0.1
-    factor_base_concepcion: 0.0033
+    # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
+    # ver CLAUDE.md, config/fisiologia.yaml:necesidades.gnomo y
+    # ardilla/lobo para el mismo recetario ya aplicado antes). Gnomo
+    # comparte el peor valor del catalogo con lobo (pre-fix) -- misma
+    # logica que ya justifico subirlo para lobo/ardilla: nada obliga a
+    # que gnomo, ademas de sufrir el peor perfil combinado (gestacion
+    # mas larga del catalogo, 200-260 dias, camada fija en 1, SIN
+    # compensacion de camada posible a diferencia de lobo/ardilla),
+    # mantenga tambien la tasa de concepcion mas baja. PROVISIONAL, sin
+    # calibrar contra el harness completo -- a diferencia de lobo/
+    # ardilla, la gestacion de gnomo (4800-6240 ticks) es comparable a
+    # la ventana de verificacion entera (6000-8000 ticks), asi que el
+    # efecto de subir solo la concepcion podria ser mas limitado aqui
+    # (una madre preñada sigue necesitando sobrevivir toda la gestacion,
+    # sin ningun colchon de camada) -- verificar contra el motor real
+    # antes de dar esto por suficiente.
+    factor_base_concepcion: 0.015
     # puntos_agarre (2026-08-31, conversación de diseño con Diego --
     # "capacidad de sostener/usar" como cimiento de sociedad: un palo o
     # una roca para defenderse, luego fuego, luego herramientas). Cuántos

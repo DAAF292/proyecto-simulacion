@@ -152,6 +152,22 @@ necesidades:
     # todo, mismo criterio de honestidad que el resto del proyecto.
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+  gnomo:
+    # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
+    # ver CLAUDE.md y poblacion.rangos_raciales.gnomo.factor_base_concepcion
+    # para el mismo recetario ya aplicado a lobo/ardilla). Gnomo era el
+    # bloqueo dominante restante tras cerrar el fix de ardilla -- 80% de
+    # extincion en la ultima verificacion, sin ningun ajuste propio hasta
+    # ahora. Mismo par de valores ya usado para lobo/ardilla.
+    #
+    # PROVISIONAL, sin calibrar. Diferencia real a vigilar frente a
+    # lobo/ardilla: la gestacion de gnomo (4800-6240 ticks) es del mismo
+    # orden que la ventana de verificacion completa (6000-8000 ticks), y
+    # su camada esta fija en 1 (sin compensacion posible) -- el efecto de
+    # esta combinacion podria ser mas limitado que en lobo/ardilla,
+    # verificar contra el motor real antes de darlo por suficiente.
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
 
 consumo:
   tasa_consumo_al_comer: 0.5
