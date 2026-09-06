@@ -4485,3 +4485,107 @@ resultado.
 5. Harness completo (15 semillas × 12000 ticks) sigue siendo la
    referencia de rigor pendiente desde "Sobrepoblación..." para
    cualquier calibración que se quiera dar por cerrada de verdad.
+
+## Medición directa del criterio real de Diego (segunda vuelta, lote más
+## grande) + conejo confirmado como nuevo eslabón débil, con un hallazgo
+## de sobrecorrección real -- ningún cambio de config aplicado todavía
+## (2026-09-06, sesión siguiente al cierre del día anterior)
+
+Continuación directa del pendiente #2 dejado por la sesión anterior
+("correr un lote bastante mayor... para medir el % real del criterio de
+las 5 especies vivas con más confianza estadística que las 4 semillas de
+esta comprobación"). Arnés en scratchpad de sesión (no en el repo, mismo
+criterio que arneses anteriores del proyecto), sin persistencia SQLite en
+disco salvo un fichero temporal descartable por semilla.
+
+**Medición, 8 semillas nuevas (9001-9008) × 6000 ticks, con los tres
+fixes de lobo/ardilla/gnomo (hambre+concepción) más parejas fundadoras ya
+en `master`**:
+
+| Semilla | gnomo | lobo | conejo | ardilla | caballo | Especies vivas |
+|---|---|---|---|---|---|---|
+| 9001 | 2 | 10 | 75 | 39 | 0 | 4/5 |
+| 9002 | 6 | 1 | 0 | 19 | 2 | 4/5 |
+| 9003 | 0 | 4 | 0 | 24 | 5 | 3/5 |
+| 9004 | 4 | 2 | 12 | 26 | 1 | 5/5 |
+| 9005 | 2 | 1 | 0 | 4 | 5 | 4/5 |
+| 9006 | 1 | 0 | 13 | 280 | 0 | 3/5 |
+| 9007 | 1 | 2 | 6 | 0 | 5 | 4/5 |
+| 9008 | 2 | 2 | 0 | 0 | 4 | 3/5 |
+
+**1/8 (12%) semillas con las 5 especies vivas a la vez** -- mejor que el
+0/4 de la comprobación anterior, pero lejos todavía del 50% que fijó
+Diego como criterio. Extinción por especie: gnomo 1/8, lobo 1/8, conejo
+**4/8 (50%)**, ardilla 2/8, caballo 2/8 -- confirma con una muestra el
+doble de grande el hallazgo de la sesión anterior: conejo, nunca tocado
+por ningún ajuste, es ahora el eslabón más frágil del catálogo. Causas de
+muerte de conejo agregadas (8 semillas): inanición 1255 (73%), vejez 351
+(20.5%), depredación 103 (6%), deshidratación 1 -- mismo patrón
+dominado-por-inanición ya visto en lobo/ardilla/gnomo antes de sus fixes
+respectivos.
+
+**Causa raíz identificada antes de tocar nada**: `config/fisiologia.yaml`
+-- conejo es la ÚNICA de las cuatro especies competidoras sin entrada
+propia bajo `necesidades`, sigue con los valores universales de
+`defecto` (`tasa_perdida_saciedad_por_tick=0.012`,
+`probabilidad_muerte_saciedad_critica=0.005`) mientras lobo/ardilla/gnomo
+ya bajaron a `0.0008`/`0.0004`. Su concepción (`factor_base_concepcion:
+0.015`, `config/poblacion.yaml`) YA coincide con el valor al que se
+subieron lobo y gnomo tras su propio fix -- no parece ser el cuello de
+botella, a diferencia de lobo/ardilla/gnomo que necesitaban ambos
+ingredientes a la vez. Hipótesis de por qué esto no se había visto antes
+(no confirmada con más profundidad, razonamiento, no medición directa de
+competencia real): con lobo/ardilla/gnomo colapsando rápido antes de sus
+fixes, y caballo (especie nueva del día anterior, comparte pradera con
+conejo) recién empezando a sostener población real, conejo nunca tuvo que
+competir en serio por el mismo espacio/comida hasta ahora -- el
+desequilibrio es indirecto, no un cambio en su propia configuración.
+
+### Prueba A/B real contra el motor -- mismo recetario de hambre aplicado
+### solo a conejo (sin tocar su concepción, ya buena): quita la extinción
+### pero sobrecorrige con fuerza -- NINGÚN VALOR CAMBIADO EN EL CONFIG REAL
+
+Monkeypatch en memoria (`config["necesidades"]["conejo"]` con los mismos
+`0.0008`/`0.0004` de lobo/ardilla/gnomo), 5 semillas nuevas (9101-9105) ×
+hasta 6000 ticks, comparando baseline vs. fix:
+
+- **Baseline (sin fix)**: 0/5 con las 5 especies vivas, conejo extinto en
+  4/5, media 13.8.
+- **Con fix de hambre en conejo**: 5/5 con las 5 especies vivas, conejo
+  extinto en 0/5 -- pero **disparado a 517-704 individuos en las cinco
+  semillas, todas cortadas antes de completar los 6000 ticks por un tope
+  de seguridad del propio arnés (500 individuos de una especie)**, frente
+  a gnomo (3-13), lobo (3-17), ardilla (5-92) y caballo (1-9) en las
+  mismas corridas. Ninguna semilla se estabilizó por sí sola dentro de la
+  ventana medida -- el corte fue del arnés, no del motor.
+
+**Diagnóstico, no solo el dato bruto**: a diferencia de lobo/ardilla/
+gnomo (que necesitaban DOS ingredientes -- hambre Y concepción -- porque
+partían con la peor reproducción del catálogo), conejo ya tenía la MEJOR
+reproducción del catálogo antes de tocar nada (camada 3-7, gestación
+15-25 días, concepción ya en 0.015). Aplicarle el mismo alivio de hambre
+sin necesitar ningún empujón de concepción quita el freno de mortalidad
+sin que haya ningún otro freno natural que lo compense -- sobrecorrección
+real, no una mejora limpia. Razonablemente esperable que, dejado correr
+la ventana completa, termine en un ciclo boom-bust (mismo patrón ya
+documentado en "Sobrepoblación...") o que la explosión de conejo presione
+por comida a las demás especies de pradera (caballo).
+
+**Decisión explícita de Diego: dejarlo documentado, sin tocar
+`config/fisiologia.yaml` en esta sesión** -- ningún valor de conejo
+cambiado en el repo real, el hallazgo queda para retomar en un futuro
+círculo de calibración, no para arreglar ahora mismo con una cifra a
+ojo. Candidato razonado para cuando se retome: un ajuste de MENOR
+magnitud que el de lobo/ardilla/gnomo (a medio camino entre el valor
+`defecto` y `0.0008`/`0.0004`), dado que conejo no necesita compensación
+de concepción como las otras tres.
+
+**Pendiente real, explícito**: `config/fisiologia.yaml` de conejo sigue
+sin ningún override -- el hallazgo de sobrecorrección queda documentado,
+no resuelto; el criterio del 50% de Diego (5 especies vivas a la vez)
+sigue sin alcanzarse con la calibración actual (12% medido, n=8); el
+harness completo (15×12000) sigue pendiente para cualquier calibración
+que se quiera dar por cerrada; el PR #19 (radio de pareja ampliado)
+sigue sin fusionar, su destino sin decidir. Próximo círculo de
+desarrollo, distinto de esta investigación de calibración, pendiente de
+plantear con Diego.
