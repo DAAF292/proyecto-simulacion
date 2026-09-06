@@ -48,3 +48,10 @@ relaciones:
   # basta sola; hacen falta dos o mas concepciones/amistad entre la
   # misma pareja.
   umbral_pareja: 0.3
+  # Fraccion del camino que el receptor recorre hacia la opinion reportada
+  # del emisor en un rumor social (2026-09-06, circulo 5a -- ver spec
+  # docs/superpowers/specs/2026-09-06-rumor-social-design.md y consumidor
+  # sistema_movimiento.py:_compartir_rumor). No es una sustitucion completa:
+  # mismo espiritu que la degradacion de segunda mano de memoria espacial
+  # compartida. PROVISIONAL, sin calibrar.
+  peso_credibilidad_rumor: 0.15

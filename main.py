@@ -525,6 +525,31 @@ def main() -> None:
                 f"{sistemas['movimiento']._stats_memoria_compartida_transferencias} "
                 "transferencias"
             )
+            # Verificacion obligatoria de rumor social (2026-09-06, circulo 5a
+            # -- ver docs/superpowers/specs/2026-09-06-rumor-social-design.md):
+            # medir explicitamente cuantos rumores se propagaron de verdad
+            # durante la tanda, y si algun consciente termino con una opinion
+            # sobre un tercero que el mismo nunca formo directamente (pares
+            # (receptor, tercero) donde el rumor creo un vinculo que no existia;
+            # aqui se confirma contra el gestor vivo que esos vinculos siguen
+            # presentes al cierre). Solo observacion, no cambia la simulacion.
+            rumores_propagados = sistemas['movimiento']._stats_rumores_propagados
+            rumor_terceros_nuevos = sistemas['movimiento']._stats_rumor_terceros_nuevos
+            rumor_nuevos_confirmados = 0
+            for eid in gestor.entidades_con(Relaciones):
+                rel = gestor.obtener_componente(eid, Relaciones)
+                if rel is None:
+                    continue
+                for otro_id in rel.vinculos:
+                    if (eid, otro_id) in rumor_terceros_nuevos:
+                        rumor_nuevos_confirmados += 1
+            print(
+                "[BOSQUE_AUTO_TICKS] rumor social: "
+                f"{rumores_propagados} rumores propagados, "
+                f"{len(rumor_terceros_nuevos)} opiniones sobre terceros creadas "
+                f"por rumor (receptor nunca las tenia), "
+                f"{rumor_nuevos_confirmados} confirmadas presentes en el gestor vivo"
+            )
             # Verificacion obligatoria de ocio consciente (2026-09-06, ver
             # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
             # medir explicitamente cuantas veces se eligio SOCIALIZAR, cuantas
