@@ -113,6 +113,17 @@ class SistemaMovimiento:
         # los lee.
         self._stats_rumores_propagados: int = 0
         self._stats_rumor_terceros_nuevos: set[tuple[int, int]] = set()
+        # Deduplicacion de conflicto por tick (fix 2026-09-07, encontrado por
+        # revision de codigo independiente): _resolver_conflicto_entre tiene
+        # TRES disparadores (refugio ocupado, roce social, CRISIS_VIOLENTA por
+        # contacto) que no se coordinaban entre si -- el mismo par podia
+        # resolverse dos veces en el mismo tick (p.ej. roce social lo resuelve
+        # probabilisticamente y CRISIS_VIOLENTA lo resuelve de forma
+        # determinista al contacto), doblando el drenaje de seguridad y el
+        # rencor escrito para un solo suceso real. Se reinicia en cada
+        # ejecutar() (un tick); _resolver_conflicto_entre consulta y actualiza
+        # este set como primer paso, sin importar quien lo invoque.
+        self._pares_conflicto_resueltos_este_tick: set[frozenset[int]] = set()
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -278,6 +289,10 @@ class SistemaMovimiento:
         tick 0.
         """
         tick_actual: int = reloj.tick_actual if reloj is not None else 0
+        # Reiniciado cada tick -- ver docstring en __init__ sobre por que
+        # _resolver_conflicto_entre necesita saber que pares ya se resolvieron
+        # este mismo tick, sin importar por cual de sus tres disparadores.
+        self._pares_conflicto_resueltos_este_tick = set()
 
         # Roce social, memoria compartida y rumor social (2026-09-06, ver
         # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md
@@ -1543,7 +1558,17 @@ class SistemaMovimiento:
         'b', el resultado y las consecuencias son coherentes en ambos
         sentidos. Devuelve el ResultadoDisputa para que el llamador decida
         si necesita reaccionar a el (hoy ninguno lo hace, pero se expone
-        por si un disparador futuro lo necesita)."""
+        por si un disparador futuro lo necesita).
+
+        Fix 2026-09-07: si este par (a_id, b_id) ya se resolvio en este
+        mismo tick por CUALQUIERA de los tres disparadores, no se vuelve a
+        resolver -- devuelve COMPARTE (sentinel neutro, ningun consumidor
+        lee el valor de retorno hoy) sin aplicar ningun efecto de nuevo."""
+        clave_par = frozenset((a_id, b_id))
+        if clave_par in self._pares_conflicto_resueltos_este_tick:
+            return ResultadoDisputa.COMPARTE
+        self._pares_conflicto_resueltos_este_tick.add(clave_par)
+
         nec_a = gestor.obtener_componente(a_id, Necesidades)
         nec_b = gestor.obtener_componente(b_id, Necesidades)
         urgencia_a = 1.0 - (nec_a.seguridad if nec_a else 1.0)

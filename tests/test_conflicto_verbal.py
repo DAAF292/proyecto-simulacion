@@ -17,10 +17,12 @@ from pathlib import Path
 
 from componentes.capacidad_mental import CapacidadMental
 from componentes.identidad import Especie
+from componentes.necesidades import Necesidades
 from componentes.pool_mental import PoolMental
 from componentes.relaciones import Relaciones
 from componentes.temperamento import Temperamento
 from main import cargar_configuracion
+from nucleo.conflicto import ResultadoDisputa
 from nucleo.entidad import GestorEntidades, crear_criatura
 from nucleo.mundo import Mundo
 from sistemas.sistema_movimiento import SistemaMovimiento
@@ -207,3 +209,71 @@ def test_roce_social_mismo_par_no_se_procesa_dos_veces_en_el_mismo_tick() -> Non
             if ids[i] in rel_j.vinculos and rel_j.vinculos[ids[i]].afinidad < 0.0:
                 rencores_dirigidos += 1
     assert rencores_dirigidos == 3
+
+
+# ---------------------------------------------------------------------------
+# Deduplicacion entre los TRES disparadores (fix 2026-09-07)
+# ---------------------------------------------------------------------------
+
+def test_mismo_par_no_se_resuelve_dos_veces_por_disparadores_distintos_en_el_mismo_tick() -> None:
+    """Ley: refugio ocupado, roce social y CRISIS_VIOLENTA comparten un
+    unico resolutor (_resolver_conflicto_entre) -- si DOS disparadores
+    distintos intentan resolver el MISMO par en el MISMO tick (sin pasar
+    por ejecutar(), que reinicia el set), la segunda llamada no debe
+    aplicar ningun efecto de nuevo: ni drenar seguridad otra vez ni
+    duplicar el rencor escrito."""
+    config = _config()
+    rng = random.Random(9)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(123))
+    a = _gnomo(gestor, config, rng, _temp(), _cap(), 0, 0)
+    b = _gnomo(gestor, config, rng, _temp(), _cap(), 0, 0)
+    sistema = SistemaMovimiento(config, rng)
+
+    temp_a = gestor.obtener_componente(a, Temperamento)
+    temp_b = gestor.obtener_componente(b, Temperamento)
+
+    primer_resultado = sistema._resolver_conflicto_entre(
+        gestor, mundo, a, b, temp_a, temp_b, tick_actual=10,
+        pos_x=0, pos_y=0, zona_idx=0,
+    )
+    seguridad_a_tras_primera = gestor.obtener_componente(a, Necesidades).seguridad
+    seguridad_b_tras_primera = gestor.obtener_componente(b, Necesidades).seguridad
+    vinculos_a_tras_primera = dict(_rel(gestor, a).vinculos)
+    vinculos_b_tras_primera = dict(_rel(gestor, b).vinculos)
+
+    # Segundo disparador, MISMO tick (mismo _pares_conflicto_resueltos_este_tick,
+    # sin pasar por ejecutar() -- simula CRISIS_VIOLENTA resolviendo el mismo
+    # par que roce social ya resolvio unos momentos antes en el mismo tick).
+    segundo_resultado = sistema._resolver_conflicto_entre(
+        gestor, mundo, a, b, temp_a, temp_b, tick_actual=10,
+        pos_x=0, pos_y=0, zona_idx=0,
+    )
+
+    assert segundo_resultado == ResultadoDisputa.COMPARTE
+    assert gestor.obtener_componente(a, Necesidades).seguridad == seguridad_a_tras_primera
+    assert gestor.obtener_componente(b, Necesidades).seguridad == seguridad_b_tras_primera
+    assert _rel(gestor, a).vinculos == vinculos_a_tras_primera
+    assert _rel(gestor, b).vinculos == vinculos_b_tras_primera
+
+
+def test_pares_conflicto_resueltos_se_reinicia_cada_ejecutar() -> None:
+    """Ley: el set de deduplicacion es POR TICK -- ejecutar() lo reinicia
+    incondicionalmente al principio (antes de cualquier otro procesamiento),
+    asi que el mismo par SI puede volver a resolverse en un tick posterior.
+    Se usa un par centinela (IDs que no existen) para comprobar el reinicio
+    en si, sin depender de si roce social/CRISIS_VIOLENTA vuelven a resolver
+    algo real durante ese mismo ejecutar() (lo cual seria una razon legitima
+    para que el set no quede vacio del todo, no una fuga del fix)."""
+    config = _config()
+    rng = random.Random(13)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(123))
+    _gnomo(gestor, config, rng, _temp(), _cap(), 0, 0)
+    sistema = SistemaMovimiento(config, rng)
+    centinela = frozenset((99998, 99999))
+    sistema._pares_conflicto_resueltos_este_tick = {centinela}
+
+    sistema.ejecutar(gestor, mundo, reloj=None)
+
+    assert centinela not in sistema._pares_conflicto_resueltos_este_tick
