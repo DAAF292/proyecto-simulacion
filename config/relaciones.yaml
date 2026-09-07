@@ -6,8 +6,13 @@
 #
 # Este circulo (2026-09-04) escribe afinidad en AMBOS signos:
 # negativa por rencor (consumidor sistema_movimiento.py) y positiva por
-# amistad de convivencia (consumidor sistema_asentamiento.py). Nadie
-# LEE Relaciones para cambiar comportamiento todavia.
+# amistad de convivencia (consumidor sistema_asentamiento.py).
+# CORREGIDO 2026-09-07 -- este parrafo decia "nadie LEE Relaciones para
+# cambiar comportamiento todavia", desactualizado desde pareja estable
+# (circulo 4b, 2026-09-04): ya hay dos consumidores reales que LEEN
+# afinidad para decidir algo -- pareja estable (bono de confort/
+# seguridad por cercania) y compartir por confianza (mas abajo,
+# umbral_confianza_compartir).
 # ==============================================================================
 
 relaciones:
@@ -75,3 +80,14 @@ relaciones:
   # mismo espiritu que la degradacion de segunda mano de memoria espacial
   # compartida. PROVISIONAL, sin calibrar.
   peso_credibilidad_rumor: 0.15
+  # Compartir por confianza (2026-09-07, circulo 4 del arco "robo/
+  # intercambio de recursos" -- ver docs/superpowers/specs/
+  # 2026-09-07-robo-compartir-confianza-design.md). Sustituye al trueque
+  # bidireccional real, descartado por Diego en esta ronda -- mismo
+  # patron que disposicion_a_aportar (almacen comunal) pero entre dos
+  # individuos. Lectura UNIDIRECCIONAL de afinidad (donante hacia
+  # receptor, sin exigir reciprocidad) -- no escribe Relaciones como
+  # consecuencia. Los tres valores PROVISIONALES, sin calibrar.
+  umbral_confianza_compartir: 0.3
+  probabilidad_base_compartir_confianza: 0.05
+  saciedad_maxima_para_recibir_compartido: 0.5

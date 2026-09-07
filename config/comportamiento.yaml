@@ -201,6 +201,15 @@ conflicto:
   probabilidad_base_roce_social: 0.01
   peso_agresividad_roce: 0.05
   peso_estres_roce: 0.05
+  # Robo (2026-09-07, circulo 3 del arco "robo/intercambio de recursos"
+  # -- ver docs/superpowers/specs/
+  # 2026-09-07-robo-compartir-confianza-design.md). Un consciente
+  # hambrioso (saciedad por debajo de este umbral) sin nada guardado
+  # propio puede intentar robar a otro con provisiones reales;
+  # probabilidad modulada por lo hambriento que esta (mas hambre, mas
+  # probable el intento). PROVISIONAL, sin calibrar.
+  umbral_saciedad_para_robar: 0.3
+  probabilidad_base_robo: 0.05
 
 # Manada -- estructuras gregarias reales en fauna (2026-09-07, ver
 # nucleo/manada.py, sistemas/sistema_manada.py y spec

@@ -18,6 +18,7 @@ from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
+from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
@@ -37,6 +38,8 @@ from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
 from nucleo.asentamiento import asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
 from nucleo.disposicion import contar_conspecificos_cercanos
+from nucleo.intercambio import transferir_recurso
+from nucleo.inventario import espacio_disponible_provisiones_kg
 from nucleo.manada import manada_de
 from nucleo.parentesco import es_familia_directa
 from nucleo.construccion import (
@@ -73,6 +76,11 @@ class SistemaMovimiento:
         # ningun camino de decision los lee.
         self._stats_roce_social_resueltos: int = 0
         self._stats_crisis_violenta_contacto: int = 0
+        # Robo y compartir por confianza (2026-09-07, circulos 3/4 del
+        # arco "robo/intercambio de recursos"). Solo observacion.
+        self._stats_robos_intentados: int = 0
+        self._stats_robos_exitosos: int = 0
+        self._stats_compartir_confianza: int = 0
         # Memoria espacial compartida (2026-09-06, ver spec
         # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md):
         # cuantos recuerdos de verdad se transfirieron entre conscientes y
@@ -202,6 +210,22 @@ class SistemaMovimiento:
         self.peso_estres_roce: float = float(
             self.config_conflicto.get("peso_estres_roce", 0.05)
         )
+        # Robo (2026-09-07, circulo 3 del arco "robo/intercambio de
+        # recursos" -- ver docs/superpowers/specs/
+        # 2026-09-07-robo-compartir-confianza-design.md). PROVISIONAL,
+        # sin calibrar.
+        self.umbral_saciedad_para_robar: float = float(
+            self.config_conflicto.get("umbral_saciedad_para_robar", 0.3)
+        )
+        self.probabilidad_base_robo: float = float(
+            self.config_conflicto.get("probabilidad_base_robo", 0.05)
+        )
+        # Capacidad de provisiones (2026-09-07, ver componentes/inventario.py:
+        # Inventario.provisiones) -- necesaria aqui para topar cuanto puede
+        # recibir un ladron o un receptor de reparto por confianza.
+        self.fraccion_provisiones_maxima: float = float(
+            self.config.get("inventario", {}).get("fraccion_provisiones_maxima", 0.05)
+        )
         # Capacidad de construcción por celda -- ver
         # config/materiales.yaml sección construccion y
         # nucleo/construccion.py:espacio_disponible_para_construir.
@@ -232,6 +256,19 @@ class SistemaMovimiento:
         # emisor, no una sustitucion completa. PROVISIONAL, sin calibrar.
         self.peso_credibilidad_rumor: float = float(
             self.config_relaciones.get("peso_credibilidad_rumor", 0.15)
+        )
+        # Compartir por confianza (2026-09-07, circulo 4 del arco
+        # "robo/intercambio de recursos" -- ver docs/superpowers/specs/
+        # 2026-09-07-robo-compartir-confianza-design.md). PROVISIONAL,
+        # sin calibrar.
+        self.umbral_confianza_compartir: float = float(
+            self.config_relaciones.get("umbral_confianza_compartir", 0.3)
+        )
+        self.probabilidad_base_compartir_confianza: float = float(
+            self.config_relaciones.get("probabilidad_base_compartir_confianza", 0.05)
+        )
+        self.saciedad_maxima_para_recibir_compartido: float = float(
+            self.config_relaciones.get("saciedad_maxima_para_recibir_compartido", 0.5)
         )
 
         # Coste de forrajeo vs. beneficio -- ver docstring de
@@ -304,21 +341,25 @@ class SistemaMovimiento:
         # este mismo tick, sin importar por cual de sus tres disparadores.
         self._pares_conflicto_resueltos_este_tick = set()
 
-        # Roce social, memoria compartida y rumor social (2026-09-06, ver
-        # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md
-        # y docs/superpowers/specs/2026-09-06-rumor-social-design.md):
-        # UNA VEZ por tick, no por entidad, sobre las posiciones tal como
-        # quedaron al cierre del tick anterior -- mismo criterio que el
-        # conflicto por refugio ocupado (los tres resuelven sobre la posicion
-        # vigente al empezar el tick, no sobre una posicion a medio
-        # actualizar por el propio bucle). No compiten por ninguna Accion:
-        # son chequeos pasivos independientes de que este haciendo cada
-        # consciente ese tick. La agrupacion por celda se construye UNA
-        # sola vez y se comparte entre los tres procesadores.
+        # Roce social, memoria compartida, rumor social, robo y compartir
+        # por confianza (2026-09-06/07, ver docs/superpowers/specs/
+        # 2026-09-06-memoria-espacial-compartida-design.md,
+        # 2026-09-06-rumor-social-design.md y
+        # 2026-09-07-robo-compartir-confianza-design.md): UNA VEZ por
+        # tick, no por entidad, sobre las posiciones tal como quedaron al
+        # cierre del tick anterior -- mismo criterio que el conflicto por
+        # refugio ocupado (todos resuelven sobre la posicion vigente al
+        # empezar el tick, no sobre una posicion a medio actualizar por el
+        # propio bucle). No compiten por ninguna Accion: son chequeos
+        # pasivos independientes de que este haciendo cada consciente ese
+        # tick. La agrupacion por celda se construye UNA sola vez y se
+        # comparte entre los cinco procesadores.
         por_celda = self._agrupar_conscientes_por_celda(gestor)
         self._procesar_roce_social(gestor, mundo, tick_actual, por_celda)
         self._procesar_memoria_compartida(gestor, por_celda)
         self._procesar_rumor(gestor, por_celda, tick_actual)
+        self._procesar_robo(gestor, mundo, tick_actual, por_celda)
+        self._procesar_compartir_confianza(gestor, por_celda)
 
         entidades = sorted(
             gestor.entidades_con(Intencion, Posicion, DimensionesFisicas, Identidad)
@@ -838,6 +879,168 @@ class SistemaMovimiento:
                             celda_x, celda_y, celda_zona_idx,
                         )
                         self._stats_roce_social_resueltos += 1
+
+    def _procesar_robo(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        tick_actual: int,
+        por_celda: dict[tuple[int, int, int], list[int]] | None = None,
+    ) -> None:
+        """Robo (2026-09-07, círculo 3 del arco "robo/intercambio de
+        recursos" -- ver docs/superpowers/specs/
+        2026-09-07-robo-compartir-confianza-design.md). Mismo molde de
+        recorrido que _procesar_roce_social, pero asimétrico: para cada
+        par prueba las DOS direcciones (a robando a b, luego b robando a
+        a) -- sin necesidad de lógica de dedup propia, el propio
+        _resolver_conflicto_entre ya descarta un segundo intento sobre el
+        mismo par este tick devolviendo COMPARTE (ningún efecto)."""
+        if por_celda is None:
+            por_celda = self._agrupar_conscientes_por_celda(gestor)
+
+        for (celda_x, celda_y, celda_zona_idx), ids in por_celda.items():
+            if len(ids) < 2:
+                continue
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    a_id, b_id = ids[i], ids[j]
+                    self._intentar_robo(
+                        gestor, mundo, a_id, b_id, tick_actual, celda_x, celda_y, celda_zona_idx
+                    )
+                    self._intentar_robo(
+                        gestor, mundo, b_id, a_id, tick_actual, celda_x, celda_y, celda_zona_idx
+                    )
+
+    def _intentar_robo(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        ladron_id: int,
+        victima_id: int,
+        tick_actual: int,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+    ) -> None:
+        """Un consciente hambriento (saciedad < umbral_saciedad_para_robar)
+        sin nada guardado propio, junto a otro con provisiones reales,
+        puede intentar robarle -- probabilidad modulada por lo hambriento
+        que está. Resuelve con el mismo resolutor que refugio ocupado/
+        conflicto verbal (mismo_grupo/familia -> COMPARTE automático, no
+        se roba a los suyos), pasando la urgencia REAL del ladrón (su
+        propia hambre) en vez del déficit de seguridad genérico. Si se
+        impone, se lleva TODO lo que la víctima tenga del primer recurso
+        no vacío, topado por su propio espacio de provisiones."""
+        nec_ladron = gestor.obtener_componente(ladron_id, Necesidades)
+        inv_ladron = gestor.obtener_componente(ladron_id, Inventario)
+        inv_victima = gestor.obtener_componente(victima_id, Inventario)
+        if nec_ladron is None or inv_ladron is None or inv_victima is None:
+            return
+        if nec_ladron.saciedad >= self.umbral_saciedad_para_robar:
+            return
+        if inv_ladron.provisiones or not inv_victima.provisiones:
+            return
+
+        saciedad_ladron = nec_ladron.saciedad
+        prob = self.probabilidad_base_robo * (1.0 - saciedad_ladron)
+        if self.rng.random() >= prob:
+            return
+
+        temp_ladron = gestor.obtener_componente(ladron_id, Temperamento)
+        temp_victima = gestor.obtener_componente(victima_id, Temperamento)
+        if temp_ladron is None or temp_victima is None:
+            return
+
+        self._stats_robos_intentados += 1
+        resultado = self._resolver_conflicto_entre(
+            gestor, mundo, ladron_id, victima_id, temp_ladron, temp_victima, tick_actual,
+            pos_x, pos_y, zona_idx,
+            urgencia_a=1.0 - saciedad_ladron,
+        )
+        if resultado != ResultadoDisputa.CEDE_B:
+            return
+
+        dims_ladron = gestor.obtener_componente(ladron_id, DimensionesFisicas)
+        if dims_ladron is None:
+            return
+        recurso = next(iter(inv_victima.provisiones), None)
+        if recurso is None:
+            return
+        espacio = espacio_disponible_provisiones_kg(
+            inv_ladron.provisiones, dims_ladron.peso, self.fraccion_provisiones_maxima
+        )
+        cantidad = transferir_recurso(
+            inv_victima.provisiones, inv_ladron.provisiones, recurso,
+            inv_victima.provisiones.get(recurso, 0.0), espacio,
+        )
+        if cantidad > 0.0:
+            self._stats_robos_exitosos += 1
+
+    def _procesar_compartir_confianza(
+        self,
+        gestor: GestorEntidades,
+        por_celda: dict[tuple[int, int, int], list[int]] | None = None,
+    ) -> None:
+        """Compartir por confianza (2026-09-07, círculo 4 del arco
+        "robo/intercambio de recursos"): unidireccional y voluntario, sin
+        pasar por el resolutor de conflicto -- no es una disputa. Mismo
+        molde de recorrido que _procesar_robo, probando las dos
+        direcciones por par; ambas pueden dispararse el mismo tick (no
+        es adversarial, no hace falta dedup)."""
+        if por_celda is None:
+            por_celda = self._agrupar_conscientes_por_celda(gestor)
+
+        for (_celda_x, _celda_y, _celda_zona_idx), ids in por_celda.items():
+            if len(ids) < 2:
+                continue
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    a_id, b_id = ids[i], ids[j]
+                    self._intentar_compartir_confianza(gestor, a_id, b_id)
+                    self._intentar_compartir_confianza(gestor, b_id, a_id)
+
+    def _intentar_compartir_confianza(
+        self, gestor: GestorEntidades, donante_id: int, receptor_id: int,
+    ) -> None:
+        """Un consciente con provisiones reales y afinidad (unidireccional,
+        SIN exigir reciprocidad -- "confío en ti" no requiere que tú
+        confíes en mí) por encima de umbral_confianza_compartir hacia
+        otro que pasa hambre (saciedad < saciedad_maxima_para_recibir_
+        compartido) puede darle algo de lo que tiene guardado, sin nada a
+        cambio. No modifica Necesidades.seguridad, rencor, ni Relaciones
+        -- es cooperación, no conflicto."""
+        inv_donante = gestor.obtener_componente(donante_id, Inventario)
+        inv_receptor = gestor.obtener_componente(receptor_id, Inventario)
+        nec_receptor = gestor.obtener_componente(receptor_id, Necesidades)
+        rel_donante = gestor.obtener_componente(donante_id, Relaciones)
+        dims_receptor = gestor.obtener_componente(receptor_id, DimensionesFisicas)
+        if (
+            inv_donante is None or inv_receptor is None or nec_receptor is None
+            or rel_donante is None or dims_receptor is None
+        ):
+            return
+        if not inv_donante.provisiones:
+            return
+        if nec_receptor.saciedad >= self.saciedad_maxima_para_recibir_compartido:
+            return
+        vinculo = rel_donante.vinculos.get(receptor_id)
+        if vinculo is None or vinculo.afinidad < self.umbral_confianza_compartir:
+            return
+        if self.rng.random() >= self.probabilidad_base_compartir_confianza:
+            return
+
+        recurso = next(iter(inv_donante.provisiones), None)
+        if recurso is None:
+            return
+        espacio = espacio_disponible_provisiones_kg(
+            inv_receptor.provisiones, dims_receptor.peso, self.fraccion_provisiones_maxima
+        )
+        cantidad = transferir_recurso(
+            inv_donante.provisiones, inv_receptor.provisiones, recurso,
+            inv_donante.provisiones.get(recurso, 0.0), espacio,
+        )
+        if cantidad > 0.0:
+            self._stats_compartir_confianza += 1
 
     def _procesar_memoria_compartida(
         self,
@@ -1574,12 +1777,14 @@ class SistemaMovimiento:
         pos_x: int = 0,
         pos_y: int = 0,
         zona_idx: int = 0,
+        urgencia_a: float | None = None,
+        urgencia_b: float | None = None,
     ) -> ResultadoDisputa:
         """Extraido de _resolver_posible_intruso (conflicto por refugio
         ocupado, 2026-08-31) -- 2026-09-06, conflicto verbal: lo usa el
         refugio ocupado (wrapper), CRISIS_VIOLENTA con contacto real y el
-        roce social. Calcula urgencia (1 - Necesidades.seguridad),
-        mismo_grupo (via asentamiento_de), son_familia (via
+        roce social. Calcula urgencia (1 - Necesidades.seguridad) POR
+        DEFECTO, mismo_grupo (via asentamiento_de), son_familia (via
         es_familia_directa) y bono_arma (via _bono_arma_empunada) para
         ambas partes, resuelve con resolver_disputa, y aplica las
         consecuencias (drenaje de Necesidades.seguridad + rencor via
@@ -1588,13 +1793,22 @@ class SistemaMovimiento:
         tenia. Simetrico: no importa cual de los dos se pase como 'a' o
         'b', el resultado y las consecuencias son coherentes en ambos
         sentidos. Devuelve el ResultadoDisputa para que el llamador decida
-        si necesita reaccionar a el (hoy ninguno lo hace, pero se expone
-        por si un disparador futuro lo necesita).
+        si necesita reaccionar a el (hoy lo usa robo, ver _procesar_robo).
+
+        urgencia_a/urgencia_b (2026-09-07, robo -- ver docs/superpowers/
+        specs/2026-09-07-robo-compartir-confianza-design.md): override
+        opcional -- "la urgencia de la propia necesidad en juego" es
+        semantica libre a proposito (ver nucleo/conflicto.py:
+        indice_asertividad_social), cada consumidor decide que mide. Sin
+        pasarlos, comportamiento IDENTICO al de siempre (deficit de
+        seguridad); robo pasa la urgencia real del ladron (su propia
+        hambre), no su miedo.
 
         Fix 2026-09-07: si este par (a_id, b_id) ya se resolvio en este
-        mismo tick por CUALQUIERA de los tres disparadores, no se vuelve a
+        mismo tick por CUALQUIERA de sus disparadores, no se vuelve a
         resolver -- devuelve COMPARTE (sentinel neutro, ningun consumidor
-        lee el valor de retorno hoy) sin aplicar ningun efecto de nuevo."""
+        lee el valor de retorno hoy salvo robo) sin aplicar ningun efecto
+        de nuevo."""
         clave_par = frozenset((a_id, b_id))
         if clave_par in self._pares_conflicto_resueltos_este_tick:
             return ResultadoDisputa.COMPARTE
@@ -1602,8 +1816,10 @@ class SistemaMovimiento:
 
         nec_a = gestor.obtener_componente(a_id, Necesidades)
         nec_b = gestor.obtener_componente(b_id, Necesidades)
-        urgencia_a = 1.0 - (nec_a.seguridad if nec_a else 1.0)
-        urgencia_b = 1.0 - (nec_b.seguridad if nec_b else 1.0)
+        if urgencia_a is None:
+            urgencia_a = 1.0 - (nec_a.seguridad if nec_a else 1.0)
+        if urgencia_b is None:
+            urgencia_b = 1.0 - (nec_b.seguridad if nec_b else 1.0)
 
         asen_a = asentamiento_de(mundo, a_id)
         mismo_grupo = asen_a is not None and b_id in asen_a.miembros

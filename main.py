@@ -684,6 +684,21 @@ def main() -> None:
                 f"{sistemas['recursos']._stats_provisiones_guardadas} veces guardado excedente, "
                 f"{sistemas['recursos']._stats_provisiones_consumidas} veces comido de la despensa"
             )
+            # Verificacion obligatoria de Robo + Compartir por confianza
+            # (2026-09-07, ver docs/superpowers/specs/
+            # 2026-09-07-robo-compartir-confianza-design.md): cuantos
+            # intentos de robo (y cuantos exitosos) y cuantos repartos por
+            # confianza ocurren de verdad en juego libre. Solo
+            # observacion, no cambia la simulacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] robo: "
+                f"{sistemas['movimiento']._stats_robos_intentados} intentos, "
+                f"{sistemas['movimiento']._stats_robos_exitosos} exitosos"
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] compartir por confianza: "
+                f"{sistemas['movimiento']._stats_compartir_confianza} veces"
+            )
 
     except KeyboardInterrupt:
         pass
