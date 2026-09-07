@@ -60,6 +60,13 @@ necesidades:
     # PROVISIONAL, sin calibrar contra el harness completo.
     bono_confort_madriguera: 0.3
     bono_seguridad_madriguera: 0.1
+    # bono_confort_salon_comun/bono_seguridad_salon_comun (2026-09-08,
+    # primera dinamica interna de asentamiento -- ver
+    # docs/superpowers/specs/2026-09-08-salon-comun-design.md). Mismo
+    # patron aditivo, sin necesitar una Fogata real aparte -- el salon
+    # ya implica su propio hogar. PROVISIONAL, sin calibrar.
+    bono_confort_salon_comun: 0.3
+    bono_seguridad_salon_comun: 0.1
     # saciedad_minima_para_guardar_provisiones (2026-09-07, ver
     # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
     # umbral de saciedad tras comer por encima del cual un consciente

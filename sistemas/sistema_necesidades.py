@@ -72,6 +72,7 @@ from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.construccion import hay_construccion_de_tipo_en
 from nucleo.fuego import fogata_en, hay_refugio_en
 from nucleo.madriguera import madriguera_en
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
@@ -138,6 +139,18 @@ class SistemaNecesidades:
         )
         self.bono_seguridad_madriguera: float = float(
             self.defecto.get("bono_seguridad_madriguera", 0.1)
+        )
+        # Salón común (2026-09-08, primera dinámica interna de
+        # asentamiento -- ver docs/superpowers/specs/
+        # 2026-09-08-salon-comun-design.md): mismo patrón aditivo, sin
+        # necesitar una Fogata real aparte -- el salón ya implica su
+        # propio hogar. Aplica a CUALQUIERA en la celda, no solo a quien
+        # lo construyó. PROVISIONAL, sin calibrar.
+        self.bono_confort_salon_comun: float = float(
+            self.defecto.get("bono_confort_salon_comun", 0.3)
+        )
+        self.bono_seguridad_salon_comun: float = float(
+            self.defecto.get("bono_seguridad_salon_comun", 0.1)
         )
         self.umbral_pareja: float = float(
             self.config.get("relaciones", {}).get("umbral_pareja", 0.3)
@@ -388,6 +401,10 @@ class SistemaNecesidades:
             # individual, que no da ningun bono.
             if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
                 obj_termico += self.bono_confort_madriguera
+            # Salon comun (2026-09-08): mismo criterio, sin necesitar una
+            # Fogata real aparte -- el salon ya implica su propio hogar.
+            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun"):
+                obj_termico += self.bono_confort_salon_comun
             # Pareja estable (2026-09-04, circulo 4b): si la pareja
             # derivada (afinidad mutua >= relaciones.umbral_pareja) esta en
             # la celda EXACTA y la propia entidad es CONSCIENTE, suma su
@@ -476,6 +493,12 @@ class SistemaNecesidades:
             # 2026-09-07-madriguera-fisica-b-design.md).
             if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
                 nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_madriguera)
+
+            # Salon comun (2026-09-08): mismo bono aditivo de seguridad,
+            # aplica a cualquiera en la celda (ver docs/superpowers/specs/
+            # 2026-09-08-salon-comun-design.md).
+            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun"):
+                nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_salon_comun)
 
             # Refugio instintivo (ver docstring de
             # sistema_movimiento.py:_calcular_dormir). Se registra la

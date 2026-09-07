@@ -181,11 +181,19 @@ def asentamiento_de(mundo: Any, id_entidad: int) -> Asentamiento | None:
     return None
 
 
-def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int, zona_idx: int = 0):
-    """Id de la Construccion tipo 'almacen' más cercana a `centro` dentro
+def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int, zona_idx: int = 0, tipo: str = "almacen"):
+    """Id de la Construccion de tipo `tipo` más cercana a `centro` dentro
     de `radio`, o None -- búsqueda EN VIVO (no el almacen_id cacheado a
     diario en Asentamiento) para no perder una construcción arrancada por
     otro miembro este mismo día, antes del próximo recálculo diario.
+
+    `tipo` (2026-09-08, salón común -- ver docs/superpowers/specs/
+    2026-09-08-salon-comun-design.md): generaliza la función más allá de
+    "almacen" para su segundo consumidor real, sin romper a los dos
+    consumidores existentes (no lo pasan, comportamiento idéntico). El
+    nombre `almacen_cercano` se conserva -- mismo criterio ya aceptado en
+    `espacio_disponible_para_construir`, que también conserva un nombre
+    histórico por los consumidores que ya lo importan.
 
     zona_idx: sin este filtro, un almacén en una cueva y otro en
     superficie (o en otra cueva) con coordenadas numéricamente cercanas
@@ -198,7 +206,7 @@ def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int, zona_idx: 
     mejor_dist = None
     for cid in gestor.entidades_con(Construccion, Posicion):
         construccion = gestor.obtener_componente(cid, Construccion)
-        if construccion.tipo != "almacen":
+        if construccion.tipo != tipo:
             continue
         pos = gestor.obtener_componente(cid, Posicion)
         if pos.zona_idx != zona_idx:

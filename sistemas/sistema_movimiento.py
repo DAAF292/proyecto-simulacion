@@ -35,7 +35,7 @@ from componentes.relaciones import Relaciones
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
-from nucleo.asentamiento import asentamiento_de
+from nucleo.asentamiento import almacen_cercano, asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.intercambio import transferir_recurso
@@ -776,13 +776,23 @@ class SistemaMovimiento:
         de que la otra parte tambien este "eligiendo" SOCIALIZAR ese tick,
         mismo criterio que CRISIS_VIOLENTA) y devuelve (0, 0): no sigue
         moviendose tras "conseguir" socializar. A distancia > 0 se acerca
-        sin resolver nada, igual que CRISIS_VIOLENTA."""
+        sin resolver nada, igual que CRISIS_VIOLENTA.
+
+        Salón común (2026-09-08, ver docs/superpowers/specs/
+        2026-09-08-salon-comun-design.md): si el asentamiento propio ya
+        tiene uno completado, es el destino preferente -- se camina hacia
+        él EN VEZ DE perseguir al consciente más cercano al azar (ley
+        simple, sin comparar distancias: un consciente que decide
+        socializar va al punto de encuentro real del pueblo, no a quien
+        le pille más cerca). Sin salón común disponible, comportamiento
+        IDÉNTICO al de antes de esta pieza. La resolución de contacto
+        real de arriba NO cambia -- sigue disparándose igual si ya se
+        está junto a alguien, sea porque ambos caminaron al salón o por
+        pura casualidad."""
         objetivo_id, objetivo_pos = self._consciente_mas_cercano_con_id(
             gestor, entidad_id, pos_x, pos_y, radio, zona_idx
         )
-        if objetivo_id is None:
-            return self._paso_aleatorio()
-        if objetivo_pos == (pos_x, pos_y):  # contacto real, no solo cercania
+        if objetivo_id is not None and objetivo_pos == (pos_x, pos_y):  # contacto real, no solo cercania
             self._aplicar_afinidad(
                 gestor, entidad_id, objetivo_id, self.delta_afinidad_socializar, tick_actual,
             )
@@ -793,7 +803,40 @@ class SistemaMovimiento:
             self._stats_socializar_afinidad_pares.add((entidad_id, objetivo_id))
             self._stats_socializar_afinidad_pares.add((objetivo_id, entidad_id))
             return (0, 0)
-        return self._acercarse_a(pos_x, pos_y, *objetivo_pos)
+
+        salon_pos = self._salon_comun_de(gestor, mundo, entidad_id)
+        if salon_pos is not None:
+            if salon_pos == (pos_x, pos_y):
+                return (0, 0)  # ya en el salon -- esperar aqui a que lleguen otros
+            return self._acercarse_a(pos_x, pos_y, *salon_pos)
+
+        if objetivo_id is not None:
+            return self._acercarse_a(pos_x, pos_y, *objetivo_pos)
+        return self._paso_aleatorio()
+
+    def _salon_comun_de(
+        self, gestor: GestorEntidades, mundo: Mundo, entidad_id: int,
+    ) -> tuple[int, int] | None:
+        """Coordenadas del salón común COMPLETADO del asentamiento de
+        `entidad_id`, o None si no pertenece a ninguno o su asentamiento
+        no tiene uno terminado todavía (2026-09-08, ver
+        docs/superpowers/specs/2026-09-08-salon-comun-design.md)."""
+        asen = asentamiento_de(mundo, entidad_id)
+        if asen is None:
+            return None
+        cid = almacen_cercano(
+            gestor, asen.centro, self.radio_cluster_asentamiento,
+            zona_idx=asen.zona_idx, tipo="salon_comun",
+        )
+        if cid is None:
+            return None
+        construccion = gestor.obtener_componente(cid, Construccion)
+        if construccion is None or not construccion.completado_alguna_vez:
+            return None
+        pos = gestor.obtener_componente(cid, Posicion)
+        if pos is None:
+            return None
+        return (pos.x, pos.y)
 
     def _agrupar_conscientes_por_celda(
         self, gestor: GestorEntidades,

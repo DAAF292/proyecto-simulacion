@@ -452,6 +452,14 @@ construccion:
   # primitivo denso sin sentirse infinito.
   huella_m2_refugio: 15.0
   huella_m2_almacen: 40.0
+  # masa_minima_salon_comun/huella_m2_salon_comun (2026-09-08, salon
+  # comun -- ver docs/superpowers/specs/2026-09-08-salon-comun-design.md):
+  # tercer eslabon de la cadena de prioridad refugio->almacen->salon
+  # comun. Algo mas grande que el almacen (masa y huella) -- un edificio
+  # pensado para reunir gente, no solo guardar materiales. PROVISIONAL,
+  # sin calibrar contra el motor en marcha.
+  masa_minima_salon_comun: 70.0
+  huella_m2_salon_comun: 45.0
   capacidad_construccion_celda_m2: 80.0
   # Cuánta masa apta transfiere Accion.CONSTRUIR del Inventario a la
   # Construccion por tick, estando en su misma celda -- PROVISIONAL, sin

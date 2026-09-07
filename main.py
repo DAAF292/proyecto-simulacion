@@ -22,6 +22,7 @@ from typing import Any
 
 import yaml
 
+from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.madriguera import Madriguera
@@ -699,6 +700,18 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] compartir por confianza: "
                 f"{sistemas['movimiento']._stats_compartir_confianza} veces"
             )
+            # Verificacion obligatoria del Salon comun (2026-09-08, ver
+            # docs/superpowers/specs/2026-09-08-salon-comun-design.md):
+            # cuantos salones comunes reales se completan, y si el
+            # contacto real de SOCIALIZAR (ya impreso arriba como
+            # "socializar contactos resueltos") sube frente a lo medido
+            # antes de esta pieza. Solo observacion.
+            salones_completados = sum(
+                1 for cid in gestor.entidades_con(Construccion)
+                if gestor.obtener_componente(cid, Construccion).tipo == "salon_comun"
+                and gestor.obtener_componente(cid, Construccion).completado_alguna_vez
+            )
+            print(f"[BOSQUE_AUTO_TICKS] salones comunes completados: {salones_completados}")
 
     except KeyboardInterrupt:
         pass

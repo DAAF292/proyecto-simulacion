@@ -37,18 +37,15 @@ def hay_refugio_en(gestor: Any, pos_x: int, pos_y: int, zona_idx: int) -> bool:
     """True si hay una Construccion tipo='refugio' completado_alguna_vez
     en esta celda exacta -- CUALQUIERA, no solo la del propietario (una
     choza abriga a quien esté dentro; a quién PERTENECE es una pregunta
-    distinta que resuelve nucleo/conflicto.py aparte, no esta función)."""
-    from componentes.construccion import Construccion
-    from componentes.posicion import Posicion
+    distinta que resuelve nucleo/conflicto.py aparte, no esta función).
 
-    for cid in gestor.entidades_con(Construccion, Posicion):
-        pos = gestor.obtener_componente(cid, Posicion)
-        if pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
-            continue
-        construccion = gestor.obtener_componente(cid, Construccion)
-        if construccion.tipo == "refugio" and construccion.completado_alguna_vez:
-            return True
-    return False
+    Alias de nucleo/construccion.py:hay_construccion_de_tipo_en
+    (2026-09-08, generalizada para el salón común, su segundo
+    consumidor real) -- conservado aquí, mismo nombre y comportamiento,
+    para no romper a los consumidores ya existentes."""
+    from nucleo.construccion import hay_construccion_de_tipo_en
+
+    return hay_construccion_de_tipo_en(gestor, pos_x, pos_y, zona_idx, "refugio")
 
 
 def celda_tiene_combustible(celda: Any, catalogo: dict[str, Any]) -> bool:

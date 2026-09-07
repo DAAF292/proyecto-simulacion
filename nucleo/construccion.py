@@ -35,6 +35,25 @@ def construccion_propia(gestor: Any, id_propietario: int, tipo: str):
     return None
 
 
+def hay_construccion_de_tipo_en(gestor: Any, pos_x: int, pos_y: int, zona_idx: int, tipo: str) -> bool:
+    """True si hay una Construccion de este `tipo`, completado_alguna_vez,
+    en esta celda exacta -- CUALQUIERA, no solo quien la construyó (un
+    sitio abriga a quien esté dentro, mismo criterio ya establecido para
+    refugio/fogata/madriguera). Generaliza nucleo/fuego.py:hay_refugio_en
+    (2026-09-08, salón común) para su segundo consumidor real."""
+    from componentes.construccion import Construccion
+    from componentes.posicion import Posicion
+
+    for cid in gestor.entidades_con(Construccion, Posicion):
+        pos = gestor.obtener_componente(cid, Posicion)
+        if pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
+            continue
+        construccion = gestor.obtener_componente(cid, Construccion)
+        if construccion.tipo == tipo and construccion.completado_alguna_vez:
+            return True
+    return False
+
+
 def masa_apta_construccion(materiales: dict[str, float], catalogo: dict[str, Any]) -> float:
     """Suma de la masa en `materiales` cuyo material del catálogo tiene
     apto_construccion=True. Materiales ausentes del catálogo o marcados
@@ -129,14 +148,17 @@ def objetivo_construccion_actual(
 ):
     """(tipo, cid_existente_o_None, posicion_de_creacion_o_None) del
     objetivo de CONSTRUIR/RECOLECTAR de este individuo ahora mismo, o
-    None si no hay ninguno. El refugio propio SIEMPRE tiene prioridad
-    mientras no esté terminado (necesidad individual antes que comunal,
-    mismo orden Maslow que el resto del motor); solo una vez resuelto se
-    mira si es miembro de un asentamiento y su almacén sigue sin
-    terminar.
+    None si no hay ninguno. Cadena de prioridad Maslow, cada eslabón
+    solo se evalúa una vez el anterior está completo: refugio propio
+    (individual) -> almacén de asentamiento (comunal, supervivencia) ->
+    salón común (comunal, calidad de vida -- 2026-09-08, ver
+    docs/superpowers/specs/2026-09-08-salon-comun-design.md). None solo
+    cuando TODA la cadena está completa, no en el primer eslabón
+    comunal ya resuelto.
     posicion_de_creacion es None para refugio (se crea donde ya se está,
-    ver sistema_movimiento.py) y el centro del asentamiento para almacén
-    (hay que llegar hasta ahí, no se crea donde a cada gnomo le pille)."""
+    ver sistema_movimiento.py) y el centro del asentamiento para
+    almacén/salón común (hay que llegar hasta ahí, no se crea donde a
+    cada gnomo le pille)."""
     from componentes.construccion import Construccion
     from nucleo.asentamiento import almacen_cercano, asentamiento_de
 
@@ -150,12 +172,24 @@ def objetivo_construccion_actual(
     asen = asentamiento_de(mundo, id_entidad)
     if asen is None:
         return None
+
     cid_almacen = almacen_cercano(gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx)
-    if cid_almacen is not None:
-        almacen = gestor.obtener_componente(cid_almacen, Construccion)
-        if almacen is not None and almacen.progreso >= 1.0:
-            return None
-    return ("almacen", cid_almacen, asen.centro)
+    if cid_almacen is None:
+        return ("almacen", None, asen.centro)
+    almacen = gestor.obtener_componente(cid_almacen, Construccion)
+    if almacen is None or almacen.progreso < 1.0:
+        return ("almacen", cid_almacen, asen.centro)
+
+    cid_salon = almacen_cercano(
+        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo="salon_comun"
+    )
+    if cid_salon is None:
+        return ("salon_comun", None, asen.centro)
+    salon = gestor.obtener_componente(cid_salon, Construccion)
+    if salon is None or salon.progreso < 1.0:
+        return ("salon_comun", cid_salon, asen.centro)
+
+    return None
 
 
 def transferir_a_construccion(
