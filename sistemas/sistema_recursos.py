@@ -46,7 +46,7 @@ from nucleo.espacio import plantas_competidoras_en
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.flora import intentar_colonizar_celda
-from nucleo.inventario import espacio_disponible_kg
+from nucleo.inventario import espacio_disponible_kg, espacio_disponible_provisiones_kg
 from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -61,6 +61,14 @@ class SistemaRecursos:
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
         self.config = config
         self.rng = rng
+        # Observación para BOSQUE_AUTO_TICKS (2026-09-07, ver spec
+        # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
+        # cuántas veces se dispara de verdad la entrada (guardar
+        # excedente) y la salida (comer de la despensa). El spec ya avisa
+        # de que el disparador es deliberadamente estrecho -- solo
+        # observación, ningún camino de decisión los lee.
+        self._stats_provisiones_guardadas: int = 0
+        self._stats_provisiones_consumidas: int = 0
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -101,6 +109,20 @@ class SistemaRecursos:
         )
         self.fraccion_carga_maxima: float = float(
             self.config.get("inventario", {}).get("fraccion_carga_maxima", 0.25)
+        )
+        # Provisiones de alimento (2026-09-07, ver
+        # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
+        # capacidad TOTALMENTE INDEPENDIENTE de fraccion_carga_maxima.
+        self.fraccion_provisiones_maxima: float = float(
+            self.config.get("inventario", {}).get("fraccion_provisiones_maxima", 0.05)
+        )
+        self.saciedad_minima_para_guardar_provisiones: float = float(
+            self.config.get("necesidades", {}).get("defecto", {}).get(
+                "saciedad_minima_para_guardar_provisiones", 0.9
+            )
+        )
+        self.umbral_purga_provisiones: float = float(
+            self.config.get("descomposicion", {}).get("umbral_purga_masa", 0.05)
         )
         # Almacén de asentamiento -- ver nucleo/asentamiento.py y
         # nucleo/construccion.py:objetivo_construccion_actual.
@@ -911,7 +933,64 @@ class SistemaRecursos:
                     and self.rng.random() < self.probabilidad_recogida_semilla_zoocoria
                 ):
                     semillas.especie_transportada = especie_para_semilla
+
+            # Provisiones (2026-09-07, ver docs/superpowers/specs/
+            # 2026-09-07-provisiones-alimento-design.md): si queda
+            # comida en la celda tras el consumo Y la entidad ya esta
+            # bien alimentada, un consciente guarda el excedente para
+            # comer mas tarde -- instinto de conservacion, no una
+            # decision calculada (ley binaria, sin variar por
+            # inteligencia/voluntad individual). Bolsillo TOTALMENTE
+            # INDEPENDIENTE de Inventario.contenidos -- nunca compite
+            # con materiales de construccion.
+            consciente = (
+                cap_mental is not None
+                and cap_mental.consciencia >= self.umbral_consciencia_agencia
+            )
+            sobra_en_celda = celda.recursos.get(nombre_rec, 0.0)
+            if (
+                consciente
+                and nec.saciedad >= self.saciedad_minima_para_guardar_provisiones
+                and sobra_en_celda > 0.0
+            ):
+                inv = gestor.obtener_componente(entidad_id, Inventario)
+                dims = gestor.obtener_componente(entidad_id, DimensionesFisicas)
+                if inv is not None and dims is not None:
+                    espacio = espacio_disponible_provisiones_kg(
+                        inv.provisiones, dims.peso, self.fraccion_provisiones_maxima
+                    )
+                    a_guardar = min(sobra_en_celda, self.tasa_consumo_comer, espacio)
+                    if a_guardar > 0.0:
+                        inv.provisiones[nombre_rec] = (
+                            inv.provisiones.get(nombre_rec, 0.0) + a_guardar
+                        )
+                        celda.recursos[nombre_rec] = max(0.0, sobra_en_celda - a_guardar)
+                        self._stats_provisiones_guardadas += 1
         else:
+            # Provisiones -- comer de la propia despensa cuando la celda
+            # actual no tiene nada de la dieta propia, ANTES de dar el
+            # sitio por agotado. Sin registrar memoria de "comida" aqui
+            # (no se comio en ningun sitio concreto) ni disparar
+            # zoocoria (eso es solo para fruta comida donde crece).
+            inv = gestor.obtener_componente(entidad_id, Inventario)
+            if inv is not None and inv.provisiones:
+                recurso_guardado = next(
+                    (r for r in dieta if inv.provisiones.get(r, 0.0) > 0.0), None
+                )
+                if recurso_guardado is not None:
+                    disponible = inv.provisiones[recurso_guardado]
+                    consumo = min(disponible, self.tasa_consumo_comer)
+                    val_nut = self.nutricion_flora.get(recurso_guardado, 0.2)
+                    val_hid = self.hidratacion_flora.get(recurso_guardado, 0.05)
+                    nec.saciedad = min(1.0, nec.saciedad + (consumo * val_nut))
+                    nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
+                    restante = disponible - consumo
+                    if restante <= self.umbral_purga_provisiones:
+                        del inv.provisiones[recurso_guardado]
+                    else:
+                        inv.provisiones[recurso_guardado] = restante
+                    self._stats_provisiones_consumidas += 1
+                    return
             # Sin esto, un individuo que llega aquí guiado por un
             # recuerdo de "comida" (nucleo/memoria.py:objetivo_recordado,
             # consultado en sistema_movimiento.py:_calcular_forrajeo SOLO

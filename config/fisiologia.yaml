@@ -60,6 +60,12 @@ necesidades:
     # PROVISIONAL, sin calibrar contra el harness completo.
     bono_confort_madriguera: 0.3
     bono_seguridad_madriguera: 0.1
+    # saciedad_minima_para_guardar_provisiones (2026-09-07, ver
+    # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
+    # umbral de saciedad tras comer por encima del cual un consciente
+    # guarda el excedente de comida en Inventario.provisiones en vez de
+    # dejarlo perderse. PROVISIONAL, sin calibrar.
+    saciedad_minima_para_guardar_provisiones: 0.9
     tasa_perdida_impulso_reproductivo_por_tick: 0.005
     probabilidad_muerte_saciedad_critica: 0.005
     probabilidad_muerte_deshidratacion: 0.005
@@ -304,6 +310,12 @@ inventario:
   # peso), no medido contra el motor en marcha -- sin ninguna acción que
   # llene un Inventario todavía, no hay nada que observar aún.
   fraccion_carga_maxima: 0.25
+  # fraccion_provisiones_maxima (2026-09-07, ver componentes/inventario.py:
+  # Inventario.provisiones): capacidad TOTALMENTE INDEPENDIENTE de
+  # fraccion_carga_maxima -- deliberadamente mucho menor, "un par de dias
+  # de raciones" en vez de "todo lo que quepa". PROVISIONAL, sin calibrar
+  # contra el motor en marcha.
+  fraccion_provisiones_maxima: 0.05
 
 capacidad_mental:
   tasa_perdida_estabilidad_por_amenaza: 0.02

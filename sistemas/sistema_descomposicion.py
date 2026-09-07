@@ -24,6 +24,7 @@ import random
 from typing import Any
 
 from componentes.construccion import Construccion
+from componentes.inventario import Inventario
 from componentes.necromasa import Necromasa
 from componentes.posicion import Posicion
 from nucleo.construccion import masa_minima_para, progreso_construccion
@@ -60,6 +61,13 @@ class SistemaDescomposicion:
         )
         self.umbral_purga_masa: float = float(
             cfg_desc.get("umbral_purga_masa", 0.05)
+        )
+        # Provisiones de alimento (2026-09-07, ver
+        # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
+        # tasa UNICA universal para toda comida guardada en
+        # Inventario.provisiones -- no una por recurso.
+        self.tasa_descomposicion_dia_alimento: float = float(
+            cfg_desc.get("tasa_descomposicion_dia_alimento", 0.15)
         )
         self.factor_humedad_lluvia: float = float(
             cfg_desc.get("factor_humedad_lluvia", 1.3)
@@ -101,6 +109,7 @@ class SistemaDescomposicion:
         Invocado a cadencia de día (Fase de cierre de ciclo).
         """
         self._descomponer_construcciones(gestor, mundo, reloj, bus_eventos)
+        self._descomponer_provisiones(gestor)
 
         # Factor de humedad calculado UNA VEZ POR ZONA (cada ZonaBioma
         # tiene su propio clima_actual), luego aplicado a cada Necromasa
@@ -202,6 +211,28 @@ class SistemaDescomposicion:
                     )
                 )
                 gestor.eliminar_entidad(nec_id)
+
+    def _descomponer_provisiones(self, gestor: GestorEntidades) -> None:
+        """
+        Caducidad de comida guardada (2026-09-07, ver
+        docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
+        cada recurso de Inventario.provisiones decae a una tasa UNICA
+        universal (tasa_descomposicion_dia_alimento), purgado por debajo
+        de umbral_purga_masa -- mismo criterio de purga que Necromasa/
+        Construccion, sin depender de clima/humedad de zona (simplificacion
+        deliberada de esta primera version). Inventario.contenidos/objetos
+        NUNCA se tocan aqui -- los materiales de construccion no caducan.
+        """
+        for eid in sorted(gestor.entidades_con(Inventario)):
+            inv = gestor.obtener_componente(eid, Inventario)
+            if inv is None or not inv.provisiones:
+                continue
+            for recurso in list(inv.provisiones.keys()):
+                restante = inv.provisiones[recurso] * (1.0 - self.tasa_descomposicion_dia_alimento)
+                if restante <= self.umbral_purga_masa:
+                    del inv.provisiones[recurso]
+                else:
+                    inv.provisiones[recurso] = restante
 
     def _descomponer_construcciones(
         self,

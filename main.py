@@ -672,6 +672,18 @@ def main() -> None:
                 f"{sistemas['manada']._stats_madriguera_excluidos_por_cupo} exclusiones "
                 "por cupo lleno (eventos acumulados)"
             )
+            # Verificacion obligatoria de Provisiones de alimento
+            # (2026-09-07, ver docs/superpowers/specs/
+            # 2026-09-07-provisiones-alimento-design.md): cuantas veces
+            # se dispara de verdad la entrada (guardar excedente) y la
+            # salida (comer de la despensa) -- el spec avisa de que el
+            # disparador es deliberadamente estrecho, medir con
+            # honestidad. Solo observacion, no cambia la simulacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] provisiones de alimento: "
+                f"{sistemas['recursos']._stats_provisiones_guardadas} veces guardado excedente, "
+                f"{sistemas['recursos']._stats_provisiones_consumidas} veces comido de la despensa"
+            )
 
     except KeyboardInterrupt:
         pass

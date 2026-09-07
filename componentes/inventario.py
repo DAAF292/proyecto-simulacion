@@ -29,6 +29,18 @@ class Inventario:
             (config/materiales.yaml:peso_objeto_kg) que cuenta hacia la MISMA
             capacidad de carga por peso que contenidos, no un límite de
             "número de objetos" aparte.
+        provisiones: {clave_recurso: cantidad_kg}, cualquier clave del
+            catálogo de config/flora.yaml (categoría alimento) -- comida
+            guardada para comer más tarde (2026-09-07, ver
+            docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md).
+            Bolsillo TOTALMENTE INDEPENDIENTE de contenidos/objetos, con su
+            propia capacidad pequeña
+            (nucleo/inventario.py:capacidad_provisiones_kg) -- una reserva de
+            supervivencia de unos pocos días, no un almacén, y nunca compite
+            con materiales de construcción (guardar comida no debería
+            impedir cargar piedra para un refugio, ni al revés). Se degrada
+            con el tiempo (sistema_descomposicion.py), a diferencia de
+            contenidos, que no caduca.
 
     Se añade a TODA criatura por igual (mismo criterio que Necesidades/
     DimensionesFisicas/Temperamento -- componentes que ya existen en
@@ -43,3 +55,4 @@ class Inventario:
 
     contenidos: dict[str, float] = field(default_factory=dict)
     objetos: list[str] = field(default_factory=list)
+    provisiones: dict[str, float] = field(default_factory=dict)

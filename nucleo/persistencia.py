@@ -79,7 +79,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.34-fase0"
+VERSION_ESQUEMA = "0.35-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -551,7 +551,11 @@ class Persistencia:
                             json.dumps(_serializar_snapshot_padre(gest)) if gest else None,
                             json.dumps(mem.recuerdos) if mem else None,
                             json.dumps(
-                                {"contenidos": inv.contenidos, "objetos": inv.objetos}
+                                {
+                                    "contenidos": inv.contenidos,
+                                    "objetos": inv.objetos,
+                                    "provisiones": inv.provisiones,
+                                }
                             ) if inv else None,
                             pos.zona_idx,
                             json.dumps(agarre.objetos) if agarre else None,
@@ -892,9 +896,10 @@ class Persistencia:
                 inventario_dict = json.loads(fila[46]) if fila[46] else {}
                 inventario_objetos = inventario_dict.get("objetos", []) if isinstance(inventario_dict, dict) else []
                 contenidos = inventario_dict.get("contenidos", {}) if isinstance(inventario_dict, dict) else inventario_dict
+                provisiones = inventario_dict.get("provisiones", {}) if isinstance(inventario_dict, dict) else {}
                 gestor.anadir_componente(
                     eid,
-                    Inventario(contenidos=contenidos, objetos=list(inventario_objetos)),
+                    Inventario(contenidos=contenidos, objetos=list(inventario_objetos), provisiones=dict(provisiones)),
                 )
                 agarre_lista = json.loads(fila[48]) if fila[48] else []
                 gestor.anadir_componente(eid, Agarre(objetos=agarre_lista))

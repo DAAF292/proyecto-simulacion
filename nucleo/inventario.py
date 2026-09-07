@@ -68,3 +68,29 @@ def espacio_disponible_kg(
         capacidad_carga_kg(peso_propio, fraccion_carga_maxima)
         - peso_cargado_kg(contenidos, objetos, peso_objeto_kg),
     )
+
+
+def capacidad_provisiones_kg(peso_propio: float, fraccion_provisiones_maxima: float) -> float:
+    """Cuánta comida puede guardar una criatura para comer más tarde, en kg
+    -- fracción del propio peso corporal, TOTALMENTE INDEPENDIENTE de
+    capacidad_carga_kg (2026-09-07, ver componentes/inventario.py:
+    Inventario.provisiones). Deliberadamente menor que fraccion_carga_maxima
+    -- una reserva de supervivencia de unos pocos días, no "todo lo que
+    quepa"; guardar comida nunca debe competir con cargar materiales de
+    construcción."""
+    return max(0.0, peso_propio) * max(0.0, fraccion_provisiones_maxima)
+
+
+def espacio_disponible_provisiones_kg(
+    provisiones: dict[str, float],
+    peso_propio: float,
+    fraccion_provisiones_maxima: float,
+) -> float:
+    """Cuánta comida más puede guardarse antes de llegar a
+    capacidad_provisiones_kg -- nunca negativo, mismo criterio que
+    espacio_disponible_kg pero sin ninguna relación con contenidos/objetos."""
+    return max(
+        0.0,
+        capacidad_provisiones_kg(peso_propio, fraccion_provisiones_maxima)
+        - float(sum(provisiones.values())),
+    )

@@ -50,6 +50,15 @@ descomposicion:
   fraccion_hueso_de_masa_seca: 0.15
   masa_referencia_fertilidad: 10.0
   umbral_purga_masa: 0.05
+  # tasa_descomposicion_dia_alimento (2026-09-07, ver
+  # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
+  # UNA tasa universal para toda comida guardada en Inventario.provisiones
+  # -- no una por recurso (13 recursos de alimento en el catalogo hoy;
+  # diferenciar manzana-se-pudre-mas-rapido-que-raiz sin ningun dato real
+  # seria adivinar, no medir). Sin dependencia de clima/humedad de zona,
+  # a diferencia de Necromasa -- simplificacion deliberada de esta
+  # primera version. PROVISIONAL, sin calibrar contra el motor en marcha.
+  tasa_descomposicion_dia_alimento: 0.15
   factor_humedad_lluvia: 1.3
   factor_humedad_seco: 0.8
 
