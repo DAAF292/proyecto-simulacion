@@ -1,9 +1,21 @@
-# Madriguera física — capacidad finita y beneficios reales — diseño
+# Madriguera física (A) — entidad real y capacidad finita — diseño
 
-Fecha: 2026-09-07. Extiende directamente la pieza recién cerrada
-`Manada` (ver
+Fecha: 2026-09-07. Círculo A de "madriguera física", partida en dos
+por el mismo criterio ya usado con sonido físico (4a/4b) y pareja
+estable (4a/4b) tras dos timeouts consecutivos del pipeline sin ningún
+progreso sobre la versión combinada de este spec (2700s cada uno, sin
+comitear código ni plan propio -- ver
+`docs/plans/failed/2026-09-07-madriguera-fisica.md`, ambos intentos).
+Extiende directamente la pieza recién cerrada `Manada` (ver
 `docs/superpowers/specs/2026-09-07-manada-fauna-design.md`) — no es
 parte del informe de "capa de comunicación" (ya cerrado del todo).
+
+Este círculo (A) es la infraestructura física en sí: la entidad
+`Madriguera` persistida, su capacidad sorteada, y la lógica de
+admisión con prioridad. El círculo B (beneficios reales de confort y
+seguridad) depende de que `madriguera_en` exista ya, y se diseña/
+entrega por separado — ver
+`docs/superpowers/specs/2026-09-07-madriguera-fisica-b-design.md`.
 
 ## Motivación
 
@@ -40,15 +52,9 @@ un hecho físico real que no se puede recalcular gratis cada día.
   quien lo recibiría por primera vez. El resto no se sincroniza ese
   día — su propia memoria individual queda intacta (mecanismo original
   de refugio de fauna, sin cambios).
-- **Dos beneficios reales, ambos reutilizando el mismo patrón aditivo
-  ya existente** (`bono_confort_fogata`/`bono_seguridad_pareja` en
-  `sistema_necesidades.py`, sin inventar un mecanismo nuevo): confort
-  térmico Y seguridad. Se aplican a CUALQUIERA que esté físicamente en
-  la celda de la madriguera en ese momento (mismo criterio que
-  `hay_refugio_en`: "una choza abriga a quien esté dentro", no solo a
-  quien tiene la coordenada en su propia memoria) — desacopla
-  deliberadamente "quién la usa de hecho" de "quién está admitido para
-  que se le sincronice como destino de navegación".
+- **Beneficios reales de usarla quedan para el círculo B** — este
+  círculo solo construye la entidad física y su cupo; `madriguera_en`
+  se diseña ya pensando en que B la consuma sin tocar este módulo.
 - **Sin decaimiento ni acción de excavar** — permanente una vez creada,
   mismo criterio ya aceptado (madriguera instintiva, no consciente).
 - **Honestidad explícita sobre "forzar nuevas comunidades"**: el diseño
@@ -77,26 +83,23 @@ un hecho físico real que no se puede recalcular gratis cada día.
      memoria (hasta `capacidad`), luego rellena huecos restantes con
      miembros nuevos (orden determinista, p.ej. `sorted(miembros)`).
    - Solo los admitidos reciben `registrar_recuerdo`.
-5. `sistemas/sistema_necesidades.py`: dos bonos nuevos, mismo bloque que
-   ya aplica `bono_confort_refugio`/`bono_confort_fogata` y
-   `bono_seguridad_pareja` — si `madriguera_en(...)` en la posición
-   actual, sumar `bono_confort_madriguera` a `obj_termico` y
-   `bono_seguridad_madriguera` a `Necesidades.seguridad` (capado a 1.0).
-6. `config/poblacion.yaml`: `capacidad_madriguera: [min, max]`
+5. `config/poblacion.yaml`: `capacidad_madriguera: [min, max]`
    PROVISIONAL, solo en `conejo`.
-7. `config/fisiologia.yaml`, sección `necesidades.defecto`:
-   `bono_confort_madriguera`, `bono_seguridad_madriguera` PROVISIONAL.
-8. Persistencia: tabla `madriguera_estado` (mismo molde que
+6. Persistencia: tabla `madriguera_estado` (mismo molde que
    `fogata_estado`: `entidad_id, x, y, capacidad, zona_idx`),
    `VERSION_ESQUEMA` sube de `"0.33-fase0"` a la siguiente (DROP-and-
    recreate, sin migración, mismo criterio ya establecido).
-9. `SistemaManada` gana `rng` en su constructor (hoy no lo recibe) para
+7. `SistemaManada` gana `rng` en su constructor (hoy no lo recibe) para
    sortear la capacidad — actualizar `main.py:instanciar_sistemas`
    para pasarle `rng_juego`.
-10. Tests dirigidos + verificación obligatoria contra el motor real.
+8. Tests dirigidos + verificación obligatoria contra el motor real.
 
 **Fuera de alcance, explícito:**
 
+- **Beneficios reales (confort/seguridad) — círculo B, spec aparte**:
+  no se toca `sistema_necesidades.py` en este círculo.
+  `nucleo/madriguera.py:madriguera_en` se diseña genérica precisamente
+  para que B la reutilice sin tocarla.
 - Cualquier acción consciente de excavar/ampliar una madriguera ya
   creada — capacidad fija de por vida, igual que el tamaño de una
   cueva.
@@ -183,15 +186,6 @@ def _sincronizar_madriguera(self, gestor, especie, zona_idx, miembros) -> None:
 `_sincronizar_madriguera` (ya los tiene en su propio bucle por
 `(especie, zona_idx)`, solo hay que propagarlos al llamar).
 
-### Beneficios (`sistema_necesidades.py`)
-
-En el mismo bloque donde ya se aplican `bono_confort_refugio`/
-`bono_confort_fogata`: si `madriguera_en(gestor, pos.x, pos.y,
-pos.zona_idx) is not None`, sumar `bono_confort_madriguera` a
-`obj_termico`. En el bloque de recuperación de seguridad (mismo que
-`bono_seguridad_pareja`): sumar `bono_seguridad_madriguera`, capado a
-`1.0`.
-
 ## Config nueva (PROVISIONAL, sin calibrar)
 
 ```yaml
@@ -199,11 +193,6 @@ pos.zona_idx) is not None`, sumar `bono_confort_madriguera` a
 capacidad_madriguera: [10, 25]  # PROVISIONAL -- lejos de "200 conejos
   # en una", fuerza a repartirse en varias madrigueras conforme crece
   # la poblacion
-
-# config/fisiologia.yaml, seccion necesidades.defecto
-bono_confort_madriguera: 0.3  # PROVISIONAL, mismo orden que refugio/fogata
-bono_seguridad_madriguera: 0.1  # PROVISIONAL, mayor que bono_seguridad_pareja
-  # (0.05) -- una madriguera protege mas que la sola compania de la pareja
 ```
 
 ## Testing
@@ -216,10 +205,6 @@ bono_seguridad_madriguera: 0.1  # PROVISIONAL, mayor que bono_seguridad_pareja
 - Cupo respetado: con más miembros que capacidad, exactamente
   `capacidad` quedan admitidos (nunca más); los ya establecidos tienen
   prioridad sobre los nuevos.
-- Beneficios: un conejo en la celda de una madriguera real gana ambos
-  bonos (verificar valores exactos); un conejo en un sitio de refugio
-  puramente individual (sin `Madriguera` ahí) no gana ninguno —
-  confirma que la diferenciación individual/colonial es real.
 - **Verificación obligatoria contra `BOSQUE_AUTO_TICKS`, no opcional**:
   medir cuántas madrigueras reales se crearon, su capacidad real
   sorteada, cuántos conejos quedaron sin admitir por cupo lleno, y si
@@ -230,8 +215,10 @@ bono_seguridad_madriguera: 0.1  # PROVISIONAL, mayor que bono_seguridad_pareja
 
 ## Pendiente real tras esta pieza
 
-- `capacidad_madriguera`/`bono_confort_madriguera`/
-  `bono_seguridad_madriguera` PROVISIONALES, sin calibrar.
+- `capacidad_madriguera` PROVISIONAL, sin calibrar.
+- **Círculo B (beneficios reales) es el siguiente paso inmediato** — ya
+  puede diseñarse/entregarse en cuanto este círculo esté mergeado,
+  reutilizando `madriguera_en` tal cual.
 - Si el cupo realmente empuja a fundar nuevas madrigueras o solo dejar
   población sin sincronizar es una pregunta abierta hasta verificarlo
   contra el motor real — candidato a una segunda vuelta de diseño
