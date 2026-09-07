@@ -5028,3 +5028,221 @@ recargar desde SQLite.
   caso a caso.
 - Con esto, la extensión completa de "madriguera física" sobre `Manada`
   queda cerrada (círculos A y B).
+
+## Calibración de estabilidad del ecosistema -- caballo y agua, criterio
+## maestro cruza el 50% de Diego en la medición, deshidratación como
+## hallazgo real sin resolver del todo (2026-09-07)
+
+Diego pidió explícitamente una ronda de pruebas contra el motor real
+para calibrar lo marcado PROVISIONAL "para que el ecosistema sea
+medianamente estable y los flujos que hemos creado se den de forma
+natural". Catalogadas 91 líneas `PROVISIONAL` en `config/*.yaml` -- **sin
+barrido ciego**, mismo criterio de siempre: solo se tocó lo que una
+medición real contra el motor señaló como bloqueo concreto.
+
+**Metodología**: arnés propio sin SQLite (scratchpad, no en el repo),
+reutilizando `main.py` tal cual (`cargar_configuracion`,
+`instanciar_sistemas`, `sembrar_poblacion_inicial`, `sembrar_flora_inicial`,
+`ejecutar_tick`) con una `Persistencia` de mentira (no-op) para evitar el
+coste real de I/O. **Ventana de 4000 ticks, no 6000-8000** -- decisión
+explícita por coste real medido: con la población creciendo hacia el
+tope de seguridad (varias partes del motor son O(N) o peor por tick,
+`_buscar_conspecifico_mas_cercano` ya documentado O(N²)), una sola
+semilla a 6000 ticks superó los 520s de una única llamada -- un lote de
+6-10 semillas en paralelo a 8000 ticks no cabía en el presupuesto de
+tiempo real de esta sesión. **Limitación honesta de esta calibración**:
+una ventana de 4000 ticks probablemente infla la tasa de supervivencia
+frente a 6000-8000 (especies que acabarían muriendo más tarde siguen
+vivas a la mitad de camino) -- los números de aquí no sustituyen al
+harness completo de 15×12000 que sigue pendiente desde
+"Sobrepoblación...".
+
+### Diagnóstico -- lote base, 6 semillas nuevas (40001-40006) × 4000 ticks, `master` sin tocar
+
+**4/6 (67%) con las 5 especies vivas simultáneamente** -- ya por encima
+del 50% que fijó Diego como criterio, aunque con dos hallazgos reales
+que exigían corrección antes de dar esto por bueno:
+
+1. **Caballo, único caso de extinción real (2/6 semillas)**, inanición
+   como causa dominante en las 6. Causa raíz: caballo -- la especie más
+   nueva del catálogo (2026-09-05) -- nunca recibió el recetario de
+   hambre/concepción ya aplicado a gnomo/lobo/conejo/ardilla; seguía con
+   `necesidades.defecto` (el mismo valor universal que ya había
+   resultado insuficiente para las otras cuatro) y la
+   `factor_base_concepcion` MÁS BAJA de todo el catálogo (0.005, más
+   baja incluso que gnomo antes de su propio fix) pese a tener un perfil
+   reproductivo (gestación corta, camada hasta 2) mucho más parecido al
+   de lobo/gnomo ya recalibrados que al caso que justificaba un valor
+   tan bajo -- probablemente un descuido de cuando se diseñó la especie,
+   nunca revisado.
+2. **Deshidratación como causa de muerte real y significativa en las 6
+   semillas**, en las 5 especies -- contradice lo documentado
+   previamente ("deshidratación prácticamente irrelevante, 1 muerte en
+   10 semillas × 8000 ticks", sección "Fragilidad de lobo..."). Mismo
+   patrón exacto que "vejez enmascarada por inanición": al bajar
+   `tasa_perdida_saciedad_por_tick` de 0.012 a 0.0008 para gnomo/lobo/
+   conejo/ardilla (15x más lento), la hidratación (`tasa_perdida_
+   hidratacion_por_tick=0.004`, sin tocar) pasó a decaer ~5x más rápido
+   que el hambre para esas cuatro especies -- un cuello de botella que
+   quedaba oculto detrás de la inanición hasta que esta se resolvió.
+   Causa raíz confirmada, no solo sospechada: medido contra 4 mundos
+   generados reales que solo el **3.3%-11.1% de las celdas tienen agua
+   potable** (permanente + charco, sin lluvia todavía), frente al radio
+   de búsqueda genérico (0-4 celdas, el mismo que ya usan comida y
+   amenaza) -- insuficiente con frecuencia real en semillas de baja
+   cobertura hídrica, agravado porque ríos/lagos/pozas son clusters
+   contiguos, no dispersos uniformemente.
+
+### Fix aplicado, verificado, mergeado (`e876e18`)
+
+- **Radio de búsqueda propio para `Accion.BEBER`** (2-8 celdas,
+  `config/comportamiento.yaml:percepcion.radio_minimo/maximo_agua_celdas`),
+  mismo patrón arquitectónico que ya tenía diseñado (sin mergear)
+  `Accion.BUSCAR_PAREJA` en el PR #19 -- **PR #19 se cierra sin mergear
+  la rama tal cual; su cambio funcional (radio 3-12 celdas para
+  búsqueda de pareja) se adapta e integra en este mismo commit**, junto
+  al de agua, en vez de mergear una rama de hace un día sin evidencia
+  propia comiteada de su efecto real (revisado explícitamente: ni el PR
+  ni sus comentarios ni el plan movido a `docs/plans/in_review/`
+  contenían ningún número real medido, pese a que CLAUDE.md mencionaba
+  un supuesto trade-off "ayuda a gnomo, perjudica a caballo" sin
+  evidencia comiteada -- tratado como no verificado y sustituido por
+  esta decisión con datos propios).
+- **Caballo gana entrada propia en `config/fisiologia.yaml:necesidades`**
+  (mismo par `0.0008`/`0.0004` que las otras cuatro) y
+  `factor_base_concepcion` sube de 0.005 a 0.015 (igual que gnomo/lobo)
+  en `config/poblacion.yaml`.
+
+**Verificado**: 300/300 tests en verde, `BOSQUE_AUTO_TICKS=2500` con la
+semilla por defecto sin ninguna excepción. Lote de 6 semillas NUEVAS
+(50001-50006, nunca vistas antes -- mismo criterio metodológico de
+siempre, nunca semilla-a-semilla) tras el fix:
+
+- **Caballo: 0/6 extinción** (frente a 2/6 antes) -- la especie
+  sobrevive con población real en las 6 (7-20 individuos).
+- **4/6 (67%) con las 5 especies vivas simultáneamente** -- mismo
+  porcentaje que el lote base, pero ahora el fallo residual es ardilla
+  (2/6, consistente con su ~25% de fracaso ya documentado desde su
+  propio fix, no una regresión nueva) en vez de caballo.
+- **Deshidratación sigue siendo una causa de muerte real y en algunos
+  casos incluso más alta en términos absolutos** (p.ej. semilla 50005:
+  165 muertes de conejo por deshidratación) -- **hallazgo honesto, no
+  resuelto del todo**: el radio ampliado mejora el acceso real
+  (confirmado por el diagnóstico de cobertura hídrica), pero en
+  poblaciones de conejo ya muy densas (300+ individuos por la propia
+  explosión reproductiva de la especie, ver más abajo) más población
+  compitiendo por la misma agua sigue produciendo muchas muertes
+  absolutas por esta causa, con independencia del radio de búsqueda.
+  **Hipótesis razonada, no confirmada con más profundidad**: esto podría
+  estar funcionando como un freno natural de densidad legítimo (misma
+  familia de mecanismo que la fertilidad por nutrición ya aceptada en
+  "Sobrepoblación...") en vez de un defecto a eliminar -- no se tocó
+  `tasa_perdida_hidratacion_por_tick` en este círculo por no tener
+  evidencia de que hacerlo sea una mejora real y no solo desplazar el
+  problema, mismo criterio de prudencia que ya se aplicó una vez con
+  conejo (alivio de hambre en solitario disparó la población sin
+  ningún freno).
+
+### Explosión de conejo -- medida, NO tocada en este círculo, decisión explícita
+
+En **9 de las 12 semillas medidas en total** (ambos lotes, antes y
+después del fix), conejo alcanzó el tope de seguridad del propio arnés
+de diagnóstico (400 individuos) antes de completar los 4000 ticks --
+`abortado_por_explosion: true`. Vejez fue la causa de muerte DOMINANTE
+para conejo en las 12 semillas (90-199 por semilla), no inanición ni
+deshidratación -- **explicado, no es un bug**: con `TICKS_POR_ANIO=480`
+(`Reloj.TICKS_POR_DIA=24 × DIAS_POR_ESTACION=5 × ESTACIONES_POR_ANIO=4`)
+y una longevidad racial de 1-3 años (480-1440 ticks), un conejo nacido
+en cualquier punto de una corrida de 4000 ticks tiene margen de sobra
+para llegar a viejo -- turnover generacional rápido esperable en un
+r-estratega, no una anomalía.
+
+**Decisión explícita: no se tocó `camada`/`factor_base_concepcion` de
+conejo más allá del recorte ya aplicado el 2026-09-06** (`camada`
+`[3,7]`→`[3,5]`, sin re-verificar hasta ahora). Razonamiento: (1) el
+propio criterio maestro de Diego (5 especies vivas a la vez) se sigue
+cumpliendo en la mayoría de semillas pese a la explosión de conejo --
+ninguna otra especie se extinguió POR CAUSA de la competencia de conejo
+en los datos medidos; (2) 400 individuos de conejo sobre 1600 celdas
+(0.25 ind/celda solo para conejo) es del mismo orden de magnitud que el
+pico de 0.34 ind/celda ya aceptado como "boom-bust normal que se
+autocorrige" en "Sobrepoblación..." -- no hay evidencia de que esto sea
+cualitativamente distinto, solo de que mi propia ventana de
+verificación (4000 ticks, tope de seguridad 400) es demasiado corta
+para ver si busca solo o no lo hace; (3) seguir apretando el freno de
+conejo sin verificar si el boom se autocorregiría con más tiempo
+repetiría el error ya cometido una vez con este mismo parámetro
+("alivio de hambre en solitario disparó a 500-700 sin estabilizarse" --
+la propia investigación de esa sobrecorrección ya es la lección
+aplicable aquí, no hace falta repetirla a ciegas). **Pendiente real,
+explícito**: confirmar con una ventana más larga (6000-8000 ticks, tope
+de seguridad más alto) si conejo realmente busca de forma natural o si
+hace falta un tercer ajuste -- no se pudo hacer en esta sesión por el
+coste real de cómputo ya señalado arriba.
+
+### "Flujos naturales" -- confirmado que SÍ se disparan con regularidad,
+### contraste real con el hallazgo repetido de sesiones anteriores
+
+Las 12 semillas medidas (ambos lotes) traen también datos directos
+sobre si los mecanismos sociales/gregarios ya construidos se ejercen de
+verdad en juego libre, no solo en tests dirigidos -- la pregunta
+explícita de Diego ("que los flujos... se den de forma natural"):
+
+- **Asentamiento (2+ miembros conscientes)**: se formó en **12 de 12
+  semillas** (1-3 asentamientos simultáneos por semilla) -- contraste
+  directo con el hallazgo repetido de las sesiones de cierre del arco
+  "hilo individual" y "capa de comunicación" ("0 asentamientos con 2+
+  miembros conscientes... la población se extinguió antes"). Con la
+  población ya más estable, este mecanismo deja de ser "correcto pero
+  invisible".
+- **Pareja estable derivada (gnomo)**: activa en **10 de 12 semillas**
+  (0-10 parejas simultáneas) -- mismo contraste, antes documentado como
+  "0 casos reales, población extinta antes de acumular afinidad
+  suficiente".
+- **Manada + madriguera compartida**: las 5 especies formaron manada en
+  ambos lotes; `BOSQUE_AUTO_TICKS=2500` (semilla por defecto) confirmó
+  29 madrigueras físicas activas y 1274 exclusiones reales por cupo
+  lleno en esa sola corrida.
+- **Rumor social, lealtad de liderazgo, reputación**: confirmados
+  disparándose con fuerza real en la misma corrida de 2500 ticks (15357
+  rumores propagados, 154 aplicaciones de lealtad, 4 candidatos
+  descalificados por reputación).
+- **Único mecanismo que NO se disparó en esta corrida concreta**: el
+  fallback de caza por sonido (0 usos en 2500 ticks, semilla por
+  defecto) -- ya documentado como "correcto pero raro, necesita varias
+  semillas para observarse", no una regresión nueva.
+- **No medido en este círculo**: parentesco derivado (madre-hijo ambos
+  vivos) -- el arnés no lo instrumentó; dado el volumen real de
+  nacimientos medido (cientos por semilla en conejo/ardilla), es
+  altamente probable que se esté dando, pero no se confirmó con un
+  contador directo. Hueco honesto, no una afirmación sin respaldo.
+
+### Pendiente real, explícito, tras este círculo
+
+- `radio_minimo/maximo_agua_celdas`, `radio_minimo/maximo_pareja_celdas`,
+  `factor_base_concepcion`/fisiología de caballo: todos PROVISIONALES,
+  sin calibrar contra el harness completo.
+- Deshidratación en poblaciones densas de conejo sigue sin resolver del
+  todo -- candidato real para una vuelta futura, con la hipótesis de
+  "freno de densidad legítimo" señalada explícitamente para no
+  sobrecorregir sin verificar primero.
+- Explosión de conejo (9/12 semillas tocan el tope de seguridad del
+  arnés) medida pero NO tocada -- necesita verificación con ventana más
+  larga antes de decidir si hace falta un tercer ajuste.
+- Parentesco derivado sin confirmar con contador directo en juego libre
+  (probable pero no medido).
+- El resto del catálogo de 91 líneas `PROVISIONAL` (combate, materiales,
+  fuego, cueva, mundo, flora, nombres, armas, clima -- ver inventario
+  completo con `grep -rn PROVISIONAL config/*.yaml`) **no se tocó**,
+  deliberadamente -- ninguno mostró relación causal con el criterio
+  maestro de Diego ni con los "flujos naturales" en esta investigación;
+  tocarlos sin una medición que los señale habría sido un barrido ciego,
+  justo lo que este círculo evitó a propósito.
+- Harness completo (15 semillas × 12000 ticks) sigue pendiente desde
+  "Sobrepoblación..." -- esta calibración (12 semillas × 4000 ticks) es
+  direccional, no una calibración cerrada de verdad; la ventana más
+  corta que la práctica habitual (6000-8000) es una limitación real de
+  esta sesión, no una elección de rigor.
+
+Commit: `e876e18`. PR #19 cerrado sin mergear (funcionalidad adaptada e
+integrada en el mismo commit).
