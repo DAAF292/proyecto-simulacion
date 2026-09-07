@@ -48,6 +48,18 @@ necesidades:
     # CONSCIENTE. PROVISIONAL, sin calibrar contra el harness completo.
     bono_confort_pareja: 0.15
     bono_seguridad_pareja: 0.05
+    # bono_confort_madriguera/bono_seguridad_madriguera (2026-09-07,
+    # circulo B de "madriguera fisica" -- ver docs/superpowers/specs/
+    # 2026-09-07-madriguera-fisica-b-design.md). Mismo patron aditivo,
+    # pero se aplica a CUALQUIERA fisicamente en la celda de una
+    # Madriguera real (nucleo/madriguera.py), sin exigir consciencia ni
+    # que el individuo la tenga en su propia memoria -- distinto de
+    # refugio individual, que sigue sin ningun bono (decision ya
+    # tomada). bono_seguridad_madriguera > bono_seguridad_pareja (0.05):
+    # una madriguera protege mas que la sola compania de la pareja.
+    # PROVISIONAL, sin calibrar contra el harness completo.
+    bono_confort_madriguera: 0.3
+    bono_seguridad_madriguera: 0.1
     tasa_perdida_impulso_reproductivo_por_tick: 0.005
     probabilidad_muerte_saciedad_critica: 0.005
     probabilidad_muerte_deshidratacion: 0.005

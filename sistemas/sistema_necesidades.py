@@ -73,6 +73,7 @@ from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import fogata_en, hay_refugio_en
+from nucleo.madriguera import madriguera_en
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_individual
@@ -125,6 +126,19 @@ class SistemaNecesidades:
         # CONSCIENTE. PROVISIONAL, sin calibrar contra el harness completo.
         self.bono_confort_pareja: float = float(self.defecto.get("bono_confort_pareja", 0.15))
         self.bono_seguridad_pareja: float = float(self.defecto.get("bono_seguridad_pareja", 0.05))
+        # Madriguera colonial (2026-09-07, circulo B -- ver
+        # docs/superpowers/specs/2026-09-07-madriguera-fisica-b-design.md):
+        # mismo patron aditivo que refugio/fogata/pareja, pero se aplica a
+        # CUALQUIERA que este fisicamente en la celda de una Madriguera real
+        # (nucleo/madriguera.py), sin exigir que la tenga en su propia
+        # memoria -- distinto del refugio individual, que sigue sin ningun
+        # bono (decision ya tomada). PROVISIONAL, sin calibrar.
+        self.bono_confort_madriguera: float = float(
+            self.defecto.get("bono_confort_madriguera", 0.3)
+        )
+        self.bono_seguridad_madriguera: float = float(
+            self.defecto.get("bono_seguridad_madriguera", 0.1)
+        )
         self.umbral_pareja: float = float(
             self.config.get("relaciones", {}).get("umbral_pareja", 0.3)
         )
@@ -368,6 +382,12 @@ class SistemaNecesidades:
                 obj_termico += self.bono_confort_refugio
             if fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
                 obj_termico += self.bono_confort_fogata
+            # Madriguera colonial (2026-09-07, circulo B): cualquiera
+            # fisicamente en su celda se beneficia, sin exigir que la
+            # tenga en su propia memoria -- distinto de refugio
+            # individual, que no da ningun bono.
+            if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+                obj_termico += self.bono_confort_madriguera
             # Pareja estable (2026-09-04, circulo 4b): si la pareja
             # derivada (afinidad mutua >= relaciones.umbral_pareja) esta en
             # la celda EXACTA y la propia entidad es CONSCIENTE, suma su
@@ -448,6 +468,14 @@ class SistemaNecesidades:
                 )
             ):
                 nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_pareja)
+
+            # Madriguera colonial (2026-09-07, circulo B): mismo bono
+            # aditivo de seguridad, sin exigir consciencia ni pareja --
+            # cualquier especie que comparta celda con la Madriguera se
+            # beneficia (ver docs/superpowers/specs/
+            # 2026-09-07-madriguera-fisica-b-design.md).
+            if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+                nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_madriguera)
 
             # Refugio instintivo (ver docstring de
             # sistema_movimiento.py:_calcular_dormir). Se registra la

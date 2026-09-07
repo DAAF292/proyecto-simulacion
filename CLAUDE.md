@@ -4900,3 +4900,131 @@ fuerza desde el primer día.
   `Asentamiento` ya existente, un concepto distinto) no se excluyó a
   propósito (ley neutra, sin excepción por especie) — inofensivo en
   esta corrida, pero señalado por si resulta confuso más adelante.
+
+## Madriguera física — capacidad finita y beneficios reales (círculos A+B),
+## cerrada — implementada directamente por Claude tras fallos repetidos
+## del pipeline, incidente real de infraestructura (2026-09-07)
+
+Extensión directa de `Manada` (arriba): Diego, viendo la madriguera
+compartida funcionando (14897 sincronizaciones, 597 conejos con sitio
+nuevo), señaló dos huecos reales -- (1) sin ningún límite, una sola
+madriguera podía "contener" a 200 conejos, cuando debería forzar a que
+se formen varias comunidades al crecer la población; (2) un refugio
+individual no debe tener bonificación (decisión ya tomada,
+`_calcular_dormir`: "el beneficio es puramente conductual"), pero una
+madriguera colonial SÍ debería dar beneficios reales -- confirmado
+explícitamente por Diego que quería ambos beneficios (confort térmico +
+seguridad). Diseñado en dos specs (`docs/superpowers/specs/
+2026-09-07-madriguera-fisica-a-design.md` y `...-b-design.md`),
+partidas desde una única spec combinada tras dos timeouts consecutivos
+del pipeline sin ningún progreso (`docs/plans/failed/
+2026-09-07-madriguera-fisica.md`).
+
+**Incidente real de infraestructura, no de diseño**: Trozo A también
+falló en su primer intento del pipeline con el mismo patrón (exploración
+larga, sin converger). Diego, viendo el segundo intento repetir el mismo
+patrón ("está tardando mucho... la vez anterior que falló tambn"), pidió
+cancelarlo directamente ("cancelalo, algo no está funcionando con el
+modelo") en vez de esperar el timeout completo. La cancelación manual
+(`kill -TERM` en cascada sobre el árbol de procesos del pipeline) se
+clasificó como "fallo de infraestructura externa" (código de salida no
+estándar, indistinguible para el script de un fallo real del proxy) --
+efecto colateral real: **esto detuvo el centinela por completo**
+(`CENTINELA DETENIDO`, diseño intencional del disyuntor para no seguir
+recogiendo trabajo a ciegas tras algo que parece un fallo externo). Sin
+código perdido (la rama huérfana se autoeliminó, sin progreso real que
+proteger). **El centinela sigue parado a fecha de esta nota** -- pendiente
+de reinicio manual (`.ai-pipeline/start-pipeline.sh` o `centinela.sh`)
+antes de que el pipeline pueda recoger cualquier encargo futuro.
+
+**Decisión de Diego tras esto**: implementar directamente los dos
+círculos (A y B) en la sesión, sin reintentar el pipeline -- excepción
+ya prevista en la sección "Flujo de implementación" de este documento
+("Diego lo pide explícitamente"). Tres fallos consecutivos del pipeline
+sobre esta misma pieza (Manada en su día, madriguera-fisica combinada, y
+Trozo A dos veces) quedan señalados como una pregunta de fiabilidad
+todavía sin resolver -- ver "Pendiente real" más abajo, conecta con la
+memoria persistente `project_evaluar_modelos_pipeline.md` (comparar
+`deepseek-v4-flash-0731` contra alternativas).
+
+### Círculo A -- entidad física real, capacidad finita
+
+**Hallazgo de diseño clave del propio spec**: para que la capacidad sea
+un límite físico real (no solo un número comparado y ya), la madriguera
+deja de ser "solo una coordenada en `MemoriaEspacial`" y se convierte en
+una entidad física real y persistida -- mismo molde exacto que `Fogata`
+(`Posicion` + un componente, sin `Identidad` ni `Intencion`).
+
+- `componentes/madriguera.py` (nuevo): `Madriguera(capacidad: int)`.
+- `nucleo/entidad.py:crear_madriguera` -- mismo molde que `crear_fogata`.
+- `nucleo/madriguera.py:madriguera_en` -- mismo molde que `fogata_en`.
+- `sistemas/sistema_manada.py:_sincronizar_madriguera`, reescrita:
+  `SistemaManada` gana `rng` en su constructor (`main.py:
+  instanciar_sistemas` le pasa `rng_juego`); localiza o crea la
+  `Madriguera` física en el sitio mayoritario (capacidad sorteada
+  **una sola vez**, `rng.randint` dentro de `capacidad_madriguera` por
+  especie, mismo patrón que el tamaño de una cueva al generarse -- nunca
+  se vuelve a sortear); admite con prioridad a quien YA tenía el sitio en
+  su memoria (`ya_establecidos`) sobre quien lo recibiría por primera vez
+  (`nuevos`), topado a `capacidad`; el resto no se sincroniza ese día, su
+  memoria individual queda intacta.
+- `config/poblacion.yaml`: `capacidad_madriguera: [10, 25]` (PROVISIONAL,
+  solo conejo).
+- Persistencia: tabla `madriguera_estado` (mismo molde que
+  `fogata_estado`), `VERSION_ESQUEMA` sube a `"0.34-fase0"`
+  (DROP-and-recreate, sin migración, criterio ya establecido).
+
+### Círculo B -- beneficios reales de confort y seguridad
+
+Reutiliza `madriguera_en` de A sin tocarlo. Mismo patrón aditivo que
+`bono_confort_refugio`/`bono_confort_fogata`/`bono_seguridad_pareja` en
+`sistema_necesidades.py`, dos veces más -- `bono_confort_madriguera`
+(0.3) suma al objetivo de confort térmico, `bono_seguridad_madriguera`
+(0.1, mayor que `bono_seguridad_pareja`=0.05 -- "una madriguera protege
+más que la sola compañía de la pareja") suma a la recuperación de
+seguridad, topada a 1.0. **Se aplican a CUALQUIERA que esté físicamente
+en la celda de la madriguera en ese momento**, sin exigir que la tenga
+en su propia memoria ni ser de la especie colonial -- desacopla
+deliberadamente "quién la usa de hecho" (bono, círculo B) de "quién está
+admitido para que se le sincronice como destino de navegación" (círculo
+A). `config/fisiologia.yaml`, sección `necesidades.defecto`, ambos
+PROVISIONALES.
+
+### Verificación contra el motor real, no solo tests
+
+300/300 tests en verde (9 nuevos, `tests/test_madriguera_fisica.py`:
+creación/búsqueda respetando zona, sorteo de capacidad solo la primera
+vez, reutilización sin re-sortear, cupo respetado con prioridad a
+ya-establecidos, los dos bonos aplicándose con su tope, refugio
+individual sin ningún bono, cualquier especie beneficiándose sin gating).
+
+`BOSQUE_AUTO_TICKS=3000` sin ninguna excepción: **29 madrigueras físicas
+creadas** a lo largo de la corrida (capacidades reales 11-24, dentro del
+rango configurado), **5763 exclusiones por cupo lleno** (contador directo
+nuevo, `SistemaManada._stats_madriguera_excluidos_por_cupo` -- eventos
+acumulados, no individuos únicos) confirmando que el cupo actúa de
+verdad y con fuerza, no es un límite teórico nunca alcanzado; al cierre
+de la corrida, **3 manadas de conejo simultáneas** -- evidencia directa
+(no prueba, tal como pedía el spec con honestidad) de que el cupo
+finito empuja hacia varias comunidades en vez de una sola. Roundtrip de
+persistencia verificado explícitamente (`BOSQUE_CONTINUAR=1`): las 29
+madrigueras y sus capacidades exactas se recuperan intactas tras
+recargar desde SQLite.
+
+**Pendiente real, explícito**:
+- `capacidad_madriguera`/`bono_confort_madriguera`/
+  `bono_seguridad_madriguera` PROVISIONALES, sin calibrar contra el
+  harness completo.
+- **El centinela sigue detenido** -- reiniciar manualmente antes de
+  soltar cualquier encargo futuro al pipeline.
+- **Fiabilidad del pipeline sobre esta clase de tarea, sin resolver**:
+  tres fallos consecutivos (Manada, madriguera-fisica combinada,
+  Trozo A ×2) sobre piezas que exigen replicar un molde ECS existente
+  (mismo patrón que `Fogata`) -- no investigado a fondo si es un patrón
+  de tarea específico que confunde al modelo actual o una racha. Antes
+  de la próxima pieza de complejidad similar, decidir con Diego si
+  investigar el modelo/pipeline (ver `project_evaluar_modelos_pipeline.md`
+  en memoria persistente) o seguir troceando/implementando directamente
+  caso a caso.
+- Con esto, la extensión completa de "madriguera física" sobre `Manada`
+  queda cerrada (círculos A y B).

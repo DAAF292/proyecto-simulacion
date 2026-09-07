@@ -79,7 +79,7 @@ def test_manada_agrupa_por_especie_y_zona_no_mezcla() -> None:
     lobo_otra_zona = _animal(gestor, config, rng, Especie.LOBO, 0, 0)
     gestor.obtener_componente(lobo_otra_zona, Posicion).zona_idx = 1
 
-    sistema = SistemaManada(config)
+    sistema = SistemaManada(config, random.Random(100))
     sistema.ejecutar(gestor, mundo, reloj=None)
 
     manada_lobo = manada_de(mundo, lobo1)
@@ -102,7 +102,7 @@ def test_manada_requiere_al_menos_dos_miembros() -> None:
     mundo = Mundo(10, 10, config, random.Random(4))
     solo = _animal(gestor, config, rng, Especie.ARDILLA, 5, 5)
 
-    sistema = SistemaManada(config)
+    sistema = SistemaManada(config, random.Random(100))
     sistema.ejecutar(gestor, mundo, reloj=None)
 
     assert manada_de(mundo, solo) is None
@@ -119,7 +119,7 @@ def test_manada_calcula_centro_correctamente() -> None:
     a = _animal(gestor, config, rng, Especie.CABALLO, 0, 0)
     b = _animal(gestor, config, rng, Especie.CABALLO, 2, 0)
 
-    sistema = SistemaManada(config)
+    sistema = SistemaManada(config, random.Random(100))
     sistema.ejecutar(gestor, mundo, reloj=None)
 
     manada = manada_de(mundo, a)
@@ -140,7 +140,7 @@ def test_madriguera_sin_memoria_previa_no_sincroniza_nada() -> None:
     a = _animal(gestor, config, rng, Especie.CONEJO, 0, 0)
     b = _animal(gestor, config, rng, Especie.CONEJO, 1, 0)
 
-    sistema = SistemaManada(config)
+    sistema = SistemaManada(config, random.Random(100))
     sistema.ejecutar(gestor, mundo, reloj=None)
 
     assert sistema._stats_madrigueras_sincronizadas == 0
@@ -165,7 +165,7 @@ def test_madriguera_sincroniza_por_mayoria_a_todo_el_grupo() -> None:
     registrar_recuerdo(_mem(gestor, b), "refugio", 20, 20, capacidad=5)
     # c no conoce ningun sitio todavia
 
-    sistema = SistemaManada(config)
+    sistema = SistemaManada(config, random.Random(100))
     sistema.ejecutar(gestor, mundo, reloj=None)
 
     assert (20, 20) in _mem(gestor, a).recuerdos["refugio"]
@@ -186,7 +186,7 @@ def test_especie_no_colonial_nunca_sincroniza_madriguera() -> None:
     b = _animal(gestor, config, rng, Especie.LOBO, 1, 0)
     registrar_recuerdo(_mem(gestor, a), "refugio", 20, 20, capacidad=5)
 
-    sistema = SistemaManada(config)
+    sistema = SistemaManada(config, random.Random(100))
     sistema.ejecutar(gestor, mundo, reloj=None)
 
     assert manada_de(mundo, a) is not None  # la manada SI se formo

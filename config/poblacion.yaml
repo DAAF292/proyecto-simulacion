@@ -144,6 +144,13 @@ rangos_raciales:
     # Mismo patron categorico que medio_alimentacion (rasgo fisico real
     # de la especie, no autoria de un suceso concreto). PROVISIONAL.
     tipo_refugio_fauna: colonial
+    # capacidad_madriguera (2026-09-07, circulo A de "madriguera fisica"
+    # -- ver docs/superpowers/specs/2026-09-07-madriguera-fisica-a-design.md):
+    # sorteada UNA VEZ al crearse la Madriguera fisica, nunca se vuelve a
+    # sortear. PROVISIONAL -- lejos de "200 conejos en una", pensada para
+    # forzar a que se repartan en varias comunidades conforme crece la
+    # poblacion.
+    capacidad_madriguera: [10, 25]
     dieta: [hierba, raices]
     peso: [1.5, 3.0]
     altura: [0.2, 0.3]

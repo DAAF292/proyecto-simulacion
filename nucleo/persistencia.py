@@ -29,6 +29,7 @@ from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.inventario import Inventario
+from componentes.madriguera import Madriguera
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
@@ -78,7 +79,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.33-fase0"
+VERSION_ESQUEMA = "0.34-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -87,6 +88,7 @@ _TABLAS_APP = (
     "necromasa_estado",
     "construccion_estado",
     "fogata_estado",
+    "madriguera_estado",
     "celdas_estado",
     "cronica_eventos",
     "configuracion_ejecucion",
@@ -289,6 +291,21 @@ class Persistencia:
                     x INTEGER NOT NULL,
                     y INTEGER NOT NULL,
                     combustible_restante REAL NOT NULL,
+                    zona_idx INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+
+            # 4d. Snapshot de madrigueras (ver componentes/madriguera.py).
+            # Mismo molde que fogata_estado: entidad física sin fila en
+            # `entidades` (no tiene Identidad).
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS madriguera_estado (
+                    entidad_id INTEGER PRIMARY KEY,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    capacidad INTEGER NOT NULL,
                     zona_idx INTEGER NOT NULL DEFAULT 0
                 )
                 """
@@ -630,6 +647,18 @@ class Persistencia:
                     )
             cur.executemany("INSERT INTO fogata_estado VALUES (?, ?, ?, ?, ?)", filas_fogata)
 
+            # C4. Madrigueras (ver componentes/madriguera.py)
+            cur.execute("DELETE FROM madriguera_estado")
+            filas_madriguera = []
+            for maid in sorted(gestor.entidades_con(Madriguera, Posicion)):
+                madriguera_comp = gestor.obtener_componente(maid, Madriguera)
+                pos_ma = gestor.obtener_componente(maid, Posicion)
+                if madriguera_comp and pos_ma:
+                    filas_madriguera.append(
+                        (maid, pos_ma.x, pos_ma.y, madriguera_comp.capacidad, pos_ma.zona_idx)
+                    )
+            cur.executemany("INSERT INTO madriguera_estado VALUES (?, ?, ?, ?, ?)", filas_madriguera)
+
             # D. Celdas dinámicas -- TODAS las zonas del territorio, no
             # solo zonas[0].
             cur.execute("DELETE FROM celdas_estado")
@@ -946,6 +975,14 @@ class Persistencia:
                 gestor.anadir_componente(foid, Posicion(x=fx, y=fy, zona_idx=fzidx))
                 gestor.anadir_componente(foid, Fogata(combustible_restante=float(combustible)))
 
+            # 4d. Cargar Madrigueras
+            cur.execute(
+                "SELECT entidad_id, x, y, capacidad, zona_idx FROM madriguera_estado"
+            )
+            for maid, max_, may_, capacidad, mazidx in cur.fetchall():
+                gestor.anadir_componente(maid, Posicion(x=max_, y=may_, zona_idx=mazidx))
+                gestor.anadir_componente(maid, Madriguera(capacidad=int(capacidad)))
+
             # Ajustar siguiente id autoincremental
             cur.execute("SELECT MAX(id) FROM entidades")
             max_id_ent = cur.fetchone()[0] or 0
@@ -957,8 +994,10 @@ class Persistencia:
             max_id_con = cur.fetchone()[0] or 0
             cur.execute("SELECT MAX(entidad_id) FROM fogata_estado")
             max_id_fog = cur.fetchone()[0] or 0
+            cur.execute("SELECT MAX(entidad_id) FROM madriguera_estado")
+            max_id_mad = cur.fetchone()[0] or 0
 
             gestor._siguiente_id = (
-                max(max_id_ent, max_id_plant, max_id_nec, max_id_con, max_id_fog) + 1
+                max(max_id_ent, max_id_plant, max_id_nec, max_id_con, max_id_fog, max_id_mad) + 1
             )
             return True

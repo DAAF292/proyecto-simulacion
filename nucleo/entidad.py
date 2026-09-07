@@ -19,6 +19,7 @@ from componentes.gestacion import Gestacion
 from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.inventario import Inventario
+from componentes.madriguera import Madriguera
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
@@ -210,6 +211,25 @@ def crear_fogata(
     gestor.anadir_componente(fid, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
     gestor.anadir_componente(fid, Fogata(combustible_restante=combustible_inicial))
     return fid
+
+
+def crear_madriguera(
+    gestor: GestorEntidades,
+    pos_x: int,
+    pos_y: int,
+    capacidad: int,
+    zona_idx: int = 0,
+) -> int:
+    """
+    Fábrica ECS: instancia una Madriguera -- entidad física real de una
+    especie colonial (hoy solo conejo). Mismo molde que crear_fogata:
+    entidad inerte de solo dos componentes, sin Identidad ni Intencion
+    propias. Ver componentes/madriguera.py.
+    """
+    mid = gestor.crear_entidad()
+    gestor.anadir_componente(mid, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
+    gestor.anadir_componente(mid, Madriguera(capacidad=capacidad))
+    return mid
 
 
 def _generar_nombre(

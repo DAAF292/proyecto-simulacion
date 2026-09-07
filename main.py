@@ -24,6 +24,7 @@ import yaml
 
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
+from componentes.madriguera import Madriguera
 from componentes.reproduccion import Sexo
 from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
@@ -118,7 +119,7 @@ def instanciar_sistemas(
         "flora": SistemaFlora(config, rng_juego),
         "ciclo_vital": SistemaCicloVital(config, rng_juego),
         "asentamiento": SistemaAsentamiento(config, rng_juego),
-        "manada": SistemaManada(config),
+        "manada": SistemaManada(config, rng_juego),
     }
 
 
@@ -653,6 +654,23 @@ def main() -> None:
                 f"{sistemas['manada']._stats_madrigueras_sincronizadas} sincronizaciones, "
                 f"{len(sistemas['manada']._stats_madriguera_miembros_nuevos)} miembros con "
                 "sitio nuevo (no lo tenian antes)"
+            )
+            # Verificacion obligatoria de Madriguera fisica (2026-09-07,
+            # circulo A -- ver docs/superpowers/specs/
+            # 2026-09-07-madriguera-fisica-a-design.md): cuantas
+            # madrigueras REALES existen al cierre, su capacidad real
+            # sorteada, y cuantos miembros quedaron excluidos por cupo
+            # lleno de verdad durante la corrida (contador directo, no
+            # aproximado). Solo observacion, no cambia la simulacion.
+            madrigueras_reales = [
+                gestor.obtener_componente(mid, Madriguera).capacidad
+                for mid in gestor.entidades_con(Madriguera)
+            ]
+            print(
+                "[BOSQUE_AUTO_TICKS] madrigueras fisicas: "
+                f"{len(madrigueras_reales)} creadas, capacidades={madrigueras_reales}, "
+                f"{sistemas['manada']._stats_madriguera_excluidos_por_cupo} exclusiones "
+                "por cupo lleno (eventos acumulados)"
             )
 
     except KeyboardInterrupt:
