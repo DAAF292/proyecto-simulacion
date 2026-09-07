@@ -5246,3 +5246,121 @@ explícita de Diego ("que los flujos... se den de forma natural"):
 
 Commit: `e876e18`. PR #19 cerrado sin mergear (funcionalidad adaptada e
 integrada en el mismo commit).
+
+## Investigación dedicada de ardilla -- ambas hipótesis de Diego refutadas
+## con datos, deshidratación confirmada como el driver real (2026-09-07,
+## sesión siguiente, ningún cambio de config aplicado)
+
+Diego, tras la calibración de arriba, pidió investigar específicamente
+el ~25-33% de fallo residual de ardilla con dos hipótesis propias a
+explorar: (1) darle una "facilidad" tipo refugio en árboles al huir de
+un depredador, y (2) ampliar su dieta ahora que el catálogo de flora
+creció (pieza 4 de "poblar más el mundo", 2026-09-03 -- 10 especies
+nuevas). Investigado con el mismo criterio de siempre: medir contra el
+motor real ANTES de diseñar o tocar nada, sin dar ninguna hipótesis por
+buena solo por sonar razonable.
+
+**Hallazgo de alcance, confirmado antes de tocar código**: `ardilla`
+sigue con `dieta: [manzanas, raices]` -- la dieta original de antes del
+catálogo ampliado. Auditado también gnomo/conejo/caballo: **ninguna de
+las 4 especies herbívoras** tiene en su dieta ninguno de los ~7 recursos
+alimento nuevos (`bellotas`, `brotes_helecho`, `nectar_semillas`,
+`bayas_espinosas`, `raices_deserticas`, `bayas_montanas`,
+`brotes_articos`) -- toda esa flora nueva crece, ocupa espacio y compite
+por él, pero es nutricionalmente INERTE para toda la fauna del motor.
+Esto no se tocó para gnomo/conejo/caballo en este círculo (decisión de
+alcance que le corresponde a Diego, no autorada aquí) -- señalado
+explícitamente como pendiente real de mayor calado que solo ardilla.
+
+**Metodología**: mismo arnés sin SQLite que la calibración anterior (ver
+sección de arriba), 6 semillas NUEVAS × 4000 ticks por condición, nunca
+semilla-a-semilla entre condiciones.
+
+### Lote base (semillas 70001-70006, `master` sin tocar, lobo presente)
+
+**0/6 extinción de ardilla** -- ya mejor que el ~25-33% documentado
+antes de este círculo. Desglose real de causas de muerte de ardilla
+agregado (491 muertes): **deshidratación 49.7%**, vejez 31.2%,
+depredación 18.9%, inanición 0.2% (1 sola muerte). Hallazgo honesto: la
+mejora frente a las cifras históricas probablemente no viene de nada
+tocado hoy -- es plausible que el radio de búsqueda de agua ampliado
+para `Accion.BEBER` (commit `e876e18`, aplicado a TODAS las especies el
+mismo día anterior) ya haya mitigado buena parte de la fragilidad de
+ardilla como efecto colateral, sin que nadie lo verificara
+específicamente para esta especie hasta ahora. No confirmado con más
+profundidad (compararía contra el estado previo a `e876e18`, fuera de
+alcance de este círculo).
+
+### Hipótesis 2 (más comida) -- REFUTADA con datos, NO aplicada
+
+Lote con `dieta: [manzanas, raices, bellotas]` (semillas NUEVAS
+71001-71006, nunca antes vistas): **1/6 extinción** (peor, no mejor, que
+el lote base -- dentro del ruido con n=6, no una regresión real) y
+desglose de causas prácticamente idéntico (deshidratación 53.9%, vejez
+31.1%, depredación 15.0%). Población total agregada de ardilla: 197
+individuos en ambos lotes -- **exactamente la misma suma**. Conclusión:
+ampliar la dieta de ardilla no tiene ningún efecto medible, porque
+inanición nunca fue el cuello de botella real de esta especie (0.2% de
+sus muertes) -- coherente con la biología: no tiene sentido dar más
+comida a un animal que casi nunca se muere de hambre. **No se aplicó
+ningún cambio a `master`** -- decisión basada en evidencia negativa, no
+en falta de tiempo.
+
+### Hipótesis 1 (refugio de depredación) -- REFUTADA con datos, SOLO
+### DIAGNÓSTICO, ninguna mecánica implementada
+
+Lote con `lobos_iniciales: 0` (semillas NUEVAS 72001-72006, config de
+prueba en memoria, nunca tocado `master`): **0/6 extinción** (igual que
+el lote base con lobo presente) y población total agregada de ardilla:
+205 individuos -- prácticamente idéntica a los 197 del lote base
+CON lobo. Desglose de causas sin depredación (obviamente 0%):
+deshidratación 65.6%, vejez 34.2% -- **las muertes que antes eran
+depredación se desplazan a deshidratación/vejez en proporción similar,
+sin cambiar el resultado neto de supervivencia**. Conclusión: quitar a
+lobo por completo del mundo no mejora la supervivencia de ardilla de
+forma medible -- la depredación de lobo NO es el driver real de su
+fragilidad residual, contra la hipótesis original de Diego.
+
+**Ninguna mecánica de refugio en árboles se diseñó ni se implementó**
+-- cumpliendo la regla fija de este proyecto (funcionalidad nueva del
+motor exige diseño en conversación con Diego antes de cualquier
+implementación). Dado que la depredación no resultó ser el problema
+real, esa mecánica -- aunque pueda tener valor narrativo propio a
+futuro -- no resolvería el fallo residual de ardilla si se construyera
+solo con ese objetivo.
+
+### Conclusión real -- el problema de ardilla ES deshidratación,
+### mismo hallazgo ya señalado (y no tocado) para conejo el día anterior
+
+Con ambas hipótesis de Diego refutadas por datos, la causa dominante
+real del fallo residual de ardilla es **la misma que ya se había
+señalado como pendiente para conejo en la sección anterior**:
+deshidratación en poblaciones que ya no mueren tanto de hambre. No se
+tocó `tasa_perdida_hidratacion_por_tick` (universal, `config/
+fisiologia.yaml`) en este círculo -- mismo criterio de prudencia ya
+aplicado antes (sin evidencia de que bajarla sea una mejora real y no
+solo desplazar el problema a otra causa, y explícitamente fuera del
+alcance que se encargó para esta investigación). **Candidato real y
+concreto para la siguiente vuelta de calibración, ahora con evidencia
+de que afecta a AL MENOS dos especies (conejo y ardilla), no un caso
+aislado**.
+
+**Pendiente real, explícito**:
+- `tasa_perdida_hidratacion_por_tick` universal, sin tocar -- candidato
+  directo de la próxima calibración, con datos de dos especies
+  (conejo, ardilla) ya apuntando en la misma dirección.
+- Dieta de gnomo/conejo/caballo también desactualizada frente al
+  catálogo de flora ampliado (7 recursos alimento nuevos, ninguno en
+  ninguna dieta) -- señalado, no tocado, decisión de alcance pendiente
+  de Diego.
+- Ninguna mecánica de refugio/huida específica para ardilla (o
+  cualquier otra especie) diseñada -- si se retoma, debe partir de un
+  problema real que la justifique, y depredación no lo es para ardilla
+  según esta medición.
+- Mismas limitaciones metodológicas que la sección anterior: 6 semillas
+  por condición y 4000 ticks son direccionales, no el harness completo
+  pendiente desde "Sobrepoblación...".
+
+Sin commits de código en este círculo -- investigación pura con
+resultado negativo en ambas hipótesis, documentada con la misma
+honestidad que el resto del proyecto.
