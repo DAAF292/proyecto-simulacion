@@ -5593,3 +5593,89 @@ candidato real es revisar la frecuencia de entrada de provisiones
 memoria de agravios por robo, y extender el alcance a materiales de
 construcción (`Inventario.contenidos`) quedan como extensiones futuras
 explícitamente no perseguidas ahora.
+
+## Salón común -- arranque del arco "dinámicas internas de asentamiento"
+## (spec, implementado directamente por Claude, 2026-09-08)
+
+Diego pidió abrir un arco nuevo, distinto del de recursos: "empezar a
+definir nuevas dinámicas de asentamientos... un salón común donde
+socializar al calor de un fuego, un edificio de liderazgo, unas
+cocinas". **Decisión explícita de Diego, importante para sesiones
+futuras: "ciudad enana" queda FUERA de este arco por completo** -- "es
+algo completamente ajeno que pertenece a la raza enana que aún no
+existe, no vuelvas a mencionarlo hasta que la planteemos". No confundir
+con las cuevas ya construidas en el arco de profundidad geológica (esas
+siguen existiendo, solo el concepto de "ciudad enana" como extensión de
+Asentamiento dentro de una cueva queda aparcado sin fecha).
+
+Menú presentado (ciudad enana, facciones entre asentamientos, nombre
+propio + crónica de asentamiento, herencia al morir un miembro, defensa
+colectiva) -- Diego redirigió hacia las dinámicas INTERNAS concretas que
+ya tenía en mente en vez de elegir del menú. Orden acordado: salón
+común primero, cocinas después, edificio de liderazgo aplazado hasta
+tener claro qué "decisión que afecte al pueblo" debería habilitar
+mecánicamente (hoy `calcular_liderazgo` es puro cálculo abstracto, sin
+ninguna decisión real que un edificio pudiera condicionar).
+
+Spec: `docs/superpowers/specs/2026-09-08-salon-comun-design.md`.
+**Hallazgo de diseño clave**: el cimiento ya existente (`Construccion`
+genérica, `CONSTRUIR`/`RECOLECTAR`, cupo de espacio por celda,
+deterioro -- todos ya funcionan para cualquier `tipo` nuevo sin tocar
+código) bastaba por completo; no hizo falta ningún mecanismo nuevo,
+solo encadenar el salón común en la prioridad ya existente y darle su
+propio efecto real.
+
+- **Efecto núcleo**: `sistema_movimiento.py:_calcular_socializar`
+  camina hacia el salón común completado del propio asentamiento en vez
+  de perseguir al consciente más cercano al azar -- amplifica gratis
+  todo lo que ya se dispara al compartir celda (roce social, rumor,
+  compartir por confianza, memoria compartida) sin tocar ninguno de
+  esos sistemas. Sin salón, comportamiento idéntico al de antes; el
+  contacto real (ya en la misma celda) sigue resolviendo exactamente
+  igual, sin mirar el salón en absoluto.
+- **"Al calor de un fuego"**: `bono_confort_salon_comun`/
+  `bono_seguridad_salon_comun`, mismo patrón aditivo exacto que
+  refugio/fogata/madriguera/pareja, sin necesitar una `Fogata` real
+  aparte -- el salón ya implica su propio hogar.
+- **Generalización real, no invención**: `nucleo/asentamiento.py:
+  almacen_cercano` gana un parámetro `tipo` opcional (segundo
+  consumidor real, mismo criterio ya usado para
+  `agrupar_por_proximidad`/`calcular_centro` con Manada);
+  `nucleo/construccion.py:objetivo_construccion_actual` deja de cortar
+  en `None` al completar el almacén -- encadena refugio → almacén →
+  salón común, terminal solo cuando TODA la cadena está completa;
+  `nucleo/fuego.py:hay_refugio_en` se convierte en un alias de una
+  línea de la nueva `hay_construccion_de_tipo_en` (comportamiento
+  idéntico, cero consumidores rotos).
+- Corrección real durante el auto-repaso del spec (spec self-review):
+  la primera redacción de la cadena de prioridad tenía una ambigüedad
+  real sobre qué pasa si el almacén no existe todavía -- resuelta
+  reestructurando el encadenamiento antes de que Diego llegara a
+  leerlo.
+
+**Verificado**: 344/344 tests (14 nuevos, `tests/test_salon_comun.py`
+-- generalización de `almacen_cercano`/`hay_refugio_en` con regresión
+explícita, cadena de prioridad completa, `SOCIALIZAR` prefiriendo el
+salón sobre un vecino deliberadamente más cercano, contacto real
+ignorando el salón, los dos bonos con su tope, salón a medias sin dar
+ningún bono). `BOSQUE_AUTO_TICKS=3000` sin excepciones.
+
+**Hallazgo honesto, no ocultado**: **0 salones comunes completados** en
+esa corrida -- el salón es el tercer y último eslabón de la cadena
+(tras refugio Y almacén), y con la semilla por defecto ninguna
+comunidad llegó tan lejos en 3000 ticks. El mecanismo está verificado
+correcto por los 14 tests dirigidos; su disparo real en juego libre no
+se observó en esta ventana concreta -- mismo patrón ya visto varias
+veces en este proyecto (asentamiento, pareja, parentesco, y ahora
+robo/compartir por confianza) antes de que la causa de fondo (tiempo/
+recursos que tarda un asentamiento en completar toda la cadena) se
+aborde por separado si hace falta.
+
+**Pendiente real, explícito**: `masa_minima_salon_comun`,
+`huella_m2_salon_comun`, `bono_confort_salon_comun`,
+`bono_seguridad_salon_comun` PROVISIONALES, sin calibrar; cocinas
+(comida elaborada, aparcado desde el arco de fuego) es el siguiente
+círculo acordado del mismo arco; edificio de liderazgo sigue aplazado
+hasta definir qué decisión mecánica real debería habilitar; **ciudad
+enana permanece fuera de alcance hasta que la raza enana se plantee --
+no mencionar hasta entonces**.
