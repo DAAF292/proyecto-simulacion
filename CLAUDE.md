@@ -4716,3 +4716,91 @@ Diego cuando el tamaño se acercaba al de "armas primitivas v2".
   24-08, ver arriba) y el harness completo de 15×12000 siguen sin
   abordarse — sin relación con este arco, solo recordatorio de que
   siguen en la lista.
+
+### Auditoría post-cierre: revisión de código independiente + verificación
+### multi-semilla, cuatro correcciones aplicadas (2026-09-07)
+
+Diego pidió testear el arco completo y analizarlo "como un agente
+externo" para mejorarlo. Dos hallazgos metodológicos reales antes de
+las correcciones en sí:
+
+- **Verificar con una sola semilla (42) no basta para concluir
+  "invisible en juego libre"**: las piezas 4b (pista de caza) y 5b
+  (reputación en liderazgo) se habían cerrado con "0 usos observados"
+  en la semilla 42. Con 6 semillas nuevas (601-608) × 3000 ticks sin
+  excepciones, **ambos mecanismos se dispararon de verdad** — caza por
+  sonido en 3 de 7 corridas, descalificación por reputación en 4 de 7.
+  El patrón real no era "nunca ocurre", era "esa semilla concreta no lo
+  disparaba". Lección para verificaciones futuras de piezas raras:
+  varias semillas nuevas, no una sola, antes de concluir invisibilidad.
+- **Una revisión de código independiente (fork sin el contexto de
+  diseño de esta sesión) encontró un bug de correctness real cruzando
+  dos piezas ya mergeadas** que ninguna verificación por pieza había
+  detectado, precisamente porque solo se manifiesta en su interacción.
+
+**Cuatro correcciones aplicadas, todas verificadas (282/282 tests,
+motor real sin excepciones)**:
+
+1. **Bug real, corregido** (`b8b8915`): `_procesar_roce_social`
+   (probabilístico, corre una vez al principio de `ejecutar()`) y
+   `_calcular_crisis_violenta` con contacto (determinista) podían
+   resolver el MISMO par dos veces en el mismo tick vía
+   `_resolver_conflicto_entre` -- doblando drenaje de seguridad y
+   rencor. No era un caso raro: la probabilidad de roce social sube con
+   el mismo estrés que dispara CRISIS_VIOLENTA, así que están
+   correlacionados. Fix: set de pares ya resueltos por tick, compartido
+   por los tres disparadores (refugio ocupado, roce social,
+   CRISIS_VIOLENTA), consultado en el único punto de entrada compartido.
+2. **Comentario desactualizado, corregido** (`90c47a2`):
+   `Accion.CRISIS_VIOLENTA` en `componentes/intencion.py` seguía
+   diciendo "sin mecánica de daño todavía" pese a que conflicto verbal
+   ya le había dado consecuencia real -- viola el propio principio de
+   honestidad del proyecto (comentario como fuente de verdad sobre
+   huecos).
+3. **División por cero latente, corregida** (`90c47a2`):
+   `nucleo/sonido.py:_radio_audible` no protegía contra
+   `peso_referencia_sonido` en 0 -- inofensivo hoy (valor fijo 90.0),
+   pero esa constante es PROVISIONAL y este proyecto la recalibra a
+   menudo; un valor inválido futuro habría tumbado el tick entero.
+4. **Capacidad de `Relaciones` insuficiente, corregida** (`23231e2`):
+   `min/max_vinculos_por_individuo` (2/6) se fijó cuando solo rencor y
+   amistad escribían ahí. Con 7 fuentes compartiendo el mismo cupo
+   diminuto -- sobre todo rumor social, que escribe sobre TERCEROS al
+   azar en cada encuentro -- medido que de 2391 contactos de
+   `SOCIALIZAR` solo 10 vínculos positivos sobrevivían al final. Subido
+   a 4/12, sigue PROVISIONAL.
+
+**Hallazgos reales, NO corregidos todavía, señalados para una sesión
+futura**:
+- Tres copias casi idénticas del escaneo "vecino más cercano"
+  (`_entidad_cercana_cualquiera`, `_entidad_cercana_cualquiera_con_id`,
+  `_consciente_mas_cercano_con_id`) en `sistema_movimiento.py` en vez de
+  una función parametrizada -- mismo patrón de duplicación que ya costó
+  tiempo antes en este proyecto (almacén/refugio sin filtrar por zona).
+- `_procesar_memoria_compartida` y `_procesar_rumor` repiten el mismo
+  bucle O(k²) de pares ordenados sobre `por_celda` (junto a
+  `_procesar_roce_social`, tres pasadas casi idénticas) sin cachear los
+  componentes del emisor entre iteraciones -- aceptable a la escala
+  actual, pero un cuarto consumidor futuro (robo/agravio genérico,
+  todavía sin construir) probablemente copiaría un cuarto bucle en vez
+  de reutilizar un despachador de pares por celda compartido.
+- Comentarios nuevos de las 5 piezas (fechas, "círculo X", rutas
+  completas de spec) siguen incrustados en el código en vez de en
+  `docs/historial_<módulo>.md` -- viola la convención que el propio
+  proyecto cerró el 2026-09-02. Pendiente de una poda dedicada (la
+  única clase de tarea que este proyecto ya confirmó que falla
+  delegada al pipeline, 2/2, así que tendría que hacerla Claude
+  directamente).
+- `calcular_liderazgo`: la descalificación por reputación reduce la
+  lista de candidatos ANTES de calcular cohesión social para la
+  decisión consejo-vs-líder-único -- coincide con lo que el propio spec
+  de 5b especificaba literalmente, pero el efecto secundario
+  (descalificar a uno puede voltear consejo↔líder único) no se pensó a
+  fondo al diseñarlo. Señalado como decisión de diseño a revisar con
+  Diego, no como bug.
+- `STATS_DESEMPATE_REPUTACION_CAMBIO` no captura el caso de
+  descalificación total del ganador presunto (ese caso ya lo cuenta
+  `STATS_REPUTACION_DESCALIFICADOS` por separado) -- las dos cifras
+  juntas sí capturan el impacto real de la reputación, pero un lector
+  de una sola cifra podría subestimarlo. Aclarar en un futuro pase, no
+  urgente.
