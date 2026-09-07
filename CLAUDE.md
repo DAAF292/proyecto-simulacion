@@ -5505,3 +5505,91 @@ mover la lógica fuera de `COMER`; fauna con caché instintivo de comida
 (ardilla en la vida real acumula frutos secos) aplazado, no descartado;
 círculos 2-4 del arco (primitivo de transferencia, robo, trueque)
 siguen sin diseñar.
+
+### Círculos 2/3/4 -- Robo + compartir por confianza, cierran el arco
+### (implementado directamente por Claude, mismo día)
+
+Diego pidió implementar el resto del arco directamente. Antes de tocar
+código, una pregunta de diseño real quedaba abierta desde el
+brainstorming inicial: **trueque bidireccional real, descartado**.
+Presentado a Diego con dos opciones (trueque real vs. "compartir por
+confianza" unidireccional) -- eligió la segunda, más simple, sin
+necesidad de modelar utilidad marginal por individuo (algo que el motor
+no tiene hoy). Spec:
+`docs/superpowers/specs/2026-09-07-robo-compartir-confianza-design.md`.
+
+**Círculo 2 -- primitivo genérico**: `nucleo/intercambio.py:
+transferir_recurso(origen, destino, recurso, cantidad_max,
+espacio_destino_max) -> float`. Función pura, neutra sobre el motivo --
+mismo espíritu que `resolver_disputa` no sabe qué se disputa.
+
+**Círculo 3 -- robo**: hallazgo real al diseñar, no anticipado --
+`_resolver_conflicto_entre` (el wrapper compartido de refugio ocupado/
+conflicto verbal/CRISIS_VIOLENTA) YA devolvía el `ResultadoDisputa` con
+un comentario explícito ("por si un disparador futuro lo necesita")
+escrito pensando exactamente en esto. Único cambio real al wrapper:
+`urgencia_a`/`urgencia_b` opcionales (semántica libre, como ya
+documentaba `indice_asertividad_social` desde su diseño original) --
+sin pasarlos, comportamiento IDÉNTICO a los tres consumidores
+existentes (regresión verificada por test dedicado). Robo pasa la
+urgencia real del ladrón (su propia hambre, `1 - saciedad`) en vez del
+déficit de seguridad genérico. `_procesar_robo`/`_intentar_robo`
+(`sistema_movimiento.py`): un consciente hambriento
+(`saciedad < umbral_saciedad_para_robar=0.3`) sin `Inventario.provisiones`
+propias, junto a otro que sí tiene, sortea el intento
+(`probabilidad_base_robo=0.05 * (1 - saciedad_ladron)`); si se impone
+(vía el mismo resolutor -- mismo_grupo/familia cae en `COMPARTE`
+automático, no se roba a los propios, sin lógica nueva), se lleva TODO
+lo que la víctima tenga del primer recurso no vacío, topado por su
+propio espacio de provisiones. Drenaje de seguridad + rencor en el
+perdedor ya vienen gratis del wrapper compartido.
+
+**Círculo 4 -- compartir por confianza** (sustituye al trueque):
+`_procesar_compartir_confianza`/`_intentar_compartir_confianza`, mismo
+molde de recorrido pero SIN pasar por el resolutor -- no es una disputa.
+Un consciente con provisiones y afinidad UNIDIRECCIONAL (`Relaciones.
+vinculos[receptor].afinidad`, sin exigir reciprocidad -- "confío en ti"
+no requiere que tú confíes en mí) por encima de
+`umbral_confianza_compartir=0.3` hacia otro con
+`saciedad < saciedad_maxima_para_recibir_compartido=0.5` le da lo que
+tenga guardado sin nada a cambio (`probabilidad_base_compartir_confianza=0.05`).
+No toca `Necesidades.seguridad` ni escribe `Relaciones` -- lectura, no
+consecuencia. De paso, corregido un comentario de cabecera desactualizado
+en `config/relaciones.yaml` ("nadie LEE Relaciones todavía" -- falso
+desde pareja estable, 2026-09-04).
+
+**Verificado**: 330/330 tests (17 nuevos,
+`tests/test_robo_compartir_confianza.py` -- primitivo de transferencia,
+regresión de urgencia por defecto vs. override, robo con éxito/fracaso/
+mismo grupo/sin condiciones, compartir con sus cuatro condiciones,
+confirmación de que compartir no toca seguridad/Relaciones).
+`BOSQUE_AUTO_TICKS=3000` sin excepciones.
+
+**Hallazgo honesto, no ocultado**: **0 robos y 0 repartos por confianza
+reales en esa corrida** -- exactamente el riesgo que el propio spec ya
+señalaba antes de implementar ("si la frecuencia de disparo... resulta
+demasiado baja... la causa más probable estaría aguas arriba" en el
+círculo 1). Con solo 2 entidades sosteniendo `provisiones` en un
+momento dado (medido en el círculo 1), la intersección "consciente
+hambriento junto a otro con comida guardada" casi nunca se da en esta
+ventana. El mecanismo en sí está verificado correcto por los 17 tests
+dirigidos -- lo que falta observar en vivo es, otra vez, consecuencia
+de aguas arriba (escasez de provisiones circulando), no un defecto de
+estos dos círculos. Mismo patrón ya visto varias veces en este proyecto
+(asentamiento, pareja, parentesco) antes de que su causa de fondo se
+abordara por separado.
+
+**Con esto, el arco completo "robo/intercambio de recursos" queda
+cerrado** -- provisiones de alimento, primitivo de transferencia, robo,
+y compartir por confianza, las 4 piezas planteadas el mismo día.
+
+**Pendiente real, explícito**: las 5 constantes nuevas
+(`umbral_saciedad_para_robar`, `probabilidad_base_robo`,
+`umbral_confianza_compartir`, `probabilidad_base_compartir_confianza`,
+`saciedad_maxima_para_recibir_compartido`) PROVISIONALES, sin calibrar;
+si se quiere observar robo/compartir en juego libre de verdad, el
+candidato real es revisar la frecuencia de entrada de provisiones
+(círculo 1), no estos dos mecanismos; trueque bidireccional real,
+memoria de agravios por robo, y extender el alcance a materiales de
+construcción (`Inventario.contenidos`) quedan como extensiones futuras
+explícitamente no perseguidas ahora.
