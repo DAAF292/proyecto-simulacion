@@ -20,7 +20,15 @@ poblacion:
 rangos_raciales:
   gnomo:
     medio_alimentacion: recolectar
-    dieta: [raices, hierba, manzanas, fruto_de_cactus, liquen, musgo]
+    # dieta ampliada (2026-09-07, ver CLAUDE.md "Alimentos huerfanos del
+    # catalogo ampliado"): las 6 entradas originales ya cruzaban los 5
+    # biomas (fruto_de_cactus=desierto, liquen=montana, musgo=tundra) --
+    # gnomo es el unico forrajero de verdad omnivoro y sin bioma fijo del
+    # catalogo, asi que hereda tambien los 7 alimentos nuevos del catalogo
+    # ampliado de flora (2026-09-03), sin excepcion por bioma.
+    dieta: [raices, hierba, manzanas, fruto_de_cactus, liquen, musgo,
+            bellotas, brotes_helecho, nectar_semillas, bayas_espinosas,
+            raices_deserticas, bayas_montanas, brotes_articos]
     peso: [8, 15]
     altura: [0.9, 1.2]
     longevidad: [45, 65]
@@ -151,7 +159,12 @@ rangos_raciales:
     # forzar a que se repartan en varias comunidades conforme crece la
     # poblacion.
     capacidad_madriguera: [10, 25]
-    dieta: [hierba, raices]
+    # dieta ampliada (2026-09-07): nectar_semillas y bayas_espinosas son
+    # ambos recursos de pradera (flor_silvestre/arbusto_espinoso, catalogo
+    # ampliado 2026-09-03) -- un herbivoro generalista de pradera real
+    # como el conejo ramonea semillas/brotes y baya de arbusto bajo, con
+    # o sin espinas.
+    dieta: [hierba, raices, nectar_semillas, bayas_espinosas]
     peso: [1.5, 3.0]
     altura: [0.2, 0.3]
     longevidad: [1, 3]
@@ -197,7 +210,17 @@ rangos_raciales:
 
   ardilla:
     medio_alimentacion: recolectar
-    dieta: [manzanas, raices]
+    # dieta ampliada (2026-09-07): bellotas (roble, catalogo ampliado
+    # 2026-09-03) es la pareja mas obvia posible para una ardilla real --
+    # sin bellotas, todo un arbol nuevo del bioma de ardilla era
+    # nutricionalmente invisible para ella. Verificado contra el motor
+    # real (ver CLAUDE.md "Investigacion de ardilla"): sin efecto
+    # medible en supervivencia (inanicion nunca fue su cuello de botella),
+    # pero se mantiene por ser la asignacion biologicamente correcta, no
+    # por esperar de ella un efecto de estabilidad. brotes_helecho
+    # (helecho, mismo bioma) queda fuera a proposito -- una ardilla real
+    # no se alimenta de brotes de helecho.
+    dieta: [manzanas, raices, bellotas]
     peso: [0.3, 0.6]
     altura: [0.15, 0.25]
     longevidad: [2, 5]
@@ -245,7 +268,12 @@ rangos_raciales:
   # sin calibrar contra el harness completo.
   caballo:
     medio_alimentacion: recolectar
-    dieta: [hierba, raices]
+    # dieta ampliada (2026-09-07): nectar_semillas (flor_silvestre,
+    # pradera, catalogo ampliado 2026-09-03) es un ramoneo blando
+    # plausible para un pastoreador de pradera real. bayas_espinosas
+    # (arbusto_espinoso, mismo bioma) queda fuera a proposito -- un
+    # caballo real evita el ramoneo espinoso, a diferencia de conejo.
+    dieta: [hierba, raices, nectar_semillas]
     peso: [400, 500]
     altura: [1.4, 1.8]
     longevidad: [15, 25]
