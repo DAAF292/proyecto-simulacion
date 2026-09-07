@@ -12,6 +12,32 @@
 percepcion:
   radio_minimo_celdas: 0
   radio_maximo_celdas: 4
+  # radio_minimo/maximo_pareja_celdas (2026-09-06, ver
+  # docs/superpowers/specs/2026-09-06-radio-busqueda-pareja-design.md --
+  # PR #19, verificado y mergeado en la investigacion de estabilidad de
+  # 2026-09-07): Accion.BUSCAR_PAREJA gana un radio de percepcion PROPIO
+  # y mayor que el generico de comida/agua/amenaza, para que las
+  # generaciones posteriores a la fundadora puedan detectar y alcanzar
+  # pareja a tiempo. PROVISIONAL, sin calibrar contra el harness
+  # completo.
+  radio_minimo_pareja_celdas: 3
+  radio_maximo_pareja_celdas: 12
+  # radio_minimo/maximo_agua_celdas (2026-09-07, investigacion de
+  # estabilidad de poblacion -- ver CLAUDE.md): medido contra el mundo
+  # real (4 semillas) que solo el 3.3%-11.1% de las celdas tienen agua
+  # potable (permanente + charco), frente al 100% de celdas con sustrato
+  # recolectable -- el radio generico (0-4 celdas, 81 celdas exploradas
+  # como maximo) deja con frecuencia CERO agua visible en semillas de
+  # baja cobertura hidrica, sobre todo porque rios/lagos/pozas son
+  # clusters contiguos, no dispersos uniformemente (varianza real mucho
+  # mayor que la cobertura media sugeriria). Confirmado como causa real
+  # de mortalidad: deshidratacion fue causa de 15-36 muertes de ardilla y
+  # 19-108 de conejo por semilla en un lote de 6 semillas x 4000 ticks
+  # (antes de este fix). Mismo patron que radio_pareja de arriba, radio
+  # propio solo para Accion.BEBER -- sin tocar el radio generico de
+  # comida/amenaza. PROVISIONAL, sin calibrar contra el harness completo.
+  radio_minimo_agua_celdas: 2
+  radio_maximo_agua_celdas: 8
 
 movimiento:
   coste_resistencia_pendiente: 0.05

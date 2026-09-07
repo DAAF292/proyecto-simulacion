@@ -256,7 +256,17 @@ rangos_raciales:
     duracion_gestacion_dias: [60, 90]
     camada: [1, 2]
     fraccion_madurez: 0.2
-    factor_base_concepcion: 0.005
+    # RECALIBRADO 2026-09-07 (investigacion de estabilidad de poblacion,
+    # ver CLAUDE.md). 0.005 era la tasa de concepcion mas baja de TODO el
+    # catalogo -- mas baja incluso que gnomo antes de su propio fix
+    # (0.0033->0.015) -- pese a que caballo tiene gestacion corta (60-90
+    # dias) y camada de hasta 2, un perfil mas cercano al de lobo/gnomo
+    # ya recalibrados que al peor caso que justificaba un valor tan bajo.
+    # Subido al mismo 0.015 que gnomo/lobo, combinado con el alivio de
+    # hambre nuevo en fisiologia.yaml:necesidades.caballo -- ver CLAUDE.md
+    # para el resultado real medido tras aplicar ambos juntos.
+    # PROVISIONAL, sin calibrar contra el harness completo.
+    factor_base_concepcion: 0.015
     puntos_agarre: 0  # un caballo no sujeta objetos
     fuerza: [0.6, 0.9]
     agilidad: [0.4, 0.7]

@@ -204,6 +204,19 @@ necesidades:
     # tras este cambio combinado (PROVISIONAL, sin verificar).
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+  caballo:
+    # AÑADIDO 2026-09-07 (investigacion de estabilidad de poblacion, ver
+    # CLAUDE.md). Caballo (especie mas nueva del catalogo, 2026-09-05)
+    # nunca recibio este recetario -- seguia con los valores universales
+    # de `defecto` (los mismos que ya resultaron insuficientes para
+    # lobo/ardilla/gnomo/conejo antes de sus propios fixes). Medido en un
+    # lote de 6 semillas nuevas x 4000 ticks: caballo fue la UNICA
+    # especie con extincion real (2/6 semillas), inanicion como causa
+    # dominante en las 6 (3-12 muertes por semilla) -- mismo patron ya
+    # visto en las otras cuatro antes de aplicarles esto. Mismo par de
+    # valores que lobo/ardilla/gnomo/conejo.
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
 
 consumo:
   tasa_consumo_al_comer: 0.5
