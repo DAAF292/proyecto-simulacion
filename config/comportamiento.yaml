@@ -175,3 +175,13 @@ conflicto:
   probabilidad_base_roce_social: 0.01
   peso_agresividad_roce: 0.05
   peso_estres_roce: 0.05
+
+# Manada -- estructuras gregarias reales en fauna (2026-09-07, ver
+# nucleo/manada.py, sistemas/sistema_manada.py y spec
+# docs/superpowers/specs/2026-09-07-manada-fauna-design.md).
+manada:
+  # Radio Manhattan (en celdas) dentro del cual conespecificos de la
+  # misma especie y zona se agrupan en una manada -- mayor que
+  # asentamiento.radio_cluster_celdas (6) porque la fauna roza mas
+  # terreno que un refugio fijo. PROVISIONAL, sin calibrar.
+  radio_manada_celdas: 8

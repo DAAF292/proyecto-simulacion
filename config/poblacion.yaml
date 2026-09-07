@@ -136,6 +136,14 @@ rangos_raciales:
 
   conejo:
     medio_alimentacion: recolectar
+    # colonial (2026-09-07, ver nucleo/manada.py y spec
+    # docs/superpowers/specs/2026-09-07-manada-fauna-design.md): unica
+    # especie con madriguera compartida -- los miembros de una misma
+    # manada sincronizan su memoria de "refugio" por voto de mayoria en
+    # vez de recordar cada uno su propio sitio de forma independiente.
+    # Mismo patron categorico que medio_alimentacion (rasgo fisico real
+    # de la especie, no autoria de un suceso concreto). PROVISIONAL.
+    tipo_refugio_fauna: colonial
     dieta: [hierba, raices]
     peso: [1.5, 3.0]
     altura: [0.2, 0.3]

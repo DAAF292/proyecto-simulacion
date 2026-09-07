@@ -48,6 +48,7 @@ from sistemas.sistema_depredacion import SistemaDepredacion
 from sistemas.sistema_desastres import SistemaDesastres
 from sistemas.sistema_descomposicion import SistemaDescomposicion
 from sistemas.sistema_flora import SistemaFlora
+from sistemas.sistema_manada import SistemaManada
 from sistemas.sistema_movimiento import SistemaMovimiento
 from sistemas.sistema_necesidades import SistemaNecesidades
 from sistemas.sistema_recursos import SistemaRecursos
@@ -117,6 +118,7 @@ def instanciar_sistemas(
         "flora": SistemaFlora(config, rng_juego),
         "ciclo_vital": SistemaCicloVital(config, rng_juego),
         "asentamiento": SistemaAsentamiento(config, rng_juego),
+        "manada": SistemaManada(config),
     }
 
 
@@ -416,6 +418,7 @@ def ejecutar_tick(
         sistemas["ciclo_vital"].ejecutar(gestor, reloj, bus_eventos)
         sistemas["desastres"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["asentamiento"].ejecutar(gestor, mundo, reloj, bus_eventos)
+        sistemas["manada"].ejecutar(gestor, mundo, reloj)
 
 
 def main() -> None:
@@ -634,6 +637,22 @@ def main() -> None:
                 "descalificados, "
                 f"{nucleo_asentamiento.STATS_DESEMPATE_REPUTACION_CAMBIO} desempates finales "
                 "cambiados"
+            )
+            # Verificacion obligatoria de Manada (2026-09-07, ver
+            # docs/superpowers/specs/2026-09-07-manada-fauna-design.md):
+            # medir explicitamente cuantas manadas se forman por especie, y
+            # cuantos miembros de especies coloniales recibieron una
+            # coordenada de madriguera que no tenian antes en su propia
+            # memoria. Solo observacion, no cambia la simulacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] manadas por especie: "
+                f"{sistemas['manada']._stats_manadas_por_especie}"
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] madriguera compartida: "
+                f"{sistemas['manada']._stats_madrigueras_sincronizadas} sincronizaciones, "
+                f"{len(sistemas['manada']._stats_madriguera_miembros_nuevos)} miembros con "
+                "sitio nuevo (no lo tenian antes)"
             )
 
     except KeyboardInterrupt:
