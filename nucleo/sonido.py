@@ -53,6 +53,12 @@ def _radio_audible(magnitud: float, agudeza_sensorial: float, config: dict) -> f
     cfg = config.get("sonido", {})
     radio_base = float(cfg.get("radio_sonido_base", 3))
     peso_referencia = float(cfg.get("peso_referencia_sonido", 90.0))
+    if peso_referencia <= 0.0:
+        # Config invalida (fix 2026-09-07): peso_referencia_sonido es
+        # PROVISIONAL y se recalibra a menudo en este proyecto -- un valor
+        # de 0 o negativo no debe tumbar el tick entero con
+        # ZeroDivisionError, se trata como "nada audible".
+        return 0.0
     factor_sensorial = 0.5 + 0.5 * agudeza_sensorial
     return radio_base * (magnitud / peso_referencia) * factor_sensorial
 

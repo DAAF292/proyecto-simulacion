@@ -126,6 +126,17 @@ def test_radio_audible_sube_con_agudeza_sensorial_y_nunca_es_cero() -> None:
     assert _radio_audible(90.0, 0.0, config) < _radio_audible(90.0, 1.0, config)
 
 
+def test_radio_audible_config_invalida_no_lanza_division_por_cero() -> None:
+    """Ley (fix 2026-09-07, hallazgo de revision de codigo independiente):
+    peso_referencia_sonido es PROVISIONAL y se recalibra a menudo -- un
+    valor 0 o negativo no debe lanzar ZeroDivisionError, se trata como
+    "nada audible" (alcance 0.0)."""
+    config_cero = {"sonido": {"radio_sonido_base": 3, "peso_referencia_sonido": 0.0}}
+    assert _radio_audible(90.0, 0.5, config_cero) == 0.0
+    config_negativa = {"sonido": {"radio_sonido_base": 3, "peso_referencia_sonido": -5.0}}
+    assert _radio_audible(90.0, 0.5, config_negativa) == 0.0
+
+
 # ---------------------------------------------------------------------------
 # sonido_mas_cercano
 # ---------------------------------------------------------------------------

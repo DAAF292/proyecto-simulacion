@@ -77,7 +77,7 @@ class Accion(Enum):
     # cada una. Tipología emergente de valentía/agresividad del
     # individuo, no escrita de antemano por caso concreto.
     HUIDA_ERRATICA = "huida_erratica"     # valentia baja: huye de cualquiera cercano, sin amenaza real
-    CRISIS_VIOLENTA = "crisis_violenta"   # agresividad alta: se acerca a cualquiera cercano -- sin mecanica de dano todavia, deliberado
+    CRISIS_VIOLENTA = "crisis_violenta"   # agresividad alta: se acerca a cualquiera cercano; a contacto real resuelve con el mismo resolutor que refugio ocupado/roce social (drena seguridad, escribe rencor)
     CATATONIA = "catatonia"               # ni lo uno ni lo otro: se queda quieto, sin actuar
 
 
