@@ -37,6 +37,7 @@ from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
 from nucleo.asentamiento import asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
 from nucleo.disposicion import contar_conspecificos_cercanos
+from nucleo.manada import manada_de
 from nucleo.parentesco import es_familia_directa
 from nucleo.construccion import (
     construccion_propia,
@@ -376,7 +377,7 @@ class SistemaMovimiento:
                 )
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
-                    gestor, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
+                    gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
                     temperamento, pos.zona_idx,
                 )
             elif accion == Accion.SOCIALIZAR:
@@ -1302,6 +1303,7 @@ class SistemaMovimiento:
     def _calcular_deambular(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
         entidad_id: int,
         especie: Especie,
         pos_x: int,
@@ -1340,13 +1342,23 @@ class SistemaMovimiento:
         nucleo.memoria.objetivo_recordado.
 
         SESGO GREGARIO: con probabilidad = Temperamento.sociabilidad
-        DIRECTA, sin escalar, la criatura busca al conspecífico más
-        cercano en su radio de percepción y avanza hacia él si está a más
-        de social.distancia_deseada_conspecifico. Sin gating por
+        DIRECTA, sin escalar, la criatura busca un objetivo social y
+        avanza hacia él si está a más de
+        social.distancia_deseada_conspecifico. Sin gating por
         consciencia -- a diferencia del sesgo de territorio, el
         agrupamiento social es plausible tanto para gnomo como para el
         resto. Si la tirada de sociabilidad no dispara el sesgo, o no hay
-        ningún conspecífico perceptible, se cae al paso aleatorio.
+        ningún objetivo perceptible, se cae al paso aleatorio.
+
+        Cohesión de manada (2026-09-07, ver nucleo/manada.py y spec
+        docs/superpowers/specs/2026-09-07-manada-fauna-design.md): si la
+        entidad pertenece HOY a una Manada (recalculada a diario,
+        cualquier especie), el objetivo social es su CENTRO -- produce
+        grupos más compactos y estables que perseguir siempre al vecino
+        más cercano, que puede formar cadenas dispersas. Sin manada
+        (solitario o recién disperso), cae al comportamiento anterior:
+        el conespecífico más cercano vía
+        _buscar_conspecifico_mas_cercano.
         """
         if (
             mem is not None
@@ -1370,13 +1382,17 @@ class SistemaMovimiento:
                 return self._acercarse_a(pos_x, pos_y, *objetivo)
 
         if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
-            objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
-                gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
+            manada = manada_de(mundo, entidad_id)
+            objetivo_social = (
+                manada.centro if manada is not None
+                else self._buscar_conspecifico_mas_cercano(
+                    gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
+                )
             )
-            if objetivo_conspecifico is not None:
-                dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
+            if objetivo_social is not None:
+                dist = abs(objetivo_social[0] - pos_x) + abs(objetivo_social[1] - pos_y)
                 if dist > self.dist_deseada_conspecifico:
-                    return self._acercarse_a(pos_x, pos_y, *objetivo_conspecifico)
+                    return self._acercarse_a(pos_x, pos_y, *objetivo_social)
 
         return self._paso_aleatorio()
 

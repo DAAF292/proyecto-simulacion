@@ -46,3 +46,10 @@ class Mundo:
         # nucleo/agua.py:pendiente_local). dict vacío hasta el primer
         # corte de día, cuando SistemaAsentamiento lo repuebla.
         self.asentamientos: dict[int, Any] = {}
+
+        # Manadas (2026-09-07, ver nucleo/manada.py y
+        # sistemas/sistema_manada.py). Mismo criterio que asentamientos --
+        # recalculado íntegro cada día a partir de Posicion + Identidad de
+        # cualquier especie (no solo gnomo), sin identidad persistida
+        # entre recálculos, no se guarda en SQLite.
+        self.manadas: dict[int, Any] = {}

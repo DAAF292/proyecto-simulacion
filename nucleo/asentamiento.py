@@ -26,6 +26,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from componentes.relaciones import Relaciones
+from nucleo.agrupacion import agrupar_por_proximidad, calcular_centro
+
+__all__ = [
+    "Asentamiento",
+    "agrupar_por_proximidad",
+    "calcular_centro",
+    "calcular_liderazgo",
+    "asentamiento_de",
+    "almacen_cercano",
+    "disposicion_a_aportar",
+]
 
 
 # Contadores de observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b
@@ -56,46 +67,11 @@ class Asentamiento:
     sí solo)."""
 
 
-def agrupar_por_proximidad(
-    puntos: dict[int, tuple[int, int]], radio: int
-) -> list[set[int]]:
-    """Agrupa ids por proximidad Manhattan <= radio -- BFS sobre el grafo
-    de adyacencia por distancia, O(N^2) en número de puntos, mismo límite
-    de escalabilidad ya aceptado en el resto del motor a esta escala de
-    población. NO es el mismo algoritmo que
-    nucleo/materiales.py:componentes_conexas (flood-fill de celdas
-    contiguas en una máscara de grid) -- aquí los puntos pueden estar
-    varias celdas separados entre sí, así que hace falta un grafo por
-    distancia, no adyacencia de grid."""
-    ids = list(puntos.keys())
-    visitados: set[int] = set()
-    grupos: list[set[int]] = []
-    for inicio in ids:
-        if inicio in visitados:
-            continue
-        grupo = {inicio}
-        visitados.add(inicio)
-        cola = [inicio]
-        while cola:
-            actual = cola.pop()
-            ax, ay = puntos[actual]
-            for otro in ids:
-                if otro in visitados:
-                    continue
-                bx, by = puntos[otro]
-                if abs(ax - bx) + abs(ay - by) <= radio:
-                    visitados.add(otro)
-                    grupo.add(otro)
-                    cola.append(otro)
-        grupos.append(grupo)
-    return grupos
-
-
-def calcular_centro(puntos: dict[int, tuple[int, int]], miembros: set[int]) -> tuple[int, int]:
-    """Centroide entero (redondeado) de las posiciones de los miembros."""
-    xs = [puntos[m][0] for m in miembros]
-    ys = [puntos[m][1] for m in miembros]
-    return (round(sum(xs) / len(xs)), round(sum(ys) / len(ys)))
+# agrupar_por_proximidad / calcular_centro: extraídas a
+# nucleo/agrupacion.py (2026-09-07) -- genéricas, sin nada de refugios ni
+# gnomo, reutilizadas también por nucleo/manada.py. Reexportadas aquí
+# (import arriba) para no romper a quien ya las importaba desde este
+# módulo.
 
 
 def calcular_liderazgo(gestor: Any, miembros: set[int], config_asentamiento: dict[str, Any]) -> set[int]:
