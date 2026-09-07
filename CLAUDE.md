@@ -4703,15 +4703,43 @@ Diego cuando el tamaño se acercaba al de "armas primitivas v2".
   roce_social`, `radio_sonido_base`, `peso_credibilidad_rumor`,
   `delta_lealtad_liderazgo`, `umbral_reputacion_descalificante`, y el
   resto) siguen PROVISIONALES, sin calibrar contra el harness completo.
-- El fallback de sonido como pista de caza (4b) y los efectos de
-  reputación en liderazgo (5b) están verificados correctos por tests
-  dirigidos pero no se ha observado su disparo real en juego libre
-  todavía — mismo patrón de fondo ya documentado varias veces
-  (asentamiento/pareja/parentesco): dependen de que la población
-  sobreviva lo bastante para que esas condiciones compuestas ocurran.
-- Ideas mencionadas por Diego como consumidores futuros del mismo
-  primitivo de `Relaciones`/rumor — mercadería, encargos, confianza
-  para pedir o confiar algo a alguien — ninguna diseñada todavía.
+- ~~El fallback de sonido como pista de caza (4b) y los efectos de
+  reputación en liderazgo (5b)... no se ha observado su disparo real en
+  juego libre todavía~~ — CORREGIDO el mismo día, ver la sección
+  "Auditoría post-cierre" más abajo: con semillas nuevas (no solo la
+  42), ambos SÍ se disparan de verdad. Verificar con una sola semilla
+  no basta para concluir invisibilidad.
+- **Menú de ideas futuras sobre esta base, planteado a Diego el mismo
+  día de cerrar el arco, ninguna diseñada todavía** — tres horizontes:
+  - **Cerca, círculos pequeños, casi todo ya construido**: (1) robo/
+    agravio genérico -- `nucleo/conflicto.py` lo declara como
+    consumidor futuro desde su diseño original (30-08), reutilizaría
+    `resolver_disputa` tal cual con un disparador nuevo (necesidad
+    urgente + tomar recursos ajenos de `Inventario`/`Construccion`).
+    (2) Llamada de alarma -- tercer uso real de `nucleo/sonido.py`
+    (tras detección de amenaza y pista de caza): un individuo que
+    detecta una amenaza REAL emite su propio sonido, más barato que un
+    combate, alertando a quien esté cerca -- comportamiento animal
+    genuino, infraestructura ya construida.
+  - **Medio, las ideas que Diego mencionó explícitamente al diseñar
+    rumor social (5a)**: trueque (intercambio de materiales entre
+    `Inventario`/`Construccion`, disposición modulada por `Relaciones`
+    -- solo intercambias con quien confías) y encargos/cooperación
+    dirigida (pedirle a alguien que aporte a TU objetivo en vez del
+    suyo) -- esta segunda, más ambiciosa, merece su propio círculo de
+    diseño aparte cuando llegue el momento.
+  - **Lejos, lo que más conecta con la aspiración Tolkien declarada del
+    proyecto**: leyendas/memoria oral -- `cronica_eventos` ya registra
+    sucesos NOTABLES/HISTÓRICOS pero nadie en el mundo "sabe" de ellos;
+    si el rumor propagara conocimiento de sucesos notables (no solo
+    opiniones sobre terceros), la fama de un individuo se extendería
+    emergentemente más allá de quien lo conoció en persona -- la pieza
+    que más se acerca a "riqueza narrativa por emergencia algorítmica,
+    nunca por autoría manual". Y facciones entre asentamientos --con
+    liderazgo/reputación ya reales y varias cuevas/asentamientos ya
+    posibles desde el arco de profundidad, diplomacia/conflicto entre
+    GRUPOS (no solo individuos) sería el siguiente salto de escala,
+    civilización en vez de solo pueblo.
 - Créditos de licencia de PyxelSpace (pendiente desde la migración del
   24-08, ver arriba) y el harness completo de 15×12000 siguen sin
   abordarse — sin relación con este arco, solo recordatorio de que
