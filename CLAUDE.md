@@ -4832,3 +4832,71 @@ futura**:
   juntas sí capturan el impacto real de la reputación, pero un lector
   de una sola cifra podría subestimarlo. Aclarar en un futuro pase, no
   urgente.
+
+## Manada — estructuras gregarias reales en fauna, cerrada (2026-09-07)
+
+Diego pidió diferenciar el comportamiento gregario por especie (lobo,
+caballo, conejo, ardilla) en vez de un único sesgo genérico —
+preguntando explícitamente si una manada de lobos debía comportarse
+igual que una de conejos. Investigado especie por especie antes de
+proponer nada: la mayoría de esa diferenciación YA existía, repartida
+en rasgos ya construidos (`medio_alimentacion == "cazar"` ya hace de
+lobo la única especie con caza en grupo; `sociabilidad` ya es la más
+alta en caballo y la más baja en ardilla). Solo la madriguera excavada
+y compartida de conejo exigía algo genuinamente nuevo — un rasgo
+racial más, `tipo_refugio_fauna: colonial`, mismo patrón categórico
+que `medio_alimentacion` (hecho físico real de la especie, no autoría
+de un suceso concreto). Evita repetir el error ya corregido una vez en
+este proyecto (categorizar cuevas por tamaño/bioma).
+
+**Diseño**: `Manada` (`nucleo/manada.py`) como objeto real, mismo
+molde que `Asentamiento` (sin identidad persistida entre recálculos
+diarios, no se guarda en SQLite), formada por pura proximidad
+(`agrupar_por_proximidad`, extraída junto a `calcular_centro` a un
+módulo neutral nuevo, `nucleo/agrupacion.py`, reutilizado por
+asentamiento y manada). Sin gate de sociabilidad para formar el grupo
+— la sociabilidad de cada individuo sigue decidiendo, como ya hacía,
+cuánto tira hacia el centro, así que una especie poco sociable rara
+vez se comporta como manada real aunque la geometría la agrupe por
+casualidad. Madriguera compartida (conejo): sincronizada por VOTO DE
+MAYORÍA sobre lo que los miembros YA recuerdan individualmente, nunca
+una coordenada elegida a dedo — se estabiliza sola con los días porque
+la persistencia real vive en `MemoriaEspacial`, ya persistida por
+individuo, no en `Manada`. Primer consumidor: `_calcular_deambular`
+tira hacia el centro de la manada en vez de solo el conespecífico más
+cercano, produciendo grupos más compactos y estables.
+
+**Incidente real de pipeline, sin relación con la calidad de la
+spec**: el único intento agotó los 2700s en el paso 177 sin escribir
+ni una línea de código ni comitear su propio plan — solo exploración
+extensa de `nucleo/asentamiento.py`. Coste bajo ($0.25), sin nada que
+rescatar (a diferencia de "armas primitivas v2", aquí no hubo ningún
+diff real). Diego pidió implementarlo directamente en vez de
+reintentar — **cerrado el mismo día**, 9 tests nuevos, 291/291 en
+verde, mergeado a `master` (`f24bd4f`) tras auditoría propia y
+verificación contra el motor real.
+
+**Verificado contra el motor real (3000 ticks, semilla por defecto),
+resultado inusualmente fuerte para una pieza recién cerrada**: manadas
+formadas por especie `{gnomo:1, conejo:2, lobo:1, caballo:1}` (ardilla
+0, coherente con su sociabilidad más baja del catálogo, sin necesidad
+de excluirla a mano); **14897 sincronizaciones de madriguera, 597
+miembros de conejo recibieron un sitio de refugio que no tenían
+antes** — a diferencia de varias piezas del arco de comunicación
+("correctas pero invisibles" en juego libre), esta se ejerce con
+fuerza desde el primer día.
+
+**Pendiente real, explícito**:
+- `radio_manada_celdas`/`tipo_refugio_fauna` PROVISIONALES, sin
+  calibrar contra el harness completo.
+- Sin liderazgo ni "macho alfa" de manada — extensión futura obvia,
+  reutilizaría `calcular_liderazgo` tal cual (`dominancia` ya existe
+  para las 4 especies fauna).
+- "Techo de presa por manada" de lobo (conteo instantáneo de
+  conespecíficos cazando cerca) se queda intacto, sin unificar con la
+  nueva estructura persistente-por-día — posible unificación futura,
+  no hecha aquí para no forzar un refactor no pedido.
+- Que una manada de gnomo también se formara (además de su
+  `Asentamiento` ya existente, un concepto distinto) no se excluyó a
+  propósito (ley neutra, sin excepción por especie) — inofensivo en
+  esta corrida, pero señalado por si resulta confuso más adelante.
