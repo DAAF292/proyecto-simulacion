@@ -5364,3 +5364,144 @@ aislado**.
 Sin commits de código en este círculo -- investigación pura con
 resultado negativo en ambas hipótesis, documentada con la misma
 honestidad que el resto del proyecto.
+
+## Alimentos huérfanos del catálogo ampliado -- reparto por naturaleza
+## real de cada especie (2026-09-07, implementado directamente por Claude)
+
+Tras la investigación de ardilla, Diego pidió repartir los 7 recursos
+de categoría alimento del catálogo ampliado de flora (2026-09-03) --
+`nectar_semillas`, `bayas_espinosas`, `bellotas`, `brotes_helecho`,
+`raices_deserticas`, `bayas_montanas`, `brotes_articos` -- que ninguna
+de las 4 especies herbívoras tenía en su `dieta`, y preguntó si hacía
+falta algún cambio más en ardilla o si el ecosistema ya podía
+considerarse estable.
+
+**Reparto, no uniforme, por naturaleza real de cada especie**
+(`config/poblacion.yaml`): gnomo gana los 7 (único forrajero sin bioma
+fijo, su dieta original ya cruzaba los 5 biomas); conejo gana
+`nectar_semillas`+`bayas_espinosas` (herbívoro generalista de pradera);
+ardilla gana solo `bellotas` (la pareja obvia; `brotes_helecho` queda
+fuera a propósito -- una ardilla real no come helecho); caballo gana
+solo `nectar_semillas` (ramoneo blando de pastoreador; se excluye
+`bayas_espinosas` -- un caballo real evita el ramoneo espinoso).
+Verificado: 300/300 tests, `BOSQUE_AUTO_TICKS=2500` sin excepciones, los
+7 recursos confirmados presentes y regenerando en el mundo real
+(`celdas_estado`). Commit `e6a351c`.
+
+**Sobre ardilla**: ningún cambio adicional -- ambas hipótesis de Diego ya
+se habían refutado con datos, y el último baseline dio 0/6 extinción.
+
+**Sobre "¿son los mundos ya estables?"**: respuesta crítica, no
+complaciente -- NO se declaró cerrado. Tres motivos: (1) la ventana de
+medición (4000 ticks) es corta frente a los 6000-8000 usados en
+investigaciones anteriores, probablemente infla la supervivencia; (2)
+el harness de rigor real (15×12000) nunca se ha corrido para nada de
+esto; (3) deshidratación domina las muertes de conejo Y ardilla -- dos
+especies distintas señalando lo mismo, sin tocar por prudencia (mismo
+riesgo de sobrecorrección ya visto una vez con conejo). Diego decidió
+no perseguir una confirmación a ventana larga por ahora ("de momento
+no") y pasar a diseñar funcionalidad nueva sobre la base actual.
+
+## Menú de funciones nuevas propuesto + arranque del arco "robo/intercambio
+## de recursos" (2026-09-07)
+
+A petición de Diego ("plantéame posibles nuevas funciones que amplíen
+el motor"), se presentó un menú curado por horizonte (cerca: robo/
+agravio genérico, llamada de alarma, liderazgo de manada, unificar
+"techo de presa por manada" con la estructura real, decaimiento de
+afinidad; medio: consumidor de `resistencia_enfermedad` -- confirmado
+sin ningún consumidor real, mismo patrón que valentía/empatía antes de
+su primer uso --, ciudad enana, fabricación de herramientas más allá de
+armas, trueque; lejos: leyendas/memoria oral vía rumor, facciones entre
+asentamientos, fauna subterránea). Diego eligió **robo + intercambio de
+recursos (trueque)**.
+
+**Brainstorming (arquitectural)**: clasificado así porque no hay ningún
+flujo existente de "mover un recurso de un individuo a otro" que
+extender. Decisión de alcance cerrada con Diego: trocear en círculos
+pequeños -- (1) provisiones de alimento (ver más abajo, este mismo
+día), (2) primitivo genérico de transferencia entre individuos, (3)
+robo vía `nucleo/conflicto.py` (ya lo nombra como consumidor futuro
+desde el 30-08), (4) trueque vía `Relaciones` -- cada uno su propio
+spec, sin empezar los círculos 2-4 todavía.
+
+### Círculo 1 del arco -- Provisiones de alimento, cerrado (spec, PR
+### directo por Claude, 2026-09-07)
+
+Diego, verificando el estado real del motor durante el brainstorming:
+"ahora los seres conscientes... no almacenan alimentos para comer
+después". Confirmado contra el código antes de diseñar: `RECOLECTAR`
+solo mete en `Inventario.contenidos` materiales de construcción, nunca
+alimento; `COMER` siempre resuelve in situ. Sin nada que un consciente
+guarde de verdad, robo/trueque de comida no tendrían nada sobre lo que
+operar.
+
+**Corrección real en brainstorming, no de diseño de Claude sin
+cuestionar**: la primera propuesta reutilizaba `Inventario.contenidos`
+(la misma bolsa que materiales de construcción) para guardar comida.
+Diego la rechazó con una pregunta que expuso el problema de raíz: "si
+luego quieren construir que hacen? tiran la comida? o al revés si
+tienen el inventario lleno de materiales no pueden guardar comida?" --
+compartir capacidad entre reserva de supervivencia y carga de trabajo
+de construcción crea un conflicto artificial sin resolución natural.
+Corregido: `Inventario.provisiones` (nuevo campo) con su propia
+capacidad, pequeña (`fraccion_provisiones_maxima=0.05`, PROVISIONAL) y
+TOTALMENTE INDEPENDIENTE de `contenidos`/`objetos` -- nunca compiten.
+Diego también cuestionó si esto debía ser "inteligencia variable" --
+confirmado que no: ley binaria única (mismo umbral de consciencia que
+ya usan `RECOLECTAR`/`CONSTRUIR`), sin atarlo a ningún atributo
+individual, un instinto de conservación, no una decisión calculada.
+
+Spec: `docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md`.
+**Implementado directamente por Claude, no por el pipeline** -- el
+centinela seguía detenido desde el incidente de cancelación de
+madriguera-fisica-a (ver sección de esa pieza, más arriba) y Diego
+pidió implementarlo directamente en vez de reiniciarlo.
+
+- **Entrada** (`sistema_recursos.py:_resolver_comer`): tras comer del
+  forraje de la celda, si el consciente ya tiene `saciedad >= 0.9`
+  (PROVISIONAL) y queda cantidad del recurso en la celda, guarda hasta
+  `tasa_consumo_comer` kg más (reutilizada, sin constante nueva) en
+  `Inventario.provisiones`, topado por el espacio disponible.
+- **Salida**: si la celda no tiene nada de la dieta propia, come
+  primero de `Inventario.provisiones` (mismo `val_nut`/`val_hid` que el
+  forraje normal) ANTES de purgar memoria stale -- sin purgar memoria
+  ni disparar zoocoria si tiene éxito (comer de la propia despensa no
+  es comer donde crece la planta).
+- **Caducidad** (`sistema_descomposicion.py:_descomponer_provisiones`,
+  cadencia diaria): tasa única universal
+  (`tasa_descomposicion_dia_alimento=0.15`, PROVISIONAL) para toda
+  comida guardada -- no una por recurso (13 recursos de alimento en el
+  catálogo hoy, diferenciar sin datos reales sería adivinar). Purga por
+  debajo de `descomposicion.umbral_purga_masa` (reutilizado, mismo
+  umbral que ya usan Necromasa/Construccion). `Inventario.contenidos`
+  nunca decae.
+- Persistencia: `provisiones` añadido al mismo blob JSON ya usado por
+  `contenidos`/`objetos` (`componentes_estado.inventario`), sin columna
+  nueva; `VERSION_ESQUEMA` sube a `0.35-fase0` de todos modos, mismo
+  criterio de higiene ya aplicado a cada pieza anterior.
+
+**Verificado**: 313/313 tests (13 nuevos,
+`tests/test_provisiones_alimento.py` -- capacidad independiente de
+carga, entrada/salida con sus cuatro condiciones cada una, caducidad,
+persistencia). `BOSQUE_AUTO_TICKS=3000` sin excepciones: **124 veces
+guardado excedente, 6 veces comido de la despensa** -- el disparador es
+deliberadamente estrecho (solo se evalúa al elegir `COMER`), tal como
+avisaba el spec; ambos números son reales y bajos pero no cero,
+reportado con honestidad, no inflado. Roundtrip de persistencia
+confirmado con la partida real de esa corrida (37 madrigueras físicas
+recuperadas exactas, continuación de 5 ticks sin excepciones). Solo 2
+entidades con provisiones activas al cierre de los 3000 ticks (0.41 kg
+total) -- consistente con la caducidad real actuando, no una despensa
+que crece sin límite.
+
+**Pendiente real, explícito**: `fraccion_provisiones_maxima`,
+`saciedad_minima_para_guardar_provisiones`, y
+`tasa_descomposicion_dia_alimento` PROVISIONALES, sin calibrar contra
+el harness completo; si la frecuencia de disparo (sobre todo la salida,
+6 en 3000 ticks) resulta demasiado baja para que robo/trueque de
+comida tengan algo real que operar, candidato a revisar el umbral o
+mover la lógica fuera de `COMER`; fauna con caché instintivo de comida
+(ardilla en la vida real acumula frutos secos) aplazado, no descartado;
+círculos 2-4 del arco (primitivo de transferencia, robo, trueque)
+siguen sin diseñar.
