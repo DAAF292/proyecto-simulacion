@@ -5859,3 +5859,123 @@ donde algo me hizo daño", y variación de toxicidad por atributo más
 allá de `resistencia_enfermedad` quedan fuera, sin necesidad real
 todavía; la explosión de conejo sigue siendo el mismo problema conocido
 de siempre, sin tocar en este círculo.
+
+## Índice espacial compartido -- escalabilidad del motor, Círculos 1+2
+## cerrados, implementado directamente por Claude (2026-09-08, mismo día)
+
+Diego, tras ver que la explosión de conejo (sección anterior) seguía
+dándose, preguntó directamente: "me empieza a preocupar la eficiencia,
+¿cómo vamos a hacer cuando existan muchas más funcionalidades
+simultáneamente y además más fauna, flora, razas, etc? ¿es viable?".
+Tratado como spike (brainstorming): perfilado real con `cProfile` sobre
+la misma semilla en dos escalas de población de la misma partida --
+población x2.2 → tiempo x3.1, peor que lineal. Causa real localizada,
+no supuesta: 60-65% del tiempo de tick en
+`nucleo/amenaza.py:posicion_amenaza_mas_cercana` →
+`nucleo/disposicion.py:posicion_mas_cercana_por_disposicion`, llamada
+una vez por entidad por tick, escaneando `gestor.entidades_con(...)` --
+la población mundial entera -- en cada llamada. Mismo patrón repetido a
+menor escala en `nucleo/construccion.py`, `nucleo/madriguera.py`,
+`nucleo/fuego.py`, `nucleo/asentamiento.py:almacen_cercano` -- el mismo
+defecto que `_buscar_conspecifico_mas_cercano` ya documentaba como
+O(N²) desde hace semanas, resultó ser un patrón repetido en casi todos
+los sistemas de "percepción de algo cercano" añadidos esta semana
+(manada, madriguera, salón común, sonido).
+
+**Decisiones cerradas con Diego, brainstorming arquitectónico** (spec:
+`docs/superpowers/specs/2026-09-08-indice-espacial-design.md`): (1)
+alcance BARRIDO COMPLETO, no solo el mayor contribuyente; (2) índice
+"congelado" (se reconstruye una vez por fase relevante, no se mantiene
+sincronizado incrementalmente) -- corrige de paso un artefacto de orden
+real y nunca diseñado a propósito: dentro del bucle de
+`sistema_movimiento.py`, una entidad procesada más tarde podía ver la
+posición YA movida de otra procesada antes en el mismo tick (quien
+tiene id más bajo se movía "primero"). Centinela del pipeline
+confirmado parado (sin reiniciar desde el incidente de madriguera-
+física-A) y con 3 fallos consecutivos previos en piezas de tamaño
+similar -- Diego eligió explícitamente que Claude implementara
+directamente esta pieza, dada su sensibilidad a errores silenciosos de
+enhebrado.
+
+**Arquitectura**: `nucleo/indice_espacial.py` (nuevo) -- `IndiceEspacial`
+agrupa TODAS las entidades con `Posicion` por `(x, y, zona_idx)` (sin
+filtrar por ningún otro componente, cada consumidor sigue filtrando el
+suyo después, igual que antes); `en_celda`/`en_radio` (recorre solo las
+celdas del rombo Manhattan, nunca la población entera). `main.py:
+ejecutar_tick` construye dos índices por tick, no uno por entidad --
+Índice A (antes de decisión/movimiento, refleja el cierre del tick
+anterior) e Índice B (tras movimiento, para depredación/necesidades/
+reproducción). Sistemas de cadencia diaria (`asentamiento`, `manada`)
+construyen el suyo propio localmente. Parámetro `indice=None` opcional
+en todas partes, con fallback interno (mismo patrón ya usado por
+`por_celda: dict | None = None` en `sistema_movimiento.py`) -- **cero
+cambios necesarios en la batería de tests existente**.
+
+**Círculo 1** (el 60-65% del coste medido): `nucleo/disposicion.py` (las
+3 funciones), `nucleo/amenaza.py` (propaga el índice), y las firmas de
+`SistemaDecision`/`SistemaMovimiento`/`SistemaDepredacion`/
+`SistemaNecesidades`/`SistemaReproduccion`. **Encontrado durante la
+propia implementación, no anticipado en el spec, y migrado también por
+ser el mismo patrón exacto con el índice ya a mano**:
+`sistema_movimiento.py:_calcular_pareja`,
+`_buscar_conspecifico_mas_cercano` (el O(N²) más antiguo y más citado
+de todo el proyecto, documentado como límite conocido desde la
+migración original del 24-08) y el bucle de detección de presa de
+`_calcular_caza` -- ninguno pasaba por `nucleo/disposicion.py`, cada
+uno hacía su propio escaneo lineal ad-hoc.
+
+**Círculo 2** (extender el mismo índice): `nucleo/construccion.py`
+(`construccion_propia`, `hay_construccion_de_tipo_en`),
+`nucleo/madriguera.py`, `nucleo/fuego.py`, `nucleo/asentamiento.py:
+almacen_cercano`, propagado a través de `objetivo_construccion_actual`
+(la cadena refugio→almacén→salón común) y de los cuatro bonos de
+confort/seguridad en `SistemaNecesidades`.
+
+**Verificado, con cifras reales, no solo "los tests pasan"**: 375/375
+tests (7 nuevos, `tests/test_indice_espacial.py`), `BOSQUE_AUTO_TICKS=3000`
+sin excepciones. Perfilado repetido con el mismo arnés, misma semilla
+60004, antes/después:
+
+| | Población | ms/tick |
+|---|---|---|
+| Antes | 93 → 208 (x2.2) | 102 → 319 (x3.1) |
+| Después | 92 → 185 (x2.0) | 69 → 173 (x2.5) |
+
+Mejora real en dos ejes distintos: velocidad absoluta (32-45% más
+rápido según la escala) Y el propio EXPONENTE de escalado (factor
+tiempo baja de x3.1 a x2.5 -- más cerca de lineal, no solo una
+constante más rápida). `hay_construccion_de_tipo_en`, `madriguera_en` y
+`posicion_mas_cercana_por_disposicion` dejan de aparecer entre los
+costes dominantes del perfil tras el fix.
+
+**Honestidad explícita sobre lo que queda fuera de estos dos círculos,
+encontrado durante la propia implementación (perfilado repetido tras
+el Círculo 2)**: `nucleo/sonido.py:sonido_mas_cercano` sigue siendo un
+coste real y ahora más visible relativamente (su límite es O(radio²)
+celdas por llamada, no O(N) entidades -- explícitamente fuera de
+alcance del spec, un índice de entidades no lo resuelve).
+`sistema_movimiento.py` conserva más funciones con el MISMO patrón de
+escaneo ad-hoc sin pasar por `nucleo/disposicion.py` que no se
+migraron en este círculo por no formar parte del alcance acordado con
+Diego (barrido de los consumidores YA identificados, no de cualquier
+`entidades_con(...)` del fichero): `_entidad_cercana_cualquiera`/
+`_entidad_cercana_cualquiera_con_id`/`_consciente_mas_cercano_con_id`
+(ya señaladas como código casi duplicado en la auditoría post-cierre
+del arco de comunicación, 2026-09-07), la búsqueda de carroñeo por
+Necromasa, "presenciar una muerte" (trauma), y el intruso de
+`_resolver_posible_intruso`. Confirmado en el perfil final:
+`_entidad_cercana_cualquiera` ya es visible (0.50→1.17s entre las dos
+escalas) -- candidato real y concreto para un **Círculo 3**, mismo
+patrón exacto, mismo índice ya construido, sin decisión de diseño
+nueva que tomar.
+
+**Pendiente real, explícito**: Círculo 3 (arriba) sin decidir si se
+aborda; el propio harness completo (15×12000) seguiría siendo la
+referencia de rigor para cualquier calibración numérica, sin relación
+con esta pieza (esta es una corrección de rendimiento, no de
+comportamiento -- ningún valor de config se tocó). El índice se
+reconstruye completo dos veces por tick (O(N) cada vez) -- suficiente
+para la escala actual; si el número de entidades sube en órdenes de
+magnitud en el futuro, la siguiente palanca sería mantenerlo
+incremental en vez de reconstruirlo, no evaluada aquí por no hacer
+falta todavía.
