@@ -40,8 +40,23 @@ rangos_raciales:
     peso: [8, 15]
     altura: [0.9, 1.2]
     longevidad: [45, 65]
-    duracion_gestacion_dias: [200, 260]
-    camada: [1, 1]
+    # RECALIBRADO 2026-09-08 (ver CLAUDE.md, "raza consciente" --
+    # investigacion de gestacion vs. muerte materna): medido con datos
+    # frescos que 12 de 18 concepciones de gnomo (67%) fracasaban porque
+    # la madre moria antes de completar la gestacion, sin llegar ni a la
+    # mitad del termino medio (~5500 ticks) en una corrida que solo
+    # alcanzo 4000-4900 ticks. Gestacion baja de 200-260 dias (con
+    # diferencia la mas larga del catalogo, 2.3-3.5x el siguiente mas
+    # largo -- caballo, 60-90) a 90-120 -- sigue siendo la mas larga con
+    # claridad, pero deja de ser una ventana de riesgo casi imposible de
+    # sobrevivir. Camada deja de estar fija en 1 (sin ningun colchon
+    # posible, a diferencia de cualquier otra especie) y gana un rango
+    # pequeno [1, 2], mismo orden que caballo -- mismo patron de dos
+    # ingredientes ya validado con lobo/ardilla, aplicado aqui a
+    # gestacion/camada en vez de a hambre/concepcion (que ya estaban
+    # calibrados). PROVISIONAL, sin calibrar contra el harness completo.
+    duracion_gestacion_dias: [90, 120]
+    camada: [1, 2]
     fraccion_madurez: 0.1
     # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
     # ver CLAUDE.md, config/fisiologia.yaml:necesidades.gnomo y
