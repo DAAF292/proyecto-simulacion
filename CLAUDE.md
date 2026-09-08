@@ -5680,6 +5680,91 @@ hasta definir qué decisión mecánica real debería habilitar; **ciudad
 enana permanece fuera de alcance hasta que la raza enana se plantee --
 no mencionar hasta entonces**.
 
+## Cocinas comunes -- tercera pieza del arco "dinámicas internas de
+## asentamiento", cierra la cola de piezas ya planteadas salvo edificio
+## de liderazgo (spec, implementado directamente por Claude, 2026-09-08)
+
+Spec: `docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md`.
+Arranque con una pregunta de fondo, no asumida: dado que "cómo
+cocinar" (mismo día) ya deja a cualquier consciente cocinar en
+cualquier Fogata individual, ¿qué hace distinta a una cocina COMÚN?
+Diego eligió mezclar las tres ideas de partida en vez de una sola:
+bono mecánico (cocinar más rápido), imán social (mismo patrón de
+confort/seguridad que salón común, como respaldo si no hay salón),
+y alacena comunal real.
+
+**Dos correcciones reales de diseño, cerradas con Diego antes de
+escribir código**:
+1. **Cadena de construcción, de lineal a PARALELA**: Diego rechazó
+   explícitamente encadenar cocina detrás de salón común ("en paralelo
+   al salón común") -- `objetivo_construccion_actual` generaliza su
+   tramo final a evaluar `["salon_comun", "cocina"]` en paralelo,
+   eligiendo el que ya lleve MÁS progreso (ley física: el esfuerzo de
+   la población converge en uno sin que nadie lo planifique), empate
+   exacto resuelto por orden fijo. `None` terminal solo con AMBOS
+   completos. Generaliza limpio a un tercer paralelo futuro.
+2. **La alacena es un destino real, no un beneficio pasivo** -- Diego
+   corrigió mi primera propuesta ("cualquiera que esté físicamente en
+   la cocina come de ahí") señalando que un hambriento en su refugio
+   debería IR a la cocina, no beneficiarse solo por casualidad.
+   `sistema_movimiento.py:_calcular_forrajeo` gana una tercera fuente
+   de candidato (la alacena de la cocina del propio asentamiento, sin
+   acotar por radio de percepción -- se sabe dónde está, igual que el
+   salón común) que compite por distancia en igualdad de condiciones
+   con necromasa y forraje local.
+
+**Arquitectura**: `Construccion` gana `provisiones: dict[str, float]`
+(mismo molde exacto que `Inventario.provisiones`, universal en el
+componente, vacío salvo en cocinas). `nucleo/construccion.py` gana
+`construccion_completada_de_asentamiento` (generaliza el patrón que
+antes solo vivía duplicado en `sistema_movimiento.py:_salon_comun_de`)
+y `construccion_de_tipo_en` (`hay_construccion_de_tipo_en` pasa a ser
+su alias booleano, mismo patrón `hay_X`/`X_en` que ya separan
+`fogata_en`/`hay_refugio_en`). `nucleo/comida.py:elaborar_recurso` gana
+`destino` opcional (por defecto el mismo dict de origen, comportamiento
+idéntico a antes) para poder depositar en la alacena de la cocina en
+vez del inventario personal de quien cocina. La cocina "implica su
+propio fuego" -- mismo criterio que el salón común -- así que
+`Accion.COCINAR` se habilita sin Fogata real si hay una cocina
+completada en la celda. `_resolver_cocinar` usa
+`factor_bono_tasa_cocina_comun` (2.0, PROVISIONAL) cuando cocina ahí.
+`_resolver_comer` gana una tercera fuente (celda → despensa personal →
+alacena, en ese orden) sin chequeo de toxicidad (la alacena solo
+contiene claves `_elaborada`, cocinar ya la elimina por completo) y
+sin filtro de dieta propia (simplificación aceptada mientras solo
+exista una especie consciente). `_calcular_socializar` usa la cocina
+como respaldo SOLO si no hay salón común. `Construccion.provisiones`
+se persiste (a diferencia de los registros de sonido/fuego, es comida
+real acumulada por la comunidad) -- `VERSION_ESQUEMA` sube a
+`"0.36-fase0"`.
+
+**Verificado**: 393/393 tests (13 nuevos,
+`tests/test_cocinas_comunes.py`, más 1 actualizado en
+`test_salon_comun.py` para reflejar el nuevo eslabón paralelo).
+`BOSQUE_AUTO_TICKS=3000` con la semilla por defecto: contadores
+idénticos a los de antes de esta pieza (0 salones/cocinas completados
+en esa corrida concreta, no llega tan lejos). **Diagnóstico honesto
+aparte** (4 semillas nuevas × hasta 8000 ticks, scratchpad, sin
+persistencia): tampoco se completó ninguna cocina ni salón común en
+ninguna -- el mecanismo está verificado correcto por los tests
+dirigidos (que sí construyen cocinas reales y confirman cada pieza:
+alacena, bono de velocidad, imán social, bonos de confort/seguridad),
+pero su disparo en juego libre sigue bloqueado por la misma causa de
+fondo ya conocida y documentada varias veces en este proyecto (la
+cadena refugio→almacén→comunal tarda más ticks de los que dura una
+población real con la calibración actual) -- mismo patrón "correcto
+pero invisible" ya visto con asentamiento, pareja, parentesco y salón
+común.
+
+**Pendiente real, explícito**: `masa_minima_cocina`, `huella_m2_cocina`,
+`bono_confort_cocina_comun`, `bono_seguridad_cocina_comun`,
+`factor_bono_tasa_cocina_comun` PROVISIONALES, sin calibrar; edificio
+de liderazgo sigue aplazado hasta definir qué decisión mecánica real
+debería habilitar -- **con esto, de las 3 piezas originalmente
+planteadas por Diego para este arco (salón común, edificio de
+liderazgo, cocinas), quedan 2 de 3 cerradas**; ciudad enana sigue fuera
+de alcance hasta que se plantee la raza enana.
+
 ## Sistema de comidas -- dieta real de gnomo + catálogo de toxicidad,
 ## precede a "cómo cocinar" (spec, implementado directamente por Claude,
 ## 2026-09-08)
