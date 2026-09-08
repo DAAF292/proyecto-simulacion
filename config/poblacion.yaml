@@ -20,15 +20,23 @@ poblacion:
 rangos_raciales:
   gnomo:
     medio_alimentacion: recolectar
-    # dieta ampliada (2026-09-07, ver CLAUDE.md "Alimentos huerfanos del
-    # catalogo ampliado"): las 6 entradas originales ya cruzaban los 5
-    # biomas (fruto_de_cactus=desierto, liquen=montana, musgo=tundra) --
-    # gnomo es el unico forrajero de verdad omnivoro y sin bioma fijo del
-    # catalogo, asi que hereda tambien los 7 alimentos nuevos del catalogo
-    # ampliado de flora (2026-09-03), sin excepcion por bioma.
-    dieta: [raices, hierba, manzanas, fruto_de_cactus, liquen, musgo,
-            bellotas, brotes_helecho, nectar_semillas, bayas_espinosas,
-            raices_deserticas, bayas_montanas, brotes_articos]
+    # dieta CORREGIDA 2026-09-08 (ver docs/superpowers/specs/
+    # 2026-09-08-sistema-comidas-design.md): la ampliacion del
+    # 2026-09-07 (ver CLAUDE.md "Alimentos huerfanos del catalogo
+    # ampliado") le daba a gnomo los 13 alimentos completos del
+    # catalogo -- Diego: "no tiene sentido que un gnomo coma hierba".
+    # Reducida a una dieta de forrajero humanoide plausible: raices
+    # (dos claves, un bioma cada una), manzanas, bayas (dos claves), y
+    # nectar de semillas. Se cae hierba/fruto_de_cactus/liquen/musgo/
+    # bellotas/brotes_helecho/brotes_articos -- siguen existiendo en el
+    # mundo para otras especies (ardilla ya come bellotas, conejo/
+    # caballo su propio subconjunto), solo dejan de ser comestibles
+    # para gnomo. raices y bayas quedan marcadas toxico_crudo en
+    # config/flora.yaml -- el mecanismo que activa ese riesgo real
+    # (probabilidad de intoxicacion + resistencia_enfermedad) todavia
+    # NO existe, se disena junto con "como cocinar" (circulo siguiente
+    # del mismo arco) para no introducir un riesgo sin cura.
+    dieta: [raices, raices_deserticas, manzanas, bayas_espinosas, bayas_montanas, nectar_semillas]
     peso: [8, 15]
     altura: [0.9, 1.2]
     longevidad: [45, 65]
