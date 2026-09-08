@@ -213,6 +213,18 @@ necesidades:
     # verificar contra el motor real antes de darlo por suficiente.
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+    # tasa_perdida_hidratacion_por_tick/probabilidad_muerte_deshidratacion
+    # (2026-09-08, ver CLAUDE.md "raza consciente" -- investigacion de
+    # deshidratacion): medido con un A/B real que aplicar el mismo
+    # alivio de forma UNIVERSAL dispara a conejo (333->702 en la
+    # semilla probada) -- mismo patron de sobrecorreccion ya visto una
+    # vez con el alivio de hambre de conejo. Aplicado aqui SOLO a
+    # gnomo, mismo patron especie-por-especie ya usado con hambre
+    # (lobo->ardilla->gnomo->conejo), en vez de universal. Mismos
+    # valores que la tasa/probabilidad de saciedad de gnomo, por
+    # simetria de partida. PROVISIONAL, sin calibrar.
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
   conejo:
     # AÑADIDO 2026-09-06 (misma investigacion de estabilidad de poblacion,
     # ver CLAUDE.md -- "conejo confirmado como nuevo eslabon debil"). A

@@ -570,7 +570,18 @@ class SistemaNecesidades:
                 if self.rng.random() < prob_muerte_inanicion:
                     causa_muerte = "inanicion"
             elif nec.hidratacion <= 0.0:
-                if self.rng.random() < self.prob_muerte_deshidratacion:
+                # probabilidad_muerte_deshidratacion (2026-09-08, ver
+                # CLAUDE.md "raza consciente"): mismo patron de override
+                # por especie que ya gana probabilidad_muerte_saciedad_
+                # critica (2026-09-05) -- sin entrada propia (el resto de
+                # especies, universal sin cambios), identico a antes.
+                prob_muerte_deshidratacion = float(
+                    cfg_esp.get(
+                        "probabilidad_muerte_deshidratacion",
+                        self.prob_muerte_deshidratacion,
+                    )
+                )
+                if self.rng.random() < prob_muerte_deshidratacion:
                     causa_muerte = "deshidratacion"
 
             if causa_muerte is not None:
