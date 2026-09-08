@@ -71,6 +71,7 @@ from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, procesar_deceso
 from nucleo.eventos import BusEventos
+from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.construccion import hay_construccion_de_tipo_en
 from nucleo.fuego import fogata_en, hay_refugio_en
 from nucleo.madriguera import madriguera_en
@@ -96,6 +97,9 @@ class SistemaNecesidades:
         self._plenitud_prev: dict[tuple[int, str], float] = {}
         self._plenitud_restante: dict[tuple[int, str], int] = {}
         self._cachear_configuracion()
+        # IndiceEspacial del tick en curso (2026-09-08) -- ver
+        # sistema_movimiento.py:_indice_actual para el mismo patron.
+        self._indice_actual = None
 
     def _cachear_configuracion(self) -> None:
         """Extrae tasas de decaimiento y probabilidades críticas."""
@@ -276,8 +280,15 @@ class SistemaNecesidades:
         mundo: Mundo,
         reloj: Reloj,
         bus_eventos: BusEventos,
+        indice=None,
     ) -> None:
-        """Procesa el decaimiento metabólico y resuelve la mortalidad fisiológica."""
+        """Procesa el decaimiento metabólico y resuelve la mortalidad fisiológica.
+
+        indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+        construido, opcional -- se guarda en self y lo consulta el
+        drenaje de seguridad por amenaza y el bono de defensa en grupo.
+        Sin indice, se construye uno interno (mismo comportamiento)."""
+        self._indice_actual = indice if indice is not None else construir_indice_espacial(gestor)
         entidades = sorted(
             gestor.entidades_con(Necesidades, Posicion, DimensionesFisicas, Identidad)
         )
@@ -390,19 +401,19 @@ class SistemaNecesidades:
             # ambiental, no lo sustituyen -- la severidad real del frío
             # importa. Ambos pueden coincidir en la misma celda y se
             # acumulan.
-            if hay_refugio_en(gestor, pos.x, pos.y, pos.zona_idx):
+            if hay_refugio_en(gestor, pos.x, pos.y, pos.zona_idx, indice=self._indice_actual):
                 obj_termico += self.bono_confort_refugio
-            if fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+            if fogata_en(gestor, pos.x, pos.y, pos.zona_idx, indice=self._indice_actual) is not None:
                 obj_termico += self.bono_confort_fogata
             # Madriguera colonial (2026-09-07, circulo B): cualquiera
             # fisicamente en su celda se beneficia, sin exigir que la
             # tenga en su propia memoria -- distinto de refugio
             # individual, que no da ningun bono.
-            if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+            if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx, indice=self._indice_actual) is not None:
                 obj_termico += self.bono_confort_madriguera
             # Salon comun (2026-09-08): mismo criterio, sin necesitar una
             # Fogata real aparte -- el salon ya implica su propio hogar.
-            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun"):
+            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun", indice=self._indice_actual):
                 obj_termico += self.bono_confort_salon_comun
             # Pareja estable (2026-09-04, circulo 4b): si la pareja
             # derivada (afinidad mutua >= relaciones.umbral_pareja) esta en
@@ -443,6 +454,7 @@ class SistemaNecesidades:
                 agudeza_sensorial=dims.agudeza_sensorial,
                 radio_busqueda_sonido=self.radio_busqueda_maxima_sonido,
                 config=self.config,
+                indice=self._indice_actual,
             )
             if amenaza_pos is not None:
                 # Bono de defensa en grupo: seguridad en numeros --
@@ -459,6 +471,7 @@ class SistemaNecesidades:
                     aliados_cercanos = contar_conspecificos_cercanos(
                         gestor, eid, ident.especie, pos.x, pos.y,
                         self.radio_apoyo_grupal, solo_cazando=False, zona_idx=pos.zona_idx,
+                        indice=self._indice_actual,
                     )
                     reduccion = min(
                         self.bono_defensa_maximo,
@@ -490,13 +503,13 @@ class SistemaNecesidades:
             # cualquier especie que comparta celda con la Madriguera se
             # beneficia (ver docs/superpowers/specs/
             # 2026-09-07-madriguera-fisica-b-design.md).
-            if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+            if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx, indice=self._indice_actual) is not None:
                 nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_madriguera)
 
             # Salon comun (2026-09-08): mismo bono aditivo de seguridad,
             # aplica a cualquiera en la celda (ver docs/superpowers/specs/
             # 2026-09-08-salon-comun-design.md).
-            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun"):
+            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun", indice=self._indice_actual):
                 nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_salon_comun)
 
             # Refugio instintivo (ver docstring de

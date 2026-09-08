@@ -77,7 +77,8 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
                                           zona_idx: int = 0,
                                           peso_agresividad_candidato: float = 0.0,
                                           valentia_propia: float = 0.0,
-                                          factor_valentia_amenaza: float = 0.0):
+                                          factor_valentia_amenaza: float = 0.0,
+                                          indice=None):
     """Posicion (x, y) del individuo mas cercano, dentro del radio de
     percepcion, cuya magnitud_disposicion_por_peso frente al propio
     supera el umbral -- mas grande si buscar_mayor, mas pequeno si no.
@@ -113,17 +114,32 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
     sin intencion de atacar a nadie) no deberia asustar a un lobo (alta
     valentia, depredador el mismo) igual que asusta a una ardilla o un
     conejo (valentia baja) -- la MISMA pareja de pesos, distinto umbral
-    segun quien mira, sin ninguna excepcion por especie."""
+    segun quien mira, sin ninguna excepcion por especie.
+
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- si se pasa, se consulta indice.en_radio en
+    vez de escanear gestor.entidades_con(Posicion, DimensionesFisicas)
+    (la poblacion mundial entera) en cada llamada. Sin indice,
+    comportamiento identico a antes. El indice no filtra por
+    DimensionesFisicas -- se añade un guard explicito para las
+    entidades que no la tengan."""
     bono_umbral_propio = valentia_propia * factor_valentia_amenaza
     mejor = None
     mejor_dist = None
-    for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
+    candidatos = (
+        indice.en_radio(x, y, zona_idx, radio)
+        if indice is not None
+        else gestor.entidades_con(Posicion, DimensionesFisicas)
+    )
+    for id_candidato in candidatos:
         if id_candidato == id_propio:
             continue
         pos_candidato = gestor.obtener_componente(id_candidato, Posicion)
-        if pos_candidato.zona_idx != zona_idx:
+        if pos_candidato is None or pos_candidato.zona_idx != zona_idx:
             continue
         dimensiones = gestor.obtener_componente(id_candidato, DimensionesFisicas)
+        if dimensiones is None:
+            continue
         bono_magnitud = 0.0
         if peso_agresividad_candidato > 0.0:
             temperamento_candidato = gestor.obtener_componente(id_candidato, Temperamento)
@@ -144,7 +160,7 @@ def posicion_mas_cercana_por_disposicion(gestor, id_propio: int, x: int, y: int,
 
 def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: int,
                                    radio: int, solo_cazando: bool = False,
-                                   zona_idx: int = 0) -> int:
+                                   zona_idx: int = 0, indice=None) -> int:
     """Cuenta individuos de la MISMA especie (Identidad.especie) dentro del
     radio Manhattan indicado, excluyendo al propio individuo.
 
@@ -166,11 +182,18 @@ def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: in
     (sistema_necesidades.py): seguridad en números no exige que los
     demás estén haciendo nada en concreto, solo estar cerca.
 
-    Reutiliza el mismo patrón de búsqueda lineal O(N) que el resto de
-    este módulo -- mismo límite de escalabilidad conocido y aceptado.
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- si se pasa, se consulta indice.en_radio en
+    vez del escaneo lineal O(N) de gestor.entidades_con(...) sobre toda
+    la población. Sin indice, comportamiento identico a antes.
     """
     total = 0
-    for id_c in gestor.entidades_con(Identidad, Posicion):
+    candidatos = (
+        indice.en_radio(x, y, zona_idx, radio)
+        if indice is not None
+        else gestor.entidades_con(Identidad, Posicion)
+    )
+    for id_c in candidatos:
         if id_c == id_propio:
             continue
         ident_c = gestor.obtener_componente(id_c, Identidad)
@@ -190,7 +213,8 @@ def contar_conspecificos_cercanos(gestor, id_propio: int, especie, x: int, y: in
 
 def id_en_contacto_por_disposicion(gestor, id_propio: int, x: int, y: int,
                                     peso_propio: float, umbral: float,
-                                    buscar_mayor: bool, zona_idx: int = 0):
+                                    buscar_mayor: bool, zona_idx: int = 0,
+                                    indice=None):
     """Id del individuo que comparte celda (x, y) con el propio y cumple
     el mismo criterio que posicion_mas_cercana_por_disposicion. None si
     no hay ninguno. Con varios candidatos validos en la misma celda, se
@@ -199,14 +223,28 @@ def id_en_contacto_por_disposicion(gestor, id_propio: int, x: int, y: int,
 
     zona_idx: "compartir celda" exige también compartir zona -- dos
     zonas distintas pueden coincidir en (x, y) sin estar en el mismo
-    sitio (ver componentes/posicion.py)."""
-    for id_candidato in gestor.entidades_con(Posicion, DimensionesFisicas):
+    sitio (ver componentes/posicion.py).
+
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- si se pasa, se consulta indice.en_celda (ya
+    filtra por zona y celda exacta) en vez del escaneo lineal O(N) sobre
+    toda la población. Sin indice, comportamiento identico a antes."""
+    candidatos = (
+        indice.en_celda(x, y, zona_idx)
+        if indice is not None
+        else gestor.entidades_con(Posicion, DimensionesFisicas)
+    )
+    for id_candidato in candidatos:
         if id_candidato == id_propio:
             continue
         pos_candidato = gestor.obtener_componente(id_candidato, Posicion)
+        if pos_candidato is None:
+            continue
         if pos_candidato.x != x or pos_candidato.y != y or pos_candidato.zona_idx != zona_idx:
             continue
         dimensiones = gestor.obtener_componente(id_candidato, DimensionesFisicas)
+        if dimensiones is None:
+            continue
         if _candidato_valido(peso_propio, dimensiones.peso, buscar_mayor, umbral):
             return id_candidato
     return None

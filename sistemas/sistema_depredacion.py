@@ -23,6 +23,7 @@ from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.disposicion import magnitud_disposicion_por_peso as magnitud_disposicion_por_tamano
+from nucleo.indice_espacial import construir_indice_espacial
 # La función real en nucleo/disposicion.py se llama
 # magnitud_disposicion_por_peso -- se importa con alias local
 # (magnitud_disposicion_por_tamano) para no reescribir las llamadas de
@@ -45,6 +46,10 @@ class SistemaDepredacion:
         self.config = config
         self.rng = rng
         self._cachear_configuracion()
+        # IndiceEspacial del tick en curso (2026-09-08) -- ver
+        # sistema_movimiento.py:_indice_actual para el mismo patron y su
+        # justificacion completa.
+        self._indice_actual = None
 
     def _cachear_configuracion(self) -> None:
         """Extrae y tipa los parámetros de combate y rendimiento biológico."""
@@ -116,6 +121,7 @@ class SistemaDepredacion:
         mundo: Mundo,
         reloj: Reloj,
         bus_eventos: BusEventos,
+        indice=None,
     ) -> None:
         """
         Procesa los encuentros de depredación en el tick actual.
@@ -123,7 +129,13 @@ class SistemaDepredacion:
 
         mundo/reloj (2026-09-06, circulo 4a -- sonido fisico): la celda
         del encuentro y el tick actual para emitir el sonido del ataque.
+
+        indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+        construido, opcional -- se guarda en self y lo consultan
+        _es_presa_valida/_resolver_ataque para el bono de caza en manada.
+        Sin indice, se construye uno interno (mismo comportamiento).
         """
+        self._indice_actual = indice if indice is not None else construir_indice_espacial(gestor)
         # La clave de agrupacion incluye zona_idx -- dos entidades con el
         # mismo (x, y) en zonas distintas NO comparten celda (ver
         # componentes/posicion.py).
@@ -199,6 +211,7 @@ class SistemaDepredacion:
         aliados_cazando = contar_conspecificos_cercanos(
             gestor, cazador_id, ident_cazador.especie, pos_x, pos_y,
             self.radio_apoyo_grupal, solo_cazando=True, zona_idx=zona_idx,
+            indice=self._indice_actual,
         )
         peso_maximo_presa = dims_cazador.peso * (
             1.0 + aliados_cazando * self.factor_ampliacion_techo_manada
@@ -291,6 +304,7 @@ class SistemaDepredacion:
             aliados_cazando = contar_conspecificos_cercanos(
                 gestor, cazador_id, ident_cazador.especie, pos_x, pos_y,
                 self.radio_apoyo_grupal, solo_cazando=True, zona_idx=zona_idx,
+                indice=self._indice_actual,
             )
             bono_grupo = min(
                 self.bono_caza_maximo,

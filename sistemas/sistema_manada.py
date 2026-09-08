@@ -23,6 +23,7 @@ from componentes.posicion import Posicion
 from componentes.temperamento import Temperamento
 from nucleo.agrupacion import agrupar_por_proximidad, calcular_centro
 from nucleo.entidad import GestorEntidades, crear_madriguera
+from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.madriguera import madriguera_en
 from nucleo.manada import Manada
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
@@ -60,6 +61,7 @@ class SistemaManada:
         # acumulados a lo largo de la corrida, no individuos unicos --
         # mismo criterio que _stats_madrigueras_sincronizadas.
         self._stats_madriguera_excluidos_por_cupo: int = 0
+        self._indice_actual = None
 
     def _es_colonial(self, especie: Especie) -> bool:
         cfg_especie = self.rangos_raciales.get(especie.value, {})
@@ -68,7 +70,13 @@ class SistemaManada:
     def ejecutar(self, gestor: GestorEntidades, mundo: Mundo, reloj: Reloj) -> None:
         """Agrupa fauna por (especie, zona) -- una manada nunca mezcla
         especies distintas ni zonas distintas, mismo criterio ya
-        establecido en Asentamiento."""
+        establecido en Asentamiento.
+
+        Cadencia diaria (2026-09-08, nucleo/indice_espacial.py): construye
+        su propio índice local en vez de recibirlo desde main.py -- llamada
+        de baja frecuencia, coste despreciable frente a construirlo dos
+        veces por tick como hacen los sistemas per-tick."""
+        self._indice_actual = construir_indice_espacial(gestor)
         posiciones_por_clave: dict[tuple[Especie, int], dict[int, tuple[int, int]]] = {}
         for eid in gestor.entidades_con(Identidad, Posicion, Temperamento):
             ident = gestor.obtener_componente(eid, Identidad)
@@ -135,7 +143,7 @@ class SistemaManada:
 
         sitio = max(conteo, key=lambda s: conteo[s])
 
-        madriguera_id = madriguera_en(gestor, sitio[0], sitio[1], zona_idx)
+        madriguera_id = madriguera_en(gestor, sitio[0], sitio[1], zona_idx, indice=self._indice_actual)
         if madriguera_id is None:
             rango = self.rangos_raciales.get(especie.value, {}).get(
                 "capacidad_madriguera", [10, 10]

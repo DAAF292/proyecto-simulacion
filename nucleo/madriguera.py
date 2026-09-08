@@ -13,15 +13,26 @@ from __future__ import annotations
 from typing import Any
 
 
-def madriguera_en(gestor: Any, pos_x: int, pos_y: int, zona_idx: int) -> int | None:
+def madriguera_en(gestor: Any, pos_x: int, pos_y: int, zona_idx: int, indice=None) -> int | None:
     """Id de la Madriguera en esta celda exacta, si existe -- None si no.
-    Búsqueda lineal O(N) sobre las madrigueras del mundo, mismo criterio
-    de escala ya aceptado en fogata_en/construccion_propia."""
+
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- si se pasa, se consulta indice.en_celda en
+    vez del escaneo lineal O(N) sobre todas las madrigueras del mundo.
+    Sin indice, comportamiento identico a antes."""
     from componentes.madriguera import Madriguera
     from componentes.posicion import Posicion
 
-    for mid in gestor.entidades_con(Madriguera, Posicion):
+    fuente = (
+        indice.en_celda(pos_x, pos_y, zona_idx)
+        if indice is not None
+        else gestor.entidades_con(Madriguera, Posicion)
+    )
+    for mid in fuente:
         pos = gestor.obtener_componente(mid, Posicion)
-        if pos.x == pos_x and pos.y == pos_y and pos.zona_idx == zona_idx:
-            return mid
+        if pos is None or pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
+            continue
+        if gestor.obtener_componente(mid, Madriguera) is None:
+            continue
+        return mid
     return None

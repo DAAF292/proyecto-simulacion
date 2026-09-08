@@ -181,7 +181,10 @@ def asentamiento_de(mundo: Any, id_entidad: int) -> Asentamiento | None:
     return None
 
 
-def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int, zona_idx: int = 0, tipo: str = "almacen"):
+def almacen_cercano(
+    gestor: Any, centro: tuple[int, int], radio: int, zona_idx: int = 0,
+    tipo: str = "almacen", indice=None,
+):
     """Id de la Construccion de tipo `tipo` más cercana a `centro` dentro
     de `radio`, o None -- búsqueda EN VIVO (no el almacen_id cacheado a
     diario en Asentamiento) para no perder una construcción arrancada por
@@ -198,18 +201,28 @@ def almacen_cercano(gestor: Any, centro: tuple[int, int], radio: int, zona_idx: 
     zona_idx: sin este filtro, un almacén en una cueva y otro en
     superficie (o en otra cueva) con coordenadas numéricamente cercanas
     se confundirían entre sí -- caso real con varias cuevas por mundo
-    compartiendo rangos de coordenadas pequeños."""
+    compartiendo rangos de coordenadas pequeños.
+
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- si se pasa, se consulta indice.en_radio en
+    vez del escaneo lineal O(N) sobre todas las construcciones del
+    mundo. Sin indice, comportamiento identico a antes."""
     from componentes.construccion import Construccion
     from componentes.posicion import Posicion
 
     mejor = None
     mejor_dist = None
-    for cid in gestor.entidades_con(Construccion, Posicion):
+    fuente = (
+        indice.en_radio(centro[0], centro[1], zona_idx, radio)
+        if indice is not None
+        else gestor.entidades_con(Construccion, Posicion)
+    )
+    for cid in fuente:
         construccion = gestor.obtener_componente(cid, Construccion)
-        if construccion.tipo != tipo:
+        if construccion is None or construccion.tipo != tipo:
             continue
         pos = gestor.obtener_componente(cid, Posicion)
-        if pos.zona_idx != zona_idx:
+        if pos is None or pos.zona_idx != zona_idx:
             continue
         dist = abs(pos.x - centro[0]) + abs(pos.y - centro[1])
         if dist <= radio and (mejor_dist is None or dist < mejor_dist):

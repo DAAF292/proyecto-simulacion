@@ -38,6 +38,7 @@ from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
 from nucleo.asentamiento import almacen_cercano, asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
 from nucleo.disposicion import contar_conspecificos_cercanos
+from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.intercambio import transferir_recurso
 from nucleo.inventario import espacio_disponible_provisiones_kg
 from nucleo.manada import manada_de
@@ -69,6 +70,13 @@ class SistemaMovimiento:
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
         self.config = config
         self.rng = rng
+        # IndiceEspacial del tick en curso (2026-09-08) -- None hasta la
+        # primera llamada a ejecutar(); los metodos _calcular_* que lo
+        # consultan lo pasan tal cual a las funciones de nucleo/*.py, que
+        # con indice=None hacen su propio escaneo interno (comportamiento
+        # identico a antes). Permite llamar a _calcular_* directamente en
+        # tests aislados sin pasar por ejecutar() primero.
+        self._indice_actual = None
         # Contadores de actividad para la verificacion contra el motor real
         # (BOSQUE_AUTO_TICKS) y los tests dirigidos: cuantas veces este
         # sistema resolvio un roce social y cuantas un CRISIS_VIOLENTA con
@@ -326,6 +334,7 @@ class SistemaMovimiento:
         gestor: GestorEntidades,
         mundo: Mundo,
         reloj: Any | None = None,
+        indice=None,
     ) -> None:
         """
         Ejecuta el paso de movimiento para todas las criaturas con Intencion y Posicion.
@@ -334,7 +343,17 @@ class SistemaMovimiento:
         ocupado con el tick actual (ultima_actualizacion_tick de los
         vínculos, nucleo/relaciones.py). Sin reloj (tests aislados) se usa
         tick 0.
+
+        indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+        construido, opcional -- si no se pasa, se construye uno interno
+        (mismo criterio que _pares_conflicto_resueltos_este_tick: estado
+        de este tick, guardado en self y leido por los metodos _calcular_*
+        internos en vez de enhebrarlo como parametro explicito por cada
+        uno de ellos). Refleja el cierre del tick anterior -- todo el
+        calculo de intencion/movimiento de este tick ve la misma foto,
+        con independencia del orden en que se procese cada entidad.
         """
+        self._indice_actual = indice if indice is not None else construir_indice_espacial(gestor)
         tick_actual: int = reloj.tick_actual if reloj is not None else 0
         # Reiniciado cada tick -- ver docstring en __init__ sobre por que
         # _resolver_conflicto_entre necesita saber que pares ya se resolvieron
@@ -578,6 +597,7 @@ class SistemaMovimiento:
             agudeza_sensorial=agudeza_sensorial,
             radio_busqueda_sonido=self.radio_busqueda_maxima_sonido,
             config=self.config,
+            indice=self._indice_actual,
         )
         if amenaza_pos is None:
             return self._paso_aleatorio()
@@ -826,7 +846,7 @@ class SistemaMovimiento:
             return None
         cid = almacen_cercano(
             gestor, asen.centro, self.radio_cluster_asentamiento,
-            zona_idx=asen.zona_idx, tipo="salon_comun",
+            zona_idx=asen.zona_idx, tipo="salon_comun", indice=self._indice_actual,
         )
         if cid is None:
             return None
@@ -1271,12 +1291,23 @@ class SistemaMovimiento:
         aliados_cazando = contar_conspecificos_cercanos(
             gestor, cazador_id, especie, pos_x, pos_y,
             self.radio_apoyo_grupal, solo_cazando=True, zona_idx=zona_idx,
+            indice=self._indice_actual,
         )
         peso_maximo_presa = peso_cazador * (
             1.0 + aliados_cazando * self.factor_ampliacion_techo_manada
         )
         presas = []
-        for eid in gestor.entidades_con(Posicion, DimensionesFisicas):
+        # radio_efectivo_por_peso siempre devuelve <= radio (reduce el
+        # alcance para presas por debajo del peso de referencia, nunca lo
+        # amplia) -- indice.en_radio(radio) es una sobre-aproximacion
+        # segura del candidato final, filtrado exacto abajo sin cambios
+        # (2026-09-08, nucleo/indice_espacial.py).
+        candidatos = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Posicion, DimensionesFisicas)
+        )
+        for eid in candidatos:
             if eid == cazador_id:
                 continue
             pos_p = gestor.obtener_componente(eid, Posicion)
@@ -1491,7 +1522,15 @@ class SistemaMovimiento:
             return self._paso_aleatorio()
 
         candidatos = []
-        for eid in gestor.entidades_con(Reproduccion, Posicion, Identidad):
+        # 2026-09-08 (nucleo/indice_espacial.py): en_radio ya acota a la
+        # zona/celda correctas -- el resto del filtrado (sexo, especie,
+        # gestacion) sigue exactamente igual sobre la lista local.
+        fuente = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Reproduccion, Posicion, Identidad)
+        )
+        for eid in fuente:
             if eid == entidad_id:
                 continue
             pos_c = gestor.obtener_componente(eid, Posicion)
@@ -1540,9 +1579,21 @@ class SistemaMovimiento:
         búsqueda lineal ya usado en _calcular_caza/_calcular_pareja de este
         archivo -- O(N) por individuo, límite conocido de escalabilidad
         si la población crece en órdenes de magnitud.
+
+        2026-09-08: si self._indice_actual está disponible (ver
+        nucleo/indice_espacial.py), se usa indice.en_radio en vez del
+        escaneo O(N) sobre toda la población -- el límite arriba
+        documentado queda resuelto cuando ejecutar() ya construyó el
+        índice; sin él (llamada aislada en tests), comportamiento
+        idéntico a antes.
         """
         candidatos = []
-        for eid in gestor.entidades_con(Identidad, Posicion):
+        fuente = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Identidad, Posicion)
+        )
+        for eid in fuente:
             if eid == entidad_id:
                 continue
             ident_c = gestor.obtener_componente(eid, Identidad)
@@ -2095,7 +2146,8 @@ class SistemaMovimiento:
         dónde ir, sistema_recursos.py decide qué pasa al llegar).
         """
         objetivo = objetivo_construccion_actual(
-            gestor, mundo, entidad_id, self.radio_cluster_asentamiento
+            gestor, mundo, entidad_id, self.radio_cluster_asentamiento,
+            indice=self._indice_actual,
         )
         if objetivo is None:
             return (0, 0)

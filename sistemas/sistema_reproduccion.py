@@ -90,19 +90,32 @@ from nucleo.reloj import Reloj
 def _macho_elegible_en_contacto(
     gestor, candidatos: list, id_hembra: int, especie_hembra, posicion_hembra,
     tick_actual: int, rangos_raciales: dict, fraccion_madurez: float,
+    indice=None,
 ):
-    for id_macho in candidatos:
+    """indice (2026-09-08, nucleo/indice_espacial.py): si se pasa, se
+    consulta indice.en_celda (contacto exige celda EXACTA) en vez de
+    escanear la lista `candidatos` entera para cada hembra. El indice no
+    filtra por Reproduccion/Identidad -- se añaden guards explícitos
+    para candidatos que no las tengan (p.ej. una Construccion en la
+    misma celda). Sin indice, comportamiento identico a antes."""
+    fuente = (
+        indice.en_celda(posicion_hembra.x, posicion_hembra.y, posicion_hembra.zona_idx)
+        if indice is not None
+        else candidatos
+    )
+    for id_macho in fuente:
         if id_macho == id_hembra:
             continue
         identidad_macho = gestor.obtener_componente(id_macho, Identidad)
-        if identidad_macho.especie != especie_hembra:
+        if identidad_macho is None or identidad_macho.especie != especie_hembra:
             continue
         rep_macho = gestor.obtener_componente(id_macho, Reproduccion)
-        if rep_macho.sexo != Sexo.MACHO:
+        if rep_macho is None or rep_macho.sexo != Sexo.MACHO:
             continue
         posicion_macho = gestor.obtener_componente(id_macho, Posicion)
         if (
-            posicion_macho.x != posicion_hembra.x
+            posicion_macho is None
+            or posicion_macho.x != posicion_hembra.x
             or posicion_macho.y != posicion_hembra.y
             or posicion_macho.zona_idx != posicion_hembra.zona_idx
         ):
@@ -232,16 +245,23 @@ class SistemaReproduccion:
         self.config = config
         self.rng = rng
 
-    def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos) -> None:
+    def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos, indice=None) -> None:
         # mundo es necesario: el nacimiento consulta la profundidad de
         # agua de la celda del parto (celda_nacimiento_segura), y se pasa
         # `mundo` entero en vez de una unica `zona` fija porque cada
         # madre puede estar en una zona distinta (ver
         # _resolver_nacimientos).
-        actualizar(gestor, self.config, self.rng, bus_eventos, reloj.tick_actual, mundo)
+        #
+        # indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial
+        # ya construido, opcional -- se reenvia a
+        # _macho_elegible_en_contacto (contacto para concepcion). Sin
+        # indice, comportamiento identico a antes.
+        actualizar(gestor, self.config, self.rng, bus_eventos, reloj.tick_actual, mundo, indice=indice)
 
 
-def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mundo) -> None:
+def actualizar(
+    gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mundo, indice=None,
+) -> None:
     # Nacimientos y concepcion se evaluan cada tick, no una vez al dia.
     _resolver_nacimientos(gestor, config, rng, bus, tick_actual, mundo)
 
@@ -273,7 +293,7 @@ def actualizar(gestor, config: dict, rng, bus: BusEventos, tick_actual: int, mun
         posicion_hembra = gestor.obtener_componente(id_hembra, Posicion)
         id_macho = _macho_elegible_en_contacto(
             gestor, candidatos, id_hembra, identidad_hembra.especie, posicion_hembra,
-            tick_actual, rangos_raciales, fraccion_madurez,
+            tick_actual, rangos_raciales, fraccion_madurez, indice=indice,
         )
         if id_macho is None:
             continue

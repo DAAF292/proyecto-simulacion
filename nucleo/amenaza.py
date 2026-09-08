@@ -71,7 +71,7 @@ def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
                                   zona_idx: int = 0, peso_agresividad_candidato: float = 0.0,
                                   valentia_propia: float = 0.0, factor_valentia_amenaza: float = 0.0,
                                   tick_actual: int = 0, agudeza_sensorial: float = 0.0,
-                                  radio_busqueda_sonido: int = 0, config=None):
+                                  radio_busqueda_sonido: int = 0, config=None, indice=None):
     """Posicion (x, y) de la amenaza mas cercana -- por criatura,
     ambiental o sonido -- dentro del radio de percepcion. None si no se
     percibe ninguna.
@@ -99,12 +99,19 @@ def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
     o config=None) la fuente por sonido esta desactivada y el
     comportamiento es identico a antes de esta pieza. Los tres
     consumidores reales pasan el tick actual, la agudeza sensorial del
-    que percibe y el radio de busqueda cacheado de config."""
+    que percibe y el radio de busqueda cacheado de config.
+
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- se propaga tal cual a
+    posicion_mas_cercana_por_disposicion (unica fuente de las tres que
+    escanea entidades; ambiental y sonido escanean celdas, sin cambios).
+    Sin indice, comportamiento identico a antes."""
     global AMENAZAS_POR_SONIDO
     amenaza_criatura = posicion_mas_cercana_por_disposicion(
         gestor, id_propio, x, y, radio, peso_propio, umbral_disposicion, buscar_mayor=True,
         zona_idx=zona_idx, peso_agresividad_candidato=peso_agresividad_candidato,
         valentia_propia=valentia_propia, factor_valentia_amenaza=factor_valentia_amenaza,
+        indice=indice,
     )
     amenaza_ambiental = celda_percibida(zona, x, y, radio, _es_celda_peligrosa)
 

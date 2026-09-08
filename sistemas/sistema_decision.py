@@ -420,17 +420,22 @@ class SistemaDecision:
             self.config.get("sonido", {}).get("radio_busqueda_maxima_sonido", 0)
         )
 
-    def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos) -> None:
-        actualizar(gestor, mundo, self.config, bus_eventos, reloj.tick_actual, self)
+    def ejecutar(self, gestor, mundo, reloj, bus_eventos: BusEventos, indice=None) -> None:
+        actualizar(gestor, mundo, self.config, bus_eventos, reloj.tick_actual, self, indice=indice)
 
 
 def actualizar(
     gestor, mundo, config: dict, bus: BusEventos, tick_actual: int,
-    sistema_decision=None,
+    sistema_decision=None, indice=None,
 ) -> None:
     # sistema_decision: opcional (SistemaDecision). Solo observacion -- se
     # pasa la instancia para incrementar _stats_socializar_elegidas en la
     # verificacion BOSQUE_AUTO_TICKS. Ningun camino de decision lo lee.
+    #
+    # indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    # construido, opcional -- se reenvia a posicion_amenaza_mas_cercana
+    # (unico consumidor de busqueda por entidad en este sistema). Sin
+    # indice, comportamiento identico a antes.
     base_deambular = config["decision"]["utilidad_deambular_base"]
     config_crisis = config["crisis_mental"]
     umbral_crisis = config_crisis["umbral_estabilidad_crisis"]
@@ -637,7 +642,7 @@ def actualizar(
         cid_objetivo = None
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             objetivo = objetivo_construccion_actual(
-                gestor, mundo, id_entidad, radio_cluster_asentamiento
+                gestor, mundo, id_entidad, radio_cluster_asentamiento, indice=indice
             )
             if objetivo is not None:
                 tipo_objetivo, cid_objetivo, _ = objetivo
@@ -696,7 +701,7 @@ def actualizar(
                 celda_fuego = zona_fuego.obtener_celda(pos.x, pos.y)
                 if (
                     celda_tiene_combustible(celda_fuego, catalogo_materiales)
-                    and fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is None
+                    and fogata_en(gestor, pos.x, pos.y, pos.zona_idx, indice=indice) is None
                 ):
                     utilidad_encender_fuego = 1.0 - necesidades.confort_termico
 
@@ -709,7 +714,7 @@ def actualizar(
         # Inventario.provisiones.
         utilidad_cocinar = 0.0
         if cap_mental.consciencia >= umbral_consciencia_agencia:
-            if fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+            if fogata_en(gestor, pos.x, pos.y, pos.zona_idx, indice=indice) is not None:
                 provisiones_cocinar = inventario.provisiones if inventario is not None else {}
                 tiene_crudo = any(
                     not r.endswith("_elaborada") and c > 0.0
@@ -876,6 +881,7 @@ def actualizar(
             agudeza_sensorial=dims.agudeza_sensorial,
             radio_busqueda_sonido=radio_busqueda_sonido,
             config=config,
+            indice=indice,
         ) is not None
         deseo_empunar = amenaza_ahora or (
             (1.0 - necesidades.seguridad)

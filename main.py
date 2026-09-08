@@ -32,6 +32,7 @@ from componentes.relaciones import Relaciones
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
+from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.mundo import Mundo
 from nucleo import amenaza as nucleo_amenaza
 from nucleo import asentamiento as nucleo_asentamiento
@@ -379,29 +380,45 @@ def ejecutar_tick(
     """
     Ejecuta un ciclo completo de simulación estructurado en tres fases desacopladas
     y resuelve el corte de día si corresponde.
+
+    Indice espacial compartido (2026-09-08, ver
+    docs/superpowers/specs/2026-09-08-indice-espacial-design.md):
+    construido DOS veces por tick, no una vez por entidad -- Indice A
+    refleja el cierre del tick anterior (decision + todo el calculo
+    interno de movimiento ven la misma foto, con independencia del orden
+    en que se procese cada entidad); Indice B se reconstruye tras
+    movimiento (posiciones ya actualizadas este tick) para los sistemas
+    que resuelven contacto/percepcion posteriores. Sistemas de cadencia
+    diaria (asentamiento, manada) construyen el suyo propio localmente,
+    sin recibirlo desde aqui.
     """
+    indice_a = construir_indice_espacial(gestor)
+
     # ---------------------------------------------------------
     # FASE 1: PERCEPCIÓN Y TOMA DE DECISIONES
     # ---------------------------------------------------------
-    sistemas["decision"].ejecutar(gestor, mundo, reloj, bus_eventos)
+    sistemas["decision"].ejecutar(gestor, mundo, reloj, bus_eventos, indice=indice_a)
 
     # ---------------------------------------------------------
     # FASE 2: ACCIÓN, CINEMÁTICA Y CONTACTO FÍSICO
     # ---------------------------------------------------------
-    sistemas["movimiento"].ejecutar(gestor, mundo, reloj)
+    sistemas["movimiento"].ejecutar(gestor, mundo, reloj, indice=indice_a)
+
+    indice_b = construir_indice_espacial(gestor)
+
     sistemas["desastres"].procesar_fuego_tick(gestor, mundo, reloj, bus_eventos)
-    sistemas["depredacion"].ejecutar(gestor, mundo, reloj, bus_eventos)
+    sistemas["depredacion"].ejecutar(gestor, mundo, reloj, bus_eventos, indice=indice_b)
 
     # ---------------------------------------------------------
     # FASE 3: METABOLISMO, RECURSOS Y RESOLUCIÓN VITAL
     # ---------------------------------------------------------
     sistemas["recursos"].ejecutar(gestor, mundo, reloj, bus_eventos)
-    sistemas["necesidades"].ejecutar(gestor, mundo, reloj, bus_eventos)
+    sistemas["necesidades"].ejecutar(gestor, mundo, reloj, bus_eventos, indice=indice_b)
     sistemas["capacidad_fisica"].ejecutar(gestor)
     sistemas["capacidad_mental"].ejecutar(gestor)
     # reproduccion recibe mundo: el nacimiento consulta la profundidad de
     # agua de la celda del parto (celda_nacimiento_segura).
-    sistemas["reproduccion"].ejecutar(gestor, mundo, reloj, bus_eventos)
+    sistemas["reproduccion"].ejecutar(gestor, mundo, reloj, bus_eventos, indice=indice_b)
 
     # ---------------------------------------------------------
     # CIERRE DE TICK Y CADENCIAS TEMPORALES

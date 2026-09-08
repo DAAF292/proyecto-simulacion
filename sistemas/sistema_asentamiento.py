@@ -36,6 +36,7 @@ from nucleo.asentamiento import (
 )
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.mundo import Mundo
@@ -55,6 +56,7 @@ class SistemaAsentamiento:
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
         )
         self._miembros_vistos_ayer: set[frozenset[int]] = set()
+        self._indice_actual = None
         # Observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b -- ver
         # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md):
         # cuántas aplicaciones reales de lealtad diaria miembro->líder se
@@ -69,6 +71,10 @@ class SistemaAsentamiento:
         reloj: Reloj,
         bus_eventos: BusEventos,
     ) -> None:
+        # Cadencia diaria (2026-09-08, nucleo/indice_espacial.py):
+        # construye su propio indice local -- llamada de baja frecuencia,
+        # mismo criterio que sistema_manada.py.
+        self._indice_actual = construir_indice_espacial(gestor)
         # 1. Refugios que llegaron a estar TERMINADOS alguna vez, por
         # propietario -- pertenencia usa completado_alguna_vez, no
         # progreso: uno a medio construir por PRIMERA vez
@@ -125,7 +131,10 @@ class SistemaAsentamiento:
                 centro=centro,
                 miembros=clave,
                 lideres=frozenset(lideres),
-                almacen_id=almacen_cercano(gestor, centro, self.radio_cluster, zona_idx=zona_asentamiento),
+                almacen_id=almacen_cercano(
+                    gestor, centro, self.radio_cluster, zona_idx=zona_asentamiento,
+                    indice=self._indice_actual,
+                ),
                 zona_idx=zona_asentamiento,
             )
             nuevos[siguiente_id] = asentamiento

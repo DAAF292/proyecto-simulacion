@@ -20,12 +20,21 @@ from typing import Any
 # mantenerlos diferidos evita crearlo en el futuro.
 
 
-def construccion_propia(gestor: Any, id_propietario: int, tipo: str):
+def construccion_propia(gestor: Any, id_propietario: int, tipo: str, indice=None):
     """Id de la Construccion de este tipo cuyo propietario_id es
-    id_propietario, si existe -- None si no. Búsqueda lineal O(N) sobre
-    las construcciones del mundo, mismo límite de escalabilidad ya
-    aceptado en el resto del motor (contar_conspecificos_cercanos,
-    _buscar_conspecifico_mas_cercano) a esta escala de población."""
+    id_propietario, si existe -- None si no.
+
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- una Construccion no se mueve, así que
+    consultarla por radio no tiene sentido; en cambio, un propietario
+    suele tener su Construccion en su propia celda o cerca -- no
+    obstante, sin una coordenada de búsqueda garantizada (el propietario
+    puede estar lejos de su refugio a medio construir), esta función
+    sigue escaneando gestor.entidades_con(Construccion) tal cual, sin
+    indice -- el parámetro se acepta por uniformidad con el resto del
+    módulo pero no se usa aquí. Búsqueda lineal O(N) sobre las
+    construcciones del mundo (mucho menor que la población total),
+    límite de escalabilidad conocido y aceptado a esta escala."""
     from componentes.construccion import Construccion
 
     for cid in gestor.entidades_con(Construccion):
@@ -35,21 +44,33 @@ def construccion_propia(gestor: Any, id_propietario: int, tipo: str):
     return None
 
 
-def hay_construccion_de_tipo_en(gestor: Any, pos_x: int, pos_y: int, zona_idx: int, tipo: str) -> bool:
+def hay_construccion_de_tipo_en(
+    gestor: Any, pos_x: int, pos_y: int, zona_idx: int, tipo: str, indice=None
+) -> bool:
     """True si hay una Construccion de este `tipo`, completado_alguna_vez,
     en esta celda exacta -- CUALQUIERA, no solo quien la construyó (un
     sitio abriga a quien esté dentro, mismo criterio ya establecido para
     refugio/fogata/madriguera). Generaliza nucleo/fuego.py:hay_refugio_en
-    (2026-09-08, salón común) para su segundo consumidor real."""
+    (2026-09-08, salón común) para su segundo consumidor real.
+
+    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+    construido, opcional -- si se pasa, se consulta indice.en_celda en
+    vez del escaneo lineal O(N) sobre todas las construcciones del
+    mundo. Sin indice, comportamiento identico a antes."""
     from componentes.construccion import Construccion
     from componentes.posicion import Posicion
 
-    for cid in gestor.entidades_con(Construccion, Posicion):
+    fuente = (
+        indice.en_celda(pos_x, pos_y, zona_idx)
+        if indice is not None
+        else gestor.entidades_con(Construccion, Posicion)
+    )
+    for cid in fuente:
         pos = gestor.obtener_componente(cid, Posicion)
-        if pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
+        if pos is None or pos.x != pos_x or pos.y != pos_y or pos.zona_idx != zona_idx:
             continue
         construccion = gestor.obtener_componente(cid, Construccion)
-        if construccion.tipo == tipo and construccion.completado_alguna_vez:
+        if construccion is not None and construccion.tipo == tipo and construccion.completado_alguna_vez:
             return True
     return False
 
@@ -144,7 +165,7 @@ def espacio_disponible_para_construir(
 
 
 def objetivo_construccion_actual(
-    gestor: Any, mundo: Any, id_entidad: int, radio_cluster: int
+    gestor: Any, mundo: Any, id_entidad: int, radio_cluster: int, indice=None
 ):
     """(tipo, cid_existente_o_None, posicion_de_creacion_o_None) del
     objetivo de CONSTRUIR/RECOLECTAR de este individuo ahora mismo, o
@@ -162,7 +183,7 @@ def objetivo_construccion_actual(
     from componentes.construccion import Construccion
     from nucleo.asentamiento import almacen_cercano, asentamiento_de
 
-    cid_refugio = construccion_propia(gestor, id_entidad, "refugio")
+    cid_refugio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
     if cid_refugio is None:
         return ("refugio", None, None)
     refugio = gestor.obtener_componente(cid_refugio, Construccion)
@@ -173,7 +194,9 @@ def objetivo_construccion_actual(
     if asen is None:
         return None
 
-    cid_almacen = almacen_cercano(gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx)
+    cid_almacen = almacen_cercano(
+        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, indice=indice
+    )
     if cid_almacen is None:
         return ("almacen", None, asen.centro)
     almacen = gestor.obtener_componente(cid_almacen, Construccion)
@@ -181,7 +204,8 @@ def objetivo_construccion_actual(
         return ("almacen", cid_almacen, asen.centro)
 
     cid_salon = almacen_cercano(
-        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo="salon_comun"
+        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo="salon_comun",
+        indice=indice,
     )
     if cid_salon is None:
         return ("salon_comun", None, asen.centro)
