@@ -270,8 +270,7 @@ class SistemaDepredacion:
         # falsas" que el circulo 4b (pista de caza) explota
         # deliberadamente.
         zona_encuentro = mundo.territorio.zonas[zona_idx]
-        celda_encuentro = zona_encuentro.obtener_celda(pos_x, pos_y)
-        emitir_sonido(celda_encuentro, tick_actual, dims_cazador.peso + dims_presa.peso)
+        emitir_sonido(zona_encuentro, pos_x, pos_y, tick_actual, dims_cazador.peso + dims_presa.peso)
 
         # 1. Probabilidad estocástica de éxito del ataque
         #

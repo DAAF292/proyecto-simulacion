@@ -15,6 +15,18 @@ Simplificaciones aceptadas explicitamente en el diseno:
 - `emitir_sonido` SOBRESCRIBE cualquier sonido anterior en esa celda -- no
   se acumulan varios sonidos superpuestos por celda.
 
+**Registro de celdas candidatas (2026-09-08)**: `sonido_mas_cercano`
+escaneaba antes un cuadrado de radio^2 celdas por llamada -- perfilado
+real (ver docs/superpowers/specs/2026-09-08-indice-espacial-design.md,
+"fuera de alcance" de ese circulo, resuelto aqui aparte) mostro que la
+inmensa mayoria de esas celdas nunca tienen sonido activo (dura solo
+`duracion_sonido_ticks`). `ZonaBioma.sonidos_activos` (un `set` de
+coordenadas) sustituye ese escaneo por una lista corta de "donde mirar" --
+`emitir_sonido` la alimenta, `sonido_mas_cercano` la auto-poda (una
+entrada expirada se descarta la primera vez que se consulta). Celda
+sigue siendo la fuente real de tick/magnitud -- el set solo indica
+coordenadas candidatas, evita duplicar el dato.
+
 Historico de decisiones: spec 4a en docs/superpowers/specs/.
 """
 
@@ -25,16 +37,19 @@ Historico de decisiones: spec 4a en docs/superpowers/specs/.
 SONIDOS_EMITIDOS_TOTALES: int = 0
 
 
-def emitir_sonido(celda, tick_actual: int, magnitud: float) -> None:
-    """Registra el evento sonoro mas reciente en la celda -- sobrescribe
-    cualquier sonido anterior ahi, no se acumulan varios.
+def emitir_sonido(zona, pos_x: int, pos_y: int, tick_actual: int, magnitud: float) -> None:
+    """Registra el evento sonoro mas reciente en la celda (pos_x, pos_y)
+    de `zona` -- sobrescribe cualquier sonido anterior ahi, no se
+    acumulan varios.
 
-    La celda es la Celda fisica del encuentro (el buffer de sonido vive en
-    el mundo, no en el bus de eventos: ver docstring del modulo).
-    """
+    zona/pos_x/pos_y (2026-09-08, antes solo recibia la Celda): hace
+    falta la coordenada, no solo el objeto Celda, para poder registrarla
+    en `zona.sonidos_activos` (ver docstring del modulo)."""
     global SONIDOS_EMITIDOS_TOTALES
+    celda = zona.obtener_celda(pos_x, pos_y)
     celda.sonido_tick_emitido = tick_actual
     celda.sonido_magnitud = magnitud
+    zona.sonidos_activos.add((pos_x, pos_y))
     SONIDOS_EMITIDOS_TOTALES += 1
 
 
@@ -67,26 +82,33 @@ def sonido_mas_cercano(
     zona, pos_x: int, pos_y: int, radio_busqueda_maxima: int,
     tick_actual: int, agudeza_sensorial: float, config: dict,
 ) -> tuple[int, int] | None:
-    """Escanea celdas dentro de radio_busqueda_maxima (techo de
-    escaneo, no el alcance real); para cada celda con sonido activo,
+    """Busca en zona.sonidos_activos (registro pequeño de "donde mirar",
+    ver docstring del modulo) en vez de escanear las radio_busqueda_maxima^2
+    celdas del vecindario -- para cada candidato con sonido activo,
     calcula SU alcance audible real (segun su propia magnitud) y lo
-    compara contra la distancia real. Devuelve la mas cercana que SI es
-    audible, o None."""
+    compara contra la distancia real (acotada a radio_busqueda_maxima,
+    mismo techo de escaneo que antes). Devuelve la mas cercana que SI es
+    audible, o None.
+
+    Auto-poda: cualquier candidato ya expirado se descarta del registro
+    en esta misma llamada -- no hace falta un barrido aparte."""
     cfg = config.get("sonido", {})
     duracion_ticks = int(cfg.get("duracion_sonido_ticks", 5))
     mejor = None
     mejor_dist = radio_busqueda_maxima + 1
-    for dy in range(-radio_busqueda_maxima, radio_busqueda_maxima + 1):
-        for dx in range(-radio_busqueda_maxima, radio_busqueda_maxima + 1):
-            nx, ny = pos_x + dx, pos_y + dy
-            if not (0 <= nx < zona.ancho and 0 <= ny < zona.alto):
-                continue
-            celda = zona.obtener_celda(nx, ny)
-            if not _sonido_activo(celda, tick_actual, duracion_ticks):
-                continue
-            dist = abs(dx) + abs(dy)
-            alcance = _radio_audible(celda.sonido_magnitud, agudeza_sensorial, config)
-            if dist <= alcance and dist < mejor_dist:
-                mejor = (nx, ny)
-                mejor_dist = dist
+    expirados = []
+    for (cx, cy) in zona.sonidos_activos:
+        celda = zona.obtener_celda(cx, cy)
+        if not _sonido_activo(celda, tick_actual, duracion_ticks):
+            expirados.append((cx, cy))
+            continue
+        dist = abs(cx - pos_x) + abs(cy - pos_y)
+        if dist > radio_busqueda_maxima:
+            continue
+        alcance = _radio_audible(celda.sonido_magnitud, agudeza_sensorial, config)
+        if dist <= alcance and dist < mejor_dist:
+            mejor = (cx, cy)
+            mejor_dist = dist
+    for clave in expirados:
+        zona.sonidos_activos.discard(clave)
     return mejor

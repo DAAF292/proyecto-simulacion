@@ -87,7 +87,7 @@ def test_sin_presa_con_sonido_audible_avanza_hacia_el_sonido() -> None:
     gestor = GestorEntidades()
     zona = _zona_manual()
     lobo = _lobo(gestor, config, rng, x=5, y=5)
-    emitir_sonido(zona.obtener_celda(5, 8), tick_actual=100, magnitud=360.0)
+    emitir_sonido(zona, 5, 8, tick_actual=100, magnitud=360.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
     sistema = SistemaMovimiento(config, rng)
 
@@ -111,7 +111,7 @@ def test_sin_presa_con_sonido_expirado_cae_a_paso_aleatorio() -> None:
     zona = _zona_manual()
     lobo = _lobo(gestor, config, rng, x=5, y=5)
     # emitido en tick 90, duracion 5 -> expira en tick 95; ahora es tick 100
-    emitir_sonido(zona.obtener_celda(5, 8), tick_actual=90, magnitud=360.0)
+    emitir_sonido(zona, 5, 8, tick_actual=90, magnitud=360.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
     sistema = SistemaMovimiento(config, rng)
 
@@ -132,7 +132,7 @@ def test_sin_presa_con_sonido_fuera_de_alcance_cae_a_paso_aleatorio() -> None:
     zona = _zona_manual()
     lobo = _lobo(gestor, config, rng, x=5, y=5)
     # magnitud 10kg -> alcance 0.25, inaudible a distancia 3
-    emitir_sonido(zona.obtener_celda(5, 8), tick_actual=100, magnitud=10.0)
+    emitir_sonido(zona, 5, 8, tick_actual=100, magnitud=10.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
     sistema = SistemaMovimiento(config, rng)
 
@@ -153,7 +153,7 @@ def test_sin_zona_el_fallback_queda_desactivado() -> None:
     gestor = GestorEntidades()
     zona = _zona_manual()
     lobo = _lobo(gestor, config, rng, x=5, y=5)
-    emitir_sonido(zona.obtener_celda(5, 8), tick_actual=100, magnitud=360.0)
+    emitir_sonido(zona, 5, 8, tick_actual=100, magnitud=360.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
     sistema = SistemaMovimiento(config, rng)
 
@@ -174,7 +174,7 @@ def test_con_presa_valida_el_sonido_nunca_se_consulta(monkeypatch) -> None:
     zona = _zona_manual()
     lobo = _lobo(gestor, config, rng, x=5, y=5)
     _conejo(gestor, config, rng, x=6, y=5)  # presa valida a distancia 1
-    emitir_sonido(zona.obtener_celda(5, 5), tick_actual=100, magnitud=999.0)
+    emitir_sonido(zona, 5, 5, tick_actual=100, magnitud=999.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
 
     def _boom(*args, **kwargs) -> None:
@@ -209,7 +209,7 @@ def test_fallback_apunta_a_presa_real_cuenta_como_caza() -> None:
     lobo = _lobo(gestor, config, rng, x=0, y=0)
     # presa a distancia 11 (> radio 10, fuera de percepcion) pero <= 12
     _conejo(gestor, config, rng, x=0, y=11)
-    emitir_sonido(zona.obtener_celda(0, 11), tick_actual=100, magnitud=999.0)
+    emitir_sonido(zona, 0, 11, tick_actual=100, magnitud=999.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
     sistema = SistemaMovimiento(config, rng)
 
@@ -237,7 +237,7 @@ def test_fallback_apunta_a_necromasa_cuenta_como_carroneo() -> None:
         masas={"tejido_blando": 2.0, "hueso": 1.0},
         agua_tisular=10.0, origen_especie="conejo", zona_idx=0,
     )
-    emitir_sonido(zona.obtener_celda(0, 11), tick_actual=100, magnitud=999.0)
+    emitir_sonido(zona, 0, 11, tick_actual=100, magnitud=999.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
     sistema = SistemaMovimiento(config, rng)
 
@@ -259,7 +259,7 @@ def test_fallback_sin_nada_en_destino_cuenta_como_pista_falsa() -> None:
     gestor = GestorEntidades()
     zona = _zona_manual()
     lobo = _lobo(gestor, config, rng, x=0, y=0)
-    emitir_sonido(zona.obtener_celda(0, 11), tick_actual=100, magnitud=999.0)
+    emitir_sonido(zona, 0, 11, tick_actual=100, magnitud=999.0)
     dims = gestor.obtener_componente(lobo, DimensionesFisicas)
     sistema = SistemaMovimiento(config, rng)
 

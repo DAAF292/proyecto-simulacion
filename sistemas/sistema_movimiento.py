@@ -2043,8 +2043,8 @@ class SistemaMovimiento:
         dims_a = gestor.obtener_componente(a_id, DimensionesFisicas)
         dims_b = gestor.obtener_componente(b_id, DimensionesFisicas)
         if dims_a is not None and dims_b is not None:
-            celda_encuentro = mundo.territorio.zonas[zona_idx].obtener_celda(pos_x, pos_y)
-            emitir_sonido(celda_encuentro, tick_actual, dims_a.peso + dims_b.peso)
+            zona_encuentro = mundo.territorio.zonas[zona_idx]
+            emitir_sonido(zona_encuentro, pos_x, pos_y, tick_actual, dims_a.peso + dims_b.peso)
         return resultado
 
     def _resolver_posible_intruso(

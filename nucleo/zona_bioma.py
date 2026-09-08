@@ -64,6 +64,15 @@ class ZonaBioma:
         self.flora_competidora_inicial: dict[tuple[int, int], list[str]] = (
             flora_competidora_inicial if flora_competidora_inicial is not None else {}
         )
+        # Registro de sonido activo (2026-09-08, nucleo/sonido.py):
+        # coordenadas que TUVIERON un sonido emitido y podrian seguir
+        # activas -- indice pequeno para que sonido_mas_cercano no tenga
+        # que escanear radio^2 celdas por llamada. Se auto-poda solo
+        # (una entrada expirada se descarta la primera vez que se
+        # consulta), no persiste -- mismo criterio que
+        # Celda.sonido_tick_emitido/sonido_magnitud, que siguen siendo la
+        # fuente real de tick/magnitud; este set solo dice DONDE mirar.
+        self.sonidos_activos: set[tuple[int, int]] = set()
         """Viento dominante fijo de la zona, sorteado una vez en la
         generación del mundo (nucleo/orografia.py:
         sortear_viento_dominante) y conservado como atributo de la zona --

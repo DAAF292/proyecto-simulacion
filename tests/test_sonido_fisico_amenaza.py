@@ -83,21 +83,23 @@ def test_emitir_sonido_escribe_y_expira_segun_duracion() -> None:
     """Ley: emitir_sonido escribe el tick y la magnitud, sobrescribe
     cualquier sonido anterior, y _sonido_activo es una ventana binaria
     (dentro de duracion_sonido_ticks) sin decaimiento gradual."""
-    celda = Celda(tipo_terreno=TipoTerreno.PRADERA)
+    zona = _zona_manual()
+    celda = zona.obtener_celda(3, 3)
     assert celda.sonido_tick_emitido == -1
     assert celda.sonido_magnitud == 0.0
     antes = nucleo_sonido.SONIDOS_EMITIDOS_TOTALES
 
-    emitir_sonido(celda, tick_actual=10, magnitud=180.0)
+    emitir_sonido(zona, 3, 3, tick_actual=10, magnitud=180.0)
     assert nucleo_sonido.SONIDOS_EMITIDOS_TOTALES == antes + 1
     assert celda.sonido_tick_emitido == 10
     assert celda.sonido_magnitud == 180.0
+    assert (3, 3) in zona.sonidos_activos
     assert _sonido_activo(celda, tick_actual=10, duracion_ticks=5) is True
     assert _sonido_activo(celda, tick_actual=15, duracion_ticks=5) is True
     assert _sonido_activo(celda, tick_actual=16, duracion_ticks=5) is False
 
     # Sobrescribe -- no se acumulan varios sonidos por celda.
-    emitir_sonido(celda, tick_actual=12, magnitud=50.0)
+    emitir_sonido(zona, 3, 3, tick_actual=12, magnitud=50.0)
     assert celda.sonido_tick_emitido == 12
     assert celda.sonido_magnitud == 50.0
 
@@ -147,7 +149,7 @@ def test_sonido_mas_cercano_encuentra_el_audible_mas_cercano() -> None:
     dentro del radio de busqueda pero fuera de SU alcance no se oye."""
     zona = _zona_manual()
     config = _config()
-    emitir_sonido(zona.obtener_celda(3, 3), tick_actual=10, magnitud=90.0)
+    emitir_sonido(zona, 3, 3, tick_actual=10, magnitud=90.0)
     # Desde (2,2), distancia 2 <= alcance 2.25 -> audible.
     assert sonido_mas_cercano(
         zona, 2, 2, radio_busqueda_maxima=12, tick_actual=10,
@@ -165,7 +167,7 @@ def test_sonido_mas_cercano_ignora_sonido_expirado() -> None:
     todo el mundo, aunque la celda conserva los campos escritos."""
     zona = _zona_manual()
     config = _config()
-    emitir_sonido(zona.obtener_celda(2, 2), tick_actual=10, magnitud=400.0)
+    emitir_sonido(zona, 2, 2, tick_actual=10, magnitud=400.0)
     assert sonido_mas_cercano(
         zona, 0, 0, radio_busqueda_maxima=12, tick_actual=14,
         agudeza_sensorial=0.5, config=config,
@@ -184,7 +186,7 @@ def test_sonido_mas_cercano_ignora_sonido_pequeno_lejano() -> None:
     zona = _zona_manual()
     config = _config()
     # magnitud 10kg -> alcance = 3 * (10/90) * 0.75 = 0.25.
-    emitir_sonido(zona.obtener_celda(5, 5), tick_actual=10, magnitud=10.0)
+    emitir_sonido(zona, 5, 5, tick_actual=10, magnitud=10.0)
     assert sonido_mas_cercano(
         zona, 5, 6, radio_busqueda_maxima=12, tick_actual=10,
         agudeza_sensorial=0.5, config=config,
@@ -201,8 +203,8 @@ def test_sonido_mas_cercano_elige_la_mas_cercana_de_varias() -> None:
     Manhattan."""
     zona = _zona_manual()
     config = _config()
-    emitir_sonido(zona.obtener_celda(2, 2), tick_actual=10, magnitud=90.0)
-    emitir_sonido(zona.obtener_celda(6, 6), tick_actual=10, magnitud=900.0)
+    emitir_sonido(zona, 2, 2, tick_actual=10, magnitud=90.0)
+    emitir_sonido(zona, 6, 6, tick_actual=10, magnitud=900.0)
     # Desde (1,1): (2,2) a dist 2 audible; (6,6) a dist 10, alcance
     # 3*(900/90)*0.75=22.5, audible pero mas lejos.
     assert sonido_mas_cercano(
@@ -320,7 +322,7 @@ def test_sonido_reciente_fuerte_es_amenaza_sin_criatura_visible() -> None:
     mundo = Mundo(10, 10, config, random.Random(11))
     zona = mundo.territorio.zonas[0]
     conejo = crear_criatura(gestor, Especie.CONEJO, 5, 5, config, rng)
-    emitir_sonido(zona.obtener_celda(5, 8), tick_actual=100, magnitud=360.0)
+    emitir_sonido(zona, 5, 8, tick_actual=100, magnitud=360.0)
     dims = gestor.obtener_componente(conejo, DimensionesFisicas)
 
     amenaza = posicion_amenaza_mas_cercana(
@@ -361,7 +363,7 @@ def test_radio_busqueda_sonido_cero_ignora_sonido() -> None:
     mundo = Mundo(10, 10, config, random.Random(15))
     zona = mundo.territorio.zonas[0]
     conejo = crear_criatura(gestor, Especie.CONEJO, 5, 5, config, rng)
-    emitir_sonido(zona.obtener_celda(5, 6), tick_actual=100, magnitud=999.0)
+    emitir_sonido(zona, 5, 6, tick_actual=100, magnitud=999.0)
     dims = gestor.obtener_componente(conejo, DimensionesFisicas)
 
     assert posicion_amenaza_mas_cercana(
@@ -380,7 +382,7 @@ def test_sonido_debil_lejano_no_es_amenaza() -> None:
     zona = mundo.territorio.zonas[0]
     conejo = crear_criatura(gestor, Especie.CONEJO, 5, 5, config, rng)
     # magnitud 10kg -> alcance 0.25, demasiado debil a distancia 3.
-    emitir_sonido(zona.obtener_celda(5, 8), tick_actual=100, magnitud=10.0)
+    emitir_sonido(zona, 5, 8, tick_actual=100, magnitud=10.0)
     dims = gestor.obtener_componente(conejo, DimensionesFisicas)
 
     assert posicion_amenaza_mas_cercana(
