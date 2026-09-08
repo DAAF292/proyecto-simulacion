@@ -6075,3 +6075,78 @@ de referencia ~92-93): 102 → 76 → 69 → 65 → **37 ms/tick** -- una
 reducción del 64% desde el punto de partida, sin cambiar ningún
 comportamiento del motor (solo rendimiento). Con esto, no queda ningún
 coste de escaneo conocido y sin abordar en el motor.
+
+### Círculo 5 -- registro de celdas en llamas, mismo día, y un bug real
+### de orden encontrado y corregido antes de comitear
+
+Mismo patrón exacto que sonidos_activos, aplicado esta vez a
+`sistema_desastres.py:procesar_fuego_tick`, que escaneaba TODA la
+cuadrícula de CADA zona, CADA tick, solo para encontrar qué celda
+seguía ardiendo -- trabajo desperdiciado casi siempre (el fuego es un
+evento raro). `ZonaBioma.celdas_en_llamas` (set de coordenadas)
+sustituye el escaneo, sincronizado en los tres puntos donde
+`en_llamas` muta (ignición diaria, propagación y extinción por tick).
+A diferencia de sonido, **esto SÍ se persiste** (`en_llamas` sobrevive
+a guardar/cargar) -- `nucleo/persistencia.py` repuebla el registro al
+cargar una partida.
+
+**Hallazgo real, encontrado por el propio proceso de verificación de
+este proyecto, no después de comitear**: la primera versión iteraba
+`zona.celdas_en_llamas` (un `set`, sin orden de iteración garantizado)
+directamente. `BOSQUE_AUTO_TICKS=3000` con la misma semilla dio
+contadores DISTINTOS al run anterior (552 sonidos frente a 147,
+distintas muertes de gnomo) -- señal inmediata de que algo divergía.
+Causa: el orden en que se procesan los focos de fuego determina el
+orden en que se consumen tiradas de `rng.random()` (extinción/
+propagación); con un orden distinto al escaneo (y, x) que sustituía,
+toda la secuencia de aleatoriedad posterior del tick se desviaba --
+mismo fenómeno de "cambiar cuántas/en qué orden se llama a rng
+desplaza todo lo demás" ya documentado varias veces en este proyecto
+(Sobrepoblación..., rng_reproduccion). Corregido ordenando el registro
+`sorted(..., key=lambda c: (c[1], c[0]))` antes de procesarlo --
+reverificado con **los mismos contadores exactos** que antes del
+cambio (147 sonidos, 1702 amenaza por sonido, 5+5 muertes de gnomo).
+
+**Verificado**: 380/380 tests (5 nuevos,
+`tests/test_incendio_registro.py` -- sincronización en ignición/
+extinción/propagación, no-op sin fuego, roundtrip de persistencia).
+Ganancia de rendimiento marginal a la escala del mundo por defecto
+(pocos incendios reales), pero corrige una fuente de coste FIJO por
+tick que no dependía de población y que crecería con más zonas/cuevas.
+
+### Análisis final -- perfilado del juego real (con persistencia SQLite
+### incluida, no solo el arnés aislado), tres hallazgos más, ninguno
+### perseguido por decisión de Diego
+
+Pedido explícito de Diego: "analiza si hay algo más que podamos hacer
+para agilizar o mejorar el motor". Perfilado con `cProfile` sobre
+`main.main()` real (800 ticks, semilla por defecto, persistencia
+real) en vez del arnés sin persistir -- reveló tres costes reales de
+naturaleza distinta a los ya corregidos, ninguno un "defecto" limpio:
+
+1. **`sistema_recursos.py:_actualizar_charcos`** (~16% del tiempo del
+   tick): escanea la cuadrícula entera de cada zona cada tick para
+   charcos/humedad de subsuelo. A diferencia de sonido/fuego, la
+   lluvia afecta potencialmente a TODO el mapa -- en los ticks con
+   lluvia el escaneo completo es necesario de verdad, no desperdiciado.
+   Una optimización parcial (registro de celdas con agua residual para
+   saltar el escaneo en ticks SIN lluvia) es posible pero de beneficio
+   parcial y con el mismo riesgo de bug de orden ya visto en el
+   Círculo 5.
+2. **`sqlite3.Connection.commit`** (~8.5% del tiempo total): un commit
+   real a disco por tick. Reducirlo (agrupar varios ticks por commit)
+   ahorraría tiempo real a cambio de aceptar perder más progreso si el
+   proceso muere a mitad de partida -- decisión de diseño de
+   durabilidad, no un bug de rendimiento a corregir sin más.
+3. **`sistema_movimiento.py:_calcular_pareja`** sigue siendo caro, pero
+   ya usa el índice espacial -- el coste restante es proporcional a la
+   densidad LOCAL dentro del radio de búsqueda de pareja (recalibrado
+   hace poco a 3-12 celdas), no a la población global. Esperable, no
+   un defecto.
+
+**Decisión de Diego, dado el riesgo/beneficio de cada uno**: no
+perseguir ninguno de los tres ahora ("los tres cambios grandes de hoy
+ya cubrieron los defectos claros -- estos son trade-offs o mejoras
+marginales con riesgo real, no defectos obvios"). Quedan documentados
+aquí como candidatos reales para una sesión futura de rendimiento, no
+como pendientes urgentes.
