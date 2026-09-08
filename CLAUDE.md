@@ -5765,6 +5765,93 @@ planteadas por Diego para este arco (salón común, edificio de
 liderazgo, cocinas), quedan 2 de 3 cerradas**; ciudad enana sigue fuera
 de alcance hasta que se plantee la raza enana.
 
+## Raza consciente prospera -- gestación/camada de gnomo + deshidratación
+## específica, el bloqueo real detrás de "cocinas comunes invisibles"
+## (2026-09-08, mismo día)
+
+Tras cerrar cocinas comunes, Diego preguntó directamente por qué el
+mecanismo nunca se observaba en juego libre -- la respuesta llevó a
+retomar, con datos frescos y una metodología nueva, la investigación
+de fragilidad de gnomo abierta desde el 2026-09-04 y nunca resuelta
+del todo. Directiva explícita de Diego: "tenemos que lograr que la
+raza consciente prospere".
+
+**Metodología nueva, más precisa que la de investigaciones previas**:
+en vez de esperar a que transcurra el término completo de gestación en
+tiempo real de corrida (200-260 días = 4800-6240 ticks, carísimo de
+alcanzar), se correlaciona cada evento `Concepcion` (entidad_id = madre)
+con un eventual evento `Muerte` de esa MISMA madre por su id -- si la
+muerte ocurre antes de `tick_concepcion + duracion_gestacion_individual`,
+es un fallo confirmado, sin esperar a que el reloj de la simulación
+llegue tan lejos. Arnés en scratchpad, no en el repo.
+
+**Hallazgo real, confirma y agrava el de "Parentesco derivado"
+(2026-09-04)**: en 2 semillas nuevas (solo 4000-4900 ticks alcanzados
+por límite de tiempo real, muy por debajo del término medio de
+gestación), **12 de 18 concepciones de gnomo (67%) ya habían fracasado
+por muerte materna, 0 nacimientos confirmados en ninguna semilla**.
+Causas de muerte dominantes: depredación, deshidratación, vejez (la
+inanición, antaño dominante, ya no lo es tras los fixes previos).
+
+**Fix 1 -- gestación y camada** (`config/poblacion.yaml`, decisión
+tomada con Diego vía pregunta directa, recomendación aceptada):
+`duracion_gestacion_dias` 200-260 → **90-120** (sigue siendo con
+claridad la más larga del catálogo -- 1.3-2x el siguiente más largo,
+caballo 60-90 -- pero deja de ser una ventana de riesgo casi imposible
+de sobrevivir); `camada` fija en `[1,1]` → **`[1,2]`** (mismo orden que
+caballo, gnomo sigue siendo la especie menos prolífica). Mismo patrón
+de dos ingredientes ya validado con lobo/ardilla (hambre+concepción),
+aplicado aquí a gestación+camada porque esos, no hambre/concepción
+(ya calibrados el 2026-09-06), eran el problema real medido.
+Reverificado con las mismas semillas: fallo por muerte materna baja de
+67% a 47%, y aparecen **nacimientos confirmados por primera vez** (0%
+→ 32%).
+
+**Fix 2 -- deshidratación específica de gnomo**, con un A/B real antes
+de tocar nada (mismo criterio de prudencia que ya evitó una
+sobrecorrección con conejo en el pasado): aplicar a hidratación el
+mismo alivio ya validado para saciedad (tasa 15x más lenta,
+probabilidad de muerte 12.5x más baja) de forma UNIVERSAL **dispara a
+conejo de 333 a 702 individuos** en la semilla probada -- confirma con
+datos la sospecha ya anotada (sin verificar) el 2026-09-07 de que la
+deshidratación actúa como un freno de densidad real. Diego, con el
+riesgo ya cuantificado, eligió aplicarlo **solo a gnomo**, mismo patrón
+especie-por-especie ya usado con hambre (lobo→ardilla→gnomo→conejo) en
+vez de universal. Hallazgo de código aparte:
+`probabilidad_muerte_deshidratacion` no soportaba override por
+especie -- asimetría real frente a `probabilidad_muerte_saciedad_critica`,
+que ya ganó ese mismo patrón el 2026-09-05 por el mismo motivo
+(fragilidad de lobo) sin que nadie extendiera el arreglo a
+hidratación. Corregido en `sistema_necesidades.py` con el mismo
+`cfg_esp.get(...)` que el resto de la sección.
+
+**Resultado combinado, verificado con semillas nuevas y la misma
+metodología de correlación**:
+
+| Semilla | Concepciones | Éxito | Gnomos finales |
+|---|---|---|---|
+| 96001 | 10 | **7 (70%)** | **19** (de 18 fundadores) |
+| 96002 | 8 | **5 (62%)** | **15** |
+
+De 0% de éxito reproductivo y población en declive constante en
+CUALQUIER semilla probada, a 62-70% de gestaciones completadas con
+éxito y población que **crece de verdad** en las dos semillas nuevas
+probadas tras ambos fixes. Deshidratación prácticamente desaparece
+como causa de muerte de gnomo (0-1 casos por semilla, antes 5-14).
+393/393 tests en verde en ambos commits.
+
+**Pendiente real, explícito**: ambos cambios son PROVISIONALES, sin
+calibrar contra el harness completo (15×12000); solo 2 semillas nuevas
+verificadas para el resultado combinado -- direccional, no una
+calibración cerrada; la deshidratación de conejo/ardilla sigue sin
+tocar, confirmada ahora con datos como un freno de densidad real (no
+solo sospechado) -- candidato a una investigación propia si se
+retoma, con la misma prudencia ya aplicada aquí (probar antes de
+aplicar, especie por especie); el criterio maestro de Diego (5
+especies vivas a la vez, ≥50% de las semillas) no se remidió con
+ambos fixes ya aplicados -- candidato inmediato si se quiere cerrar
+esa investigación del todo.
+
 ## Sistema de comidas -- dieta real de gnomo + catálogo de toxicidad,
 ## precede a "cómo cocinar" (spec, implementado directamente por Claude,
 ## 2026-09-08)
