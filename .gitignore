@@ -9,3 +9,5 @@ datos/*.db
 .ai-pipeline/watch.log
 .ai-pipeline/trayectorias/
 .ai-pipeline/costes/
+herramientas/harness_log_*.txt
+herramientas/resultados_harness_*.json
