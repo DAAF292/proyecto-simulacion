@@ -6032,3 +6032,46 @@ en el motor, dejando solo `nucleo/sonido.py:sonido_mas_cercano`
 (O(radio²) por celda, un defecto de naturaleza distinta, no resuelto
 por un índice de entidades) como coste real conocido y sin tocar,
 documentado explícitamente en el spec como fuera de alcance.
+
+### Círculo 4 -- registro de sonidos activos, mismo día, a petición
+### explícita de Diego ("como solucionamos eso")
+
+`nucleo/sonido.py:sonido_mas_cercano` escaneaba un cuadrado de
+`radio_busqueda_maxima²` celdas por llamada preguntando "¿hay sonido
+aquí?" -- la inmensa mayoría vacías, dado que un sonido dura solo
+`duracion_sonido_ticks` (5 por defecto). No era el mismo defecto que
+los Círculos 1-3 (no escala con la población, escala con el radio de
+búsqueda, constante), pero seguía siendo trabajo desperdiciado real.
+Bounded (per la skill de brainstorming), sin spec aparte -- mismo
+espíritu del índice espacial: sustituir "recorrer todo el espacio de
+búsqueda" por "recorrer solo lo que puede tener respuesta".
+
+**Diseño**: `ZonaBioma.sonidos_activos: set[tuple[int,int]]` (nuevo) --
+registro de coordenadas que tuvieron un sonido emitido y podrían seguir
+activas. `Celda.sonido_tick_emitido`/`sonido_magnitud` siguen siendo la
+fuente real del dato (sin duplicar tick/magnitud en dos sitios); el set
+solo dice DÓNDE mirar. `emitir_sonido` cambia de firma
+(`celda`) → (`zona, pos_x, pos_y`) para poder registrar la coordenada
+-- dos call sites reales (`sistema_movimiento.py`,
+`sistema_depredacion.py`) y varios tests con la firma vieja
+actualizados. `sonido_mas_cercano` recorre `zona.sonidos_activos` en
+vez del cuadrado de celdas, **auto-podándose**: una entrada expirada se
+descarta la primera vez que se encuentra en cualquier consulta, sin
+necesitar un barrido de limpieza aparte -- el registro se mantiene
+pequeño solo. Mismo techo de escaneo (`radio_busqueda_maxima`) que
+antes, comportamiento idéntico verificado con los contadores exactos
+de `BOSQUE_AUTO_TICKS` (147 sonidos, 1702 amenazas por sonido, 1
+fallback de caza -- mismos números que antes del fix).
+
+**Verificado**: 375/375 tests, perfilado repetido con el mismo arnés --
+a población 92 (escala estable de las cuatro rondas), ms/tick sigue
+bajando: 65 → **37**. A población 279 (coincide exactamente con la
+medición anterior, comparación limpia sin el sesgo de muestreo ya
+señalado): 247 → **149** ms/tick. `sonido_mas_cercano`/`_sonido_activo`
+dejan de aparecer entre los costes dominantes del perfil.
+
+**Balance acumulado del día completo** (Círculos 1-4, misma población
+de referencia ~92-93): 102 → 76 → 69 → 65 → **37 ms/tick** -- una
+reducción del 64% desde el punto de partida, sin cambiar ningún
+comportamiento del motor (solo rendimiento). Con esto, no queda ningún
+coste de escaneo conocido y sin abordar en el motor.
