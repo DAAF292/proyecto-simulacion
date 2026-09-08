@@ -5979,3 +5979,56 @@ para la escala actual; si el número de entidades sube en órdenes de
 magnitud en el futuro, la siguiente palanca sería mantenerlo
 incremental en vez de reconstruirlo, no evaluada aquí por no hacer
 falta todavía.
+
+### Círculo 3 -- el resto del motor, mismo día, a petición explícita de
+### Diego ("yo lo arreglaría ahora para dejar el motor lo más eficiente
+### posible y sin deuda técnica")
+
+Sin decisión de diseño nueva -- mismo índice ya construido, mismo
+patrón exacto, aplicado al resto de funciones de
+`sistema_movimiento.py` que hacían su propio escaneo O(N) ad-hoc sin
+pasar nunca por `nucleo/disposicion.py`: `_entidad_cercana_cualquiera`,
+`_entidad_cercana_cualquiera_con_id`, `_consciente_mas_cercano_con_id`
+(HUIDA_ERRATICA, CRISIS_VIOLENTA, SOCIALIZAR), `_clasificar_destino_sonido`
+(presa y necromasa, solo observación), `_calcular_forrajeo` (necromasa),
+`_resolver_posible_intruso` (conflicto por refugio ocupado). También
+`sistema_recursos.py:_resolver_comer` (carroñeo de Necromasa) -- este
+sí necesitó enhebrar el parámetro por primera vez en `SistemaRecursos`
+(no lo tenía desde el Círculo 1/2 por no hacer falta hasta ahora),
+recibiendo el Índice B desde `main.py`.
+
+**Barrido de verificación explícito, no solo "arreglé lo que ya sabía"**:
+un `grep` de todos los `entidades_con(...)` restantes en `sistemas/`
+confirmó que el resto son bucles de despacho por entidad o por día
+(necesariamente O(N) -- un sistema tiene que visitar cada entidad una
+vez para procesarla, eso no es el defecto) o mantenimiento completo
+(`sistema_recursos.py:_consumir_fogatas`, decae TODA fogata cada tick
+con independencia de dónde esté nadie) -- ninguno es una búsqueda de
+"más cercano" sin resolver. `sistema_capacidad_mental.py` (penalización
+por presenciar muerte) se revisó y se descartó explícitamente: compara
+cada entidad contra la lista de muertes DE ESTE TICK (típicamente 0-3),
+no contra la población -- O(N × muertes_del_tick), no el mismo defecto.
+
+**Verificado**: 375/375 tests en verde (sin tests nuevos -- refactor de
+rendimiento puro sobre funciones ya cubiertas), `BOSQUE_AUTO_TICKS=3000`
+sin excepciones. Perfilado repetido una vez más, mismo arnés: a la
+población de referencia estable (~92, escala 1 en las tres rondas),
+ms/tick sigue bajando -- 102 (antes de tocar nada) → 76 (Círculo 1) →
+69 (Círculo 1+2) → 65 (Círculo 1+2+3). **Limitación honesta de la
+escala 2 de este arnés**: al avanzar un número fijo de ticks con un
+límite de tiempo real, un motor más rápido recorre más ticks (y por
+tanto llega a una población MAYOR) en la misma ventana de 150s -- la
+población de la escala 2 no es la misma entre rondas (208 → 237 → 185 →
+279), así que comparar el "factor tiempo" de una ronda a otra no es
+una medición limpia. La comparación que SÍ es limpia y favorable:
+contra el baseline original sin ningún fix (208 población → 319
+ms/tick), esta ronda final procesa MÁS población (279) en MENOS tiempo
+por tick (247 ms) -- más entidades, más rápido, sin ambigüedad.
+
+Con esto, la investigación de eficiencia iniciada por la pregunta de
+Diego ("¿es viable?") queda cerrada del todo por ahora -- los tres
+círculos cubren todo patrón de escaneo O(N) por entidad identificado
+en el motor, dejando solo `nucleo/sonido.py:sonido_mas_cercano`
+(O(radio²) por celda, un defecto de naturaleza distinta, no resuelto
+por un índice de entidades) como coste real conocido y sin tocar,
+documentado explícitamente en el spec como fuera de alcance.
