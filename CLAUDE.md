@@ -5755,3 +5755,107 @@ edificio) es el siguiente paso inmediato de este mismo arco; dieta de
 conejo/ardilla/caballo no revisada (Diego solo pidió corregir la de
 gnomo); alquimia como sistema de procesado genérico compartido con
 metalurgia/magia, mencionada, sin ningún diseño todavía.
+
+## Cómo cocinar -- Accion.COCINAR, comida elaborada, toxicidad real
+## activada (spec, implementado directamente por Claude, 2026-09-08)
+
+Cierra el círculo de "sistema de comidas" abierto el mismo día,
+activando el catálogo `toxico_crudo` que había quedado deliberadamente
+inerte. Spec: `docs/superpowers/specs/2026-09-08-como-cocinar-design.md`.
+
+**Decisión de Diego contra la recomendación inicial de Claude**:
+`Accion.COCINAR` dedicada, no un efecto pasivo en la Fogata (Claude
+prefería lo pasivo para no repetir el patrón de curvas de utilidad
+casi inalcanzables ya visto con `ENCENDER_FUEGO`/"piedra suelta").
+Mitigado con utilidad BASE FIJA (mismo patrón que `CONSTRUIR`), no una
+fórmula nueva que calibrar.
+
+**Decisión de Diego sobre severidad, tras plantearle el riesgo real**:
+intoxicación = muerte probabilística, mismo molde que las demás
+`probabilidad_muerte_*` ya existentes -- aceptado explícitamente el
+riesgo de un vector de muerte nuevo para gnomo (la especie más frágil
+del catálogo), mitigado con una probabilidad base deliberadamente muy
+baja (`0.001`, muy por debajo de las demás) y verificación obligatoria
+antes de confiar en ella.
+
+**Hallazgo real del propio auto-repaso del spec, con consecuencias
+serias evitadas antes de escribir código**: la primera versión del
+chequeo de toxicidad no llevaba gate de consciencia. Conejo y caballo
+también comen `raices`/`bayas_espinosas` (ahora tóxicas) en su dieta --
+sin el gate, ambas especies habrían quedado expuestas a un vector de
+muerte permanente sin ninguna forma de cocinar jamás (fauna no puede
+construir Fogata ni tiene `Accion.COCINAR`). Corregido: el chequeo
+completo (forraje de celda y salida de provisiones) exige
+`cap_mental.consciencia >= umbral_consciencia_agencia`, mismo umbral
+que el resto del arco -- fauna aplazada, no descartada.
+
+**Mejora dirigida real, encontrada al diseñar**: la lógica de morir
+(instanciar `Necromasa`, emitir `Muerte`, purgar la entidad) vivía solo
+dentro de `sistema_necesidades.py:_resolver_deceso`, sin ser invocable
+desde otro sistema. Extraída a `nucleo/entidad.py:procesar_deceso(...)`
+-- `_resolver_deceso` pasa a ser un wrapper de una línea, comportamiento
+idéntico (regresión verificada). Permite que `sistema_recursos.py` mate
+por intoxicación sin duplicar esa lógica.
+
+**Arquitectura real**:
+- `nucleo/comida.py` (nuevo): `elaborar_recurso`/`es_elaborado`/
+  `recurso_base` -- funciones puras, mismo patrón que
+  `nucleo/intercambio.py`. Comida elaborada = clave con sufijo
+  `_elaborada` DENTRO del mismo `Inventario.provisiones` (no una
+  transferencia entre entidades, una transformación del propio
+  recurso), con `factor_mejora_elaboracion` (multiplicador único y
+  universal, sin tabla de recetas) sobre `valor_nutricional`/
+  `valor_hidratacion`.
+- `_resolver_cocinar` transforma hasta `tasa_cocinar_kg_tick` del
+  primer recurso crudo no vacío por tick.
+- La versión `_elaborada` **elimina la toxicidad por completo**, no la
+  reduce -- binario, "cocinar es la cura".
+- Con ambas versiones guardadas, se prefiere comer la `_elaborada`
+  (orden de búsqueda explícito por cada alimento de la dieta, no una
+  búsqueda global "cualquier elaborada del inventario").
+- El mecanismo no excluye la carne por diseño -- hoy ningún consciente
+  la come, pero el día que exista una raza consciente carnívora usaría
+  exactamente el mismo `toxico_crudo`/`Accion.COCINAR`, sin ningún caso
+  especial que escribir (universal, tal como pidió Diego).
+
+**Verificado**: 368/368 tests (20 nuevos,
+`tests/test_como_cocinar.py` -- extracción de `procesar_deceso`,
+funciones puras de `nucleo/comida.py`, `_resolver_cocinar`, valores
+nutricionales efectivos, toxicidad con tirada forzada matando al
+consciente y NUNCA a la versión elaborada, `resistencia_enfermedad`
+alta reduciendo la probabilidad efectiva, **fauna exenta confirmada
+explícitamente** (conejo comiendo `raices` tóxicas con tirada forzada
+nunca muere), preferencia por lo elaborado, utilidad de `COCINAR` en
+sus tres condiciones, roundtrip de persistencia). `BOSQUE_AUTO_TICKS=3000`
+sin excepciones: `cocinar` se resolvió 37 veces, **0 muertes por
+intoxicación**.
+
+**Verificación reforzada, honesta sobre sus límites**: la corrida de
+`BOSQUE_AUTO_TICKS` de esa semilla tardó ~10 minutos en vez de los 5-15
+segundos habituales -- investigado antes de dar la pieza por buena:
+**697 conejos vivos al final**, la explosión de población de conejo ya
+documentada en este proyecto (boom-bust conocido, disparada esta vez
+por el desplazamiento de la secuencia de `rng` que cualquier código
+nuevo introduce, mismo fenómeno metodológico ya explicado varias veces
+en este documento) -- sin relación causal con "cómo cocinar" en sí. Un
+arnés dirigido aparte (6 semillas nuevas, scratchpad, con salvaguarda
+de tiempo de 45s/semilla) confirmó **0 muertes por intoxicación de 36
+muertes de gnomo totales**, con `cocinar` disparándose de forma
+consistente (9-22 veces por semilla) -- probabilidad verificada segura
+para gnomo. Honestidad explícita: con una probabilidad tan
+conservadora, no se ha observado matar a nadie todavía en ~9000 ticks
+combinados de juego libre -- el mecanismo en sí ya está probado
+correcto por los tests con tirada forzada, lo que falta observar es su
+disparo real bajo esta probabilidad, mismo patrón "correcto pero raro"
+ya visto varias veces en este proyecto.
+
+**Pendiente real, explícito**: las cuatro constantes nuevas
+(`utilidad_cocinar_base`, `tasa_cocinar_kg_tick`,
+`probabilidad_muerte_intoxicacion_base`, `factor_mejora_elaboracion`)
+PROVISIONALES, sin calibrar contra el harness completo; **cocinas
+comunes (edificio) es el siguiente círculo real del arco** "dinámicas
+internas de asentamiento"; toxicidad para fauna, memoria de "sitio
+donde algo me hizo daño", y variación de toxicidad por atributo más
+allá de `resistencia_enfermedad` quedan fuera, sin necesidad real
+todavía; la explosión de conejo sigue siendo el mismo problema conocido
+de siempre, sin tocar en este círculo.
