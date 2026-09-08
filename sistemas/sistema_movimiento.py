@@ -625,10 +625,19 @@ class SistemaMovimiento:
         radio, de CUALQUIER tipo (cualquier especie, criatura o
         necromasa), sin filtro de amenaza ni de disposicion por tamano
         -- una crisis mental no razona sobre quien es peligroso o presa,
-        reacciona a la presencia en si."""
+        reacciona a la presencia en si.
+
+        2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
+        si esta disponible, en vez del escaneo O(N) sobre toda la
+        poblacion -- sin el, comportamiento identico a antes."""
         mejor: tuple[int, int] | None = None
         mejor_dist = radio + 1
-        for otro_id in gestor.entidades_con(Posicion):
+        fuente = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Posicion)
+        )
+        for otro_id in fuente:
             if otro_id == entidad_id:
                 continue
             pos_o = gestor.obtener_componente(otro_id, Posicion)
@@ -655,11 +664,20 @@ class SistemaMovimiento:
         (distancia 0) el resolutor compartido _resolver_conflicto_entre
         exige los DOS ids, no basta la celda. _calcular_huida_erratica
         sigue usando la variante original sin id, intacta -- un vuelco
-        no necesita saber a quien huye, solo en que direccion."""
+        no necesita saber a quien huye, solo en que direccion.
+
+        2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
+        si esta disponible, en vez del escaneo O(N) sobre toda la
+        poblacion -- sin el, comportamiento identico a antes."""
         mejor_id: int | None = None
         mejor: tuple[int, int] | None = None
         mejor_dist = radio + 1
-        for otro_id in gestor.entidades_con(Posicion):
+        fuente = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Posicion)
+        )
+        for otro_id in fuente:
             if otro_id == entidad_id:
                 continue
             pos_o = gestor.obtener_componente(otro_id, Posicion)
@@ -690,11 +708,22 @@ class SistemaMovimiento:
         busca; requiere CapacidadMental.consciencia >=
         self.umbral_consciencia_agencia (mismo umbral que gatea la agencia
         en la decisión). Devuelve (id, posicion) del mas cercano dentro
-        del radio o (None, None) si no hay ningun consciente."""
+        del radio o (None, None) si no hay ningun consciente.
+
+        2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
+        si esta disponible, en vez del escaneo O(N) sobre toda la
+        poblacion -- el indice no filtra por CapacidadMental, se añade
+        el guard explicito ya presente abajo. Sin indice, comportamiento
+        identico a antes."""
         mejor_id: int | None = None
         mejor: tuple[int, int] | None = None
         mejor_dist = radio + 1
-        for otro_id in gestor.entidades_con(Posicion, CapacidadMental):
+        fuente = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Posicion, CapacidadMental)
+        )
+        for otro_id in fuente:
             if otro_id == entidad_id:
                 continue
             cap_otro = gestor.obtener_componente(otro_id, CapacidadMental)
@@ -1377,8 +1406,18 @@ class SistemaMovimiento:
         percepcion efectivo del destino, "carrona" si hay una Necromasa
         comestible dentro del radio, "nada" si no hay ninguna. Ningun camino
         de juego lee este resultado: son solo contadores de observacion.
+
+        2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
+        si esta disponible para ambos escaneos, en vez de O(N) sobre
+        toda la poblacion/toda la necromasa del mundo -- sin el,
+        comportamiento identico a antes.
         """
-        for eid in gestor.entidades_con(Posicion, DimensionesFisicas):
+        fuente_presa = (
+            self._indice_actual.en_radio(tx, ty, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Posicion, DimensionesFisicas)
+        )
+        for eid in fuente_presa:
             if eid == cazador_id:
                 continue
             pos_p = gestor.obtener_componente(eid, Posicion)
@@ -1394,7 +1433,12 @@ class SistemaMovimiento:
             if dist <= radio_efectivo:
                 return "caza"
 
-        for nid in gestor.entidades_con(Necromasa, Posicion):
+        fuente_necromasa = (
+            self._indice_actual.en_radio(tx, ty, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Necromasa, Posicion)
+        )
+        for nid in fuente_necromasa:
             pos_n = gestor.obtener_componente(nid, Posicion)
             nec_comp = gestor.obtener_componente(nid, Necromasa)
             if (
@@ -1425,8 +1469,16 @@ class SistemaMovimiento:
         # 1. Percepción directa de Necromasa o Recursos vegetales en el vecindario
         candidatos = []
         
-        # A. Necromasa cercana
-        for nid in gestor.entidades_con(Necromasa, Posicion):
+        # A. Necromasa cercana (2026-09-08, nucleo/indice_espacial.py):
+        # usa self._indice_actual si esta disponible, en vez de O(N)
+        # sobre toda la necromasa del mundo -- sin el, comportamiento
+        # identico a antes.
+        fuente_necromasa = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Necromasa, Posicion)
+        )
+        for nid in fuente_necromasa:
             pos_n = gestor.obtener_componente(nid, Posicion)
             nec_comp = gestor.obtener_componente(nid, Necromasa)
             # Solo vale la pena viajar hasta aquí si queda tejido_blando
@@ -2052,19 +2104,28 @@ class SistemaMovimiento:
         ):
             return
 
+        # 2026-09-08 (nucleo/indice_espacial.py): en_celda ya filtra por
+        # celda/zona exacta -- se añaden los guards de Temperamento/
+        # Identidad que el escaneo O(N) original garantizaba implicito.
         intruso_id: int | None = None
-        for otro_id in gestor.entidades_con(Posicion, Temperamento, Identidad):
+        fuente_intruso = (
+            self._indice_actual.en_celda(pos_x, pos_y, zona_idx)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Posicion, Temperamento, Identidad)
+        )
+        for otro_id in fuente_intruso:
             if otro_id == propietario_id:
                 continue
             pos_otro = gestor.obtener_componente(otro_id, Posicion)
+            if pos_otro is None or pos_otro.x != pos_x or pos_otro.y != pos_y or pos_otro.zona_idx != zona_idx:
+                continue
             if (
-                pos_otro is not None
-                and pos_otro.x == pos_x
-                and pos_otro.y == pos_y
-                and pos_otro.zona_idx == zona_idx
+                gestor.obtener_componente(otro_id, Temperamento) is None
+                or gestor.obtener_componente(otro_id, Identidad) is None
             ):
-                intruso_id = otro_id
-                break
+                continue
+            intruso_id = otro_id
+            break
         if intruso_id is None:
             return
 

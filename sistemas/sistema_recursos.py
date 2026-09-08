@@ -47,6 +47,7 @@ from nucleo.espacio import plantas_competidoras_en
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.flora import intentar_colonizar_celda
+from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.inventario import espacio_disponible_kg, espacio_disponible_provisiones_kg
 from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
@@ -74,6 +75,9 @@ class SistemaRecursos:
         # 2026-09-08-como-cocinar-design.md). Solo observacion.
         self._stats_cocinar_resuelto: int = 0
         self._stats_muertes_intoxicacion: int = 0
+        # IndiceEspacial del tick en curso (2026-09-08) -- ver
+        # sistema_movimiento.py:_indice_actual para el mismo patron.
+        self._indice_actual = None
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -242,11 +246,18 @@ class SistemaRecursos:
         mundo: Mundo,
         reloj: Reloj,
         bus_eventos: BusEventos,
+        indice=None,
     ) -> None:
         """
         Punto de entrada tick a tick de la Fase 3.
         Actualiza charcos ambientales y resuelve las intenciones COMER, BEBER y ALIVIARSE.
+
+        indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
+        construido, opcional -- se guarda en self y lo consulta
+        _resolver_comer para el carroñeo de Necromasa. Sin indice, se
+        construye uno interno (mismo comportamiento).
         """
+        self._indice_actual = indice if indice is not None else construir_indice_espacial(gestor)
         # Charcos/humedad de subsuelo son estado POR ZONA (cada
         # ZonaBioma es autonoma, con su propio clima_actual) -- se
         # actualizan todas las zonas del territorio, no solo la
@@ -932,9 +943,21 @@ class SistemaRecursos:
         # 1. Evaluación de Carroñeo (Necromasa en la celda). zona_idx:
         # "en la celda" exige tambien estar en la misma zona -- ver
         # componentes/posicion.py.
+        #
+        # 2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
+        # si esta disponible (indice.en_celda ya filtra por celda/zona)
+        # en vez del escaneo O(N) sobre toda la necromasa del mundo --
+        # sin el, comportamiento identico a antes.
         candidatos_necromasa = []
-        for nid in gestor.entidades_con(Necromasa, Posicion):
+        fuente_necromasa = (
+            self._indice_actual.en_celda(pos_x, pos_y, zona_idx)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Necromasa, Posicion)
+        )
+        for nid in fuente_necromasa:
             pos_n = gestor.obtener_componente(nid, Posicion)
+            if pos_n is None or gestor.obtener_componente(nid, Necromasa) is None:
+                continue
             if pos_n.x == pos_x and pos_n.y == pos_y and pos_n.zona_idx == zona_idx:
                 candidatos_necromasa.append(nid)
 

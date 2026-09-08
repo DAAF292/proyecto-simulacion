@@ -412,7 +412,7 @@ def ejecutar_tick(
     # ---------------------------------------------------------
     # FASE 3: METABOLISMO, RECURSOS Y RESOLUCIÓN VITAL
     # ---------------------------------------------------------
-    sistemas["recursos"].ejecutar(gestor, mundo, reloj, bus_eventos)
+    sistemas["recursos"].ejecutar(gestor, mundo, reloj, bus_eventos, indice=indice_b)
     sistemas["necesidades"].ejecutar(gestor, mundo, reloj, bus_eventos, indice=indice_b)
     sistemas["capacidad_fisica"].ejecutar(gestor)
     sistemas["capacidad_mental"].ejecutar(gestor)
