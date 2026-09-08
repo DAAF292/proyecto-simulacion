@@ -73,6 +73,15 @@ class ZonaBioma:
         # Celda.sonido_tick_emitido/sonido_magnitud, que siguen siendo la
         # fuente real de tick/magnitud; este set solo dice DONDE mirar.
         self.sonidos_activos: set[tuple[int, int]] = set()
+        # Registro de celdas en llamas (2026-09-08, mismo patron que
+        # sonidos_activos): sistema_desastres.py:procesar_fuego_tick
+        # necesitaba escanear TODA la cuadricula cada tick, en cada
+        # zona, solo para encontrar que celdas seguian ardiendo --
+        # trabajo desperdiciado casi siempre (el fuego es un evento
+        # raro). A diferencia de sonidos_activos, esto SI se persiste
+        # (en_llamas sobrevive a guardar/cargar, ver
+        # nucleo/persistencia.py) -- se repuebla al cargar una partida.
+        self.celdas_en_llamas: set[tuple[int, int]] = set()
         """Viento dominante fijo de la zona, sorteado una vez en la
         generación del mundo (nucleo/orografia.py:
         sortear_viento_dominante) y conservado como atributo de la zona --

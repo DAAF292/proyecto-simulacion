@@ -786,10 +786,17 @@ class Persistencia:
             ) in cur.fetchall():
                 if zona_idx >= len(mundo.territorio.zonas):
                     continue
-                celda = mundo.territorio.zonas[zona_idx].obtener_celda(x, y)
+                zona_celda = mundo.territorio.zonas[zona_idx]
+                celda = zona_celda.obtener_celda(x, y)
                 celda.fertilidad = float(fert)
                 celda.profundidad_charco = float(prof_ch)
                 celda.en_llamas = bool(fuego)
+                if celda.en_llamas:
+                    # zona_celda.celdas_en_llamas (2026-09-08): registro
+                    # que sustituye el escaneo completo de la cuadricula
+                    # en procesar_fuego_tick -- hay que repoblarlo al
+                    # cargar, en_llamas SI se persiste.
+                    zona_celda.celdas_en_llamas.add((x, y))
                 celda.recursos = json.loads(rec_json)
                 # deposito_mineral/masa_mineral_restante son estado
                 # mutable de la partida (una veta agotada por

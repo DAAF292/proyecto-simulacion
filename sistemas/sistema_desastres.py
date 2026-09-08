@@ -127,6 +127,7 @@ class SistemaDesastres:
                     if celda.tipo_terreno == TipoTerreno.BOSQUE and not celda.en_llamas:
                         if self.rng.random() < prob_efectiva:
                             celda.en_llamas = True
+                            zona.celdas_en_llamas.add((x, y))
                             bus_eventos.emitir(
                                 Evento(
                                     tipo="IncendioIniciado",
@@ -161,13 +162,20 @@ class SistemaDesastres:
         reloj: Reloj,
         bus_eventos: BusEventos,
     ) -> None:
-        celdas_en_llamas: list[tuple[int, int]] = []
-
-        for y in range(zona.alto):
-            for x in range(zona.ancho):
-                celda = zona.obtener_celda(x, y)
-                if celda.en_llamas:
-                    celdas_en_llamas.append((x, y))
+        # 2026-09-08: lee el registro de zona.celdas_en_llamas en vez de
+        # escanear toda la cuadricula -- ver docstring de
+        # ZonaBioma.celdas_en_llamas. sorted(...) es OBLIGATORIO, no
+        # cosmetico: es un set, sin orden de iteracion garantizado, y el
+        # orden en que se procesan los focos determina el orden en que
+        # se consumen tiradas de rng.random() (extincion/propagacion) --
+        # con un orden distinto al escaneo original (y, x) la secuencia
+        # de aleatoriedad de TODO lo que venga despues en el tick se
+        # desvia, mismo fenomeno ya documentado en este proyecto
+        # (Sobrepoblacion..., CLAUDE.md). Se ordena igual que el escaneo
+        # que sustituye: y ascendente, luego x ascendente.
+        celdas_en_llamas: list[tuple[int, int]] = sorted(
+            zona.celdas_en_llamas, key=lambda c: (c[1], c[0])
+        )
 
         if not celdas_en_llamas:
             return
@@ -195,9 +203,11 @@ class SistemaDesastres:
 
         for ex, ey in extinciones:
             zona.obtener_celda(ex, ey).en_llamas = False
+            zona.celdas_en_llamas.discard((ex, ey))
 
         for nx, ny in nuevos_focos:
             zona.obtener_celda(nx, ny).en_llamas = True
+            zona.celdas_en_llamas.add((nx, ny))
 
         # 1. Flora en llamas -> Ceniza mineralizada. zona_idx se descarta
         # ANTES de indexar el grid de esta zona -- una entidad de otra
