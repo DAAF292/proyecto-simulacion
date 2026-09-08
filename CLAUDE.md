@@ -5852,6 +5852,76 @@ especies vivas a la vez, ≥50% de las semillas) no se remidió con
 ambos fixes ya aplicados -- candidato inmediato si se quiere cerrar
 esa investigación del todo.
 
+## Verificación amplia del motor + conejo, mismo día -- trade-off real
+## aceptado, no una solución limpia
+
+Diego pidió una verificación general del estado del motor tras los
+fixes de gnomo ("asentamientos, edificios, alimentación, etc."). Arnés
+sin persistencia, 2 semillas nuevas hasta 4400-6100 ticks:
+
+- **Asentamientos**: 4 y 2 formados (tamaños 3-10) -- funcionando.
+- **Refugios/almacenes**: 21+19 refugios, 3+4 almacenes completados --
+  la cadena básica se completa con regularidad ahora que gnomo
+  sobrevive de verdad.
+- **Salón común/cocina**: 0 completados en ambas -- el tramo paralelo
+  final sigue sin alcanzarse (exige sostener el esfuerzo un tramo más
+  después del almacén).
+- **Cocinar/alacena**: cocinar se ejerce (55 y 14 veces), alacena en 0
+  (coherente, sin cocina completada no hay alacena).
+- **Social**: socializar/roce social muy activos (miles de veces);
+  robo intentado pero nunca exitoso en la muestra; compartir por
+  confianza raro pero observado; **pareja estable de gnomo: 0 en
+  ambas** -- sigue sin observarse, población aún modesta (12-16).
+- **Manada/madriguera**: funcionando con fuerza en casi todas las
+  especies.
+- **El desequilibrio real y visible**: conejo domina el ecosistema
+  (586-642 individuos, 822-1007 muertes ya contabilizadas) frente al
+  resto -- el mismo boom-bust sin resolver, ya documentado y aplazado
+  hace días.
+
+### Investigación de conejo -- el sistema es más caótico de lo que
+### unas pocas semillas pueden calibrar con confianza
+
+Trayectoria real (3 semillas nuevas, seguimiento cada 500 ticks, hasta
+8000): una mostró crecimiento sin techo (30→933, sin bust dentro de la
+ventana), las otras dos "bust" muy por encima del rango histórico sano
+(0.05-0.07 ind/celda). Deshidratación y vejez, casi a la par, como
+causas dominantes -- confirma que el alivio de hambre de conejo
+(2026-09-06) le quitó su freno natural principal sin compensación
+reproductiva suficiente.
+
+**Decisión de Diego, tras plantear tres palancas**: recortar camada Y
+concepción a la vez, con margen real (`camada` `[3,5]`→`[2,3]`,
+`factor_base_concepcion` `0.015`→`0.008`). **Resultado, con 11
+semillas nuevas en total probadas entre las distintas combinaciones,
+honesto sobre su límite real**: esta combinación cura la explosión sin
+techo en la mayoría de las semillas, pero **2 de 7 (~29%) llevan a
+conejo a la extinción total** -- un riesgo que prácticamente no
+existía antes de tocar nada. Un intento de suavizar la concepción
+(`0.008`→`0.010`) para reducir ese riesgo **no mejoró nada** (2 de 4
+semillas nuevas se extinguieron igual) -- evidencia clara de que
+cambiar estos números desplaza toda la secuencia de `rng` posterior
+(mismo fenómeno ya documentado repetidas veces en este proyecto:
+"Sobrepoblación...", el propio conejo en 2026-09-06), haciendo que
+comparaciones de pocas semillas por combinación no sean fiables para
+afinar más.
+
+**Decisión final de Diego, con el trade-off ya cuantificado**:
+quedarse con `camada=[2,3]`/`factor_base_concepcion=0.008` tal cual,
+aceptando el ~29% de riesgo de extinción medido como el precio de
+eliminar la explosión sin techo -- documentado con total honestidad
+como trade-off, no como solución cerrada. 393/393 tests en verde.
+
+**Pendiente real, explícito, más urgente que antes**: el harness
+completo (15 semillas × 12000 ticks) sigue siendo la única vía real de
+calibrar esto sin el ruido ya demostrado hoy -- cada sesión de
+calibración de este proyecto se ha topado con el mismo límite
+metodológico sin llegar nunca a correrlo; candidato real a plantear
+como su propia pieza de infraestructura si se quiere calibrar
+población en serio a partir de ahora. Salón común/cocina/pareja
+estable de gnomo siguen sin observarse en juego libre -- correctos por
+tests dirigidos, su disparo real exige más ticks de los medidos hoy.
+
 ## Sistema de comidas -- dieta real de gnomo + catálogo de toxicidad,
 ## precede a "cómo cocinar" (spec, implementado directamente por Claude,
 ## 2026-09-08)
