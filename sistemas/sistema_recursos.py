@@ -36,6 +36,7 @@ from nucleo.armas import (
 )
 from nucleo.celda import Celda
 from nucleo.construccion import (
+    construccion_de_tipo_en,
     masa_minima_para,
     objetivo_construccion_actual,
     progreso_construccion,
@@ -75,6 +76,9 @@ class SistemaRecursos:
         # 2026-09-08-como-cocinar-design.md). Solo observacion.
         self._stats_cocinar_resuelto: int = 0
         self._stats_muertes_intoxicacion: int = 0
+        # Alacena de cocina comun (2026-09-08, ver docs/superpowers/specs/
+        # 2026-09-08-cocinas-comunes-design.md). Solo observacion.
+        self._stats_alacena_consumida: int = 0
         # IndiceEspacial del tick en curso (2026-09-08) -- ver
         # sistema_movimiento.py:_indice_actual para el mismo patron.
         self._indice_actual = None
@@ -88,6 +92,13 @@ class SistemaRecursos:
         # Cocinar (2026-09-08, ver docs/superpowers/specs/
         # 2026-09-08-como-cocinar-design.md). PROVISIONAL.
         self.tasa_cocinar_kg_tick: float = float(cfg_cons.get("tasa_cocinar_kg_tick", 0.5))
+        # factor_bono_tasa_cocina_comun (2026-09-08, cocinas comunes --
+        # ver docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md):
+        # cocinar en una cocina comun es mas rapido que con una Fogata
+        # individual. PROVISIONAL.
+        self.factor_bono_tasa_cocina_comun: float = float(
+            cfg_cons.get("factor_bono_tasa_cocina_comun", 2.0)
+        )
 
         cfg_abono = self.config.get("abono", {})
         self.incremento_fertilidad: float = float(
@@ -803,7 +814,14 @@ class SistemaRecursos:
         vuelve a comprobar Fogata aquí: si deja de haberla a mitad de
         cocinar, este tick concreto ya se resuelve igual, mismo criterio
         que el resto del motor no re-verifica condiciones de entrada
-        dentro de la resolución)."""
+        dentro de la resolución).
+
+        Cocina común (2026-09-08, ver docs/superpowers/specs/
+        2026-09-08-cocinas-comunes-design.md): si la celda tiene una
+        cocina, cocinar es más rápido (factor_bono_tasa_cocina_comun) Y
+        el resultado se deposita en la alacena comunal
+        (Construccion.provisiones) en vez del inventario personal de
+        quien cocina."""
         inv = gestor.obtener_componente(entidad_id, Inventario)
         if inv is None or not inv.provisiones:
             return
@@ -813,7 +831,17 @@ class SistemaRecursos:
         )
         if recurso_crudo is None:
             return
-        transformado = elaborar_recurso(inv.provisiones, recurso_crudo, self.tasa_cocinar_kg_tick)
+        cid_cocina = construccion_de_tipo_en(
+            gestor, pos_x, pos_y, zona_idx, "cocina", indice=self._indice_actual
+        )
+        if cid_cocina is not None:
+            cocina = gestor.obtener_componente(cid_cocina, Construccion)
+            tasa = self.tasa_cocinar_kg_tick * self.factor_bono_tasa_cocina_comun
+            transformado = elaborar_recurso(
+                inv.provisiones, recurso_crudo, tasa, destino=cocina.provisiones,
+            )
+        else:
+            transformado = elaborar_recurso(inv.provisiones, recurso_crudo, self.tasa_cocinar_kg_tick)
         if transformado > 0.0:
             self._stats_cocinar_resuelto += 1
 
@@ -1181,6 +1209,42 @@ class SistemaRecursos:
                             )
                             self._stats_muertes_intoxicacion += 1
                     return
+
+            # Alacena de cocina común (2026-09-08, ver docs/superpowers/
+            # specs/2026-09-08-cocinas-comunes-design.md): tercera
+            # fuente, tras celda y despensa personal -- solo si esta
+            # entidad está FÍSICAMENTE en la celda de una cocina común
+            # (sistema_movimiento.py:_calcular_forrajeo ya decidió
+            # caminar hasta aquí si hacía falta). Sin chequeo de
+            # toxicidad: la alacena solo puede contener claves
+            # "_elaborada" (únicas que elaborar_recurso escribe) y
+            # cocinar ya elimina la toxicidad por completo. Sin filtro
+            # de dieta propia -- simplificación aceptada mientras solo
+            # exista una especie consciente (gnomo).
+            cid_cocina = construccion_de_tipo_en(
+                gestor, pos_x, pos_y, zona_idx, "cocina", indice=self._indice_actual
+            )
+            if cid_cocina is not None:
+                cocina = gestor.obtener_componente(cid_cocina, Construccion)
+                if cocina is not None and cocina.provisiones:
+                    recurso_alacena = next(
+                        (r for r in cocina.provisiones if cocina.provisiones[r] > 0.0),
+                        None,
+                    )
+                    if recurso_alacena is not None:
+                        disponible = cocina.provisiones[recurso_alacena]
+                        consumo = min(disponible, self.tasa_consumo_comer)
+                        val_nut = self._valor_nutricional_efectivo(recurso_alacena)
+                        val_hid = self._valor_hidratacion_efectiva(recurso_alacena)
+                        nec.saciedad = min(1.0, nec.saciedad + (consumo * val_nut))
+                        nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
+                        restante = disponible - consumo
+                        if restante <= self.umbral_purga_provisiones:
+                            del cocina.provisiones[recurso_alacena]
+                        else:
+                            cocina.provisiones[recurso_alacena] = restante
+                        self._stats_alacena_consumida += 1
+                        return
             # Sin esto, un individuo que llega aquí guiado por un
             # recuerdo de "comida" (nucleo/memoria.py:objetivo_recordado,
             # consultado en sistema_movimiento.py:_calcular_forrajeo SOLO

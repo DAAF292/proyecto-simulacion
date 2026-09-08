@@ -114,6 +114,8 @@ def test_objetivo_avanza_a_salon_comun_tras_refugio_y_almacen_completos():
 
 
 def test_objetivo_none_cuando_salon_comun_tambien_esta_completo():
+    """Desde cocinas comunes (2026-09-08), salon_comun y cocina son
+    PARALELOS -- None exige ambos completos, no solo salon_comun."""
     config = _config()
     rng = random.Random(2)
     gestor = GestorEntidades()
@@ -123,6 +125,7 @@ def test_objetivo_none_cuando_salon_comun_tambien_esta_completo():
     gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
     _construccion(gestor, "almacen", 5, 5)
     _construccion(gestor, "salon_comun", 5, 5)
+    _construccion(gestor, "cocina", 5, 5)
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
 
     objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)

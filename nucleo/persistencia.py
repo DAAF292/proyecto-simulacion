@@ -79,7 +79,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.35-fase0"
+VERSION_ESQUEMA = "0.36-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -276,7 +276,8 @@ class Persistencia:
                     propietario_id INTEGER,
                     progreso REAL NOT NULL,
                     completado_alguna_vez BOOLEAN NOT NULL,
-                    zona_idx INTEGER NOT NULL DEFAULT 0
+                    zona_idx INTEGER NOT NULL DEFAULT 0,
+                    provisiones TEXT NOT NULL DEFAULT '{}'
                 )
                 """
             )
@@ -633,10 +634,11 @@ class Persistencia:
                             con_comp.progreso,
                             con_comp.completado_alguna_vez,
                             pos_c.zona_idx,
+                            json.dumps(con_comp.provisiones),
                         )
                     )
             cur.executemany(
-                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
+                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
             )
 
             # C3. Fogatas (ver componentes/fogata.py)
@@ -964,9 +966,12 @@ class Persistencia:
             # 4b. Cargar Construcciones
             cur.execute(
                 "SELECT entidad_id, x, y, tipo, materiales, propietario_id, progreso, "
-                "completado_alguna_vez, zona_idx FROM construccion_estado"
+                "completado_alguna_vez, zona_idx, provisiones FROM construccion_estado"
             )
-            for coid, cx, cy, tipo, mats_json, propietario_id, progreso, completado, zidx in cur.fetchall():
+            for (
+                coid, cx, cy, tipo, mats_json, propietario_id, progreso, completado, zidx,
+                provisiones_json,
+            ) in cur.fetchall():
                 gestor.anadir_componente(coid, Posicion(x=cx, y=cy, zona_idx=zidx))
                 gestor.anadir_componente(
                     coid,
@@ -976,6 +981,7 @@ class Persistencia:
                         propietario_id=propietario_id,
                         progreso=float(progreso),
                         completado_alguna_vez=bool(completado),
+                        provisiones=json.loads(provisiones_json),
                     ),
                 )
 

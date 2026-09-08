@@ -44,14 +44,13 @@ def construccion_propia(gestor: Any, id_propietario: int, tipo: str, indice=None
     return None
 
 
-def hay_construccion_de_tipo_en(
+def construccion_de_tipo_en(
     gestor: Any, pos_x: int, pos_y: int, zona_idx: int, tipo: str, indice=None
-) -> bool:
-    """True si hay una Construccion de este `tipo`, completado_alguna_vez,
-    en esta celda exacta -- CUALQUIERA, no solo quien la construyó (un
+) -> int | None:
+    """Id de la Construccion de este `tipo`, completado_alguna_vez, en
+    esta celda exacta -- CUALQUIERA, no solo quien la construyó (un
     sitio abriga a quien esté dentro, mismo criterio ya establecido para
-    refugio/fogata/madriguera). Generaliza nucleo/fuego.py:hay_refugio_en
-    (2026-09-08, salón común) para su segundo consumidor real.
+    refugio/fogata/madriguera). None si no hay ninguna.
 
     indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
     construido, opcional -- si se pasa, se consulta indice.en_celda en
@@ -71,8 +70,21 @@ def hay_construccion_de_tipo_en(
             continue
         construccion = gestor.obtener_componente(cid, Construccion)
         if construccion is not None and construccion.tipo == tipo and construccion.completado_alguna_vez:
-            return True
-    return False
+            return cid
+    return None
+
+
+def hay_construccion_de_tipo_en(
+    gestor: Any, pos_x: int, pos_y: int, zona_idx: int, tipo: str, indice=None
+) -> bool:
+    """True si hay una Construccion de este `tipo` en esta celda exacta
+    -- generaliza nucleo/fuego.py:hay_refugio_en (2026-09-08, salón
+    común) para su segundo consumidor real. Alias booleano de
+    construccion_de_tipo_en (2026-09-08, cocinas comunes -- ver
+    docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md), que
+    devuelve el cid real para quien lo necesite (p.ej. leer/escribir su
+    alacena)."""
+    return construccion_de_tipo_en(gestor, pos_x, pos_y, zona_idx, tipo, indice=indice) is not None
 
 
 def masa_apta_construccion(materiales: dict[str, float], catalogo: dict[str, Any]) -> float:
@@ -169,16 +181,25 @@ def objetivo_construccion_actual(
 ):
     """(tipo, cid_existente_o_None, posicion_de_creacion_o_None) del
     objetivo de CONSTRUIR/RECOLECTAR de este individuo ahora mismo, o
-    None si no hay ninguno. Cadena de prioridad Maslow, cada eslabón
-    solo se evalúa una vez el anterior está completo: refugio propio
+    None si no hay ninguno. Cadena de prioridad Maslow: refugio propio
     (individual) -> almacén de asentamiento (comunal, supervivencia) ->
-    salón común (comunal, calidad de vida -- 2026-09-08, ver
-    docs/superpowers/specs/2026-09-08-salon-comun-design.md). None solo
-    cuando TODA la cadena está completa, no en el primer eslabón
+    dos comunales de "calidad de vida" EN PARALELO entre sí -- salón
+    común y cocina (2026-09-08, ver docs/superpowers/specs/
+    2026-09-08-cocinas-comunes-design.md; salón común solo,
+    2026-09-08-salon-comun-design.md). None solo cuando TODA la cadena
+    está completa (incluidos AMBOS paralelos), no en el primer eslabón
     comunal ya resuelto.
+
+    Los dos paralelos no se bloquean entre sí -- se elige el que ya
+    lleve MÁS progreso (ley física: el esfuerzo de la población
+    converge en uno solo sin que nadie lo planifique), empate exacto
+    (ninguno empezado) resuelto por el orden fijo de la lista
+    (salon_comun primero). Generaliza limpio a un tercer paralelo
+    futuro sin tocar la forma de la función.
+
     posicion_de_creacion es None para refugio (se crea donde ya se está,
     ver sistema_movimiento.py) y el centro del asentamiento para
-    almacén/salón común (hay que llegar hasta ahí, no se crea donde a
+    almacén/paralelos (hay que llegar hasta ahí, no se crea donde a
     cada gnomo le pille)."""
     from componentes.construccion import Construccion
     from nucleo.asentamiento import almacen_cercano, asentamiento_de
@@ -203,17 +224,58 @@ def objetivo_construccion_actual(
     if almacen is None or almacen.progreso < 1.0:
         return ("almacen", cid_almacen, asen.centro)
 
-    cid_salon = almacen_cercano(
-        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo="salon_comun",
-        indice=indice,
-    )
-    if cid_salon is None:
-        return ("salon_comun", None, asen.centro)
-    salon = gestor.obtener_componente(cid_salon, Construccion)
-    if salon is None or salon.progreso < 1.0:
-        return ("salon_comun", cid_salon, asen.centro)
+    tipos_paralelos = ["salon_comun", "cocina"]
+    pendientes: list[tuple[str, Any, float]] = []
+    for tipo in tipos_paralelos:
+        cid = almacen_cercano(
+            gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo=tipo,
+            indice=indice,
+        )
+        if cid is None:
+            pendientes.append((tipo, None, 0.0))
+            continue
+        construccion = gestor.obtener_componente(cid, Construccion)
+        progreso = construccion.progreso if construccion is not None else 0.0
+        if progreso < 1.0:
+            pendientes.append((tipo, cid, progreso))
 
-    return None
+    if not pendientes:
+        return None
+
+    tipo_elegido, cid_elegido, _ = max(
+        pendientes, key=lambda p: (p[2], -tipos_paralelos.index(p[0]))
+    )
+    return (tipo_elegido, cid_elegido, asen.centro)
+
+
+def construccion_completada_de_asentamiento(
+    gestor: Any, mundo: Any, id_entidad: int, radio_cluster: int, tipo: str, indice=None
+) -> Any:
+    """Id de la Construccion `tipo` COMPLETADA del asentamiento de
+    id_entidad, o None si no pertenece a ninguno o no tiene una
+    terminada todavía (2026-09-08, cocinas comunes -- ver
+    docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md).
+    Generaliza el patrón que hoy solo vivía duplicado como
+    sistema_movimiento.py:_salon_comun_de -- un único punto de verdad
+    para "¿tiene mi asentamiento un X terminado?", reutilizable por
+    cualquier consumidor futuro del mismo patrón (imán social,
+    alacena...). _salon_comun_de NO se toca -- ya funciona, sin
+    necesidad real de refactorizarlo."""
+    from componentes.construccion import Construccion
+    from nucleo.asentamiento import almacen_cercano, asentamiento_de
+
+    asen = asentamiento_de(mundo, id_entidad)
+    if asen is None:
+        return None
+    cid = almacen_cercano(
+        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo=tipo, indice=indice
+    )
+    if cid is None:
+        return None
+    construccion = gestor.obtener_componente(cid, Construccion)
+    if construccion is None or not construccion.completado_alguna_vez:
+        return None
+    return cid
 
 
 def transferir_a_construccion(

@@ -38,14 +38,25 @@ def recurso_base(recurso: str) -> str:
     return recurso
 
 
-def elaborar_recurso(provisiones: dict[str, float], recurso: str, cantidad_max: float) -> float:
+def elaborar_recurso(
+    provisiones: dict[str, float], recurso: str, cantidad_max: float,
+    destino: dict[str, float] | None = None,
+) -> float:
     """Mueve hasta `cantidad_max` kg de `recurso` (crudo) a
-    "<recurso>_elaborada" DENTRO del mismo dict -- no es una
-    transferencia entre dos entidades (ver nucleo/intercambio.py:
-    transferir_recurso), es una transformación del propio recurso.
-    Purga la clave cruda si queda en 0. Devuelve la cantidad real
-    transformada (0.0 si `recurso` ya está elaborado o no hay nada que
-    transformar)."""
+    "<recurso>_elaborada" -- no es una transferencia entre dos entidades
+    (ver nucleo/intercambio.py: transferir_recurso), es una
+    transformación del propio recurso. Purga la clave cruda si queda en
+    0. Devuelve la cantidad real transformada (0.0 si `recurso` ya está
+    elaborado o no hay nada que transformar).
+
+    destino (2026-09-08, cocinas comunes -- ver docs/superpowers/specs/
+    2026-09-08-cocinas-comunes-design.md): dict opcional donde depositar
+    el resultado elaborado -- por defecto el mismo `provisiones`
+    (comportamiento idéntico a antes). Cocinar en una cocina común
+    deposita en la alacena compartida (Construccion.provisiones) en vez
+    del inventario personal de quien cocina."""
+    if destino is None:
+        destino = provisiones
     if es_elaborado(recurso):
         return 0.0
     disponible = provisiones.get(recurso, 0.0)
@@ -58,5 +69,5 @@ def elaborar_recurso(provisiones: dict[str, float], recurso: str, cantidad_max: 
     else:
         provisiones[recurso] = restante
     clave_elaborada = recurso + _SUFIJO_ELABORADO
-    provisiones[clave_elaborada] = provisiones.get(clave_elaborada, 0.0) + cantidad
+    destino[clave_elaborada] = destino.get(clave_elaborada, 0.0) + cantidad
     return cantidad

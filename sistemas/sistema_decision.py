@@ -212,6 +212,7 @@ from nucleo.armas import (
 )
 from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.construccion import (
+    hay_construccion_de_tipo_en,
     masa_apta_construccion,
     material_suficiente_para,
     objetivo_construccion_actual,
@@ -710,11 +711,19 @@ def actualizar(
         # consciencia que CONSTRUIR/RECOLECTAR/ENCENDER_FUEGO. Utilidad
         # BASE FIJA (no derivada de una necesidad, a diferencia de
         # ENCENDER_FUEGO) -- gateada a 0.0 si no hay una Fogata activa en
-        # la celda o no queda nada crudo (sin sufijo "_elaborada") en
+        # la celda NI una cocina común completada (2026-09-08, cocinas
+        # comunes -- ver docs/superpowers/specs/
+        # 2026-09-08-cocinas-comunes-design.md: la cocina implica su
+        # propio fuego, mismo criterio que ya usa el salón común) o no
+        # queda nada crudo (sin sufijo "_elaborada") en
         # Inventario.provisiones.
         utilidad_cocinar = 0.0
         if cap_mental.consciencia >= umbral_consciencia_agencia:
-            if fogata_en(gestor, pos.x, pos.y, pos.zona_idx, indice=indice) is not None:
+            hay_fuego_para_cocinar = (
+                fogata_en(gestor, pos.x, pos.y, pos.zona_idx, indice=indice) is not None
+                or hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "cocina", indice=indice)
+            )
+            if hay_fuego_para_cocinar:
                 provisiones_cocinar = inventario.provisiones if inventario is not None else {}
                 tiene_crudo = any(
                     not r.endswith("_elaborada") and c > 0.0

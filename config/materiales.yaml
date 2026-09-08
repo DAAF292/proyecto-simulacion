@@ -460,6 +460,13 @@ construccion:
   # sin calibrar contra el motor en marcha.
   masa_minima_salon_comun: 70.0
   huella_m2_salon_comun: 45.0
+  # masa_minima_cocina/huella_m2_cocina (2026-09-08, cocinas comunes --
+  # ver docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md):
+  # PARALELO al salon comun en la cadena de prioridad, no un eslabon
+  # detras -- algo mas modesto que el salon comun (masa y huella), un
+  # edificio de trabajo, no de reunion. PROVISIONAL, sin calibrar.
+  masa_minima_cocina: 50.0
+  huella_m2_cocina: 35.0
   capacidad_construccion_celda_m2: 80.0
   # Cuánta masa apta transfiere Accion.CONSTRUIR del Inventario a la
   # Construccion por tick, estando en su misma celda -- PROVISIONAL, sin

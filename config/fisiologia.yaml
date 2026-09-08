@@ -67,6 +67,13 @@ necesidades:
     # ya implica su propio hogar. PROVISIONAL, sin calibrar.
     bono_confort_salon_comun: 0.3
     bono_seguridad_salon_comun: 0.1
+    # bono_confort_cocina_comun/bono_seguridad_cocina_comun (2026-09-08,
+    # cocinas comunes -- ver docs/superpowers/specs/
+    # 2026-09-08-cocinas-comunes-design.md): mismo patron e iguales
+    # valores que salon comun por simetria de partida, sin ninguna razon
+    # para diferenciarlos todavia. PROVISIONAL, sin calibrar.
+    bono_confort_cocina_comun: 0.3
+    bono_seguridad_cocina_comun: 0.1
     # saciedad_minima_para_guardar_provisiones (2026-09-07, ver
     # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
     # umbral de saciedad tras comer por encima del cual un consciente
@@ -252,6 +259,11 @@ consumo:
   # elaborado por tick de Accion.COCINAR -- mismo orden de magnitud que
   # tasa_consumo_al_comer. PROVISIONAL, sin calibrar.
   tasa_cocinar_kg_tick: 0.5
+  # factor_bono_tasa_cocina_comun (2026-09-08, cocinas comunes -- ver
+  # docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md):
+  # cocinar en una cocina comun es mas rapido que con una Fogata
+  # individual. PROVISIONAL, sin calibrar.
+  factor_bono_tasa_cocina_comun: 2.0
 
 decision:
   utilidad_deambular_base: 0.1

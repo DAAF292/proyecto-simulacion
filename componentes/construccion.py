@@ -65,6 +65,13 @@ class Construccion:
             SistemaAsentamiento usa completado_alguna_vez para
             pertenencia, objetivo_construccion_actual sigue usando
             progreso para decidir si hay que aportar más material.
+        provisiones: {clave_alimento: cantidad_kg} -- alacena comunal
+            (2026-09-08, cocinas comunes -- ver docs/superpowers/specs/
+            2026-09-08-cocinas-comunes-design.md). Mismo molde exacto que
+            Inventario.provisiones (incluido el sufijo "_elaborada"),
+            universal en el componente por el mismo criterio que Agarre/
+            Semillas -- vacío salvo en construcciones tipo "cocina" con
+            algo cocinado ahí.
     """
 
     tipo: str
@@ -72,3 +79,4 @@ class Construccion:
     propietario_id: int | None = None
     progreso: float = 0.0
     completado_alguna_vez: bool = False
+    provisiones: dict[str, float] = field(default_factory=dict)

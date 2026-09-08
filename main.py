@@ -739,11 +739,21 @@ def main() -> None:
                 and gestor.obtener_componente(cid, Construccion).completado_alguna_vez
             )
             print(f"[BOSQUE_AUTO_TICKS] salones comunes completados: {salones_completados}")
+            # Verificacion obligatoria de cocinas comunes (2026-09-08, ver
+            # docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md).
+            # Solo observacion.
+            cocinas_completadas = sum(
+                1 for cid in gestor.entidades_con(Construccion)
+                if gestor.obtener_componente(cid, Construccion).tipo == "cocina"
+                and gestor.obtener_componente(cid, Construccion).completado_alguna_vez
+            )
+            print(f"[BOSQUE_AUTO_TICKS] cocinas comunes completadas: {cocinas_completadas}")
             print(f"[BOSQUE_AUTO_TICKS] muertes de gnomo por causa: {muertes_gnomo_por_causa}")
             print(
                 "[BOSQUE_AUTO_TICKS] cocinar: "
                 f"{sistemas['recursos']._stats_cocinar_resuelto} veces resuelto, "
-                f"{sistemas['recursos']._stats_muertes_intoxicacion} muertes por intoxicacion"
+                f"{sistemas['recursos']._stats_muertes_intoxicacion} muertes por intoxicacion, "
+                f"{sistemas['recursos']._stats_alacena_consumida} alacena consumida"
             )
 
     except KeyboardInterrupt:

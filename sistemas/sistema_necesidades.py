@@ -155,6 +155,17 @@ class SistemaNecesidades:
         self.bono_seguridad_salon_comun: float = float(
             self.defecto.get("bono_seguridad_salon_comun", 0.1)
         )
+        # bono_confort_cocina_comun/bono_seguridad_cocina_comun
+        # (2026-09-08, cocinas comunes -- ver docs/superpowers/specs/
+        # 2026-09-08-cocinas-comunes-design.md): mismo patrón e iguales
+        # valores que salón común por simetría de partida, sin ninguna
+        # razón para diferenciarlos todavía. PROVISIONAL.
+        self.bono_confort_cocina_comun: float = float(
+            self.defecto.get("bono_confort_cocina_comun", 0.3)
+        )
+        self.bono_seguridad_cocina_comun: float = float(
+            self.defecto.get("bono_seguridad_cocina_comun", 0.1)
+        )
         self.umbral_pareja: float = float(
             self.config.get("relaciones", {}).get("umbral_pareja", 0.3)
         )
@@ -415,6 +426,10 @@ class SistemaNecesidades:
             # Fogata real aparte -- el salon ya implica su propio hogar.
             if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun", indice=self._indice_actual):
                 obj_termico += self.bono_confort_salon_comun
+            # Cocina comun (2026-09-08, ver docs/superpowers/specs/
+            # 2026-09-08-cocinas-comunes-design.md): mismo criterio.
+            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "cocina", indice=self._indice_actual):
+                obj_termico += self.bono_confort_cocina_comun
             # Pareja estable (2026-09-04, circulo 4b): si la pareja
             # derivada (afinidad mutua >= relaciones.umbral_pareja) esta en
             # la celda EXACTA y la propia entidad es CONSCIENTE, suma su
@@ -511,6 +526,11 @@ class SistemaNecesidades:
             # 2026-09-08-salon-comun-design.md).
             if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun", indice=self._indice_actual):
                 nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_salon_comun)
+
+            # Cocina comun (2026-09-08, ver docs/superpowers/specs/
+            # 2026-09-08-cocinas-comunes-design.md): mismo bono aditivo.
+            if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "cocina", indice=self._indice_actual):
+                nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_cocina_comun)
 
             # Refugio instintivo (ver docstring de
             # sistema_movimiento.py:_calcular_dormir). Se registra la

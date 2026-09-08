@@ -44,6 +44,7 @@ from nucleo.inventario import espacio_disponible_provisiones_kg
 from nucleo.manada import manada_de
 from nucleo.parentesco import es_familia_directa
 from nucleo.construccion import (
+    construccion_completada_de_asentamiento,
     construccion_propia,
     espacio_disponible_para_construir,
     huella_m2_para,
@@ -429,7 +430,7 @@ class SistemaMovimiento:
                 )
             elif accion == Accion.COMER:
                 dx, dy = self._calcular_forrajeo(
-                    gestor, zona, ident.especie, pos.x, pos.y, radio, mem, cap_mental, pos.zona_idx
+                    gestor, mundo, eid, zona, ident.especie, pos.x, pos.y, radio, mem, cap_mental, pos.zona_idx
                 )
             elif accion == Accion.BEBER:
                 radio_agua = radio_individual(
@@ -859,6 +860,20 @@ class SistemaMovimiento:
                 return (0, 0)  # ya en el salon -- esperar aqui a que lleguen otros
             return self._acercarse_a(pos_x, pos_y, *salon_pos)
 
+        # Cocina comun como respaldo social (2026-09-08, ver
+        # docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md):
+        # SOLO si no hay salon comun -- el salon sigue siendo el iman
+        # social principal, la cocina solo lo sustituye cuando el
+        # asentamiento aun no tiene uno.
+        cid_cocina = self._cocina_de(gestor, mundo, entidad_id)
+        if cid_cocina is not None:
+            pos_cocina = gestor.obtener_componente(cid_cocina, Posicion)
+            if pos_cocina is not None:
+                cocina_pos = (pos_cocina.x, pos_cocina.y)
+                if cocina_pos == (pos_x, pos_y):
+                    return (0, 0)
+                return self._acercarse_a(pos_x, pos_y, *cocina_pos)
+
         if objetivo_id is not None:
             return self._acercarse_a(pos_x, pos_y, *objetivo_pos)
         return self._paso_aleatorio()
@@ -886,6 +901,21 @@ class SistemaMovimiento:
         if pos is None:
             return None
         return (pos.x, pos.y)
+
+    def _cocina_de(
+        self, gestor: GestorEntidades, mundo: Mundo, entidad_id: int,
+    ) -> int | None:
+        """Id de la cocina común COMPLETADA del asentamiento de
+        `entidad_id`, o None si no pertenece a ninguno o su asentamiento
+        no tiene una terminada todavía (2026-09-08, cocinas comunes --
+        ver docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md).
+        Devuelve el cid (no la posición como _salon_comun_de) porque los
+        dos consumidores reales (imán social de respaldo, alacena de
+        _calcular_forrajeo) necesitan cosas distintas del resultado."""
+        return construccion_completada_de_asentamiento(
+            gestor, mundo, entidad_id, self.radio_cluster_asentamiento, "cocina",
+            indice=self._indice_actual,
+        )
 
     def _agrupar_conscientes_por_celda(
         self, gestor: GestorEntidades,
@@ -1453,6 +1483,8 @@ class SistemaMovimiento:
     def _calcular_forrajeo(
         self,
         gestor: GestorEntidades,
+        mundo: Mundo,
+        entidad_id: int,
         zona: Any,
         especie: Especie,
         pos_x: int,
@@ -1462,7 +1494,12 @@ class SistemaMovimiento:
         cap_mental: CapacidadMental | None,
         zona_idx: int = 0,
     ) -> tuple[int, int]:
-        """Busca comida: evalúa necromasa y flora en radio sensorial y memoria."""
+        """Busca comida: evalúa necromasa, flora, alacena de cocina común
+        (2026-09-08) y memoria.
+
+        mundo/entidad_id (2026-09-08, cocinas comunes -- ver
+        docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md):
+        necesarios para localizar la cocina común del asentamiento."""
         cfg_esp = self.config.get("rangos_raciales", {}).get(especie.value, {})
         dieta = cfg_esp.get("dieta", [])
 
@@ -1507,6 +1544,24 @@ class SistemaMovimiento:
                     if hay_comida:
                         dist = abs(dx) + abs(dy)
                         candidatos.append((dist, nx, ny))
+
+        # C. Alacena de cocina común del asentamiento (2026-09-08, ver
+        # docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md)
+        # -- SOLO consciente (fauna no tiene asentamiento ni cocina). NO
+        # está acotada por `radio`: se sabe dónde está la cocina propia
+        # del asentamiento igual que ya pasa con el salón común/almacén,
+        # no es percepción sensorial del entorno inmediato -- compite
+        # por distancia con los candidatos de arriba en igualdad de
+        # condiciones (Diego: "la más cercana gana, sin prioridad
+        # especial").
+        if cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia:
+            cid_cocina = self._cocina_de(gestor, mundo, entidad_id)
+            if cid_cocina is not None:
+                cocina = gestor.obtener_componente(cid_cocina, Construccion)
+                pos_cocina = gestor.obtener_componente(cid_cocina, Posicion)
+                if cocina is not None and cocina.provisiones and pos_cocina is not None:
+                    dist = abs(pos_cocina.x - pos_x) + abs(pos_cocina.y - pos_y)
+                    candidatos.append((dist, pos_cocina.x, pos_cocina.y))
 
         if candidatos:
             candidatos.sort()
