@@ -77,6 +77,19 @@ necesidades:
     probabilidad_muerte_saciedad_critica: 0.005
     probabilidad_muerte_deshidratacion: 0.005
     probabilidad_muerte_ahogamiento: 0.5
+    # probabilidad_muerte_intoxicacion_base (2026-09-08, ver
+    # docs/superpowers/specs/2026-09-08-como-cocinar-design.md): al comer
+    # crudo un alimento marcado toxico_crudo (config/flora.yaml), modulada
+    # por (1 - resistencia_enfermedad) -- primer consumidor real de ese
+    # atributo, sorteado por individuo desde hace tiempo sin ninguno.
+    # Deliberadamente MUY por debajo de las demas probabilidades de
+    # muerte de este bloque -- vector de muerte NUEVO para gnomo, la
+    # especie mas fragil del catalogo (peor perfil reproductivo, todo el
+    # trabajo de estabilidad de esta sesion) -- empezar conservador, no
+    # igualar tasas ya calibradas de otras causas. PROVISIONAL, sin
+    # calibrar contra el harness completo -- verificar con especial
+    # cuidado contra el motor real antes de confiar en este numero.
+    probabilidad_muerte_intoxicacion_base: 0.001
     # ticks_plenitud (2026-08-29, incremento 2 del diseño de microsueños --
     # ver sistemas/sistema_necesidades.py): PERIODO DE PLENITUD posaciedad.
     # Una necesidad que alcanza 1.0 no decae durante este numero de ticks;
@@ -234,6 +247,11 @@ necesidades:
 consumo:
   tasa_consumo_al_comer: 0.5
   tasa_consumo_al_beber: 0.2
+  # tasa_cocinar_kg_tick (2026-09-08, ver docs/superpowers/specs/
+  # 2026-09-08-como-cocinar-design.md): cuanto se transforma de crudo a
+  # elaborado por tick de Accion.COCINAR -- mismo orden de magnitud que
+  # tasa_consumo_al_comer. PROVISIONAL, sin calibrar.
+  tasa_cocinar_kg_tick: 0.5
 
 decision:
   utilidad_deambular_base: 0.1
@@ -293,6 +311,13 @@ decision:
   # crisis real -- un gnomo no debería morirse de hambre por seguir
   # construyendo. PROVISIONAL, sin calibrar contra el motor en marcha.
   utilidad_construir_base: 0.3
+  # utilidad_cocinar_base (2026-09-08, ver docs/superpowers/specs/
+  # 2026-09-08-como-cocinar-design.md): base FIJA, no derivada de una
+  # necesidad -- cocinar es preparar para mas tarde, no una urgencia
+  # (a diferencia de ENCENDER_FUEGO). Por debajo de utilidad_construir_
+  # base -- terminar el refugio propio pesa mas que cocinar. PROVISIONAL,
+  # sin calibrar.
+  utilidad_cocinar_base: 0.25
   # utilidad_recolectar_base (2026-08-30, Círculo C -- ver
   # nucleo/construccion.py:material_suficiente_para_refugio): por encima
   # de utilidad_construir_base a propósito -- mientras falte material,

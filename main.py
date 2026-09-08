@@ -489,6 +489,13 @@ def main() -> None:
 
     try:
         ticks_ejecutados = 0
+        # Verificacion obligatoria de "como cocinar" (2026-09-08, ver
+        # docs/superpowers/specs/2026-09-08-como-cocinar-design.md):
+        # cuantas muertes de gnomo por cada causa, con enfasis explicito
+        # en "intoxicacion" (vector de muerte nuevo) -- se acumula aqui
+        # (nivel main.py, cruza sistemas) en vez de en un _stats_* de un
+        # sistema concreto. Solo observacion, no cambia la simulacion.
+        muertes_gnomo_por_causa: dict[str, int] = {}
         while True:
             if auto_ticks > 0 and ticks_ejecutados >= auto_ticks:
                 break
@@ -503,6 +510,9 @@ def main() -> None:
                     persistencia.registrar_entidad_nueva(ev.entidad_id, ev.datos)
                 elif ev.tipo == "Muerte":
                     persistencia.marcar_entidad_muerta(ev.entidad_id)
+                    if ev.datos.get("especie") == "gnomo":
+                        causa = ev.datos.get("causa", "?")
+                        muertes_gnomo_por_causa[causa] = muertes_gnomo_por_causa.get(causa, 0) + 1
             persistencia.persistir_eventos(eventos_tick)
 
             lineas_narradas = narrar(eventos_tick, gestor)
@@ -712,6 +722,12 @@ def main() -> None:
                 and gestor.obtener_componente(cid, Construccion).completado_alguna_vez
             )
             print(f"[BOSQUE_AUTO_TICKS] salones comunes completados: {salones_completados}")
+            print(f"[BOSQUE_AUTO_TICKS] muertes de gnomo por causa: {muertes_gnomo_por_causa}")
+            print(
+                "[BOSQUE_AUTO_TICKS] cocinar: "
+                f"{sistemas['recursos']._stats_cocinar_resuelto} veces resuelto, "
+                f"{sistemas['recursos']._stats_muertes_intoxicacion} muertes por intoxicacion"
+            )
 
     except KeyboardInterrupt:
         pass

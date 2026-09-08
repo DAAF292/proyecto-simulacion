@@ -451,6 +451,10 @@ def actualizar(
     # curiosidad. PROVISIONAL.
     utilidad_socializar_base = float(config["decision"].get("utilidad_socializar_base", 0.3))
     utilidad_recolectar_base = float(config["decision"].get("utilidad_recolectar_base", 0.35))
+    # utilidad_cocinar_base (2026-09-08, ver docs/superpowers/specs/
+    # 2026-09-08-como-cocinar-design.md): base FIJA, no derivada de una
+    # necesidad -- cocinar es preparar para mas tarde, no una urgencia.
+    utilidad_cocinar_base = float(config["decision"].get("utilidad_cocinar_base", 0.25))
     catalogo_materiales = config.get("materiales", {})
     config_construccion = config.get("construccion", {})
     fraccion_carga_maxima = float(config.get("inventario", {}).get("fraccion_carga_maxima", 0.25))
@@ -696,6 +700,24 @@ def actualizar(
                 ):
                     utilidad_encender_fuego = 1.0 - necesidades.confort_termico
 
+        # COCINAR (2026-09-08, ver docs/superpowers/specs/
+        # 2026-09-08-como-cocinar-design.md). Misma compuerta de
+        # consciencia que CONSTRUIR/RECOLECTAR/ENCENDER_FUEGO. Utilidad
+        # BASE FIJA (no derivada de una necesidad, a diferencia de
+        # ENCENDER_FUEGO) -- gateada a 0.0 si no hay una Fogata activa en
+        # la celda o no queda nada crudo (sin sufijo "_elaborada") en
+        # Inventario.provisiones.
+        utilidad_cocinar = 0.0
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            if fogata_en(gestor, pos.x, pos.y, pos.zona_idx) is not None:
+                provisiones_cocinar = inventario.provisiones if inventario is not None else {}
+                tiene_crudo = any(
+                    not r.endswith("_elaborada") and c > 0.0
+                    for r, c in provisiones_cocinar.items()
+                )
+                if tiene_crudo:
+                    utilidad_cocinar = utilidad_cocinar_base
+
         # FABRICAR_ARMA (armas primitivas v2, ver componentes/intencion.py,
         # config/armas.yaml y nucleo/armas.py). Misma compuerta de
         # consciencia que CONSTRUIR/RECOLECTAR. Utilidad = 1.0 - seguridad
@@ -772,6 +794,7 @@ def actualizar(
             (utilidad_recolectar, Accion.RECOLECTAR),
             (utilidad_construir, Accion.CONSTRUIR),
             (utilidad_encender_fuego, Accion.ENCENDER_FUEGO),
+            (utilidad_cocinar, Accion.COCINAR),
             # SOCIALIZAR va delante de DEAMBULAR a proposito: es la accion de
             # ocio consciente que compite con el vagabundeo sin rumbo; cuando
             # su compuerta se cierra (0.0 por no-consciente o necesidad fisica

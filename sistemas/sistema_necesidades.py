@@ -64,14 +64,13 @@ from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
-from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
 from nucleo.agua import profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.disposicion import contar_conspecificos_cercanos
-from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
-from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.entidad import GestorEntidades, procesar_deceso
+from nucleo.eventos import BusEventos
 from nucleo.construccion import hay_construccion_de_tipo_en
 from nucleo.fuego import fogata_en, hay_refugio_en
 from nucleo.madriguera import madriguera_en
@@ -581,39 +580,24 @@ class SistemaNecesidades:
         causa: str,
         zona_idx: int = 0,
     ) -> None:
-        """Instancia la necromasa, emite el evento Muerte con coordenadas y purga la entidad."""
-        rep = gestor.obtener_componente(entidad_id, Reproduccion)
-        sexo_valor = rep.sexo.value if rep is not None else None
-        masas, agua_tisular = componer_necromasa(
-            dims.peso, self.fraccion_masa_seca, self.fraccion_hueso, self.fraccion_agua_tisular
-        )
-
-        crear_necromasa(
+        """Instancia la necromasa, emite el evento Muerte con coordenadas y
+        purga la entidad -- wrapper de nucleo/entidad.py:procesar_deceso
+        (2026-09-08, extraído para que otros sistemas, p.ej. intoxicación
+        por comer crudo tóxico en sistema_recursos.py, puedan matar una
+        entidad sin duplicar esta lógica). Comportamiento idéntico al de
+        antes de la extracción."""
+        procesar_deceso(
             gestor=gestor,
+            bus_eventos=bus_eventos,
+            tick_actual=reloj.tick_actual,
+            entidad_id=entidad_id,
             pos_x=pos_x,
             pos_y=pos_y,
-            masas=masas,
-            agua_tisular=agua_tisular,
-            origen_especie=ident.especie.value,
-            tasa_putrefaccion=0.05,
+            dims=dims,
+            ident=ident,
+            causa=causa,
             zona_idx=zona_idx,
+            fraccion_masa_seca=self.fraccion_masa_seca,
+            fraccion_hueso=self.fraccion_hueso,
+            fraccion_agua_tisular=self.fraccion_agua_tisular,
         )
-
-        bus_eventos.emitir(
-            Evento(
-                tipo="Muerte",
-                severidad=Severidad.HISTORICO,
-                tick=reloj.tick_actual,
-                entidad_id=entidad_id,
-                datos={
-                    "causa": causa,
-                    "especie": ident.especie.value,
-                    "nombre": ident.nombre,
-                    "sexo": sexo_valor,
-                    "x": pos_x,
-                    "y": pos_y,
-                    "zona_idx": zona_idx,
-                },
-            )
-        )
-        gestor.eliminar_entidad(entidad_id)

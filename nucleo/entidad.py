@@ -32,6 +32,7 @@ from componentes.relaciones import Relaciones
 from componentes.semillas import Semillas
 from componentes.temperamento import Temperamento
 from nucleo.ciclo_vital import TICKS_POR_ANIO
+from nucleo.eventos import BusEventos, Evento, Severidad
 
 T = TypeVar("T")
 
@@ -164,6 +165,67 @@ def crear_necromasa(
         ),
     )
     return nec_id
+
+
+def procesar_deceso(
+    gestor: GestorEntidades,
+    bus_eventos: BusEventos,
+    tick_actual: int,
+    entidad_id: int,
+    pos_x: int,
+    pos_y: int,
+    dims: DimensionesFisicas,
+    ident: Identidad,
+    causa: str,
+    zona_idx: int = 0,
+    fraccion_masa_seca: float = 0.35,
+    fraccion_hueso: float = 0.15,
+    fraccion_agua_tisular: float = 0.65,
+    tasa_putrefaccion: float = 0.05,
+) -> None:
+    """
+    Instancia la necromasa, emite el evento Muerte con coordenadas y purga
+    la entidad -- extraído de sistema_necesidades.py:_resolver_deceso
+    (2026-09-08, ver docs/superpowers/specs/2026-09-08-como-cocinar-design.md)
+    para que otros sistemas (p.ej. intoxicación por comer crudo tóxico en
+    sistema_recursos.py) puedan matar una entidad sin duplicar esta lógica.
+    Mismo comportamiento exacto que antes de la extracción.
+    """
+    rep = gestor.obtener_componente(entidad_id, Reproduccion)
+    sexo_valor = rep.sexo.value if rep is not None else None
+    masas, agua_tisular = componer_necromasa(
+        dims.peso, fraccion_masa_seca, fraccion_hueso, fraccion_agua_tisular
+    )
+
+    crear_necromasa(
+        gestor=gestor,
+        pos_x=pos_x,
+        pos_y=pos_y,
+        masas=masas,
+        agua_tisular=agua_tisular,
+        origen_especie=ident.especie.value,
+        tasa_putrefaccion=tasa_putrefaccion,
+        zona_idx=zona_idx,
+    )
+
+    bus_eventos.emitir(
+        Evento(
+            tipo="Muerte",
+            severidad=Severidad.HISTORICO,
+            tick=tick_actual,
+            entidad_id=entidad_id,
+            datos={
+                "causa": causa,
+                "especie": ident.especie.value,
+                "nombre": ident.nombre,
+                "sexo": sexo_valor,
+                "x": pos_x,
+                "y": pos_y,
+                "zona_idx": zona_idx,
+            },
+        )
+    )
+    gestor.eliminar_entidad(entidad_id)
 
 
 def crear_construccion(

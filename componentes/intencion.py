@@ -49,6 +49,15 @@ class Accion(Enum):
     # ahí. Sin desplazamiento (como RECOLECTAR/ALIVIARSE) -- se resuelve
     # donde ya se esté.
     ENCENDER_FUEGO = "encender_fuego"
+    # COCINAR (2026-09-08, ver docs/superpowers/specs/
+    # 2026-09-08-como-cocinar-design.md): misma compuerta de consciencia
+    # que CONSTRUIR/RECOLECTAR. Utilidad BASE FIJA (no derivada de una
+    # necesidad, a diferencia de ENCENDER_FUEGO) -- cocinar es preparar
+    # comida para más tarde, no una urgencia. Gateada a 0.0 si no hay una
+    # Fogata activa en la celda o no queda nada crudo en
+    # Inventario.provisiones. Sin desplazamiento -- se resuelve donde ya
+    # se esté.
+    COCINAR = "cocinar"
     # FABRICAR_ARMA: exclusiva de quien supera
     # decision.umbral_consciencia_agencia (gnomo hoy) -- fabricar un arma
     # es agencia consciente, no instinto. Gateada por necesidad real

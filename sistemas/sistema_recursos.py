@@ -41,7 +41,8 @@ from nucleo.construccion import (
     progreso_construccion,
     transferir_a_construccion,
 )
-from nucleo.entidad import GestorEntidades, crear_fogata
+from nucleo.comida import elaborar_recurso, es_elaborado, recurso_base
+from nucleo.entidad import GestorEntidades, crear_fogata, procesar_deceso
 from nucleo.espacio import plantas_competidoras_en
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
@@ -69,6 +70,10 @@ class SistemaRecursos:
         # observación, ningún camino de decisión los lee.
         self._stats_provisiones_guardadas: int = 0
         self._stats_provisiones_consumidas: int = 0
+        # Cocinar + intoxicacion (2026-09-08, ver docs/superpowers/specs/
+        # 2026-09-08-como-cocinar-design.md). Solo observacion.
+        self._stats_cocinar_resuelto: int = 0
+        self._stats_muertes_intoxicacion: int = 0
         self._cachear_configuracion()
 
     def _cachear_configuracion(self) -> None:
@@ -76,6 +81,9 @@ class SistemaRecursos:
         cfg_cons = self.config.get("consumo", {})
         self.tasa_consumo_comer: float = float(cfg_cons.get("tasa_consumo_al_comer", 0.5))
         self.tasa_consumo_beber: float = float(cfg_cons.get("tasa_consumo_al_beber", 0.2))
+        # Cocinar (2026-09-08, ver docs/superpowers/specs/
+        # 2026-09-08-como-cocinar-design.md). PROVISIONAL.
+        self.tasa_cocinar_kg_tick: float = float(cfg_cons.get("tasa_cocinar_kg_tick", 0.5))
 
         cfg_abono = self.config.get("abono", {})
         self.incremento_fertilidad: float = float(
@@ -151,6 +159,17 @@ class SistemaRecursos:
         self.umbral_consciencia_agencia: float = float(
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
         )
+        # Toxicidad de crudo + comida elaborada (2026-09-08, ver
+        # docs/superpowers/specs/2026-09-08-como-cocinar-design.md).
+        # PROVISIONALES.
+        self.probabilidad_muerte_intoxicacion_base: float = float(
+            self.config.get("necesidades", {}).get("defecto", {}).get(
+                "probabilidad_muerte_intoxicacion_base", 0.001
+            )
+        )
+        self.factor_mejora_elaboracion: float = float(
+            self.config.get("elaboracion", {}).get("factor_mejora_elaboracion", 1.5)
+        )
 
         cfg_dep = self.config.get("depredacion", {})
         self.eficiencia_biomasa_saciedad: float = float(
@@ -171,12 +190,17 @@ class SistemaRecursos:
         self.especies_flora: dict[str, Any] = self.config.get("flora", {}).get("especies", {})
         self.nutricion_flora: dict[str, float] = {}
         self.hidratacion_flora: dict[str, float] = {}
+        # toxico_crudo_flora (2026-09-08, ver docs/superpowers/specs/
+        # 2026-09-08-como-cocinar-design.md): mismo bucle que nutricion_
+        # flora/hidratacion_flora, no uno aparte.
+        self.toxico_crudo_flora: dict[str, bool] = {}
         for esp_data in self.especies_flora.values():
             for rec in esp_data.get("recursos", []):
                 nom = rec.get("nombre")
                 if nom:
                     self.nutricion_flora[nom] = float(rec.get("valor_nutricional", 0.2))
                     self.hidratacion_flora[nom] = float(rec.get("valor_hidratacion", 0.05))
+                    self.toxico_crudo_flora[nom] = bool(rec.get("toxico_crudo", False))
 
         # especie_por_recurso: {nombre_recurso: especie_que_lo_produce}
         # (2026-09-03, pieza 3 -- cupo de espacio compartido por celda).
@@ -248,7 +272,8 @@ class SistemaRecursos:
 
             if intencion.accion == Accion.COMER:
                 self._resolver_comer(
-                    gestor, eid, ident, nec, mem, cap_mental, celda, pos.x, pos.y, pos.zona_idx
+                    gestor, eid, ident, nec, mem, cap_mental, celda, pos.x, pos.y, pos.zona_idx,
+                    bus_eventos, reloj.tick_actual,
                 )
             elif intencion.accion == Accion.BEBER:
                 self._resolver_beber(nec, mem, cap_mental, celda, pos.x, pos.y)
@@ -278,6 +303,8 @@ class SistemaRecursos:
                     gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
                     inv_fuego, agarre_fuego,
                 )
+            elif intencion.accion == Accion.COCINAR:
+                self._resolver_cocinar(gestor, eid, pos.x, pos.y, pos.zona_idx)
             elif intencion.accion == Accion.FABRICAR_ARMA:
                 inv = gestor.obtener_componente(eid, Inventario)
                 agarre_fabricar = gestor.obtener_componente(eid, Agarre)
@@ -749,6 +776,36 @@ class SistemaRecursos:
             )
             return
 
+    def _resolver_cocinar(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+    ) -> None:
+        """Cocinar (2026-09-08, ver docs/superpowers/specs/
+        2026-09-08-como-cocinar-design.md): transforma hasta
+        tasa_cocinar_kg_tick del primer recurso crudo no vacío de
+        Inventario.provisiones en su versión "_elaborada" -- defensivo
+        (la compuerta ya lo filtra en sistema_decision.py, pero no
+        vuelve a comprobar Fogata aquí: si deja de haberla a mitad de
+        cocinar, este tick concreto ya se resuelve igual, mismo criterio
+        que el resto del motor no re-verifica condiciones de entrada
+        dentro de la resolución)."""
+        inv = gestor.obtener_componente(entidad_id, Inventario)
+        if inv is None or not inv.provisiones:
+            return
+        recurso_crudo = next(
+            (r for r in inv.provisiones if not es_elaborado(r) and inv.provisiones[r] > 0.0),
+            None,
+        )
+        if recurso_crudo is None:
+            return
+        transformado = elaborar_recurso(inv.provisiones, recurso_crudo, self.tasa_cocinar_kg_tick)
+        if transformado > 0.0:
+            self._stats_cocinar_resuelto += 1
+
     def _resolver_fabricar_arma(
         self,
         gestor: GestorEntidades,
@@ -825,6 +882,25 @@ class SistemaRecursos:
             if fogata.combustible_restante <= 0.0:
                 gestor.eliminar_entidad(fid)
 
+    def _valor_nutricional_efectivo(self, nombre: str) -> float:
+        """valor_nutricional del recurso, multiplicado por
+        factor_mejora_elaboracion si `nombre` es la versión "_elaborada"
+        (2026-09-08, ver docs/superpowers/specs/
+        2026-09-08-como-cocinar-design.md). Los recursos de Celda nunca
+        llevan el sufijo -- solo Inventario.provisiones puede tener algo
+        cocinado -- así que esto es un no-op para el forraje de celda."""
+        valor = self.nutricion_flora.get(recurso_base(nombre), 0.2)
+        if es_elaborado(nombre):
+            valor *= self.factor_mejora_elaboracion
+        return valor
+
+    def _valor_hidratacion_efectiva(self, nombre: str) -> float:
+        """Análogo a _valor_nutricional_efectivo para valor_hidratacion."""
+        valor = self.hidratacion_flora.get(recurso_base(nombre), 0.05)
+        if es_elaborado(nombre):
+            valor *= self.factor_mejora_elaboracion
+        return valor
+
     def _resolver_comer(
         self,
         gestor: GestorEntidades,
@@ -837,10 +913,21 @@ class SistemaRecursos:
         pos_x: int,
         pos_y: int,
         zona_idx: int = 0,
+        bus_eventos: BusEventos | None = None,
+        tick_actual: int = 0,
     ) -> None:
         """
         Resuelve la ingesta de biomasa: evalúa primero necromasa presente (carroñeo)
         y posteriormente forraje vegetal compatible con la dieta de la especie.
+
+        bus_eventos/tick_actual (2026-09-08, toxicidad de crudo -- ver
+        docs/superpowers/specs/2026-09-08-como-cocinar-design.md):
+        necesarios para poder matar por intoxicación (procesar_deceso)
+        sin salir de este método. Opcionales con default para no romper
+        tests dirigidos existentes que llaman a este método directamente
+        sin pasar bus_eventos -- sin él, la muerte por intoxicación
+        simplemente no se resuelve (defensivo, nunca debería ocurrir en
+        juego real: ejecutar() siempre los pasa).
         """
         # 1. Evaluación de Carroñeo (Necromasa en la celda). zona_idx:
         # "en la celda" exige tambien estar en la misma zona -- ver
@@ -899,11 +986,48 @@ class SistemaRecursos:
             consumo = min(cant_actual, self.tasa_consumo_comer)
             celda.recursos[nombre_rec] = max(0.0, cant_actual - consumo)
 
-            val_nut = self.nutricion_flora.get(nombre_rec, 0.2)
-            val_hid = self.hidratacion_flora.get(nombre_rec, 0.05)
+            consciente = (
+                cap_mental is not None
+                and cap_mental.consciencia >= self.umbral_consciencia_agencia
+            )
+
+            val_nut = self._valor_nutricional_efectivo(nombre_rec)
+            val_hid = self._valor_hidratacion_efectiva(nombre_rec)
 
             nec.saciedad = min(1.0, nec.saciedad + (consumo * val_nut))
             nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
+
+            # Toxicidad de crudo (2026-09-08, ver docs/superpowers/specs/
+            # 2026-09-08-como-cocinar-design.md) -- GATEADA A CONSCIENTE:
+            # sin este gate, conejo/caballo (que tambien comen raices/
+            # bayas_espinosas) quedarian expuestos a un vector de muerte
+            # sin ninguna forma de cocinar jamas. Los recursos de celda
+            # nunca llevan el sufijo "_elaborada" (solo Inventario.
+            # provisiones puede tener algo cocinado), asi que aqui
+            # siempre se evalua el recurso crudo tal cual.
+            if (
+                consciente
+                and bus_eventos is not None
+                and self.toxico_crudo_flora.get(nombre_rec, False)
+            ):
+                dims_tox = gestor.obtener_componente(entidad_id, DimensionesFisicas)
+                resistencia = dims_tox.resistencia_enfermedad if dims_tox is not None else 0.0
+                prob = self.probabilidad_muerte_intoxicacion_base * (1.0 - resistencia)
+                if dims_tox is not None and self.rng.random() < prob:
+                    procesar_deceso(
+                        gestor=gestor,
+                        bus_eventos=bus_eventos,
+                        tick_actual=tick_actual,
+                        entidad_id=entidad_id,
+                        pos_x=pos_x,
+                        pos_y=pos_y,
+                        dims=dims_tox,
+                        ident=identidad,
+                        causa="intoxicacion",
+                        zona_idx=zona_idx,
+                    )
+                    self._stats_muertes_intoxicacion += 1
+                    return
 
             self._registrar_recuerdo_si_procede(mem, cap_mental, "comida", pos_x, pos_y)
 
@@ -942,11 +1066,8 @@ class SistemaRecursos:
             # decision calculada (ley binaria, sin variar por
             # inteligencia/voluntad individual). Bolsillo TOTALMENTE
             # INDEPENDIENTE de Inventario.contenidos -- nunca compite
-            # con materiales de construccion.
-            consciente = (
-                cap_mental is not None
-                and cap_mental.consciencia >= self.umbral_consciencia_agencia
-            )
+            # con materiales de construccion. (`consciente` ya calculado
+            # arriba, reutilizado tambien por el chequeo de toxicidad.)
             sobra_en_celda = celda.recursos.get(nombre_rec, 0.0)
             if (
                 consciente
@@ -974,14 +1095,29 @@ class SistemaRecursos:
             # zoocoria (eso es solo para fruta comida donde crece).
             inv = gestor.obtener_componente(entidad_id, Inventario)
             if inv is not None and inv.provisiones:
+                consciente = (
+                    cap_mental is not None
+                    and cap_mental.consciencia >= self.umbral_consciencia_agencia
+                )
+                # Preferencia por lo elaborado (2026-09-08): para CADA r
+                # de la dieta, en su orden ya establecido, se prueba
+                # primero f"{r}_elaborada" y luego r crudo, antes de
+                # pasar al siguiente r -- no es una busqueda global de
+                # "cualquier elaborada en todo el inventario".
                 recurso_guardado = next(
-                    (r for r in dieta if inv.provisiones.get(r, 0.0) > 0.0), None
+                    (
+                        candidato
+                        for r in dieta
+                        for candidato in (f"{r}_elaborada", r)
+                        if inv.provisiones.get(candidato, 0.0) > 0.0
+                    ),
+                    None,
                 )
                 if recurso_guardado is not None:
                     disponible = inv.provisiones[recurso_guardado]
                     consumo = min(disponible, self.tasa_consumo_comer)
-                    val_nut = self.nutricion_flora.get(recurso_guardado, 0.2)
-                    val_hid = self.hidratacion_flora.get(recurso_guardado, 0.05)
+                    val_nut = self._valor_nutricional_efectivo(recurso_guardado)
+                    val_hid = self._valor_hidratacion_efectiva(recurso_guardado)
                     nec.saciedad = min(1.0, nec.saciedad + (consumo * val_nut))
                     nec.hidratacion = min(1.0, nec.hidratacion + (consumo * val_hid))
                     restante = disponible - consumo
@@ -990,6 +1126,37 @@ class SistemaRecursos:
                     else:
                         inv.provisiones[recurso_guardado] = restante
                     self._stats_provisiones_consumidas += 1
+
+                    # Toxicidad de crudo (2026-09-08) -- mismo gate de
+                    # consciencia que en el forraje de celda (aunque en
+                    # la practica esta rama ya es consciente-only, dado
+                    # que solo un consciente puede tener provisiones);
+                    # la version "_elaborada" nunca tira esta probabilidad.
+                    if (
+                        consciente
+                        and bus_eventos is not None
+                        and not es_elaborado(recurso_guardado)
+                        and self.toxico_crudo_flora.get(recurso_guardado, False)
+                    ):
+                        dims_tox = gestor.obtener_componente(entidad_id, DimensionesFisicas)
+                        resistencia = (
+                            dims_tox.resistencia_enfermedad if dims_tox is not None else 0.0
+                        )
+                        prob = self.probabilidad_muerte_intoxicacion_base * (1.0 - resistencia)
+                        if dims_tox is not None and self.rng.random() < prob:
+                            procesar_deceso(
+                                gestor=gestor,
+                                bus_eventos=bus_eventos,
+                                tick_actual=tick_actual,
+                                entidad_id=entidad_id,
+                                pos_x=pos_x,
+                                pos_y=pos_y,
+                                dims=dims_tox,
+                                ident=identidad,
+                                causa="intoxicacion",
+                                zona_idx=zona_idx,
+                            )
+                            self._stats_muertes_intoxicacion += 1
                     return
             # Sin esto, un individuo que llega aquí guiado por un
             # recuerdo de "comida" (nucleo/memoria.py:objetivo_recordado,
