@@ -5679,3 +5679,79 @@ círculo acordado del mismo arco; edificio de liderazgo sigue aplazado
 hasta definir qué decisión mecánica real debería habilitar; **ciudad
 enana permanece fuera de alcance hasta que la raza enana se plantee --
 no mencionar hasta entonces**.
+
+## Sistema de comidas -- dieta real de gnomo + catálogo de toxicidad,
+## precede a "cómo cocinar" (spec, implementado directamente por Claude,
+## 2026-09-08)
+
+Diego pidió separar explícitamente "qué es la comida" de "cómo se
+cocina" antes de diseñar las cocinas comunes -- dos conversaciones, no
+una. Arranque real: preguntó qué come gnomo hoy, y al ver los 13
+recursos completos del catálogo (herencia del círculo de "alimentos
+huérfanos", 2026-09-07) reaccionó: "no tiene sentido que un gnomo coma
+hierba".
+
+**Dieta de gnomo reducida a 6 claves reales**: `raices`+
+`raices_deserticas` (raíces), `manzanas`, `bayas_espinosas`+
+`bayas_montanas` (bayas), `nectar_semillas` (néctar) -- una dieta de
+forrajero humanoide plausible en vez de "come literalmente todo el
+catálogo". Se cae `hierba`/`fruto_de_cactus`/`liquen`/`musgo`/
+`bellotas`/`brotes_helecho`/`brotes_articos` de la dieta de gnomo --
+siguen existiendo en el mundo para otras especies (ardilla ya come
+bellotas), solo dejan de ser comestibles para gnomo.
+
+**Hallazgo real que surgió de la propia pregunta**: ¿qué de esa dieta
+podría ser tóxico en crudo? Diego: "las raíces y las bayas pueden llegar
+a ser tóxicas" -- primer caso REAL para
+`DimensionesFisicas.resistencia_enfermedad`, sorteado por individuo
+desde hace tiempo sin ningún consumidor (mismo patrón que valentía/
+empatía antes de su primer uso). Corrección real de diseño en el
+camino: la primera propuesta de Claude sugería el riesgo específicamente
+para carne cruda (razonable dado que ningún consciente come carne hoy)
+-- Diego corrigió: "ahora no hay razas conscientes que consuman carne,
+pero las habrá... el proceso de cocinado tiene que ser un poco
+universal". El mecanismo no excluye la carne por diseño, simplemente
+hoy nadie consciente la come -- el día que exista una raza carnívora
+consciente, usaría el mismo campo y el mismo mecanismo sin ningún caso
+especial.
+
+**Visión a futuro, anotada, sin diseñar**: Diego conecta esto con una
+futura alquimia -- un sistema de procesado genérico compartido entre
+comida, refinamiento de metales (ya existe minería de vetas), y un
+futuro sistema de magia. El multiplicador universal de mejora (sin
+tabla de recetas por alimento) que se decidió para "comida elaborada"
+es justo lo que dejaría esa puerta abierta más adelante, sin
+comprometerse a nada de eso ahora.
+
+Spec: `docs/superpowers/specs/2026-09-08-sistema-comidas-design.md`.
+**Secuenciación deliberada, para no soltar un riesgo sin cura**: este
+círculo solo añade el CATÁLOGO -- `toxico_crudo: true` en las 4 claves
+de raíces/bayas (`config/flora.yaml`, mismo patrón que
+`apto_construccion`/`compite_espacio_fisico`) -- como dato inerte, sin
+ningún código que lo lea todavía. Activar la probabilidad real de
+intoxicación (modulada por `resistencia_enfermedad`) y el multiplicador
+`factor_mejora_elaboracion` quedan explícitamente para cuando se diseñe
+"cómo cocinar" (círculo siguiente), implementados JUNTOS -- introducir
+el riesgo ahora sin ninguna cura disponible habría sido una regresión
+real para gnomo.
+
+**Verificado**: 348/348 tests (4 nuevos, `tests/test_sistema_comidas.py`
+-- dieta exacta, `toxico_crudo` marcado exactamente donde corresponde,
+regresión del resto del catálogo). `BOSQUE_AUTO_TICKS=3000` sin
+excepciones. Diagnóstico dirigido adicional (Diego: "testea qué provoca
+en el mundo", 3 semillas nuevas, arnés en scratchpad no comiteado, con
+salvaguarda de tiempo real de 40s/corrida tras un primer intento que
+tardó demasiado): la dieta reducida no muestra evidencia de perjudicar
+la supervivencia de gnomo frente a la dieta vieja de 13 recursos (9→10,
+12→13, 11→15 individuos vivos en las 3 semillas) -- muestra pequeña,
+reportada con la misma cautela metodológica ya establecida en este
+proyecto sobre comparaciones semilla-a-semilla (el cambio puede desviar
+la secuencia de aleatoriedad aguas abajo).
+
+**Pendiente real, explícito**: el círculo de "cómo cocinar" (acción de
+elaborar, activación real de toxicidad + `resistencia_enfermedad`,
+`factor_mejora_elaboracion`, y solo entonces las cocinas comunes como
+edificio) es el siguiente paso inmediato de este mismo arco; dieta de
+conejo/ardilla/caballo no revisada (Diego solo pidió corregir la de
+gnomo); alquimia como sistema de procesado genérico compartido con
+metalurgia/magia, mencionada, sin ningún diseño todavía.
