@@ -7135,3 +7135,105 @@ a esta escala, sin relación con el hallazgo de lobo.
   sigue sin correrse nunca para nada de esto -- las 15 semillas de hoy
   se cortaron entre 5765 y 10104 ticks por el límite de tiempo real del
   entorno de 4 núcleos.
+
+## Presupuesto calórico de lobo con venado disponible -- causa real
+## identificada: no es nutrición, es frecuencia de encuentro (2026-09-09,
+## mismo día, respuesta directa al "Pendiente real" de la sección
+## anterior)
+
+Diego pidió investigar directamente la pregunta que dejó abierta la
+sección anterior: ¿por qué la inanición sigue siendo la causa de muerte
+dominante de lobo pese a que venado (presa numéricamente viable en
+solitario, con margen real) ya existe y se caza de verdad? Arnés nuevo,
+`diag_calorico_lobo.py` (scratchpad, no en el repo): instrumenta
+`SistemaDepredacion._resolver_ataque` para registrar cada captura real
+de lobo (especie de presa, saciedad antes/después) y muestrea
+`Necesidades.saciedad` de cada lobo vivo cada 200 ticks. 4 semillas
+nuevas (500001-500004), hasta 6000 ticks cada una (cortadas entre
+5142-6000 por el límite de tiempo real del entorno).
+
+**Corrección propia importante, encontrada al preparar el diagnóstico
+antes de interpretar nada**: mis primeros cálculos a mano sobre el
+"margen calórico por captura" partían de los valores por DEFECTO
+codificados en `sistema_depredacion.py` (`eficiencia_biomasa_saciedad
+=1.5`, `captura_prob_min/max=0.05/0.5`) en vez de los valores REALES de
+`config/combate.yaml` (`eficiencia_biomasa_saciedad=12.0`,
+`captura_prob_min/max=0.15/0.85`) -- un error de lectura propio, no del
+motor, corregido antes de sacar ninguna conclusión de los números
+equivocados.
+
+**Resultado 1 -- la nutrición por captura NO es el problema, confirmado
+con datos reales de captura, no solo con la fórmula**: con
+`eficiencia_biomasa_saciedad=12.0` real, `aporte_maximo = (peso_presa/
+peso_cazador) * 12.0` es generoso -- una captura de venado o de gnomo
+casi siempre llena la saciedad de lobo A TOPE (a 1.0), confirmado
+capturando directamente el antes/después real de decenas de capturas
+(ejemplos reales: venado 0.598→1.0, gnomo 0.387→1.0, gnomo 0.152→1.0).
+Incluso ardilla (la presa menos nutritiva del catálogo) da un
+0.06-0.10 real por captura, no un valor insignificante.
+
+**Resultado 2 -- lobo pasa una fracción real y alta de su vida en
+saciedad=0**: muestreado directamente (no inferido), **26.4% de media**
+de las muestras de saciedad de lobo (15.8%-34.7% según la semilla)
+están exactamente en 0.0 -- el estado en el que se activa el sorteo de
+muerte por inanición cada tick (`probabilidad_muerte_saciedad_critica
+=0.0004` para lobo). Esto explica directamente por qué inanición sigue
+dominando: no es que cada captura alimente poco, es que pasan MUCHOS
+ticks entre capturas, tiempo suficiente para vaciarse del todo y
+quedarse ahí, acumulando riesgo de muerte tick a tick.
+
+**Resultado 3 -- causa raíz real: radio de percepción de caza minúsculo
++ elección puramente por distancia, sin preferencia por valor
+nutricional**. `sistema_movimiento.py:_calcular_caza` usa el mismo
+`radio_individual` genérico que el resto de percepción
+(`config/comportamiento.yaml: percepcion.radio_minimo/maximo_celdas`
+=[0,4]) -- para lobo (`agudeza_sensorial` 0.5-0.8), esto aterriza en
+radio 2 (42% de individuos) o radio 3 (58%), según el propio docstring
+de `nucleo/percepcion.py`. Un radio Manhattan de 2 cubre solo 12 celdas,
+uno de 3 cubre 24 -- una fracción minúscula del mapa en cualquier tick
+dado. Y dentro de ese radio, `_calcular_caza` ordena presas por
+DISTANCIA únicamente (`presas.sort()`, sin ningún peso por valor
+nutricional) y persigue siempre la más cercana, nunca la más rentable.
+**Confirmado con las capturas reales agregadas de las 4 semillas**:
+ardilla 106 capturas, conejo 58, gnomo 35, **venado solo 28** -- pese a
+ser, con diferencia, la presa que más saciedad da por captura. La
+explicación no es preferencia ni casualidad: ardilla parte con 3x más
+población fundadora que venado (30 vs 10) y probablemente mayor
+densidad efectiva, así que dentro de un radio de 2-3 celdas es
+simplemente más probable topar antes con una ardilla barata que con un
+venado rentable -- lobo no elige, coge lo primero que ve.
+
+**Conclusión, contrastada con Diego antes de tocar nada**: el problema
+de fondo de lobo nunca fue "falta de presa nutricionalmente viable"
+(ya resuelto con venado, y el propio venado se caza con éxito real) --
+es que el radio de percepción de caza es demasiado pequeño para que la
+frecuencia de encuentro (con cualquier presa, no solo venado) mantenga
+a lobo fuera de saciedad=0 la mayor parte del tiempo, y que dentro de
+ese radio limitado no hay ninguna preferencia por la presa más rentable
+-- ambos factores compuestos explican por qué tener venado disponible
+no bajó la inanición de forma visible en la prueba extensa.
+
+**Pendiente real, sin decidir todavía, palancas candidatas sin
+implementar**:
+- Ampliar el radio de percepción específico de caza (distinto del radio
+  genérico compartido con comida/agua/amenaza) -- palanca más directa,
+  pero exige decidir si es solo para lobo o una ley general (todo
+  cazador percibe presa más lejos que otras cosas, biológicamente
+  plausible -- un depredador real invierte más en detectar presa que
+  una presa en detectar comida vegetal estática).
+- Preferencia por valor nutricional al elegir presa dentro del radio ya
+  percibido (ordenar por `aporte_maximo` estimado en vez de por
+  distancia pura, o un compromiso entre ambos) -- no descarta el
+  problema de radio pequeño, pero al menos evitaría que lobo ignore un
+  venado más rentable por perseguir la ardilla más cercana cuando ambas
+  están dentro del radio.
+- Subir la densidad de venado (más `venados_iniciales`, o tasa de
+  reproducción) -- la vía más simple pero ya se descartó una vez un
+  atajo parecido para lobo ("subir `lobos_iniciales` no arregla nada",
+  2026-09-05) por el mismo motivo que podría fallar aquí: más población
+  sin mejorar el problema de encuentro solo añade individuos compitiendo
+  por el mismo cuello de botella.
+- Ninguna implementada -- decisión de diseño real (qué tan "consciente"
+  debe ser un depredador de la calidad de su presa, si el radio de caza
+  debe ser una ley general o específica) pendiente de acordar con Diego
+  antes de tocar código, mismo criterio que el resto del proyecto.
