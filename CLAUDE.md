@@ -7334,3 +7334,85 @@ antes de aplicar"). El motor vuelve exactamente al comportamiento de
   exactamente el mismo patrón que motivó media docena de reversiones ya
   documentadas en este proyecto (fertilidad de conejo, `techo_fraccion_
   edad_inicial_longevidad` de lobo, `ardilla_trim`, entre otras).
+
+## Segundo intento (candidato "c" de arriba): preferencia por presa como
+## TASA, radio de caza sin tocar -- también empeora, aislando la causa
+## real: el problema no era combinar las dos palancas, es preferir
+## "mejor" sobre "más cerca" en sí (2026-09-09, mismo día, descartado
+## sin comitear)
+
+Diego aprobó explícitamente seguir con el candidato "c" de la sección
+anterior: aislar la preferencia por presa del cambio de radio,
+implementando además una fórmula distinta (tasa `ratio_biomasa /
+(distancia + 1)` en vez de la resta lineal ya descartada) -- una presa
+al doble de distancia necesita ser el doble de rentable para ganar,
+mismo principio que la teoría de forrajeo óptimo real (rentabilidad =
+valor/tiempo de persecución), en teoría más robusto que restar un coste
+fijo pequeño. Radio de caza deliberadamente SIN TOCAR esta vez.
+
+414/414 tests (4 nuevos), `BOSQUE_AUTO_TICKS=3000` sin excepciones --
+mecánicamente correcto, igual que el primer intento.
+
+**Verificación cuantitativa, mismo arnés y MISMAS 4 semillas
+(500001-500004), comparando las tres condiciones ya medidas**:
+
+| | Línea base (`f07915c`) | 1er intento (radio+resta lineal, revertido) | 2º intento (solo tasa, radio intacto) |
+|---|---|---|---|
+| `frac_tiempo_saciedad_cero` (media) | 0.264 | 0.385 | **0.352** |
+| Capturas totales (4 semillas) | 227 | 58 | **95** |
+
+**El segundo intento es mejor que el primero en ambas métricas, pero
+sigue siendo claramente peor que la línea base** -- ni la fórmula de
+tasa (más principiada) ni aislar el radio bastaron para recuperar el
+comportamiento original. Composición de presas también reveladora:
+pese a que la tasa está diseñada para favorecer explícitamente a venado
+(ratio~0.21) sobre ardilla (ratio~0.006), la PROPORCIÓN de capturas de
+venado bajó frente a la línea base (12.3%→8.4% del total) -- el colapso
+general de frecuencia de caza (227→95) arrastra hacia abajo incluso a
+la presa que la preferencia debía beneficiar.
+
+**Conclusión real, más importante que el resultado numérico en sí**:
+esto descarta la hipótesis de que "combinar radio ampliado + preferencia
+mal calibrada" era la causa del primer fracaso -- **la preferencia por
+presa SOLA, con radio intacto y con una fórmula mejor fundamentada
+(tasa, no resta), sigue perjudicando la frecuencia de caza real**. El
+mecanismo de fondo parece ser estructural, no un problema de calibración
+de un parámetro concreto: `_calcular_caza` recalcula el mejor candidato
+desde cero cada tick, sin ningún compromiso persistente con un objetivo
+-- cualquier fórmula que a veces prefiera un objetivo más lejano sobre
+uno más cercano introduce, por diseño, más ticks de persecución por
+intento de caza, y con presa que también se mueve, más ticks de
+persecución significan más oportunidades reales de perder el objetivo
+antes de alcanzarlo. La ventaja de "cazar mejor cuando se caza" nunca ha
+compensado la pérdida de "cazar con menos frecuencia" en ninguna de las
+dos fórmulas probadas.
+
+**Decisión, con la evidencia ya en mano**: descartado sin comitear
+(cambios locales revertidos con `git checkout`, nunca llegaron a
+`master` ni a la rama de trabajo) -- 410/410 tests en verde tras
+descartar, motor exactamente en el estado de `f07915c`.
+
+**Pendiente real, con el candidato "c" ya agotado**:
+- De las tres palancas candidatas señaladas tras el primer revert, dos
+  quedan descartadas por evidencia real (resta lineal + radio; tasa sin
+  radio) y una sin probar todavía -- **mecanismo de "objetivo fijado"**
+  (recordar el último objetivo de caza mientras siga siendo válido y
+  visible, en vez de recalcular desde cero cada tick) es ahora el único
+  candidato de la lista original que no se ha intentado, y el análisis
+  de esta sección lo señala como el más prometedor: ataca directamente
+  la causa estructural identificada (sin compromiso persistente, ningún
+  cambio de fórmula de puntuación puede evitar el coste de persecuciones
+  más largas y más propensas a fallar). Es una pieza de estado nueva
+  (más grande que un ajuste numérico), no probada todavía.
+- Alternativa mucho más simple, también sin probar: aceptar que "más
+  cerca" ya es, en la práctica, una heurística razonable para un
+  depredador oportunista (coincide con cómo cazan muchos depredadores
+  reales -- energía mínima antes que presa óptima) y abandonar la vía
+  de preferencia por valor por completo, centrando cualquier mejora
+  futura de lobo en otras palancas (frecuencia de encuentro vía
+  densidad de presa, no vía elección de presa).
+- El diagnóstico de causa raíz de "Presupuesto calórico de lobo..."
+  (radio pequeño + sin preferencia) sigue siendo correcto como
+  DIAGNÓSTICO -- lo que estas dos rondas descartan es que la preferencia
+  por valor, en cualquiera de sus dos formulaciones probadas, sea la
+  CURA correcta.
