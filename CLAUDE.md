@@ -6824,3 +6824,113 @@ los valores tocados hoy (`fisiologia.yaml`: hidratación de lobo/conejo;
 PROVISIONALES. El harness completo de referencia (15×12000) sigue
 siendo la validación de rigor pendiente para dar cualquiera de estos
 tres commits por definitivamente cerrado.
+
+## Venado y cabra montés -- primeras dos especies de un arco de
+## biodiversidad de fauna, implementadas directamente por Claude
+## (2026-09-09, sesión siguiente, mismo día)
+
+Con el ecosistema ya estable, Diego propuso ampliar la biodiversidad --
+primero sugirió "cabras y ovejas", descartadas en conversación por
+connotación de domesticación real (de los primeros animales
+domesticados del mundo real). Reencuadrado hacia mamíferos genuinamente
+salvajes: **venado** (cierra directamente el problema nutricional de
+lobo, ya documentado desde el 2026-09-04 -- "el 75% de la nutrición de
+lobo venía de gnomo") y **cabra montés** (primera fauna del bioma
+montaña, vacío de fauna desde que existe flora propia ahí -- también
+propuesto por Diego, pero como especie realmente salvaje, nunca
+domesticada). Specs escritas por separado a petición explícita de
+Diego, para poder soltarlas por separado al pipeline:
+`docs/superpowers/specs/2026-09-09-especie-venado-design.md` y
+`2026-09-09-especie-cabra-montes-design.md`.
+
+**Diseño clave de venado, distinto de caballo**: peso deliberadamente
+por debajo de TODO el rango de lobo (60-90kg), para ser cazable en
+SOLITARIO por la vía normal de depredación -- sin pasar por el techo de
+presa por manada, que esta misma sesión confirmó (73 corridas) que
+prácticamente nunca se dispara en juego libre. Cero código nuevo de
+depredación necesario, a diferencia de caballo.
+
+**Bloqueo real de infraestructura, antes de implementar**: Diego pidió
+"levanta el centinela" para probar si el modelo barato del pipeline
+implementaba las dos specs correctamente. Comprobado antes de intentarlo:
+este contenedor cloud no tiene `OPENROUTER_API_KEY` ni `litellm`/
+`mini-swe-agent` instalados -- es un entorno efímero distinto de la
+máquina histórica del pipeline (WSL2 de Diego). Reportado con honestidad
+en vez de fingir un intento, ofrecidas tres vías (instalar aquí con la
+clave, correrlo en su máquina, o implementar directamente) -- Diego
+eligió la tercera, excepción ya prevista en la sección "Flujo de
+implementación" de este documento.
+
+**Hallazgo real durante la implementación, no anticipado en el spec de
+venado**: "más ligero que lobo" no bastaba para garantizar caza
+solitaria de verdad. `sistema_depredacion.py:_es_presa_valida` exige
+además `magnitud_disposicion_por_peso(peso_cazador, peso_presa) >=
+depredacion.umbral_disposicion_caza` (0.5) -- una ley LOGARÍTMICA
+(`log_ratio/(1+log_ratio)`) que solo supera 0.5 cuando el cazador pesa
+más de ~e≈2.72x que la presa. Con el peso original del spec (venado
+20-40kg, lobo 60-90kg), el peor caso (lobo 60kg, venado 40kg, ratio
+1.5x) quedaba muy por debajo del umbral -- confirmado por un test que
+fallaba de forma intermitente según la semilla de sorteo de pesos, no
+un fallo aleatorio del arnés. Corregido bajando el peso a `[12, 20]`kg
+(corzo real pesa 15-30kg, sigue biológicamente plausible): incluso el
+peor caso (lobo 60kg vs venado 20kg, ratio 3.0x) supera el umbral con
+margen real (magnitud=0.523 frente a 0.500 exigido).
+
+**Segundo hallazgo real, más serio -- bug de persistencia pre-existente,
+sin relación con las especies nuevas, encontrado verificando el
+roundtrip**: `BOSQUE_CONTINUAR=1` crasheaba con `TypeError: unhashable
+type: list` en `sistema_manada.py:_sincronizar_madriguera`. Causa raíz:
+JSON no tiene tupla -- `nucleo/persistencia.py:cargar_snapshot`
+deserializaba cada sitio `(x,y)` de `MemoriaEspacial.recuerdos` como
+`[x,y]` (lista) sin normalizar de vuelta a tupla. Esto rompía DOS cosas
+en silencio para cualquier entidad recargada desde SQLite, no solo la
+madriguera: `nucleo/memoria.py:registrar_recuerdo`/
+`purgar_recuerdo_invalido` comparan por identidad de tupla (`(x,y) in
+lista`), así que la deduplicación/purga de memoria dejaba de funcionar
+tras cualquier recarga -- y `_sincronizar_madriguera` usa un sitio como
+clave de `dict`, de ahí el crash real, solo visible con una especie
+colonial (conejo) que ya tuviera memoria de refugio persistida en el
+momento exacto de la carga. Corregido en el único punto de entrada
+desde disco (normaliza cada sitio a tupla al cargar), con test de
+regresión dedicado (`tests/test_persistencia_memoria_espacial.py`) --
+commit separado (`12cc3b3`) del de las especies (`f290a5b`), por ser un
+hallazgo independiente.
+
+**Verificado contra el motor real, ambos commits**: 410/410 tests en
+verde. `BOSQUE_AUTO_TICKS=3000` sin excepciones: ambas especies forman
+manada (`venado: 1, cabra_montes: 1`), y consultando la base de datos
+real (no solo "no lanzó excepción") -- venado sufrió depredación real
+por lobo (2 de 8 muertes por `depredacion`, de 14 venados creados entre
+fundadores y nacidos), confirmando que la caza en solitario se ejerce
+de verdad en juego libre; cabra montés no sufrió ninguna depredación (3
+de 3 muertes por `vejez`), coherente con la honestidad del spec (sin
+depredador real en montaña todavía). Ambas especies se reprodujeron
+(venado 10→14, cabra montés 8→11). `BOSQUE_CONTINUAR=1` repetido tras
+el fix de persistencia, sin excepciones -- confirma el bug realmente
+cerrado, no solo el test unitario en verde.
+
+**Pendiente real, explícito**:
+- Todos los valores de ambos catálogos son PROVISIONALES, sin calibrar
+  contra el harness completo -- ni siquiera contra el A/B de 6-8
+  semillas que sí recibieron gnomo/lobo/conejo/ardilla esta sesión.
+- Si lobo empieza a sostener población real gracias a venado, el
+  siguiente paso natural (no hecho aquí) es remedir si la caza en
+  manada sobre caballo por fin empieza a dispararse -- candidato directo
+  de seguimiento.
+- Cabra montés sigue sin ningún depredador real en montaña -- si se
+  quiere una dinámica presa-depredador ahí, es un círculo de diseño
+  aparte (fauna subterránea/de montaña propia, ya mencionada como
+  horizonte lejano).
+- Sin ventaja de escalada/movimiento propio de terreno de montaña para
+  cabra montés -- señalado como fuera de alcance en el spec, candidato
+  futuro real si se quiere diferenciarla mecánicamente más allá del
+  catálogo de atributos.
+- Sin representación visual para ninguna de las dos -- motor primero.
+- Desierto y tundra siguen siendo los dos biomas sin fauna propia --
+  horizonte futuro ya señalado en la conversación de biodiversidad,
+  sin empezar.
+- El menú más amplio de biodiversidad que se discutió el mismo día
+  (insectos como capa de recurso forrajeable, no como especie ECS;
+  aves terrestres reutilizando el movimiento existente, vuelo real
+  aplazado indefinidamente) sigue sin ningún diseño ni línea de código
+  -- solo conversación.
