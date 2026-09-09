@@ -6392,3 +6392,127 @@ ya cubrieron los defectos claros -- estos son trade-offs o mejoras
 marginales con riesgo real, no defectos obvios"). Quedan documentados
 aquí como candidatos reales para una sesión futura de rendimiento, no
 como pendientes urgentes.
+
+## El harness completo, por fin construido y corrido -- primer 15x12000
+## real de todo el proyecto, y dos bugs reales encontrados de inmediato
+## (2026-09-09)
+
+Diego pidió construir la pieza de infraestructura señalada el día
+anterior. `herramientas/harness_calibracion.py` (nuevo, pieza
+reutilizable, no scratchpad): corre N semillas nuevas × M ticks EN
+PARALELO (multiprocessing, una semilla por proceso, sin persistencia),
+agregando un informe de todos los flujos del motor. Con el motor un
+64% más rápido tras el trabajo de rendimiento del día anterior, 15
+semillas en paralelo usan hasta 15 de los 20 núcleos disponibles --
+factible en minutos, no en horas.
+
+**Primera corrida real, 15 semillas nuevas × hasta 12000 ticks** (las
+15 tocaron el límite de seguridad de 1500s antes del objetivo,
+llegando a 7655-10032 ticks -- aun así, la muestra más grande y fiable
+que este proyecto ha tenido nunca para esto). Hallazgos honestos:
+
+- **Gnomo: 0% extinción**, población 3-39, embudo reproductivo 74% --
+  el fix del día anterior se confirma real a escala, no ruido de
+  muestra pequeña.
+- **Caballo: 0% extinción**, población sana 6-37.
+- **Lobo: 100% extinción (15/15)** -- nunca visto con las muestras
+  pequeñas de días anteriores, el hallazgo más grave de la corrida.
+  Sin investigar todavía.
+- **Conejo: 67% extinción** -- mucho peor que el ~29% estimado el día
+  anterior con solo 7 semillas: el trade-off aceptado entonces estaba
+  basado en una muestra demasiado optimista.
+- **Ardilla: 73% extinción** -- investigado a fondo, ver abajo.
+- **Criterio maestro de Diego (5 especies vivas a la vez): 0/15** --
+  casi enteramente por la extinción total de lobo.
+- Asentamientos y almacenes: 15/15 completados -- sólido a esta
+  escala. Pareja estable de gnomo, robo exitoso, compartir por
+  confianza, cocinar: todos confirmados funcionando de verdad (85, 82,
+  51, 653 veces respectivamente) -- antes parecían "invisibles" solo
+  por falta de muestra.
+
+**Corrección metodológica real, encontrada al escribir el harness**: la
+medición manual de "parejas estables" de sesiones anteriores llamaba a
+`son_pareja(rel_a, rel_b, b, a, umbral)` con `id_a`/`id_b` invertidos
+-- siempre devolvía 0 aunque sí hubiera parejas reales. El harness lo
+corrige (`son_pareja(rel_a, rel_b, a, b, umbral)`).
+
+### Caballo vs. ardilla -- por qué una prospera y la otra se extingue
+
+Diego pidió determinar la diferencia real. Comparando causas de muerte:
+caballo 5.6% por deshidratación, ardilla 53.8% (con diferencia la
+causa dominante). Explicado por `altura` (config/poblacion.yaml):
+`profundidad_agua_potable(celda) <= altura` condiciona qué tan
+profunda puede ser el agua que una criatura alcanza a vadear -- caballo
+es la especie más alta del catálogo (1.4-1.8m), ardilla la más baja con
+diferencia (0.15-0.25m). No es un bug: es una consecuencia real y
+coherente de un mecanismo ya existente, cuya severidad nunca se había
+medido a esta escala. Las trayectorias de ardilla muestran además un
+patrón de "vórtice de extinción" -- la mayoría cae a 0 en 4000-6000
+ticks de forma bastante monótona, pero las pocas que sobreviven ese
+tramo explotan después (147-566) -- sugiere un umbral crítico de
+población mínima viable, no una decadencia suave.
+
+**Fix aplicado**: mismo alivio de deshidratación que ya recibió gnomo
+(`tasa_perdida_hidratacion_por_tick`/`probabilidad_muerte_deshidratacion`
+→ 0.0008/0.0004), específico de ardilla. A/B real antes de aplicar (6
+semillas nuevas × hasta 8000 ticks, en paralelo, config parcheada en
+memoria sin tocar ficheros): **0/6 extinción con el alivio frente a
+3/6 sin él**, sin el patrón de sobrecorrección que sí apareció con
+conejo (poblaciones de magnitud comparable en ambas condiciones).
+395/395 tests en verde.
+
+### Por qué salón común y cocina nunca se completaban -- dos bugs
+### reales, no un problema de escala ni de suerte
+
+Diego preguntó directamente por qué los sistemas sociales nuevos de
+asentamiento nunca se daban. Diagnóstico dirigido (inspeccionando
+`Construccion.progreso`/`materiales` de tipo `salon_comun`/`cocina`
+directamente, no solo `completado_alguna_vez`): en una semilla con
+almacén completo desde el tick 3000 y 23 gnomos vivos a los 7625
+ticks, **ninguno de los dos había recibido jamás ni 1 kg de
+material**. No era un problema de tiempo ni de población -- algo lo
+bloqueaba por completo.
+
+**Bug real 1, de código**: `sistema_movimiento.py:_calcular_construir`
+creaba SIEMPRE `tipo="almacen"` hardcodeado al llegar al centro del
+asentamiento para el eslabón comunal siguiente, sin mirar el `tipo`
+real devuelto por `objetivo_construccion_actual` -- desde que cocinas
+comunes (día anterior) añadió `salon_comun`/`cocina` como paralelos,
+cada intento de empezar cualquiera de los dos creaba en su lugar OTRO
+almacén duplicado (nunca registrado como `salon_comun`/`cocina` en
+ninguna consulta por tipo, y confundiendo a `objetivo_construccion_actual`
+con dos "almacen" a la vez). El código llevaba el comentario literal
+"# almacén, todavía no existe" desde antes de que cocinas comunes
+existiera -- nunca se actualizó al generalizar la función a paralelos.
+Ningún test existente lo detectó porque ninguno probaba la rama de
+CREACIÓN de `_calcular_construir` cuando `cid` es `None` para un tipo
+que no fuera refugio/almacén -- hueco de cobertura real, cerrado ahora
+con 2 tests de regresión.
+
+**Bug real 2, de calibración, encontrado al escribir el test de
+regresión (no antes)**: `huella_m2_salon_comun` (45.0) +
+`huella_m2_almacen` (40.0) = 85 > `capacidad_construccion_celda_m2`
+(80.0) -- el salón común era MATEMÁTICAMENTE IMPOSIBLE de construir en
+el centro del asentamiento (el único sitio donde puede crearse) una
+vez el almacén ya estaba ahí, con independencia de cuánta población o
+tiempo hubiera. Bajado a 35.0 (igual que cocina) -- 40+35=75≤80, cabe
+con margen real de 5 m².
+
+**Verificado con el motor real tras ambos fixes**: dos semillas nuevas,
+salón común completado en el tick 800 y 400 respectivamente (¡nunca en
+ninguna corrida antes del fix!); en una de las dos, tras completar el
+salón, la población pasó automáticamente a construir la cocina
+también, completándola en el tick 2600 -- la cadena paralela completa
+funciona de punta a punta por primera vez. 395/395 tests en verde.
+
+**Pendiente real, explícito, ahora la investigación más urgente**:
+**lobo se extingue en el 100% de las 15 semillas del harness** --
+nunca visto con las muestras pequeñas de sesiones anteriores, sin
+investigar todavía. Conejo (67% real, no el ~29% estimado antes) y
+ardilla (mejorado pero sin remedir a la escala del harness completo)
+siguen con extinción real significativa. El criterio maestro de Diego
+(5 especies vivas a la vez) sigue en 0% -- casi enteramente explicado
+por lobo. El harness completo (`herramientas/harness_calibracion.py`)
+ya existe y está verificado -- el siguiente paso natural es
+recalibrar lobo con él como referencia, y luego remedir conejo/ardilla
+juntos para ver si el criterio maestro por fin se acerca al 50%.
