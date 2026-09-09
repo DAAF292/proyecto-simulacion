@@ -900,7 +900,26 @@ class Persistencia:
                         _reconstruir_gestacion(tick_inicio=fila[42], id_padre=fila[43], snapshot=snapshot_padre),
                     )
 
-                recuerdos_dict = json.loads(fila[45]) if fila[45] else {}
+                # Bug real encontrado el 2026-09-09 (verificacion de
+                # roundtrip de las especies venado/cabra_montes): JSON no
+                # tiene tupla, asi que cada sitio (x,y) volvia como [x,y]
+                # tras json.loads -- nucleo/memoria.py:registrar_recuerdo/
+                # purgar_recuerdo_invalido comparan por identidad de tupla
+                # ((x,y) in lista), asi que una entidad recargada desde
+                # SQLite nunca deduplicaba ni purgaba correctamente sus
+                # propios recuerdos, y sistema_manada.py:
+                # _sincronizar_madriguera crasheaba con "unhashable type:
+                # list" al usar un sitio como clave de dict (solo
+                # observable con especies coloniales -- conejo -- que
+                # ademas tuvieran memoria de refugio ya persistida).
+                # Normalizado aqui, en el unico punto de entrada desde
+                # disco, para que el resto del motor siga viendo siempre
+                # tuplas como si nunca se hubiera serializado.
+                recuerdos_crudo = json.loads(fila[45]) if fila[45] else {}
+                recuerdos_dict = {
+                    tipo: [tuple(sitio) for sitio in sitios]
+                    for tipo, sitios in recuerdos_crudo.items()
+                }
                 gestor.anadir_componente(eid, MemoriaEspacial(recuerdos=recuerdos_dict))
                 inventario_dict = json.loads(fila[46]) if fila[46] else {}
                 inventario_objetos = inventario_dict.get("objetos", []) if isinstance(inventario_dict, dict) else []
