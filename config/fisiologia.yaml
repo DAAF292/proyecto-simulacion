@@ -165,6 +165,25 @@ necesidades:
     # de necesidades.defecto sin ningun cambio de comportamiento.
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+    # tasa_perdida_hidratacion_por_tick/probabilidad_muerte_deshidratacion
+    # (2026-09-09, auditoria comparativa de causas de muerte contra caballo
+    # -- ver CLAUDE.md, harness_calibracion.py primera corrida completa):
+    # lobo nunca habia recibido este mismo alivio que ya tienen gnomo/
+    # ardilla, pese a tener la tasa de deshidratacion mas alta del
+    # catalogo tras caballo/gnomo/ardilla ya corregidos (6.7x la de
+    # caballo, normalizado por exposicion individuo-tick) -- combinada con
+    # inanicion tambien elevada (9.3x caballo), lobo llegaba a 53% de
+    # extincion en el harness completo (15x12000). A/B real antes de
+    # aplicar (6 semillas nuevas x 6000 ticks, aislado, sin tocar
+    # concepcion/camada de nuevo): extincion de lobo baja de 4/6 (67%,
+    # control con la config vigente) a 0/6 con este alivio -- senal limpia
+    # y fuerte, sin el patron de sobrecorreccion ya visto con
+    # ardilla/conejo (lobo nunca se ha acercado a explotar, poblacion
+    # maxima observada 16 en la muestra). Mismos valores que el resto del
+    # catalogo ya corregido. PROVISIONAL, sin calibrar contra el harness
+    # completo con este cambio ya aplicado.
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
   ardilla:
     # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
     # ver CLAUDE.md -- ardilla se extinguio en el 100% de mas de 90
