@@ -6,6 +6,7 @@ una descripción de qué hace el código -- misma convención que el resto
 del proyecto.
 """
 import random
+from collections import Counter
 from pathlib import Path
 
 from componentes.capacidad_mental import CapacidadMental
@@ -365,3 +366,86 @@ def test_persistencia_roundtrip_provisiones_construccion(tmp_path):
     construccion2 = gestor2.obtener_componente(cid2, Construccion)
     assert construccion2.tipo == "cocina"
     assert construccion2.provisiones == {"manzanas_elaborada": 3.5}
+
+
+# ---------------------------------------------------------------------------
+# Regresion: sistema_movimiento.py:_calcular_construir creaba SIEMPRE
+# tipo="almacen" al llegar al centro del asentamiento, sin mirar el tipo
+# real pedido por objetivo_construccion_actual -- bug real encontrado
+# el 2026-09-09 (ver herramientas/harness_calibracion.py, primera
+# corrida completa 15x12000): explicaba por si solo que salon_comun y
+# cocina nunca acumularan ni 1kg de material en ninguna semilla medida.
+# ---------------------------------------------------------------------------
+
+def _asentamiento_listo_para_paralelos(gestor, config, rng, centro=(5, 5)):
+    """Gnomo con refugio (en una celda DISTINTA del centro -- el refugio
+    individual no tiene por qué coincidir con el centroide del cluster)
+    y almacen ya completos (el almacen SI vive siempre en el centro),
+    miembro de un asentamiento en `centro` -- listo para que
+    objetivo_construccion_actual devuelva salon_comun o cocina."""
+    refugio_x, refugio_y = centro[0] + 2, centro[1] + 2
+    gnomo = crear_criatura(gestor, Especie.GNOMO, *centro, config, rng)
+    cid_refugio = crear_construccion(gestor, refugio_x, refugio_y, "refugio", propietario_id=gnomo)
+    gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
+    gestor.obtener_componente(cid_refugio, Construccion).completado_alguna_vez = True
+    cid_almacen = crear_construccion(gestor, *centro, "almacen", propietario_id=None)
+    gestor.obtener_componente(cid_almacen, Construccion).progreso = 1.0
+    gestor.obtener_componente(cid_almacen, Construccion).completado_alguna_vez = True
+    return gnomo
+
+
+def test_calcular_construir_crea_salon_comun_no_almacen_duplicado():
+    """Ley: al llegar al centro del asentamiento con almacen ya completo
+    y ningun paralelo empezado, _calcular_construir crea una
+    Construccion del TIPO REAL pedido (salon_comun, por orden fijo de
+    empate) -- no un segundo "almacen" duplicado."""
+    config = _config()
+    rng = random.Random(50)
+    gestor = GestorEntidades()
+    mundo = Mundo(10, 10, config, random.Random(1))
+    gnomo = _asentamiento_listo_para_paralelos(gestor, config, rng)
+    mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
+
+    sistema = SistemaMovimiento(config, rng)
+    sistema._calcular_construir(
+        gestor, mundo, gnomo, Especie.GNOMO, 5, 5, radio=5, mem=None,
+        cap_mental=gestor.obtener_componente(gnomo, CapacidadMental),
+        temperamento=gestor.obtener_componente(gnomo, Temperamento),
+    )
+
+    tipos = Counter(
+        gestor.obtener_componente(cid, Construccion).tipo
+        for cid in gestor.entidades_con(Construccion)
+    )
+    assert tipos["almacen"] == 1, "no debe crear un segundo almacen duplicado"
+    assert tipos["salon_comun"] == 1
+    assert tipos["cocina"] == 0
+
+
+def test_calcular_construir_crea_cocina_cuando_lleva_mas_progreso():
+    """Ley: si la cocina ya lleva mas progreso que el salon comun, el
+    tipo creado es cocina, no almacen ni salon_comun."""
+    config = _config()
+    rng = random.Random(51)
+    gestor = GestorEntidades()
+    mundo = Mundo(10, 10, config, random.Random(1))
+    gnomo = _asentamiento_listo_para_paralelos(gestor, config, rng, centro=(3, 3))
+    _construccion(gestor, "cocina", 3, 3, progreso=0.3, completado=False)
+    mundo.asentamientos[1] = Asentamiento(id=1, centro=(3, 3), miembros=frozenset({gnomo}))
+
+    sistema = SistemaMovimiento(config, rng)
+    inv = gestor.obtener_componente(gnomo, Inventario)
+    inv.contenidos["arcilla"] = 50.0
+    sistema._calcular_construir(
+        gestor, mundo, gnomo, Especie.GNOMO, 3, 3, radio=5, mem=None,
+        cap_mental=gestor.obtener_componente(gnomo, CapacidadMental),
+        temperamento=gestor.obtener_componente(gnomo, Temperamento),
+    )
+
+    tipos = Counter(
+        gestor.obtener_componente(cid, Construccion).tipo
+        for cid in gestor.entidades_con(Construccion)
+    )
+    assert tipos["cocina"] == 1, "no debe crear una segunda cocina ni un salon_comun"
+    assert tipos["salon_comun"] == 0
+    assert tipos["almacen"] == 1

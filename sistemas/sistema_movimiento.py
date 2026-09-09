@@ -2303,16 +2303,28 @@ class SistemaMovimiento:
             )
             return (0, 0)
 
-        # almacén, todavía no existe: hay que llegar al centro del
-        # asentamiento antes de poder crearlo.
+        # Comunal (almacen/salon_comun/cocina), todavia no existe: hay
+        # que llegar al centro del asentamiento antes de poder crearlo.
+        #
+        # BUG REAL (2026-09-09, ver herramientas/harness_calibracion.py):
+        # este bloque creaba SIEMPRE tipo="almacen" hardcodeado, sin
+        # mirar `tipo` -- desde que cocinas comunes (2026-09-08) hizo
+        # que objetivo_construccion_actual pudiera devolver
+        # "salon_comun"/"cocina" con cid=None, cada intento de empezar
+        # cualquiera de los dos creaba en su lugar OTRO almacen
+        # duplicado en la misma celda (nunca registrado como
+        # salon_comun/cocina en ninguna consulta por tipo, y confundiendo
+        # a objetivo_construccion_actual con dos "almacen" a la vez).
+        # Explica por si solo por que salon_comun/cocina nunca llegaban
+        # a acumular ni 1kg de material en ninguna semilla medida.
         cx, cy = pos_creacion
         if (cx, cy) != (pos_x, pos_y):
             return self._acercarse_a(pos_x, pos_y, cx, cy)
         if espacio_disponible_para_construir(
             gestor, pos_x, pos_y, zona_idx, self.config
-        ) < huella_m2_para("almacen", self.config_construccion):
+        ) < huella_m2_para(tipo, self.config_construccion):
             return (0, 0)
-        crear_construccion(gestor, pos_x, pos_y, "almacen", propietario_id=None, zona_idx=zona_idx)
+        crear_construccion(gestor, pos_x, pos_y, tipo, propietario_id=None, zona_idx=zona_idx)
         return (0, 0)
 
     def _acercarse_a(self, ox: int, oy: int, tx: int, ty: int) -> tuple[int, int]:

@@ -455,11 +455,21 @@ construccion:
   # masa_minima_salon_comun/huella_m2_salon_comun (2026-09-08, salon
   # comun -- ver docs/superpowers/specs/2026-09-08-salon-comun-design.md):
   # tercer eslabon de la cadena de prioridad refugio->almacen->salon
-  # comun. Algo mas grande que el almacen (masa y huella) -- un edificio
-  # pensado para reunir gente, no solo guardar materiales. PROVISIONAL,
-  # sin calibrar contra el motor en marcha.
+  # comun. Algo mas grande que el almacen (masa) -- un edificio pensado
+  # para reunir gente, no solo guardar materiales. PROVISIONAL, sin
+  # calibrar contra el motor en marcha.
+  #
+  # huella_m2_salon_comun CORREGIDA 2026-09-09 (de 45.0 a 35.0, ver
+  # herramientas/harness_calibracion.py -- primera corrida completa
+  # 15x12000): con 45.0, huella_m2_almacen(40.0) + huella_m2_salon_comun
+  # SUMABAN 85 > capacidad_construccion_celda_m2(80.0) -- el salon comun
+  # era MATEMATICAMENTE IMPOSIBLE de construir en el centro del
+  # asentamiento (el unico sitio donde puede crearse) una vez el almacen
+  # ya estaba ahi, con independencia de cuanta poblacion/tiempo hubiera.
+  # Bajado a 35.0 (igual que cocina, el otro paralelo) -- 40+35=75<=80,
+  # cabe con margen real (5 m2).
   masa_minima_salon_comun: 70.0
-  huella_m2_salon_comun: 45.0
+  huella_m2_salon_comun: 35.0
   # masa_minima_cocina/huella_m2_cocina (2026-09-08, cocinas comunes --
   # ver docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md):
   # PARALELO al salon comun en la cadena de prioridad, no un eslabon

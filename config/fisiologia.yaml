@@ -197,6 +197,26 @@ necesidades:
     # todo, mismo criterio de honestidad que el resto del proyecto.
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+    # tasa_perdida_hidratacion_por_tick/probabilidad_muerte_deshidratacion
+    # (2026-09-09, ver herramientas/harness_calibracion.py -- primera
+    # corrida completa de 15x12000): el harness completo revelo que
+    # ardilla se extingue en el 73% de 15 semillas nuevas, deshidratacion
+    # como causa dominante (53.8% de sus muertes, frente a solo 5.6% en
+    # caballo) -- explicado por la altura (config/poblacion.yaml): ardilla
+    # es la especie mas baja del catalogo (0.15-0.25m) y
+    # profundidad_agua_potable(celda) <= altura le impide vadear la
+    # mayoria de fuentes de agua que si alcanza una especie mas alta
+    # (caballo, 1.4-1.8m) -- una consecuencia real y coherente del
+    # mecanismo ya existente, no un bug, cuya severidad nunca se habia
+    # medido a esta escala. A/B real antes de aplicar (6 semillas nuevas
+    # x hasta 8000 ticks, en paralelo): 0/6 extincion con el alivio
+    # frente a 3/6 sin el, sin el patron de sobrecorreccion que si
+    # aparecio con conejo (poblaciones de magnitud comparable en ambas
+    # condiciones). Mismos valores que gnomo/lobo, por el mismo motivo
+    # (ya era el peor par del catalogo). PROVISIONAL, sin calibrar contra
+    # el harness completo.
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
   gnomo:
     # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
     # ver CLAUDE.md y poblacion.rangos_raciales.gnomo.factor_base_concepcion
