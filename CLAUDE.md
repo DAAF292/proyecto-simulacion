@@ -7237,3 +7237,100 @@ implementar**:
   debe ser un depredador de la calidad de su presa, si el radio de caza
   debe ser una ley general o específica) pendiente de acordar con Diego
   antes de tocar código, mismo criterio que el resto del proyecto.
+
+## Intento real de radio de caza + preferencia por presa -- IMPLEMENTADO,
+## MEDIDO, REVERTIDO -- empeora las dos métricas que debía mejorar
+## (2026-09-09, mismo día)
+
+Diego aprobó las dos palancas de la sección anterior ("ajustar lo de la
+percepción, pero tampoco pasarnos, y lo de la preferencia de presas me
+parece interesante sí"). Implementado directamente (pipeline seguía sin
+disponibilidad en este contenedor, mismo motivo que venado/cabra_montes):
+
+- `radio_minimo/maximo_caza_celdas` (1-7, `config/comportamiento.yaml`)
+  -- radio propio de `Accion.CAZAR`, mismo patrón exacto que ya usan
+  BEBER/BUSCAR_PAREJA (`radio_individual` con su propio par min/max),
+  ampliación deliberadamente más contenida que la de pareja.
+- `peso_distancia_preferencia_presa` (0.02, `config/combate.yaml`) --
+  `sistema_movimiento.py:_calcular_caza` deja de ordenar candidatos por
+  distancia pura (`presas.sort()` + `presas[0]`) y en su lugar puntúa
+  cada uno como `ratio_biomasa - peso_distancia*distancia`, escogiendo
+  el máximo -- `ratio_biomasa` reutilizado tal cual del mismo proxy que
+  ya usa `_resolver_ataque` para `aporte_maximo`.
+
+Commit `158cdb1`: 415/415 tests (5 nuevos), `BOSQUE_AUTO_TICKS=3000` sin
+excepciones -- verificación mecánica correcta, el código hace exactamente
+lo que el diseño pedía.
+
+**Verificación cuantitativa real, mismo arnés y MISMAS 4 semillas del
+diagnóstico que motivó el cambio (500001-500004) -- resultado: EMPEORA
+las dos métricas objetivo, en las 4 de 4 semillas, sin excepción**:
+
+| | Antes (commit `f07915c`) | Después (commit `158cdb1`) |
+|---|---|---|
+| `frac_tiempo_saciedad_cero` (media) | 0.264 | **0.385** (peor) |
+| Capturas totales (4 semillas) | 227 | **58** (peor, -74%) |
+| `saciedad_ganada_media` por captura | ~0.25-0.32 | ~0.33-0.44 (mejor) |
+
+La nutrición por captura SÍ mejora (la preferencia por valor funciona
+tal como se diseñó: cuando lobo caza, caza algo mejor) -- pero la
+FRECUENCIA de caza se desploma tanto que el efecto neto es peor, no
+mejor. Dos semillas (de 4) ni siquiera completaron su presupuesto de
+ticks en el mismo límite de tiempo real que antes (radio más ancho =
+más candidatos que escanear cada tick = más coste real por tick, un
+efecto colateral de rendimiento aparte del efecto ecológico).
+
+**Diagnóstico de la causa, con un segundo arnés dirigido** (instrumenta
+`_calcular_caza`, no solo las capturas resueltas, para ver si el lobo
+oscila de objetivo tick a tick en vez de comprometerse a uno): resultado
+mixto, no una única causa limpia -- una semilla mostró oscilación baja
+(4.0% de cambios de dirección entre decisiones consecutivas, racha
+media de 23.4 ticks manteniendo el mismo rumbo) y otra oscilación alta
+(22.4%, racha media 4.4). Incluso en la semilla de BAJA oscilación (más
+"comprometida" con un objetivo), las capturas siguieron siendo muchas
+menos que antes -- la oscilación real existe pero no es la explicación
+completa por sí sola.
+
+**Hipótesis más probable, no confirmada con más profundidad todavía**:
+`peso_distancia_preferencia_presa=0.02` es demasiado débil frente a la
+brecha real de `ratio_biomasa` entre presas (ardilla~0.006 frente a
+venado~0.21, gnomo~0.15 -- una diferencia de hasta 0.2), así que la
+distancia queda casi irrelevante en la práctica: con el radio ya
+ampliado a 1-7, el lobo persigue casi siempre la presa "más valiosa"
+visible, esté a 1 celda o a 7, en vez de comer lo que tiene al lado.
+Perseguir sistemáticamente el objetivo más lejano dentro de un radio
+mucho más ancho, con presa que también se mueve y sin ningún mecanismo
+de "objetivo fijado" entre ticks (`_calcular_caza` recalcula el mejor
+candidato de cero cada vez, sin memoria del intento anterior), parece
+convertir cada intento de caza en una persecución mucho más larga y con
+más probabilidad de fallar -- la ganancia de calidad por captura no
+compensa la pérdida de frecuencia.
+
+**Decisión, con la evidencia ya en mano**: revertido por completo
+(`git revert 158cdb1`, sin reescribir historia) en vez de intentar una
+segunda recalibración sin verificar -- mismo criterio de prudencia ya
+aplicado varias veces en este proyecto ("no ajustar a ciegas... probar
+antes de aplicar"). El motor vuelve exactamente al comportamiento de
+`f07915c` (radio genérico, presa más cercana sin ponderar valor).
+
+**Pendiente real, con más información que antes de intentar esto**:
+- El diagnóstico de causa raíz de la sección anterior (radio de caza
+  minúsculo + sin preferencia por valor) sigue siendo válido -- lo que
+  falla es ESTA implementación concreta, no el diagnóstico.
+- Si se retoma: candidatos razonados, ninguno probado -- (a) un peso de
+  distancia mucho más alto (p.ej. 0.08-0.10 en vez de 0.02), para que
+  solo una presa MUCHO más valiosa justifique alejarse pocas celdas más,
+  no todo el radio; (b) mecanismo de "objetivo fijado" (recordar el
+  último objetivo de caza mientras siga siendo válido y visible, en vez
+  de recalcular desde cero cada tick) -- ataca la oscilación directamente,
+  pero es una pieza de estado nueva, más grande que un ajuste numérico;
+  (c) separar las dos palancas (probar radio ampliado SOLO, sin
+  preferencia, y preferencia SOLO, sin ampliar radio) para aislar cuál
+  de las dos es la que realmente perjudica -- este círculo las combinó
+  desde el principio y nunca las aisló.
+- Lección metodológica reforzada: una intención de diseño bien razonada
+  (y aprobada por Diego) no garantiza el resultado -- verificar contra
+  el motor real ANTES de dar algo por bueno siguió siendo decisivo aquí,
+  exactamente el mismo patrón que motivó media docena de reversiones ya
+  documentadas en este proyecto (fertilidad de conejo, `techo_fraccion_
+  edad_inicial_longevidad` de lobo, `ardilla_trim`, entre otras).
