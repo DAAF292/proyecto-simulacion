@@ -7471,3 +7471,62 @@ efecto agregado sobre el criterio maestro, no solo sobre lobo en
 aislamiento; el mecanismo de "objetivo fijado" entre ticks queda como
 posible mejora adicional futura, ya no urgente dado que esta palanca
 más simple ya mostró una mejora real medida.
+
+### Verificación a escala del criterio maestro -- A/B real con el harness
+### completo (worktree "antes" vs. `master` "después"), mejora real pero
+### modesta, no una solución (2026-09-09, mismo día)
+
+Diego cuestionó con razón que la mejora del proxy (`frac_tiempo_
+saciedad_cero` 0.264→0.218, 17.4% relativo) pudiera ser demasiado
+pequeña para importar -- pregunta legítima, dado que el proxy nunca
+mide directamente lo que de verdad interesa (extinción real, criterio
+maestro). Verificado con el propio `herramientas/harness_calibracion.py`
+en vez de seguir confiando en el proxy: worktree aislado en el commit
+previo al fix (`890d6b3`, "antes") corriendo las MISMAS 8 semillas
+nuevas (20001-20008, 6000 ticks, 400s/semilla de límite) que el
+directorio principal con el fix ya aplicado (`e3f1d7c`, "después") --
+mismo criterio metodológico ya usado varias veces este día (comparar
+código real, no solo config en memoria).
+
+| | Antes (`890d6b3`) | Después (`e3f1d7c`) |
+|---|---|---|
+| Extinción lobo | 25% (2/8) | **12% (1/8)** |
+| Extinción gnomo | 0% (0/8) | 12% (1/8) |
+| Extinción ardilla | 12% (1/8) | 12% (1/8) |
+| Extinción conejo / caballo | 0% / 0% | 0% / 0% |
+| **Criterio maestro (5 especies vivas)** | **62% (5/8)** | **75% (6/8)** |
+
+**Honesto sobre el tamaño real del efecto**: hay mejora real en las dos
+métricas que de verdad importan (extinción de lobo, criterio maestro),
+en la misma dirección que predecía el proxy -- pero **n=8 por
+condición, la misma escala pequeña que ya ha producido lecturas
+erróneas varias veces este día** (el propio lobo mostró 100%/67%/53%/
+47%/25%/12% de extinción según la muestra en investigaciones previas de
+esta sesión). Un dato que no encaja limpio y no se ignora: gnomo pasó
+de 0% a 12% de extinción (1 semilla) -- gnomo no es depredador, no
+debería verse afectado por el radio de caza de lobo de ninguna forma
+causal directa, así que esto es ruido de desplazamiento de secuencia de
+`rng` (el mismo fenómeno ya documentado media docena de veces en este
+proyecto), no un efecto colateral real. Las causas de muerte agregadas
+de lobo son casi idénticas entre ambas corridas (inanición 46 antes vs
+45 después, vejez 40 en ambas) -- la mejora se explica más por CUÁLES
+semillas concretas cruzan el umbral de extinción que por un cambio
+dramático en el patrón agregado de causas.
+
+**Conclusión, sin inflar el resultado**: el radio de caza ampliado es
+una mejora real, medida dos veces de forma independiente (proxy
+instrumentado + harness completo con extinción real), en la dirección
+correcta y del orden de magnitud esperado por el propio análisis del
+proxy (no una sorpresa positiva ni negativa) -- pero **no resuelve la
+fragilidad de lobo**, sigue extinguiéndose en 1 de 8 semillas nuevas
+incluso con el fix, y la varianza intrínseca de esta especie sigue
+siendo mayor que la señal de cualquier mejora aislada medida con
+muestras de este tamaño. Confirma con más fuerza la síntesis ya escrita
+varias veces en este documento: cualquier calibración de lobo que se
+quiera dar por "cerrada" de verdad necesita el harness de referencia
+completo (15×12000), no lotes de 4-8 semillas -- este mismo ejercicio,
+con más semillas, sería la forma correcta de confirmar si el 62%→75% es
+una señal real o todavía ruido.
+
+Worktree temporal (`scratchpad/worktree-antes`) retirado tras la
+comparación -- no forma parte del repositorio.
