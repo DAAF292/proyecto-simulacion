@@ -15,6 +15,8 @@ poblacion:
   conejos_iniciales: 30
   ardillas_iniciales: 30
   caballos_iniciales: 9  # PROVISIONAL -- ver 2026-09-05-especie-caballo-design.md
+  venados_iniciales: 10  # PROVISIONAL -- ver 2026-09-09-especie-venado-design.md
+  cabras_montes_iniciales: 8  # PROVISIONAL -- ver 2026-09-09-especie-cabra-montes-design.md
   techo_fraccion_edad_inicial_longevidad: 0.7
 
 rangos_raciales:
@@ -407,6 +409,115 @@ rangos_raciales:
     sociabilidad: [0.7, 0.95]  # animal de manada
     agresividad: [0.05, 0.2]
     dominancia: [0.2, 0.5]
+    empatia: [0.4, 0.7]
+    lealtad: [0.4, 0.7]
+    fe: [0.0, 0.1]
+    curiosidad: [0.2, 0.5]
+    inteligencia: [0.1, 0.3]
+    memoria: [0.2, 0.5]
+    voluntad: [0.1, 0.3]
+    resiliencia: [0.3, 0.6]
+    estabilidad_mental_maxima: [0.4, 0.6]
+    consciencia: [0.0, 0.1]
+
+  # VENADO (2026-09-09, ver docs/superpowers/specs/
+  # 2026-09-09-especie-venado-design.md): herbivoro mediano de bosque,
+  # deliberadamente MAS LIGERO que lobo (60-90kg) -- a diferencia de
+  # caballo, cazable en solitario por la via normal de deprediacion, sin
+  # pasar por el techo de presa por manada (nunca se dispara en juego
+  # libre, confirmado con 73 corridas el mismo dia). Arranca con el par
+  # de hambre/sed ya validado esta sesion (ver fisiologia.yaml), no con
+  # `defecto` -- evita repetir el ciclo de caballo (nacio fragil, se
+  # corrigio dias despues). Todo PROVISIONAL, sin calibrar contra el
+  # harness completo.
+  #
+  # peso CORREGIDO durante la implementacion (spec original decia
+  # [20,40]): "mas ligero que lobo" no bastaba por si solo --
+  # sistema_depredacion.py:_es_presa_valida exige ADEMAS
+  # magnitud_disposicion_por_peso(peso_cazador, peso_presa) >=
+  # depredacion.umbral_disposicion_caza (0.5), una ley LOGARITMICA
+  # (log_ratio/(1+log_ratio)) que solo supera 0.5 cuando el cazador pesa
+  # mas de ~e≈2.72x que la presa -- con lobo 60-90kg y venado 20-40kg el
+  # PEOR caso (lobo 60kg, venado 40kg, ratio 1.5x) quedaba muy por
+  # debajo del umbral, confirmado por un test que fallaba de forma
+  # intermitente segun la semilla de sorteo de pesos. Bajado a [12,20]:
+  # incluso el peor caso (lobo 60kg vs venado 20kg, ratio 3.0x) supera
+  # el umbral con margen (magnitud=0.523). Corzo real pesa 15-30kg
+  # (hembras desde 15kg), sigue dentro de lo biologicamente plausible
+  # para "venado" generico.
+  venado:
+    medio_alimentacion: recolectar
+    dieta: [hierba, brotes_helecho, bellotas]
+    peso: [12, 20]
+    altura: [0.6, 0.9]
+    longevidad: [10, 18]
+    # Gestacion deliberadamente corta frente a los ~200 dias de un
+    # cervido real -- mismo criterio de sostenibilidad ya usado en
+    # caballo, no fidelidad biologica estricta.
+    duracion_gestacion_dias: [60, 90]
+    camada: [1, 2]
+    fraccion_madurez: 0.2
+    factor_base_concepcion: 0.015
+    puntos_agarre: 0  # un venado no sujeta objetos
+    fuerza: [0.3, 0.6]
+    agilidad: [0.6, 0.9]
+    velocidad: [0.6, 0.9]
+    resistencia_enfermedad: [0.2, 0.5]
+    agudeza_sensorial: [0.5, 0.8]
+    vitalidad_maxima: [0.3, 0.6]
+    resistencia_maxima: [0.3, 0.6]
+    curacion: [0.01, 0.03]
+    recuperacion: [0.08, 0.15]
+    # Valentia baja a proposito, prefiere huir -- mismo criterio que caballo.
+    valentia: [0.1, 0.3]
+    sociabilidad: [0.6, 0.9]  # animal de manada
+    agresividad: [0.05, 0.2]
+    dominancia: [0.15, 0.4]
+    empatia: [0.4, 0.7]
+    lealtad: [0.4, 0.7]
+    fe: [0.0, 0.1]
+    curiosidad: [0.2, 0.5]
+    inteligencia: [0.1, 0.3]
+    memoria: [0.2, 0.5]
+    voluntad: [0.1, 0.3]
+    resiliencia: [0.3, 0.6]
+    estabilidad_mental_maxima: [0.4, 0.6]
+    consciencia: [0.0, 0.1]
+
+  # CABRA_MONTES (2026-09-09, ver docs/superpowers/specs/
+  # 2026-09-09-especie-cabra-montes-design.md): primera fauna de
+  # TipoTerreno.MONTANA -- bioma que solo tenia flora propia hasta
+  # ahora. Biodiversidad genuina, sin relacion con el problema
+  # nutricional de lobo (montana no tiene ningun depredador que la
+  # ronde todavia). Dieta = las dos unicas fuentes de alimento reales de
+  # montana (liquen, bayas_montanas). Sin ninguna ventaja de
+  # escalada/movimiento propio de terreno -- usa las mismas reglas de
+  # pendiente_maxima_transitable que el resto de fauna. Todo
+  # PROVISIONAL, sin calibrar contra el harness completo.
+  cabra_montes:
+    medio_alimentacion: recolectar
+    dieta: [liquen, bayas_montanas]
+    peso: [25, 45]
+    altura: [0.7, 0.9]
+    longevidad: [10, 16]
+    duracion_gestacion_dias: [60, 90]
+    camada: [1, 2]
+    fraccion_madurez: 0.2
+    factor_base_concepcion: 0.015
+    puntos_agarre: 0  # una cabra montes no sujeta objetos
+    fuerza: [0.3, 0.6]
+    agilidad: [0.7, 0.95]
+    velocidad: [0.5, 0.8]
+    resistencia_enfermedad: [0.2, 0.5]
+    agudeza_sensorial: [0.5, 0.8]
+    vitalidad_maxima: [0.3, 0.6]
+    resistencia_maxima: [0.3, 0.6]
+    curacion: [0.01, 0.03]
+    recuperacion: [0.08, 0.15]
+    valentia: [0.15, 0.4]
+    sociabilidad: [0.5, 0.85]  # rebaños pequeños de montaña
+    agresividad: [0.05, 0.2]
+    dominancia: [0.15, 0.4]
     empatia: [0.4, 0.7]
     lealtad: [0.4, 0.7]
     fe: [0.0, 0.1]

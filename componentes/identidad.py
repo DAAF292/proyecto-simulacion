@@ -47,6 +47,16 @@ class Especie(Enum):
     # que nadie" (2026-09-04/05). Sin caza en manada todavia -- un lobo
     # solo lo abate con dificultad, resultado esperado, no un bug.
     CABALLO = "caballo"
+    # VENADO: herbivoro mediano en bosque, mas ligero que lobo (20-40kg
+    # frente a 60-90kg) -- a diferencia de caballo, cazable en SOLITARIO
+    # por la via normal (sin pasar por el techo de presa por manada),
+    # ver docs/superpowers/specs/2026-09-09-especie-venado-design.md.
+    VENADO = "venado"
+    # CABRA_MONTES: primera fauna de TipoTerreno.MONTANA, bioma que solo
+    # tenia flora hasta ahora -- ver docs/superpowers/specs/
+    # 2026-09-09-especie-cabra-montes-design.md. Sin depredador real en
+    # montana todavia, biodiversidad genuina, no ligada al problema de lobo.
+    CABRA_MONTES = "cabra_montes"
 
 
 @dataclass

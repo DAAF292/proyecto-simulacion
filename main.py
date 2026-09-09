@@ -138,6 +138,15 @@ def sembrar_poblacion_inicial(
 
     celdas_bosque: list[tuple[int, int]] = []
     celdas_pradera: list[tuple[int, int]] = []
+    # celdas_montana (2026-09-09, ver docs/superpowers/specs/
+    # 2026-09-09-especie-cabra-montes-design.md): primer bioma de fauna
+    # real fuera de bosque/pradera -- montana solo tenia flora hasta
+    # ahora. Sin fallback a otro bioma (a diferencia de celdas_pradera,
+    # que cae a candidatas_bosque): si una semilla no genera montana
+    # suficiente, esa partida simplemente no tiene cabras montesas, ley
+    # neutra cubierta por el guard "if not celdas_candidatas: continue"
+    # ya existente mas abajo.
+    celdas_montana: list[tuple[int, int]] = []
 
     for y in range(zona.alto):
         for x in range(zona.ancho):
@@ -152,6 +161,8 @@ def sembrar_poblacion_inicial(
                 celdas_bosque.append((x, y))
             elif celda.tipo_terreno == TipoTerreno.PRADERA and not celda.tiene_agua:
                 celdas_pradera.append((x, y))
+            elif celda.tipo_terreno == TipoTerreno.MONTANA and not celda.tiene_agua:
+                celdas_montana.append((x, y))
 
     # Respaldo de seguridad ante semillas con escasa generación de bosque.
     # Confirmado con Diego (tensión con el Principio 5, leyes neutras,
@@ -165,6 +176,11 @@ def sembrar_poblacion_inicial(
         (Especie.LOBO, poblacion_cfg.get("lobos_iniciales", 6), candidatas_bosque),
         (Especie.ARDILLA, poblacion_cfg.get("ardillas_iniciales", 30), candidatas_bosque),
         (
+            Especie.VENADO,
+            poblacion_cfg.get("venados_iniciales", 10),
+            candidatas_bosque,
+        ),
+        (
             Especie.CONEJO,
             poblacion_cfg.get("conejos_iniciales", 30),
             celdas_pradera if celdas_pradera else candidatas_bosque,
@@ -173,6 +189,11 @@ def sembrar_poblacion_inicial(
             Especie.CABALLO,
             poblacion_cfg.get("caballos_iniciales", 9),
             celdas_pradera if celdas_pradera else candidatas_bosque,
+        ),
+        (
+            Especie.CABRA_MONTES,
+            poblacion_cfg.get("cabras_montes_iniciales", 8),
+            celdas_montana,
         ),
     ]
 

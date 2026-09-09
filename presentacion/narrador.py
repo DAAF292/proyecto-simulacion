@@ -22,7 +22,16 @@ _PLANTILLA_GENERICA = "Tick {tick}: evento {tipo} (entidad {entidad_id})."
 # cerrado de las 4 especies reales (componentes/identidad.py); una especie
 # nueva que no aparezca aqui cae al masculino por defecto ("un"), mismo
 # criterio permisivo que el resto de tablas de este tipo en el proyecto.
-_ESPECIES_FEMENINAS = {"ardilla"}
+_ESPECIES_FEMENINAS = {"ardilla", "cabra_montes"}
+
+# Nombre legible para la cronica (2026-09-09, especie cabra_montes):
+# Especie.value es un identificador tecnico (snake_case, sin tildes),
+# correcto para persistencia/config pero no para texto narrado -- todas
+# las especies anteriores eran ya una sola palabra legible tal cual
+# (gnomo, lobo, conejo, ardilla, caballo, venado); cabra_montes es la
+# primera con mas de una palabra. Solo entra aqui quien lo necesite --
+# el resto sigue usando especie.value sin cambios.
+_NOMBRES_LEGIBLES = {"cabra_montes": "cabra montés"}
 
 
 def _es_femenino(especie: str | None) -> bool:
@@ -71,6 +80,11 @@ def _contexto(evento: Evento) -> dict:
     }
     contexto.update(evento.datos)
     especie = contexto.get("especie")
+    # especie_legible sustituye a especie SOLO para texto mostrado
+    # (sujeto de fallback, plantilla de Concepcion) -- _es_femenino de
+    # abajo sigue consultando el valor tecnico crudo, no este.
+    if especie is not None:
+        contexto["especie"] = _NOMBRES_LEGIBLES.get(especie, especie)
     nombre = contexto.get("nombre")
     # Nombre propio real (spec 2026-09-04): es "real" cuando NO coincide
     # con el patron de fallback `{especie}_{entidad_id}` que producen las
@@ -99,7 +113,8 @@ def _contexto(evento: Evento) -> dict:
         articulo = "una" if femenino else "un"
         contexto["articulo"] = articulo
         contexto["terminacion"] = "a" if femenino else "o"
-        contexto["sujeto"] = f"{articulo} {especie}" if especie is not None else ""
+        especie_legible = contexto.get("especie")
+        contexto["sujeto"] = f"{articulo} {especie_legible}" if especie_legible is not None else ""
     return contexto
 
 

@@ -320,6 +320,27 @@ necesidades:
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
 
+  venado:
+    # AÑADIDO 2026-09-09 (arco de biodiversidad de fauna, ver
+    # docs/superpowers/specs/2026-09-09-especie-venado-design.md).
+    # Arranca YA con el mismo par de hambre/sed que esta sesion confirmo
+    # estable en gnomo/lobo/ardilla -- evita repetir el ciclo de caballo
+    # (nacio con `defecto`, se corrigio dias despues tras confirmarse
+    # fragilidad real).
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
+
+  cabra_montes:
+    # AÑADIDO 2026-09-09 (arco de biodiversidad de fauna, ver
+    # docs/superpowers/specs/2026-09-09-especie-cabra-montes-design.md).
+    # Mismo par ya validado, mismo criterio que venado.
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
+
 consumo:
   tasa_consumo_al_comer: 0.5
   tasa_consumo_al_beber: 0.2
