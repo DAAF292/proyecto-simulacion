@@ -7042,3 +7042,96 @@ resto de este documento).
   específico de lobo/cabra_montes, útil recordarlo al diseñar fauna
   futura en desierto/tundra si algún depredador de otro bioma pudiera
   alcanzarlos por el mismo camino.
+
+## Prueba extensa con venado/cabra_montes -- criterio maestro real 40%
+## (5 especies), no el 88% ya documentado -- hueco de documentación
+## corregido, hallazgo real sobre lobo sin resolver (2026-09-09, mismo
+## día, análisis de los datos crudos ya generados por "lanza una prueba
+## extensa", nunca escrito hasta ahora)
+
+**Corrección de un hueco real de documentación**: la corrida de 15
+semillas nuevas (900001-900015, hasta 10104 ticks, harness
+`herramientas/harness_calibracion.py`) lanzada tras cerrar el arco de
+venado/cabra_montes se reportó verbalmente en conversación pero nunca
+se escribió aquí -- viola el propio principio de este documento
+("documentación... no lo des por recordado sin más"). Recuperados los
+datos crudos (`.json` del harness, seguían en el scratchpad de la
+sesión) y reanalizados con rigor antes de escribir esto, no de memoria.
+
+**Resultado real, con las 15 semillas completas**:
+
+| Especie | Extinción | Causa dominante |
+|---|---|---|
+| gnomo | 0/15 (0%) | depredación 54%, inanición 27% |
+| lobo | 7/15 (47%) | inanición 51%, vejez 48% |
+| conejo | 3/15 (20%) | vejez 93% |
+| ardilla | 4/15 (27%) | vejez 75%, depredación 19% |
+| caballo | 0/15 (0%) | vejez 71%, deshidratación 19% |
+| venado | 3/15 (20%) | vejez 42%, depredación 39% |
+| cabra_montes | 1/15 (7%) | vejez 61%, inanición 33% |
+
+**Criterio maestro de Diego (5 especies vivas a la vez): 6/15 (40%)**
+-- con las 7 especies del catálogo completo vivas a la vez: 5/15 (33%).
+Muy por debajo del 88% (7/8) con el que se cerró la sesión de
+estabilización horas antes.
+
+**Diagnóstico honesto, no alarmista**: la caída NO parece deberse a
+venado/cabra_montes perjudicando al resto -- gnomo y caballo siguen en
+0% de extinción, conejo/ardilla dentro de rangos ya vistos antes.
+**Lobo (47% de extinción) es, con diferencia, quien arrastra el
+criterio maestro hacia abajo**, y ese 47% cae limpiamente dentro de la
+varianza YA documentada de esta misma especie en esta misma sesión
+(100%, 67%, 53%, 47%, 25%, 12% según la muestra -- ver "Lobo -- dos
+intentos rápidos..." más arriba). El 88% que se documentó como cierre
+de la investigación de estabilización se midió sobre una muestra de
+solo 8 semillas -- no representativa, sesgada hacia el extremo bueno de
+la varianza real de lobo, tal como este mismo documento ya advertía en
+su momento ("ninguno de los tres commits... se verificó contra el
+harness completo... 6-8 semillas por condición"). No es una regresión
+causada por hoy -- es la primera vez que se mide con una muestra grande
+tras esos fixes, y la varianza que ya se sabía que existía se manifiesta.
+
+**Hallazgo real, más interesante, sin resolver**: venado SÍ se caza de
+verdad en juego libre (85 muertes reales por depredación agregadas en
+las 15 semillas, presente incluso en la mayoría de semillas donde lobo
+acabó extinto) -- el propósito de diseño de venado ("darle a lobo una
+presa nutricionalmente viable en solitario") se ejerce, no es
+"correcto pero invisible" como tantos otros mecanismos de este
+proyecto. **Pero no está cerrando el problema de fondo**: incluso con
+caza de venado real y documentada, la causa de muerte dominante de
+lobo sigue siendo inanición (51%), casi empatada con vejez (48%) --
+prácticamente sin cambios frente a antes de que venado existiera.
+Revisando semilla a semilla: en varias de las 7 semillas donde lobo se
+extinguió, hubo entre 2 y 9 capturas reales de venado antes de la
+extinción -- comer presa real no bastó para evitar el colapso. Esto
+apunta a que el cuello de botella de lobo no es "falta de presa
+viable" (ya resuelto, venado lo demuestra) sino algo más fino:
+frecuencia/eficiencia de caza real, o simplemente que el margen
+calórico por captura sigue sin ser suficiente incluso con una presa
+más grande que conejo/ardilla -- no investigado todavía con datos, sería
+la primera vez que se mide esto DESPUÉS de tener una presa nutricionalmente
+adecuada disponible (a diferencia de la investigación previa de fragilidad
+de lobo, que nunca contó con venado).
+
+**Otros datos reales de la misma corrida, sin sorpresas**: asentamientos
+(40 en total entre las 15 semillas), refugios (344), almacenes (36),
+salón común (27) y cocina (12) completados -- confirma que los
+mecanismos sociales/de construcción siguen disparándose con fuerza real
+a esta escala, sin relación con el hallazgo de lobo.
+
+**Pendiente real, explícito, más concreto que antes**:
+- Investigar el presupuesto calórico real de lobo AHORA que existe una
+  presa numéricamente viable en solitario (venado) -- pregunta nueva,
+  nunca antes formulada así: ¿por qué cazar venado con éxito real no
+  está bastando para bajar la inanición? Candidatos: tasa de encuentro/
+  frecuencia de caza real (no solo viabilidad numérica), o el ratio de
+  saciedad ganada por captura de venado frente al coste metabólico de
+  lobo en el tramo de tiempo entre capturas.
+- El criterio maestro real hoy es 33-40%, no 88% -- corregido aquí con
+  honestidad; sigue sin alcanzar el 50% que fijó Diego como objetivo,
+  con lobo como bloqueo casi exclusivo (el resto del catálogo se
+  comporta razonablemente bien).
+- El harness completo de referencia (15×12000, sin cortar por tiempo)
+  sigue sin correrse nunca para nada de esto -- las 15 semillas de hoy
+  se cortaron entre 5765 y 10104 ticks por el límite de tiempo real del
+  entorno de 4 núcleos.
