@@ -175,6 +175,24 @@ depredacion:
   # comportamiento actual.
   factor_ampliacion_techo_manada: 1.0
 
+  # Preferencia por valor nutricional al elegir presa (2026-09-09, ver
+  # CLAUDE.md "Presupuesto calorico de lobo con venado disponible"):
+  # medido con un arnes instrumentado que _calcular_caza elegia SIEMPRE
+  # la presa mas cercana (presas.sort() por distancia, sin ponderar
+  # cuanto alimenta) -- en 4 semillas nuevas, lobo cazo 106 veces ardilla
+  # (la presa MENOS nutritiva) frente a solo 28 veces venado (con
+  # diferencia la mas rentable), pese a que las capturas de venado casi
+  # siempre llenan la saciedad a tope. sistema_movimiento.py:_calcular_caza
+  # ahora puntua cada candidato como ratio_biomasa - este_factor*distancia
+  # y elige el MAXIMO -- ratio_biomasa (peso_presa/peso_cazador)
+  # reutilizado tal cual, mismo proxy que ya usa
+  # sistema_depredacion.py:_resolver_ataque para aporte_maximo, sin
+  # inventar una formula de "valor" nueva. PROVISIONAL, elegido para que
+  # una presa mucho mas rentable siga ganando incluso a la distancia
+  # maxima del radio de caza, sin volver la distancia irrelevante entre
+  # presas de valor similar -- sin calibrar contra el harness completo.
+  peso_distancia_preferencia_presa: 0.02
+
 # Sonido fisico -- infraestructura y deteccion temprana de amenaza
 # (2026-09-06, circulo 4a -- ver
 # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md).

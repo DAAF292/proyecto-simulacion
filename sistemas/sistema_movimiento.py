@@ -158,6 +158,19 @@ class SistemaMovimiento:
         self.radio_max_pareja: int = int(cfg_per.get("radio_maximo_pareja_celdas", 12))
         self.radio_min_agua: int = int(cfg_per.get("radio_minimo_agua_celdas", 2))
         self.radio_max_agua: int = int(cfg_per.get("radio_maximo_agua_celdas", 8))
+        # Radio propio de CAZAR (2026-09-09 -- ver CLAUDE.md "Presupuesto
+        # calorico de lobo con venado disponible": medido que el radio
+        # generico (2-3 celdas reales para lobo) es la causa raiz de que
+        # inanicion siga dominando pese a tener presa nutricionalmente
+        # viable -- un depredador invierte mas en detectar presa que una
+        # criatura generica en localizar comida vegetal estatica, mismo
+        # criterio que ya justifico un radio propio para BEBER/BUSCAR_PAREJA.
+        # Ampliacion moderada a proposito (Diego: "ajustar... pero tampoco
+        # pasarnos") -- mas contenida que la de pareja (3-12, la busqueda
+        # de pareja cubre gran parte del territorio porque una pareja es
+        # mucho mas rara que una presa), del mismo orden que la de agua.
+        self.radio_min_caza: int = int(cfg_per.get("radio_minimo_caza_celdas", 1))
+        self.radio_max_caza: int = int(cfg_per.get("radio_maximo_caza_celdas", 7))
 
         cfg_rel = self.config.get("relieve", {})
         self.pend_min: float = float(cfg_rel.get("pendiente_minima_transitable", 0.05))
@@ -321,6 +334,24 @@ class SistemaMovimiento:
         self.factor_ampliacion_techo_manada: float = float(
             cfg_dep.get("factor_ampliacion_techo_manada", 1.0)
         )
+        # Preferencia por valor nutricional al elegir presa (2026-09-09 --
+        # ver CLAUDE.md "Presupuesto calorico de lobo con venado disponible":
+        # medido que _calcular_caza elegia SIEMPRE la presa mas cercana sin
+        # ponderar cuanto alimenta -- lobo cazaba 4x mas ardilla (barata)
+        # que venado (mucho mas rentable) solo por ser mas numerosa/cercana
+        # con mas frecuencia. ratio_biomasa = peso_presa/peso_cazador
+        # reutilizado tal cual -- el mismo proxy que ya usa
+        # sistema_depredacion.py:_resolver_ataque para calcular
+        # aporte_maximo, sin inventar una formula de "valor" nueva.
+        # Puntuacion = ratio_biomasa - peso_distancia_preferencia_presa*dist,
+        # se elige el maximo en vez del mas cercano -- PROVISIONAL, elegido
+        # para que incluso a la distancia maxima del radio de caza una presa
+        # mucho mas rentable (venado) siga ganando a una barata (ardilla)
+        # cercana, sin volver la distancia irrelevante entre presas de
+        # valor similar.
+        self.peso_distancia_preferencia_presa: float = float(
+            cfg_dep.get("peso_distancia_preferencia_presa", 0.02)
+        )
         # Sonido fisico (2026-09-06, circulo 4a -- ver
         # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
         # techo de escaneo (no el alcance real) para la tercera fuente de
@@ -424,8 +455,11 @@ class SistemaMovimiento:
                     temperamento, tick_actual, dims.agudeza_sensorial,
                 )
             elif accion == Accion.CAZAR:
+                radio_caza = radio_individual(
+                    dims.agudeza_sensorial, self.radio_min_caza, self.radio_max_caza
+                )
                 dx, dy = self._calcular_caza(
-                    gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio, pos.zona_idx,
+                    gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio_caza, pos.zona_idx,
                     zona=zona, tick_actual=tick_actual, agudeza_sensorial=dims.agudeza_sensorial,
                 )
             elif accion == Accion.COMER:
@@ -1294,7 +1328,10 @@ class SistemaMovimiento:
         agudeza_sensorial: float = 0.0,
     ) -> tuple[int, int]:
         """
-        Avanza hacia la presa válida más cercana dentro del radio sensorial.
+        Avanza hacia la presa válida MÁS RENTABLE (no la más cercana,
+        desde 2026-09-09 -- ver punto 4 y CLAUDE.md "Presupuesto
+        calórico de lobo con venado disponible") dentro del radio
+        sensorial de caza.
 
         Tres filtros de "presa válida", todos PROVISIONALES:
 
@@ -1335,6 +1372,23 @@ class SistemaMovimiento:
            (cualquier especie con conespecíficos cazando cerca se
            beneficia igual, no una regla especial de lobo), coherente con
            el resto de usos ya existentes de esta misma función.
+
+        4. Preferencia por valor nutricional (2026-09-09,
+           self.peso_distancia_preferencia_presa): entre las presas
+           válidas dentro del radio, se elige la que maximiza
+           ratio_biomasa - peso_distancia_preferencia_presa*distancia,
+           no la más cercana sin más. ratio_biomasa (peso_presa/
+           peso_cazador) es el mismo proxy que ya usa
+           sistema_depredacion.py:_resolver_ataque para aporte_maximo --
+           una presa mucho más rentable (venado) sigue ganando incluso a
+           la distancia máxima del radio de caza frente a una barata
+           cercana (ardilla), sin volver la distancia irrelevante entre
+           presas de valor similar. Corrige un hallazgo real: sin esto,
+           lobo cazaba 4x más ardilla que venado pese a ser mucho menos
+           nutritiva, solo por ser más numerosa/cercana con más
+           frecuencia -- el radio de caza (self.radio_min_caza/
+           radio_max_caza, propio desde el mismo commit, ver __init__)
+           tampoco arreglaba esto por sí solo.
         Fallback de sonido (2026-09-06, circulo 4b): si no queda ninguna
         presa valida, se intenta primero sonido_mas_cercano (consumido tal
         cual de nucleo/sonido.py) con radio_busqueda_maxima_sonido, tick_actual
@@ -1380,7 +1434,8 @@ class SistemaMovimiento:
                 radio, dims_p.peso, self.peso_referencia_deteccion_plena
             )
             if dist <= radio_efectivo:
-                presas.append((dist, pos_p.x, pos_p.y))
+                ratio_biomasa = dims_p.peso / max(0.1, peso_cazador)
+                presas.append((dist, ratio_biomasa, pos_p.x, pos_p.y))
 
         if not presas:
             # Fallback de sonido como pista de caza (2026-09-06, circulo
@@ -1414,8 +1469,15 @@ class SistemaMovimiento:
                     return self._acercarse_a(pos_x, pos_y, *objetivo_sonido)
             return self._paso_aleatorio()
 
-        presas.sort()
-        _, px, py = presas[0]
+        # Preferencia por valor nutricional (2026-09-09), no por pura
+        # distancia -- ver comentario de self.peso_distancia_preferencia_presa
+        # en __init__. Puntuacion = ratio_biomasa - peso_distancia*dist,
+        # se elige el MAXIMO en vez del mas cercano (antes: presas.sort()
+        # + presas[0], puramente por distancia ascendente).
+        _, _, px, py = max(
+            presas,
+            key=lambda p: p[1] - self.peso_distancia_preferencia_presa * p[0],
+        )
         return self._acercarse_a(pos_x, pos_y, px, py)
 
     def _clasificar_destino_sonido(
