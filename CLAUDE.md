@@ -6917,10 +6917,16 @@ cerrado, no solo el test unitario en verde.
   siguiente paso natural (no hecho aquí) es remedir si la caza en
   manada sobre caballo por fin empieza a dispararse -- candidato directo
   de seguimiento.
-- Cabra montés sigue sin ningún depredador real en montaña -- si se
+- ~~Cabra montés sigue sin ningún depredador real en montaña -- si se
   quiere una dinámica presa-depredador ahí, es un círculo de diseño
   aparte (fauna subterránea/de montaña propia, ya mencionada como
-  horizonte lejano).
+  horizonte lejano).~~ -- CORREGIDO el mismo día, ver la sección
+  "Lobo caza en montaña -- investigación del mecanismo, confirmado como
+  comportamiento correcto, no un bug" más abajo: la prueba extensa
+  posterior (15 semillas) sí registró depredación real de cabra_montes
+  por lobo (10 muertes) -- esta entrada asumía sin verificar que "sin
+  depredador diseñado a propósito" significaba "sin depredador real en
+  juego libre", y no era el caso.
 - Sin ventaja de escalada/movimiento propio de terreno de montaña para
   cabra montés -- señalado como fuera de alcance en el spec, candidato
   futuro real si se quiere diferenciarla mecánicamente más allá del
@@ -6934,3 +6940,105 @@ cerrado, no solo el test unitario en verde.
   aves terrestres reutilizando el movimiento existente, vuelo real
   aplazado indefinidamente) sigue sin ningún diseño ni línea de código
   -- solo conversación.
+
+## Lobo caza en montaña -- investigación del mecanismo, confirmado como
+## comportamiento correcto, no un bug (2026-09-09, mismo día)
+
+La prueba extensa de 15 semillas con venado/cabra_montes ya incluidas
+(ver sección anterior) registró **10 muertes reales de cabra_montes por
+depredación** -- contradiciendo la propia honestidad del spec de
+cabra_montes y la nota de "Pendiente real" de la sección anterior
+("sin depredador real en montaña todavía"), escrita a partir de una
+única corrida de 3000 ticks donde no se había observado ninguna. Diego
+pidió investigar el mecanismo antes de decidir si era un bug o
+comportamiento deseado -- lobo es la ÚNICA especie del catálogo con
+`medio_alimentacion: cazar`, y lobo nace y vive en bosque, nunca en
+montaña.
+
+**Investigación, verificada en tres niveles (código + generación real +
+cálculo numérico), no solo leída en abstracto**:
+
+1. **El movimiento no conoce el concepto de bioma, solo elevación y
+   agua**. `sistema_movimiento.py:_aplicar_movimiento` (validación de
+   cada paso) comprueba exactamente dos restricciones -- profundidad de
+   agua frente a la estatura corporal, y diferencia de elevación entre
+   celda origen y destino contra `pendiente_maxima_transitable(fuerza)`
+   (~0.22, escalado por la fuerza individual). `TipoTerreno`/bioma
+   **nunca se consulta** en la función que decide si un paso es válido
+   -- el bioma es pura clasificación climática por celda
+   (`nucleo/bioma.py:clasificar_bioma`, por elevación+lluvia+
+   temperatura), nunca una barrera física para el motor de movimiento.
+   Mismo hallazgo que ya existía para bosque/pradera (contiguos,
+   documentado en el arco de "Distribución causal de flora"), nunca
+   antes verificado para bosque/montaña.
+
+2. **Bosque y montaña son geográficamente contiguos, confirmado
+   empíricamente** (arnés dirigido, 4 semillas nuevas, mundo 40×40,
+   contando adyacencia real de 4-vecinos):
+
+   | Semilla | Celdas montaña | Celdas bosque | Pares 4-vecinos bosque-montaña | Distancia mínima |
+   |---|---|---|---|---|
+   | 1 | 52 | 740 | 12 | 1 |
+   | 2 | 143 | 589 | 26 | 1 |
+   | 3 | 89 | 265 | 7 | 1 |
+   | 42 | 194 | 360 | 26 | 1 |
+
+   Frontera real y directa en las 4 semillas, sin excepción -- coherente
+   con la generación orográfica causal (campo de elevación continuo,
+   sin discontinuidades artificiales entre biomas).
+
+3. **`Accion.CAZAR` está explícitamente exento del sesgo de
+   territorio**, por diseño documentado desde antes de esta sesión, no
+   un descuido nuevo. El propio docstring de
+   `sistema_movimiento.py:_calcular_deambular` lo dice: el sesgo de
+   territorio (lo único que mantendría a fauna sin consciencia cerca de
+   sitios conocidos) solo aplica "sin objetivo activo (COMER/BEBER/
+   CAZAR/HUIR/BUSCAR_PAREJA)". `_calcular_caza` es una función de
+   persecución pura -- busca la presa válida más cercana dentro del
+   radio sensorial por peso/distancia/detectabilidad, sin ninguna
+   noción de bioma, y camina hacia ella con `_acercarse_a`, sujeta
+   únicamente al mismo gate de elevación/agua del punto 1.
+
+4. **cabra_montes es presa numéricamente válida para lobo, con margen
+   real, no por casualidad rara**: `cabra_montes: [25,45]kg` frente a
+   `lobo: [60,90]kg` -- siempre más ligera, nunca choca con el techo
+   `peso_maximo_presa` (solitario, sin bono de manada). El filtro
+   adicional `magnitud_disposicion_por_peso(peso_cazador, peso_presa)
+   >= depredacion.umbral_disposicion_caza` (0.5, logarítmico) exige un
+   ratio de peso >= e≈2.72 -- no cualquier combinación individual pasa
+   (p.ej. lobo 60kg/cabra 45kg falla, ratio 1.33), pero una fracción
+   real del espacio de sorteo sí (p.ej. lobo 90kg/cabra 25kg, ratio 3.6,
+   magnitud 0.56) -- coherente con 10 muertes reales en 15 semillas, ni
+   una tasa desbocada ni un caso imposible.
+
+**Conclusión, confirmada por Diego como comportamiento correcto, no un
+bug**: no hay ningún fallo de código ni ninguna regresión introducida
+por venado/cabra_montes -- es el mismo mecanismo de persecución ya
+usado deliberadamente para el resto de la caza (nunca antes puesto a
+prueba con un depredador y una presa nativos de biomas distintos hasta
+hoy). Un lobo cazando cerca del límite bosque/montaña detecta una
+cabra_montes dentro de su radio de percepción y camina hacia ella paso
+a paso -- cada paso limitado solo por pendiente/agua, nunca por bioma
+-- pudiendo terminar cazándola dentro de montaña. Físicamente plausible
+además: un lobo real persigue presa a través de fronteras de hábitat
+sin ningún problema. La spec de cabra_montes y la nota de "Pendiente
+real" de la sección anterior quedaban desactualizadas por una muestra
+de una sola corrida corta, no por un error de diseño -- corregidas
+arriba (tachadas, no borradas, mismo criterio de honestidad que el
+resto de este documento).
+
+**Pendiente real, explícito, distinto de "sin depredador en montaña"**:
+- Sin remedir si esta misma vía (persecución sin barrera de bioma)
+  también permite a lobo cazar cabra_montes con apoyo de manada (techo
+  de presa ampliado) -- no investigado, candidato de seguimiento menor.
+- Cabra montés sigue sin ninguna ventaja de terreno propia de montaña
+  (escalada, refugio en risco) que compense esta exposición real a
+  depredación -- señalado ya en la sección anterior como fuera de
+  alcance del spec original, ahora con más motivo real detrás si se
+  quisiera equilibrar la dinámica presa-depredador de montaña.
+- El mecanismo general (persecución de caza sin gate de bioma, solo
+  elevación/agua) aplica igual a CUALQUIER futuro par depredador-presa
+  de biomas distintos que sean geográficamente contiguos -- no es
+  específico de lobo/cabra_montes, útil recordarlo al diseñar fauna
+  futura en desierto/tundra si algún depredador de otro bioma pudiera
+  alcanzarlos por el mismo camino.
