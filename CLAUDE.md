@@ -6516,3 +6516,57 @@ por lobo. El harness completo (`herramientas/harness_calibracion.py`)
 ya existe y está verificado -- el siguiente paso natural es
 recalibrar lobo con él como referencia, y luego remedir conejo/ardilla
 juntos para ver si el criterio maestro por fin se acerca al 50%.
+
+### Lobo -- dos intentos rápidos, ninguno con mejora clara, la especie
+### de mayor varianza del catálogo (2026-09-09, mismo día)
+
+Diego pidió seguir con lobo de inmediato. Vejez es la causa dominante
+(42.7%) en el harness de 15 semillas -- hipótesis directa: el techo
+universal `poblacion.techo_fraccion_edad_inicial_longevidad` (0.7)
+penaliza mucho más a una especie de vida corta (lobo, 8-14 años) que a
+una larga (gnomo, 45-65), dejando a los fundadores más desafortunados
+con apenas 1000-2000 ticks de vida restante desde el tick 0. Hecho
+configurable por especie (`rangos_raciales.<especie>.
+techo_fraccion_edad_inicial_longevidad`, opcional, sin entrada
+comportamiento idéntico a antes -- infraestructura de riesgo cero,
+sí aplicada) y probado en A/B para lobo (0.7→0.3, 6 semillas nuevas):
+**NO mostró mejora** -- 5/6 extinción con el cambio frente a 3/6 sin
+él. Descartado, no se le da ningún valor a lobo en config real.
+
+Segundo intento, sobre el hallazgo de que caballo tuvo **0 muertes por
+depredación en las 15 semillas del harness** -- lobo nunca caza
+caballo con éxito, pese a ser la presa que de verdad lo alimentaría
+(conejo/ardilla apenas nutren a un depredador de su tamaño). La caza
+en manada exige varios aliados cazando cerca a la vez, algo que casi
+nunca se da con una población de 8-20 lobos dispersos. Probado en A/B
+subir `factor_ampliacion_techo_manada` (1.0→3.0, menos aliados
+necesarios): tampoco mostró diferencia clara -- 2/6 extinción en
+ambas condiciones, 1 caza exitosa de caballo con el cambio frente a 0
+sin él.
+
+**Hallazgo metodológico real, más importante que cualquiera de los dos
+intentos**: el propio baseline de lobo dio TRES resultados de
+extinción distintos según la muestra -- 100% en el harness de 15
+semillas, 50% (3/6) en el primer A/B, 33% (2/6) en el segundo, todos
+con semillas nuevas distintas. Lobo parece ser la especie de mayor
+varianza de todo el catálogo -- ni 6 semillas por combinación bastan
+para distinguir una mejora real del ruido, mismo fenómeno de
+desplazamiento de secuencia de `rng` ya visto varias veces hoy con
+conejo, llevado aquí a un extremo mayor.
+
+**Decisión de cierre**: no seguir iterando con muestras de 6 semillas
+-- rendimientos decrecientes claros, mismo patrón ya visto con conejo.
+395/395 tests en verde en ambos intentos (ninguno se aplicó a config
+real salvo la infraestructura de riesgo cero).
+
+**Pendiente real, explícito**: lobo sigue extinguiéndose con alta
+probabilidad y sin una palanca clara identificada -- de los tres
+hallazgos reales del día (vejez enmascarando, caza en manada nunca
+disparándose, alta varianza intrínseca), ninguno se tradujo en un fix
+verificado. Cualquier intento futuro de calibrar lobo necesita el
+harness completo (15×12000) por combinación probada, no A/B de 6
+semillas -- la lección más clara que deja esta investigación. El
+criterio maestro de Diego (5 especies vivas a la vez) sigue sin
+remedirse tras los fixes de ardilla y los bugs de salón/cocina
+corregidos hoy mismo -- candidato inmediato si se retoma esta línea de
+trabajo.
