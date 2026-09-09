@@ -38,6 +38,18 @@ percepcion:
   # comida/amenaza. PROVISIONAL, sin calibrar contra el harness completo.
   radio_minimo_agua_celdas: 2
   radio_maximo_agua_celdas: 8
+  # radio_minimo/maximo_caza_celdas (2026-09-09, TERCER intento aislado --
+  # ver CLAUDE.md "Radio de caza en solitario"): los dos intentos previos
+  # de mejorar la frecuencia de caza de lobo (resta lineal + radio;
+  # formula de tasa sin radio) se revirtieron por empeorar frac_tiempo_
+  # saciedad_cero/capturas reales. Ninguno probo el radio ampliado EN
+  # SOLITARIO -- este es ese circulo, aislado: mismo rango moderado ya
+  # usado antes (1-7), pero la eleccion de presa sigue siendo "la mas
+  # cercana" sin ningun cambio. Mismo patron que radio_pareja/radio_agua,
+  # radio propio solo para Accion.CAZAR. PROVISIONAL, sin calibrar contra
+  # el harness completo.
+  radio_minimo_caza_celdas: 1
+  radio_maximo_caza_celdas: 7
 
 movimiento:
   coste_resistencia_pendiente: 0.05

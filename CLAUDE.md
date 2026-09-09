@@ -7416,3 +7416,58 @@ descartar, motor exactamente en el estado de `f07915c`.
   DIAGNÓSTICO -- lo que estas dos rondas descartan es que la preferencia
   por valor, en cualquiera de sus dos formulaciones probadas, sea la
   CURA correcta.
+
+## Radio de caza en solitario -- TERCER intento, la primera mejora real
+## tras dos reversiones, comiteado (2026-09-09, mismo día)
+
+Diego preguntó directamente si bastaba con dejar solo el radio de
+percepción más alto -- exactamente la palanca que quedaba sin aislar de
+la lista original ("probar radio ampliado SOLO, sin preferencia").
+Implementado: mismo `radio_minimo/maximo_caza_celdas` (1-7,
+`config/comportamiento.yaml`, patrón ya usado por BEBER/BUSCAR_PAREJA)
+del primer intento, pero **sin ningún cambio en la elección de presa**
+-- `_calcular_caza` sigue con `presas.sort()` + `presas[0]` (la más
+cercana), exactamente como en la línea base. 413/413 tests (3 nuevos),
+`BOSQUE_AUTO_TICKS=3000` sin excepciones.
+
+**Verificación cuantitativa, mismo arnés y MISMAS 4 semillas
+(500001-500004), comparando las cuatro condiciones ya medidas**:
+
+| | Línea base (`f07915c`) | 1er intento (radio+resta lineal) | 2º intento (solo tasa) | 3er intento (solo radio) |
+|---|---|---|---|---|
+| `frac_tiempo_saciedad_cero` (media) | 0.264 | 0.385 | 0.352 | **0.218** |
+| Capturas totales (4 semillas) | 227 | 58 | 95 | **212** |
+
+**Primera mejora real de las tres rondas probadas**: `frac_tiempo_
+saciedad_cero` baja de 0.264 a 0.218 (lobo pasa menos tiempo en el
+estado que activa el sorteo de muerte por inanición), y las capturas se
+mantienen prácticamente al nivel de la línea base (212 frente a 227,
+dentro del ruido esperado por desplazamiento de secuencia de `rng`).
+Desglose semilla a semilla, coherente con la varianza ya conocida de
+esta especie (no una mejora uniforme, pero sí clara en agregado): 3 de
+4 semillas mejoran individualmente (s2: frac 0.311→0.074, capturas
+57→90; s3: 0.347→0.215, 29→50; s4: 0.240→0.213, 51→57), 1 de 4 empeora
+(s1: 0.158→0.370, 90→15).
+
+**Conclusión, con las tres rondas juntas**: confirma con precisión el
+diagnóstico de causa raíz -- el radio de percepción SÍ era demasiado
+pequeño y SÍ era una palanca real de mejora; el error de los dos
+intentos anteriores no era el radio, era la preferencia por valor
+combinada con él (o sola). "Más cerca" resulta ser, en la práctica, una
+heurística de caza suficientemente buena para un depredador oportunista
+-- ampliar cuánto ve sin cambiar a quién persigue es lo que realmente
+ayuda, coincidiendo con la alternativa "mucho más simple" ya señalada
+como candidata en la sección anterior.
+
+**Comiteado** (`config/comportamiento.yaml`,
+`sistemas/sistema_movimiento.py`, `tests/test_radio_caza_solitario.py`).
+
+**Pendiente real, explícito**: `radio_minimo/maximo_caza_celdas=[1,7]`
+sigue PROVISIONAL, sin calibrar contra el harness completo -- esta
+verificación es de 4 semillas, no las 15×12000 de referencia; el
+criterio maestro de Diego (5 especies vivas a la vez) no se remidió con
+este cambio ya aplicado, candidato inmediato si se quiere confirmar el
+efecto agregado sobre el criterio maestro, no solo sobre lobo en
+aislamiento; el mecanismo de "objetivo fijado" entre ticks queda como
+posible mejora adicional futura, ya no urgente dado que esta palanca
+más simple ya mostró una mejora real medida.

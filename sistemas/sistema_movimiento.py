@@ -158,6 +158,19 @@ class SistemaMovimiento:
         self.radio_max_pareja: int = int(cfg_per.get("radio_maximo_pareja_celdas", 12))
         self.radio_min_agua: int = int(cfg_per.get("radio_minimo_agua_celdas", 2))
         self.radio_max_agua: int = int(cfg_per.get("radio_maximo_agua_celdas", 8))
+        # Radio propio de CAZAR (2026-09-09, TERCER intento aislado -- ver
+        # CLAUDE.md "Intento real de radio de caza + preferencia por
+        # presa" y su segundo intento con formula de tasa, ambos
+        # revertidos por perjudicar la frecuencia de caza real. Ninguno
+        # de los dos probo el radio EN SOLITARIO, sin ninguna preferencia
+        # por valor -- este circulo lo aisla: mismo patron ya usado por
+        # BEBER/BUSCAR_PAREJA (radio propio, mayor que el generico), pero
+        # la eleccion de presa sigue siendo "la mas cercana" sin cambios
+        # -- solo se amplia lo que el lobo PERCIBE, no como elige entre lo
+        # percibido. Mismo rango moderado ya usado en el primer intento
+        # (Diego: "ajustar... pero tampoco pasarnos").
+        self.radio_min_caza: int = int(cfg_per.get("radio_minimo_caza_celdas", 1))
+        self.radio_max_caza: int = int(cfg_per.get("radio_maximo_caza_celdas", 7))
 
         cfg_rel = self.config.get("relieve", {})
         self.pend_min: float = float(cfg_rel.get("pendiente_minima_transitable", 0.05))
@@ -424,8 +437,11 @@ class SistemaMovimiento:
                     temperamento, tick_actual, dims.agudeza_sensorial,
                 )
             elif accion == Accion.CAZAR:
+                radio_caza = radio_individual(
+                    dims.agudeza_sensorial, self.radio_min_caza, self.radio_max_caza
+                )
                 dx, dy = self._calcular_caza(
-                    gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio, pos.zona_idx,
+                    gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio_caza, pos.zona_idx,
                     zona=zona, tick_actual=tick_actual, agudeza_sensorial=dims.agudeza_sensorial,
                 )
             elif accion == Accion.COMER:
@@ -1294,7 +1310,16 @@ class SistemaMovimiento:
         agudeza_sensorial: float = 0.0,
     ) -> tuple[int, int]:
         """
-        Avanza hacia la presa válida más cercana dentro del radio sensorial.
+        Avanza hacia la presa válida más cercana dentro del radio sensorial
+        -- `radio` ya llega calculado con self.radio_min_caza/
+        radio_max_caza (2026-09-09, propio de CAZAR, mismo patrón que
+        BEBER/BUSCAR_PAREJA) desde `ejecutar()`, no el genérico de
+        comida/amenaza. Elección de presa DELIBERADAMENTE sin cambios --
+        la más cercana, sin ponderar valor: dos intentos previos de
+        preferencia por valor (resta lineal, luego tasa) se revirtieron
+        por empeorar la frecuencia de caza real (ver CLAUDE.md), así que
+        este círculo aísla el radio en solitario para saber si esa
+        palanca sola ayuda sin la penalización de perseguir presa lejana.
 
         Tres filtros de "presa válida", todos PROVISIONALES:
 
