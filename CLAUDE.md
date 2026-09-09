@@ -6570,3 +6570,257 @@ criterio maestro de Diego (5 especies vivas a la vez) sigue sin
 remedirse tras los fixes de ardilla y los bugs de salón/cocina
 corregidos hoy mismo -- candidato inmediato si se retoma esta línea de
 trabajo.
+
+## Auditoría de estabilización -- primer momento en que el criterio
+## maestro de Diego se cumple con claridad (13% → 62% → 88%), tres
+## commits verificados uno a uno contra el motor real (2026-09-09,
+## sesión siguiente, entorno con 4 núcleos en vez de los 15-20 de la
+## sesión anterior -- muestras por ronda más pequeñas por necesidad,
+## documentado así en cada paso)
+
+Retomada la investigación de estabilidad justo donde la dejó la sección
+anterior. Diego pidió una auditoría completa de semillas para ver cómo
+sobreviven las criaturas y cómo se disparan los mecanismos del motor --
+el propio `herramientas/harness_calibracion.py` ya construido el día
+anterior, corrido de nuevo (15 semillas nuevas, 300001-300015, hasta
+12000 ticks, tope de 1200s/semilla por la limitación real de cómputo de
+este entorno -- las 15 se cortaron por tiempo entre 7003 y 10296 ticks,
+ninguna llegó al término completo, mismo criterio de honestidad que la
+corrida anterior sobre qué cuenta como dato válido).
+
+**Resultado de esa primera corrida**: gnomo y caballo 0% extinción
+(confirmando que sus fixes previos se sostienen), lobo 53% (8/15),
+conejo 47% (7/15), ardilla 20% (3/15) pero con **explosión sin control**
+en la mayoría de sus supervivencias (hasta 701 individuos, muy por
+encima de cualquier referencia sana histórica). Criterio maestro de
+Diego: **2/15 (13%)**. Mecanismos sociales confirmados disparándose con
+fuerza real por primera vez a escala completa: salón común 15/15, almacén
+15/15, cocina 10/15, parejas estables de gnomo en 12/15, manada/
+madriguera con 94.620 sincronizaciones agregadas, socializar/roce social
+con más de 230.000 contactos combinados.
+
+**Lectura crítica de ese primer resultado, antes de tocar nada**:
+comparado con la corrida anterior (lobo 100%, conejo 67%, ardilla 73%),
+la mejora de lobo y conejo **no podía atribuirse a ningún cambio de
+config propio de esas dos especies** -- solo ardilla había recibido un
+fix nuevo el día anterior (alivio de deshidratación), y cualquier cambio
+de config desplaza toda la secuencia de `rng` del motor para el resto de
+especies (fenómeno ya documentado repetidas veces en este proyecto).
+Señalado explícitamente como posible ruido, no como mejora real, antes
+de decidir ningún siguiente paso.
+
+### Comparación de causas de muerte contra caballo (referencia estable),
+### normalizada por exposición individuo-tick, no solo conteo bruto
+
+Diego pidió específicamente comparar los motivos de muerte de ardilla,
+conejo y lobo contra caballo (el único junto a gnomo con 0% de extinción
+en la corrida). Calculada la exposición individuo-tick real (integral
+trapezoidal de la trayectoria muestreada cada 1000 ticks) para poder
+comparar tasas, no solo proporciones dentro de cada especie -- una tasa
+de mortalidad total 7.9x más alta que caballo no se ve comparando solo
+porcentajes de causa.
+
+| | caballo | gnomo | lobo | conejo | ardilla |
+|---|---|---|---|---|---|
+| tasa global (por 10k ind-tick) | **1.00** | 1.36 | 3.28 (3.3x) | 7.87 (7.9x) | 4.16 (4.2x) |
+| vejez | 0.744 | 0.196 | 0.218 | 5.296 | 3.087 |
+| inanición | 0.136 | 0.397 | 1.269 | 0.066 | 0.355 |
+| deshidratación | 0.118 | 0.010 | **0.790** | **2.106** | 0.013 |
+| depredación | 0 | 0.729 | 0 | 0.396 | 0.705 |
+
+**Diagnóstico real, distinto para cada especie, no una causa común**:
+caballo es estable porque NINGÚN eje de riesgo está elevado (cero
+depredación, inanición y deshidratación bajas, solo vejez esperable) con
+una fecundidad calibrada a juego (concepción 0.015, camada 1-2). Lobo
+tenía los tres frentes elevados a la vez (inanición 9.3x caballo,
+deshidratación 6.7x) y **nunca había recibido el mismo alivio de
+deshidratación que ya tenían gnomo y ardilla** -- hallazgo nuevo, no
+visto en la investigación de fragilidad de lobo del día anterior (esa
+investigación probó edad inicial y techo de manada, nunca deshidratación
+específica). Conejo tenía deshidratación real (17.9x caballo) pero
+mostraba un patrón bimodal genuino en sus trayectorias (pico-y-caída en
+varias semillas, algo que ardilla nunca mostraba). Ardilla ya tenía la
+deshidratación resuelta desde el día anterior -- su problema real era
+`factor_base_concepcion=0.03`, el doble que el resto del catálogo, sin
+ningún freno que lo compensara tras quitarle el de deshidratación.
+
+Examinadas también las trayectorias completas (no solo el final): en las
+semillas de ardilla que se extinguen, depredación es 27-44% de sus
+muertes; en las que explotan, baja a 1-16% -- confirma que es una
+**carrera contra la depredación temprana**, no un problema de comida (la
+inanición se mantiene baja incluso con 701 individuos, la comida no está
+limitando la población a esa escala). Conejo, en cambio, no mostró esa
+correlación con depredación -- su extinción se explica mejor por la
+combinación de deshidratación real y una fecundidad ya recortada el
+2026-09-06 que resultó insuficiente para el contexto actual (con gnomo/
+lobo ya no colapsando, compitiendo por el mismo espacio).
+
+### Ronda 1 de A/B -- tres hipótesis aisladas, una se aplica, dos no
+
+Diseñado un arnés nuevo (`ab_estabilizacion.py`, scratchpad de sesión,
+mismo patrón que `harness_calibracion.py` pero con parches de config en
+memoria, sin tocar disco) para probar cada hipótesis en aislamiento
+antes de aplicar nada -- 4 condiciones × 6 semillas nuevas × 6000 ticks:
+
+- **`lobo_hidrat`** (mismo alivio de deshidratación que gnomo/ardilla,
+  `0.0008`/`0.0004`): extinción 4/6 (control) → **0/6**. Señal limpia y
+  fuerte, sin ningún indicio de sobrecorrección (lobo nunca se acerca a
+  explotar, máximo 16 individuos en la muestra). **Aplicado a
+  `config/fisiologia.yaml`, commit `a9e3bf7`.**
+- **`conejo_hidrat`** (mismo alivio, aislado, sin tocar fecundidad): 1/6
+  extinción, igual que el control -- no redujo la extinción, solo
+  desplazó hacia arriba las poblaciones que sobrevivían. Descartado en
+  solitario.
+- **`ardilla_trim`** (concepción 0.03→0.015 + camada [2,4]→[1,3], los dos
+  a la vez y de golpe): sobrecorrigió con fuerza -- ardilla pasó de
+  explotar (6-432) a rozar la extinción (0-24), y **conejo empeoró como
+  efecto colateral** (1/6→4/6 extinción). Descartado, no aplicado.
+
+395/395 tests en verde tras aplicar solo el fix de lobo.
+
+### Ronda 2 -- hipótesis más quirúrgicas, aislando qué parámetro pesa
+### realmente
+
+Con los dos intentos combinados de la ronda 1 fallidos, la ronda 2 aisló
+variables en vez de combinarlas: 3 condiciones × 6 semillas × 6000
+ticks, comparadas contra el control ya medido en la ronda 1.
+
+- **`ardilla_concepcion_suave`** (solo concepción 0.03→0.022, camada
+  intacta): apenas frenó la explosión (67-690 individuos) -- concepción
+  no es el lever dominante.
+- **`ardilla_camada_suave`** (solo camada [2,4]→[2,3], concepción
+  intacta): **el lever más eficaz de los dos probados por separado**
+  (4-258 individuos, techo bastante más bajo, 0/6 extinción) -- confirma
+  que el tamaño de camada pesa más que la probabilidad de concepción a
+  la hora de controlar el techo de una explosión.
+- **`conejo_combo_moderado`** (alivio de deshidratación + restauración
+  PARCIAL de la fecundidad recortada el 2026-09-06: camada [2,3]→[2,4],
+  concepción 0.008→0.010 -- ni el valor original que causó la
+  mega-explosión, ni el recorte que dejaba 47% de extinción real):
+  **0/6 extinción**, primera condición que elimina la extinción de
+  conejo observada en cualquier muestra de esta sesión -- pero las
+  poblaciones que sobreviven suben (hasta 343).
+
+Bono de esta ronda: las 18 semillas (bajo las tres condiciones, todas ya
+con el fix de lobo committeado en disco) dieron **0/18 extinción de
+lobo** -- confirmación mucho más amplia que la ronda 1 de que el fix se
+sostiene.
+
+**Aplicados a `config/poblacion.yaml` y `config/fisiologia.yaml`,
+commit `13411ef`**: camada de ardilla a [2,3] (concepción se deja en
+0.03, sin tocar -- el lever que menos pesaba); receta completa de conejo
+(deshidratación + camada [2,3]→[2,4] + concepción 0.008→0.010).
+
+**Verificación combinada, primera vez con los tres cambios juntos en
+disco** (8 semillas nuevas, 700001-700008, hasta 8000 ticks): criterio
+maestro de Diego **13% → 62%** -- primera vez que cruza el 50% en toda
+la investigación. Extinción de ardilla (1/8) y conejo (0/8)
+prácticamente resueltas. **Pero con un coste real, dicho con la misma
+honestidad que el resto de esta sección**: conejo no se estabilizó, solo
+cambió de modo de fallo -- máximo observado **691 individuos**, peor que
+el peor caso histórico sin tocar nada (394). Vejez explicaba el 94.6% de
+sus muertes -- básicamente sin ningún freno real una vez quitada la
+extinción.
+
+### Corrección quirúrgica -- revertir solo la camada de conejo, criterio
+### maestro sube a 88%
+
+Mismo diagnóstico que ya había dado la ronda 2 con ardilla (camada pesa
+más que concepción para controlar el techo de explosión), aplicado aquí
+en sentido inverso: revertir SOLO `camada` de conejo a [2,3] (valor de
+2026-09-06), dejando `factor_base_concepcion=0.010` y el alivio de
+deshidratación intactos. **Commit `862f5f0`.**
+
+**Verificado con 8 semillas nuevas más (800001-800008, hasta 8000
+ticks)**: conejo **0/8 extinción, máximo 337** -- por debajo incluso del
+peor caso histórico (394), confirmando la hipótesis con precisión.
+Criterio maestro de Diego: **62% → 88% (7/8)**. Lobo se mantuvo dentro de
+su rango de varianza ya conocido (1/8, 12%) -- no hay evidencia de que
+combinar los tres fixes lo haya perjudicado. Ardilla no se extinguió en
+ninguna semilla, aunque su magnitud media subió algo frente a la
+verificación anterior (203.9 vs 92.4) -- probablemente desplazamiento de
+secuencia de `rng` al tocar la config de conejo, no perseguido más por
+ahora dado que el resultado global mejoró. 395/395 tests en verde en las
+tres verificaciones.
+
+### Investigación aparte: ¿caza lobo en manada a caballo? -- NO,
+### confirmado con 73 corridas de esta misma sesión, sin excepción
+
+Diego preguntó explícitamente si el mecanismo de "techo de presa por
+manada" (diseñado el 2026-09-05 junto a la especie caballo, para que
+varios lobos cazando juntos pudieran abatir una presa mucho más grande
+que un individuo solo) se está disparando ahora que lobo ya no colapsa.
+Comprobado agregando el campo `depredacion` de las muertes de caballo en
+**las 73 corridas generadas en toda esta sesión** (24 de la ronda 1, 18
+de la ronda 2, 15 del harness completo, 8+8 de las dos verificaciones
+combinadas): **0 muertes de caballo por depredación, en las 73, sin
+ninguna excepción**.
+
+**Causa real, no un bug**: el propio código de "techo de presa por
+manada" (`sistema_depredacion.py`/`sistema_movimiento.py`,
+`factor_ampliacion_techo_manada=1.0`, `config/combate.yaml`) exige
+`peso_cazador * (1 + aliados_cazando_cerca) >= peso_presa` para que un
+lobo (~60-90kg) considere siquiera perseguir un caballo (~400-500kg) --
+con los pesos medios reales del catálogo, hacen falta **~5 lobos
+cazando activamente (`Accion.CAZAR`) dentro de `radio_apoyo_grupal=3`
+celdas a la vez**, no solo 5 lobos vivos en el mundo. Revisadas las 73
+corridas: la población de lobo NUNCA superó los 18 individuos en ninguna
+semilla de esta sesión (máximo real observado: 16, en la ronda 1;
+mediana mucho más baja), y las manadas de lobo que sí se formaron
+(visibles en los conteos de `manadas_por_especie` de las corridas que
+usan el harness completo) casi siempre son de 1, ocasionalmente 2
+lobos -- nunca los ~5 cazando simultáneamente y cerca que exige la
+fórmula. El mecanismo está verificado correcto por sus propios tests
+dirigidos (`tests/test_especie_caballo.py`, escenarios construidos a
+mano que sí confirman el techo funcionando), pero en juego libre, ni
+siquiera con lobo ya mucho más estable que antes de esta sesión, la
+población de lobo real nunca alcanza la escala necesaria para que se
+dispare ni una sola vez. **No es un problema nuevo de esta sesión --ya
+se había señalado el 2026-09-05 ("0 caballos murieron por depredación
+en las 15 semillas del harness")-- pero esta sesión lo confirma con una
+muestra mucho mayor (73 corridas, no solo 15) y con lobo en un estado de
+salud poblacional muy superior al de esa fecha, descartando "lobo estaba
+casi extinto" como explicación suficiente.**
+
+**Implicación real, sin resolver todavía**: subir la población de lobo
+por sí sola no bastaría sin más -- ya se descartó una vez ("Intento
+descartado: subir `lobos_iniciales` no arregla nada", 2026-09-05) que
+más fundadores ayudara a nada, y el propio umbral de ~5 cazando a la vez
+es estructuralmente difícil de alcanzar con una especie que, incluso
+estable, ronda 1-18 individuos totales por semilla. Candidatos reales
+para una investigación futura, ninguno explorado hoy: (a) bajar
+`factor_ampliacion_techo_manada` (1.0→algo menor, requeriría menos
+aliados) -- palanca numérica pura, ya probada una vez sin éxito claro el
+2026-09-05 (1.0→3.0 fue en la dirección equivocada, subir el factor
+ayuda menos, no más -- habría que bajarlo, no subirlo, error de signo a
+evitar en el próximo intento); (b) revisar si `radio_apoyo_grupal=3` es
+demasiado estricto para que varios lobos dispersos lleguen a coincidir;
+(c) aceptar que la caza en manada de caballo es, en la práctica, un
+evento rarísimo y coherente con la propia escasez de grandes
+depredadores organizados -- no necesariamente un defecto a corregir.
+
+### Balance del día, con honestidad
+
+Progreso real y medido: el criterio maestro de Diego (5 especies vivas a
+la vez) pasó de **13% → 62% → 88%** en tres iteraciones, cada una
+verificada contra el motor real antes de aplicarse, ninguna aceptada
+solo por la lectura de config en abstracto. Es el primer momento de todo
+el proyecto en que el motor se comporta de forma genuinamente estable en
+la mayoría de las semillas probadas.
+
+**Lo que sigue sin resolver, explícito**: ninguno de los tres commits de
+hoy se verificó contra el harness completo de referencia (15×12000) --
+todas las verificaciones de esta sesión usaron 6-8 semillas por
+condición (entorno de 4 núcleos, frente a los 15-20 de sesiones
+anteriores, tiempo real limitado), documentado así en cada paso. Ardilla
+sigue sin un techo firme (hasta 495 en la última muestra, sin
+extinguirse). Lobo mantiene su varianza ya conocida (0-25% de extinción
+según la muestra). La caza en manada de caballo permanece, con una
+muestra mucho mayor que antes, confirmada como un evento que
+prácticamente nunca ocurre en juego libre -- mecanismo correcto,
+población de lobo estructuralmente insuficiente para dispararlo. Todos
+los valores tocados hoy (`fisiologia.yaml`: hidratación de lobo/conejo;
+`poblacion.yaml`: camada de ardilla/conejo, concepción de conejo) siguen
+PROVISIONALES. El harness completo de referencia (15×12000) sigue
+siendo la validación de rigor pendiente para dar cualquiera de estos
+tres commits por definitivamente cerrado.
