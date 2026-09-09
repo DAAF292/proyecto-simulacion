@@ -224,18 +224,36 @@ rangos_raciales:
     # "Sobrepoblacion...") sigue siendo la unica via real de calibrar
     # esto sin ruido -- PROVISIONAL, aceptado con esta limitacion
     # conocida en vez de seguir iterando sin presupuesto claro.
-    camada: [2, 3]
+    # camada RESTAURADA PARCIALMENTE 2026-09-09 (auditoria de
+    # estabilizacion, ver CLAUDE.md). El harness completo de 15x12000
+    # midio 47% de extincion real de conejo -- peor que el ~29% estimado
+    # con solo 7 semillas el 2026-09-06, cuando se recorto este valor de
+    # [3,7] a [2,3]. A/B real: aliviar SOLO la deshidratacion especifica
+    # de conejo (fisiologia.yaml, mismo par que gnomo/ardilla/lobo) NO
+    # redujo la extincion (seguia en 1/6) -- confirma que el recorte de
+    # fecundidad de 2026-09-06 se paso de frenada para el contexto actual
+    # (gnomo/lobo ya no colapsan, compiten por el mismo espacio). Receta
+    # de dos ingredientes de nuevo (mismo patron que ya funciono en
+    # lobo/gnomo/ardilla), pero PARCIAL -- ni vuelve al valor original
+    # [3,7]/0.015 que causo la mega-explosion (500-700 individuos), ni se
+    # queda en el recorte que causaba extincion real. Combinado con el
+    # alivio de deshidratacion: 0/6 extincion en el A/B (6 semillas
+    # nuevas x 6000 ticks) frente a 1/6 sin este cambio -- pero las
+    # poblaciones que sobreviven suben (hasta 343), mismo patron de
+    # "cura la extincion, no doma del todo la magnitud" ya visto en
+    # gnomo/ardilla/lobo. PROVISIONAL, sin calibrar contra el harness
+    # completo con este cambio ya aplicado.
+    camada: [2, 4]
     fraccion_madurez: 0.3
-    # factor_base_concepcion REBAJADA 2026-09-08 (de 0.015 a 0.008 --
-    # ver comentario de camada arriba, misma investigacion). Era el
-    # unico numero de conejo nunca tocado (ya confirmado como el mejor
-    # del catalogo, correctamente sin necesidad de subirlo) -- pero la
-    # combinacion con el alivio de hambre ya aplicado resulto
-    # demasiado fertil en conjunto. Sigue por encima del peor valor
-    # historico del catalogo (0.0033-0.0067, gnomo/lobo/ardilla antes
-    # de sus propios fixes) -- conejo sigue siendo mas fertil que
-    # cualquier otra especie, solo menos que antes de este recorte.
-    factor_base_concepcion: 0.008
+    # factor_base_concepcion SUBIDA PARCIALMENTE 2026-09-09 -- ver
+    # comentario de camada arriba, misma investigacion. De 0.008 (REBAJADA
+    # 2026-09-08) a 0.010 -- ni el 0.015 original, ni el 0.008 que dejaba
+    # 47% de extincion real en el harness completo. Sigue por debajo del
+    # resto del catalogo ya recalibrado (0.015 en gnomo/lobo/caballo,
+    # 0.022 seria el equivalente de ardilla) -- conejo compensa con
+    # camada mayor y gestacion mucho mas corta, no necesita la misma
+    # concepcion que las demas.
+    factor_base_concepcion: 0.010
     # 0: un conejo real no sujeta objetos de forma activa (a diferencia
     # de una ardilla) -- el más incierto de los cuatro, abierto a
     # corrección de Diego si no encaja con lo que tenía en mente.
@@ -281,7 +299,24 @@ rangos_raciales:
     altura: [0.15, 0.25]
     longevidad: [2, 5]
     duracion_gestacion_dias: [18, 28]
-    camada: [2, 4]
+    # camada RECORTADA 2026-09-09 (auditoria de estabilizacion, ver
+    # CLAUDE.md y herramientas/harness_calibracion.py -- el harness
+    # completo de 15x12000 revelo poblacion final media de 232 con
+    # maximos de 701, sin ningun indicio de nivelarse en la trayectoria
+    # -- la trayectoria crece de forma sostenida hasta el ultimo tick
+    # medido en 10 de 15 semillas). A/B real antes de aplicar: recortar
+    # SOLO factor_base_concepcion (0.03->0.022, ver abajo) aislado apenas
+    # freno la explosion (poblaciones hasta 690 en 6 semillas nuevas);
+    # recortar SOLO camada (4->3, este cambio) aislado fue el lever mas
+    # eficaz de los dos probados por separado (poblaciones 4-258, techo
+    # bastante mas bajo, 0/6 extincion -- sin el riesgo de sobrecorreccion
+    # que si aparecio al recortar concepcion+camada juntos y de golpe en
+    # un primer intento, que crasho la poblacion a 0-24 individuos).
+    # Sigue por encima de la referencia sana historica (~0.05-0.07
+    # ind/celda, ~80-112 individuos) en el extremo alto de la muestra --
+    # mejora real, NO una solucion cerrada. PROVISIONAL, sin calibrar
+    # contra el harness completo con este cambio ya aplicado.
+    camada: [2, 3]
     fraccion_madurez: 0.4
     # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
     # ver CLAUDE.md y config/fisiologia.yaml:necesidades.ardilla para el

@@ -288,6 +288,24 @@ necesidades:
     # tras este cambio combinado (PROVISIONAL, sin verificar).
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
+    # tasa_perdida_hidratacion_por_tick/probabilidad_muerte_deshidratacion
+    # (2026-09-09, auditoria de estabilizacion -- ver CLAUDE.md y
+    # herramientas/harness_calibracion.py). El harness completo de
+    # 15x12000 confirmo deshidratacion como el segundo factor de muerte
+    # de conejo (26.8% de sus muertes, 17.9x la tasa de caballo
+    # normalizada por exposicion individuo-tick) y un factor consistente
+    # en las semillas que se extinguen (25-47% de sus muertes). Probado
+    # EN SOLITARIO primero (A/B, 6 semillas nuevas): NO redujo la
+    # extincion por si solo (seguia en 1/6), solo desplazo hacia arriba
+    # las poblaciones que sobrevivian -- confirma que conejo necesitaba
+    # el mismo patron de DOS ingredientes que ya uso lobo/gnomo/ardilla
+    # (mitigar mortalidad + restaurar algo de fecundidad, ver
+    # poblacion.rangos_raciales.conejo.camada/factor_base_concepcion
+    # para la otra mitad del fix). Mismos valores que el resto del
+    # catalogo ya corregido. PROVISIONAL, sin calibrar contra el harness
+    # completo con este cambio ya aplicado.
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
   caballo:
     # AÑADIDO 2026-09-07 (investigacion de estabilidad de poblacion, ver
     # CLAUDE.md). Caballo (especie mas nueva del catalogo, 2026-09-05)
