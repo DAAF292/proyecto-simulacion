@@ -224,26 +224,30 @@ rangos_raciales:
     # "Sobrepoblacion...") sigue siendo la unica via real de calibrar
     # esto sin ruido -- PROVISIONAL, aceptado con esta limitacion
     # conocida en vez de seguir iterando sin presupuesto claro.
-    # camada RESTAURADA PARCIALMENTE 2026-09-09 (auditoria de
-    # estabilizacion, ver CLAUDE.md). El harness completo de 15x12000
-    # midio 47% de extincion real de conejo -- peor que el ~29% estimado
-    # con solo 7 semillas el 2026-09-06, cuando se recorto este valor de
-    # [3,7] a [2,3]. A/B real: aliviar SOLO la deshidratacion especifica
-    # de conejo (fisiologia.yaml, mismo par que gnomo/ardilla/lobo) NO
-    # redujo la extincion (seguia en 1/6) -- confirma que el recorte de
-    # fecundidad de 2026-09-06 se paso de frenada para el contexto actual
-    # (gnomo/lobo ya no colapsan, compiten por el mismo espacio). Receta
-    # de dos ingredientes de nuevo (mismo patron que ya funciono en
-    # lobo/gnomo/ardilla), pero PARCIAL -- ni vuelve al valor original
-    # [3,7]/0.015 que causo la mega-explosion (500-700 individuos), ni se
-    # queda en el recorte que causaba extincion real. Combinado con el
-    # alivio de deshidratacion: 0/6 extincion en el A/B (6 semillas
-    # nuevas x 6000 ticks) frente a 1/6 sin este cambio -- pero las
-    # poblaciones que sobreviven suben (hasta 343), mismo patron de
-    # "cura la extincion, no doma del todo la magnitud" ya visto en
-    # gnomo/ardilla/lobo. PROVISIONAL, sin calibrar contra el harness
-    # completo con este cambio ya aplicado.
-    camada: [2, 4]
+    # camada -- intento de restaurarla a [2,4] el 2026-09-09 REVERTIDO el
+    # mismo dia (auditoria de estabilizacion, ver CLAUDE.md). El harness
+    # completo de 15x12000 midio 47% de extincion real de conejo -- peor
+    # que el ~29% estimado con solo 7 semillas el 2026-09-06, cuando se
+    # recorto este valor de [3,7] a [2,3]. A/B real: aliviar SOLO la
+    # deshidratacion especifica de conejo (fisiologia.yaml, mismo par que
+    # gnomo/ardilla/lobo) NO redujo la extincion (seguia en 1/6) --
+    # confirmo que el recorte de fecundidad de 2026-09-06 se paso de
+    # frenada para el contexto actual. Receta de dos ingredientes de
+    # nuevo (mismo patron que lobo/gnomo/ardilla): alivio de
+    # deshidratacion + camada [2,3]->[2,4] + concepcion 0.008->0.010,
+    # verificada en A/B aislado (0/6 extincion) y comprobada CON los
+    # otros dos fixes de esta misma auditoria ya en disco (verificacion
+    # combinada, 8 semillas x 8000 ticks): elimino la extincion (0/8)
+    # pero disparo la magnitud a 691 individuos -- peor que el peor caso
+    # historico sin tocar nada (394). Revertido SOLO este campo a [2,3]
+    # (concepcion 0.010 e hidratacion aliviada se quedan, ver abajo y
+    # fisiologia.yaml) -- mismo diagnostico que ya se confirmo con
+    # ardilla en esta misma auditoria: camada pesa mas que concepcion a
+    # la hora de controlar el techo de explosion, asi que revertir solo
+    # la camada (no el paquete completo) es la correccion quirurgica.
+    # PROVISIONAL, sin calibrar contra el harness completo con este
+    # cambio ya aplicado.
+    camada: [2, 3]
     fraccion_madurez: 0.3
     # factor_base_concepcion SUBIDA PARCIALMENTE 2026-09-09 -- ver
     # comentario de camada arriba, misma investigacion. De 0.008 (REBAJADA
