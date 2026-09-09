@@ -182,6 +182,16 @@ def sembrar_poblacion_inicial(
     techo_fraccion_edad_inicial = float(
         poblacion_cfg.get("techo_fraccion_edad_inicial_longevidad", 0.0)
     )
+    # Override por especie (2026-09-09, ver herramientas/harness_calibracion.py
+    # -- lobo extinto en 15/15 semillas, vejez como causa dominante):
+    # una fracción UNIVERSAL fija penaliza mucho más a una especie de
+    # vida corta (lobo, 8-14 años) que a una larga (gnomo, 45-65 años) --
+    # el mismo 0.7 dejaba a los fundadores de lobo más desafortunados con
+    # apenas 1000-2000 ticks de vida restante desde el tick 0. Vive en
+    # rangos_raciales (mismo sitio que longevidad/camada por especie),
+    # sin entrada -> mismo valor universal de siempre, comportamiento
+    # idéntico para quien no la necesite.
+    rangos_raciales_cfg = config.get("rangos_raciales", {})
 
     def _registrar_fundador(eid: int, especie: Especie) -> None:
         # Registro en la tabla histórica 'entidades': la población
@@ -206,6 +216,11 @@ def sembrar_poblacion_inicial(
     for especie, cantidad, celdas_candidatas in especies_spawn:
         if not celdas_candidatas:
             continue
+        techo_fraccion_especie = float(
+            rangos_raciales_cfg.get(especie.value, {}).get(
+                "techo_fraccion_edad_inicial_longevidad", techo_fraccion_edad_inicial
+            )
+        )
         # Parejas fundadoras (spec 2026-09-06-parejas-fundadoras): los
         # primeros cantidad // 2 machos/hembras se siembran por parejas en
         # una misma celda, para que una fracción de la población fundadora
@@ -223,7 +238,7 @@ def sembrar_poblacion_inicial(
                 config,
                 rng_juego,
                 tick_actual=0,
-                techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+                techo_fraccion_edad_inicial=techo_fraccion_especie,
                 sexo_forzado=Sexo.MACHO,
             )
             _registrar_fundador(eid_macho, especie)
@@ -235,7 +250,7 @@ def sembrar_poblacion_inicial(
                 config,
                 rng_juego,
                 tick_actual=0,
-                techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+                techo_fraccion_edad_inicial=techo_fraccion_especie,
                 sexo_forzado=Sexo.HEMBRA,
             )
             _registrar_fundador(eid_hembra, especie)
@@ -252,7 +267,7 @@ def sembrar_poblacion_inicial(
                 config,
                 rng_juego,
                 tick_actual=0,
-                techo_fraccion_edad_inicial=techo_fraccion_edad_inicial,
+                techo_fraccion_edad_inicial=techo_fraccion_especie,
             )
             _registrar_fundador(eid_sobrante, especie)
 
