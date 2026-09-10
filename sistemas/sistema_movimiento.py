@@ -120,14 +120,16 @@ class SistemaMovimiento:
         self._stats_sonido_caza_fallback_caza: int = 0
         self._stats_sonido_caza_fallback_carrona: int = 0
         self._stats_sonido_caza_fallback_nulo: int = 0
-        # Aullido de caza en manada (2026-09-10, ver CLAUDE.md y spec
-        # docs/superpowers/specs/2026-09-10-aullido-caza-manada-design.md):
-        # cuantas veces un cazador emitio sonido al toparse con una presa
-        # que su techo de manada actual todavia no le permite intentar --
-        # para la verificacion obligatoria contra BOSQUE_AUTO_TICKS. Solo
-        # observacion, ningun camino de decision lo lee (el efecto real
-        # pasa por el fallback de sonido 4b ya existente, sin cambios).
-        self._stats_aullido_caza_manada: int = 0
+        # Cohesion de manada en el fallback de caza (2026-09-10, sustituye
+        # al aullido de caza -- ver CLAUDE.md "Aullido de caza en manada,
+        # revertido" y spec docs/superpowers/specs/
+        # 2026-09-10-cohesion-manada-fallback-caza-design.md): cuantas
+        # veces un cazador sin presa valida propia se dejo llevar hacia el
+        # centro de su Manada en vez de caer directo a sonido/paso
+        # aleatorio -- para la verificacion obligatoria contra
+        # BOSQUE_AUTO_TICKS. Solo observacion, ningun camino de decision
+        # lo lee.
+        self._stats_manada_cohesion_fallback_caza: int = 0
         # Rumor social (2026-09-06, circulo 5a -- ver spec
         # docs/superpowers/specs/2026-09-06-rumor-social-design.md): cuantos
         # rumores se propagaron de verdad (cada direccion emisor->receptor que
@@ -451,6 +453,7 @@ class SistemaMovimiento:
                 dx, dy = self._calcular_caza(
                     gestor, eid, ident.especie, pos.x, pos.y, dims.peso, radio_caza, pos.zona_idx,
                     zona=zona, tick_actual=tick_actual, agudeza_sensorial=dims.agudeza_sensorial,
+                    mundo=mundo,
                 )
             elif accion == Accion.COMER:
                 dx, dy = self._calcular_forrajeo(
@@ -1316,6 +1319,7 @@ class SistemaMovimiento:
         zona: Any | None = None,
         tick_actual: int = 0,
         agudeza_sensorial: float = 0.0,
+        mundo: Any | None = None,
     ) -> tuple[int, int]:
         """
         Avanza hacia la presa válida más cercana dentro del radio sensorial
@@ -1368,38 +1372,43 @@ class SistemaMovimiento:
            (cualquier especie con conespecíficos cazando cerca se
            beneficia igual, no una regla especial de lobo), coherente con
            el resto de usos ya existentes de esta misma función.
-        Aullido de caza en manada (2026-09-10, ver CLAUDE.md -- "Si hay
-        manadas y hay presas, por que los lobos en manada no cazan
-        caballos?" y spec docs/superpowers/specs/
-        2026-09-10-aullido-caza-manada-design.md): una manada de lobo
-        grande (4-7 miembros con normalidad) casi nunca cazaba en grupo
-        porque nada sincronizaba CUANDO cada miembro decide cazar -- cada
-        uno tira su propio dado de hambre en un tick distinto. Cuando un
-        candidato se descarta EXCLUSIVAMENTE por el techo de manada
-        (peso_maximo_presa, con los aliados que el cazador YA tiene
-        cazando cerca en este instante -- el caso real de "esto no puedo
-        yo solo/con lo que tengo ahora", no cualquier presa vista), el
-        cazador aulla: emite sonido en su PROPIA posicion (el sonido nace
-        de quien lo emite, no de un tercero). Sin codigo nuevo de
-        movimiento: un companyero sin presa valida propia ya converge
-        hacia ese sonido via el fallback 4b de mas abajo, y una vez cerca
-        aliados_cazando sube en la siguiente evaluacion, desbloqueando la
-        presa que antes quedaba excluida. Limitacion real, senyalada en
-        el spec: solo responde quien YA eligio CAZAR este tick por su
-        propio hambre y no tenia presa que perseguir -- no recluta a
-        quien este tick prefiere beber o dormir, por hambriento que este
-        en general.
+        Cohesion de manada como fallback de caza (2026-09-10, SUSTITUYE al
+        aullido de caza -- ver CLAUDE.md "Aullido de caza en manada,
+        revertido" + spec docs/superpowers/specs/
+        2026-09-10-cohesion-manada-fallback-caza-design.md): el primer
+        intento (un cazador excluido por el techo de manada aullaba para
+        "convocar" ayuda a mitad de acecho) no era fiel a como caza un
+        lobo real -- un aullido en plena persecucion alertaria a la presa,
+        rompiendo el sigilo; la coordinacion real de una manada es
+        ESTRUCTURAL, no reactiva: el grupo ya viaja/descansa/busca junto
+        ANTES de encontrar presa. _calcular_deambular ya tira hacia el
+        centro de la Manada propia como sesgo gregario, pero queda
+        deliberadamente desactivado mientras haya un objetivo activo
+        (CAZAR incluido) -- correcto cuando SI hay una presa real que
+        perseguir, pero deja sin ningun sesgo de cohesion el caso "no
+        encontre nada que cazar", que es justo el que importa para que
+        varios cazadores acaben cerca a la vez. Mismo mecanismo exacto
+        que ya usa deambular (nucleo.manada.manada_de + tirar hacia
+        manada.centro si esta a mas de dist_deseada_conspecifico),
+        aplicado aqui SOLO en el fallback sin presa -- sin sonido nuevo,
+        sin constante nueva.
 
         Fallback de sonido (2026-09-06, circulo 4b): si no queda ninguna
         presa valida, se intenta primero sonido_mas_cercano (consumido tal
         cual de nucleo/sonido.py) con radio_busqueda_maxima_sonido, tick_actual
         y agudeza_sensorial -- el cazador avanza hacia el sonido audible mas
-        cercano con _acercarse_a. Incertidumbre real: al llegar puede haber una
-        presa todavia cerca, un cadaver de una caza ajena (carroñeo automatico
-        via _calcular_forrajeo) o nada. `zona` distingue la llamada nueva desde
-        ejecutar() (pasa la ZonaBioma) de las llamadas legacy sin zona: sin
-        zona el fallback se desactiva y el comportamiento es identico a antes.
-        Si hay presa valida el sonido NUNCA se consulta -- presa real > sonido.
+        cercano con _acercarse_a (una senal real de que algo esta pasando
+        cerca -- un encuentro de caza o conflicto ajeno ya emite sonido por
+        su cuenta, sin relacion con esta pieza). Incertidumbre real: al
+        llegar puede haber una presa todavia cerca, un cadaver de una caza
+        ajena (carroneo automatico via _calcular_forrajeo) o nada. Si no
+        hay sonido audible tampoco, cae a la cohesion de manada (arriba);
+        si ninguna de las dos aplica, paso aleatorio -- comportamiento
+        identico al de antes de esta pieza. `zona` distingue la llamada
+        nueva desde ejecutar() (pasa la ZonaBioma) de las llamadas legacy
+        sin zona: sin zona ambos fallbacks quedan desactivados, identico a
+        antes de 2026-09-06. Si hay presa valida ni sonido ni manada se
+        consultan -- presa real > cualquier fallback.
         """
         peso_minimo_viable = peso_cazador * self.fraccion_minima_peso_presa
         aliados_cazando = contar_conspecificos_cercanos(
@@ -1411,7 +1420,6 @@ class SistemaMovimiento:
             1.0 + aliados_cazando * self.factor_ampliacion_techo_manada
         )
         presas = []
-        aullido_emitido = False
         # radio_efectivo_por_peso siempre devuelve <= radio (reduce el
         # alcance para presas por debajo del peso de referencia, nunca lo
         # amplia) -- indice.en_radio(radio) es una sobre-aproximacion
@@ -1433,20 +1441,10 @@ class SistemaMovimiento:
                 continue
             dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
             if dist > radio:
-                # Mismo alcance que radio_efectivo_por_peso ya garantiza
-                # (siempre <= radio) -- el aullido no debe disparar por
-                # una presa fuera del radio sensorial del cazador, y
                 # cuando self._indice_actual es None (tests directos sin
                 # indice) `candidatos` no viene pre-filtrado por radio.
                 continue
             if dims_p.peso >= peso_maximo_presa:
-                if zona is not None and not aullido_emitido:
-                    emitir_sonido(
-                        zona, pos_x, pos_y, tick_actual,
-                        peso_cazador + dims_p.peso,
-                    )
-                    self._stats_aullido_caza_manada += 1
-                    aullido_emitido = True
                 continue
             radio_efectivo = radio_efectivo_por_peso(
                 radio, dims_p.peso, self.peso_referencia_deteccion_plena
@@ -1484,6 +1482,20 @@ class SistemaMovimiento:
                     else:
                         self._stats_sonido_caza_fallback_nulo += 1
                     return self._acercarse_a(pos_x, pos_y, *objetivo_sonido)
+            # Cohesion de manada, ultimo fallback antes del paso aleatorio
+            # (2026-09-10, sustituye al aullido de caza -- ver docstring de
+            # esta funcion y CLAUDE.md). Sin ningun sonido audible que
+            # seguir tampoco, un cazador que pertenece HOY a una Manada
+            # deriva hacia su centro -- mismo mecanismo silencioso que ya
+            # usa _calcular_deambular para el sesgo gregario, aplicado
+            # aqui solo cuando no hay presa ni pista de sonido.
+            if mundo is not None:
+                manada = manada_de(mundo, cazador_id)
+                if manada is not None:
+                    dist_centro = abs(manada.centro[0] - pos_x) + abs(manada.centro[1] - pos_y)
+                    if dist_centro > self.dist_deseada_conspecifico:
+                        self._stats_manada_cohesion_fallback_caza += 1
+                        return self._acercarse_a(pos_x, pos_y, *manada.centro)
             return self._paso_aleatorio()
 
         presas.sort()

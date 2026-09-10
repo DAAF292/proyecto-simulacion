@@ -8015,3 +8015,81 @@ semillas nuevas, comparar capturas de caballo/venado por lobo antes/
 después) si se quiere confirmar el efecto real, no solo que el
 mecanismo dispara. La limitación de "solo responde quien ya iba a
 cazar" tampoco se ha medido cuánto la acota en la práctica.
+
+## Aullido de caza en manada -- REVERTIDO el mismo día, sustituido por
+## cohesión de manada como fallback de caza, más fiel a como coordina
+## una manada real (2026-09-10, mismo día)
+
+Diego, tras ver el aullido implementado y funcionando (130 disparos en
+3000 ticks, 432/432 tests), cuestionó el diseño en vez de aceptarlo sin
+más: "es que no me convence, en la naturaleza como funcionaria?".
+Investigado antes de defender el diseño ya hecho -- mismo criterio de
+autocrítica que el resto del proyecto:
+
+**Por qué el aullido no era fiel**: un lobo real no aúlla a mitad de
+acecho para "convocar ayuda" contra una presa ya detectada -- eso
+alertaría a la presa, rompiendo el sigilo que la caza real exige. La
+coordinación real de una manada es ESTRUCTURAL, no reactiva: el grupo
+ya viaja, descansa y busca junto ANTES de encontrar presa -- la
+cohesión precede la caza, no se convoca durante ella.
+
+**Causa raíz, sin cambios desde el diagnóstico original**:
+`_calcular_deambular` ya tira hacia el centro de la `Manada` propia
+como sesgo gregario (2026-09-07), pero queda desactivado mientras haya
+CUALQUIER objetivo activo, `Accion.CAZAR` incluido -- correcto cuando
+hay presa real, pero deja sin ningún sesgo de cohesión el caso "elegí
+cazar, no encontré nada", que es justo el que importa para que varios
+cazadores terminen cerca a la vez.
+
+**Rediseño, spec `docs/superpowers/specs/
+2026-09-10-cohesion-manada-fallback-caza-design.md`** (supersede a la
+del aullido, conservada como registro histórico -- mismo criterio de
+honestidad de siempre, no se borra el intento fallido): revertido por
+completo el aullido (`emitir_sonido` en `_calcular_caza`,
+`_stats_aullido_caza_manada`, sus 7 tests) y sustituido por el MISMO
+mecanismo que `_calcular_deambular` ya usa -- `nucleo.manada.manada_de`
++ tirar hacia `manada.centro` si está a más de
+`distancia_deseada_conspecifico` -- aplicado ahora también dentro de
+`_calcular_caza`, solo en la rama `if not presas:`. Orden de fallback:
+presa real > sonido audible (2026-09-06, círculo 4b, sin cambios) >
+cohesión de manada (nuevo) > paso aleatorio. `_calcular_caza` gana un
+parámetro opcional `mundo: Any | None = None` (mismo criterio que
+`zona`: sin él, llamadas legacy quedan exactamente como antes). Ninguna
+constante numérica nueva -- reutiliza estructuras y umbrales ya
+existentes por completo.
+
+**Verificado**: 431/431 tests (6 nuevos,
+`tests/test_cohesion_manada_fallback_caza.py`, sustituye al fichero de
+tests del aullido -- sin presa ni sonido con manada deriva hacia el
+centro; con presa válida la manada nunca se consulta; sonido audible
+más cerca que el centro de la manada gana; ya cerca del centro no
+fuerza movimiento; sin manada cae al comportamiento anterior; sin
+`mundo` -- llamadas legacy -- la cohesión queda desactivada igual que
+sin `zona`). `BOSQUE_AUTO_TICKS=3000` con la semilla por defecto sin
+ninguna excepción -- 0 disparos de cohesión en esa corrida concreta
+(mismo tipo de "correcto pero raro en esta semilla" ya visto varias
+veces en este proyecto, comparación semilla-a-semilla no fiable tras
+cualquier cambio de código). Confirmado que el mecanismo SÍ se ejerce
+en juego libre con una semilla nueva (777001, arnés de sesión sin
+persistencia, 2789 ticks reales): **10 disparos de cohesión, 0 de
+sonido** en esa corrida -- el fallback nuevo se dispara con normalidad
+cuando toca.
+
+**Limitación real, misma que ya tenía el aullido, señalada con
+honestidad**: solo se beneficia quien YA eligió `CAZAR` este tick por
+su propio hambre -- la cohesión no recluta a quien prefiere beber o
+dormir. Tampoco garantiza que, al llegar cerca del centro de la manada,
+haya de verdad aliados cazando en ese instante exacto
+(`aliados_cazando` sigue exigiendo `Accion.CAZAR` literal y
+simultánea) -- sube la PROBABILIDAD de coincidencia, no la garantiza.
+
+**Pendiente real, explícito**: no medido todavía si esto sube de
+verdad la tasa de caza exitosa de lobo contra caballo/venado en manada
+(mismo objetivo de fondo que ya perseguía el aullido, sin confirmar
+con ninguno de los dos diseños) -- candidato directo para una medición
+A/B (varias semillas nuevas, capturas de caballo/venado por lobo antes/
+después) si se quiere cerrar esto de verdad. Lección metodológica
+reforzada: verificar contra el motor real, y estar dispuesto a
+cuestionar el propio diseño recién implementado en vez de defenderlo,
+sigue siendo más valioso que cualquier razonamiento sobre el papel --
+mismo patrón ya documentado media docena de veces en este proyecto.

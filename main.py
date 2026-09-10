@@ -684,15 +684,16 @@ def main() -> None:
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_carrona} carroñeo real, "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_nulo} pista falsa"
             )
-            # Verificacion obligatoria de aullido de caza en manada
-            # (2026-09-10, ver CLAUDE.md y spec docs/superpowers/specs/
-            # 2026-09-10-aullido-caza-manada-design.md): medir explicitamente
-            # cuantas veces un cazador aullo al toparse con una presa que su
-            # techo de manada actual no le permite intentar. Solo
+            # Verificacion obligatoria de cohesion de manada en el fallback
+            # de caza (2026-09-10, sustituye al aullido de caza -- ver
+            # CLAUDE.md y spec docs/superpowers/specs/
+            # 2026-09-10-cohesion-manada-fallback-caza-design.md): medir
+            # explicitamente cuantas veces un cazador sin presa ni sonido
+            # que seguir derivo hacia el centro de su Manada. Solo
             # observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] aullido de caza en manada: "
-                f"{sistemas['movimiento']._stats_aullido_caza_manada} veces"
+                "[BOSQUE_AUTO_TICKS] cohesion de manada (fallback de caza): "
+                f"{sistemas['movimiento']._stats_manada_cohesion_fallback_caza} veces"
             )
             # Verificacion obligatoria de lealtad y liderazgo (2026-09-06,
             # circulo 5b -- ver
