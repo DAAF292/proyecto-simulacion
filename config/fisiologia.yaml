@@ -518,6 +518,18 @@ ciclo_vital:
   # usó el proyecto para el sistema de agua.
   techo_probabilidad_muerte_vejez: 0.05
   exponente_curva_vejez: 8.0
+  # Ley biológica neutra de fecundidad por edad (spec
+  # 2026-09-10-fecundidad-edad-design.md, aprobada por Diego): la
+  # fecundidad es plena hasta inicio_declinacion de la longevidad
+  # individual y decae progresivamente (exponente, perfil del tramo
+  # final) hasta 0 al agotarla -- corta el hallazgo real de la
+  # investigación de lobo (madres al final de su vida concibiendo y
+  # perdiendo la gestación al morir antes del término). PROVISIONAL,
+  # ambos parámetros, sin calibrar contra el harness completo; el A/B
+  # requerido con semillas nuevas compara tasa de gestaciones
+  # perdidas y estabilidad de lobo (que NO debe desestabilizarse).
+  inicio_declinacion_fecundidad: 0.6
+  exponente_fecundidad_edad: 2.0
 
 reproduccion:
   mutacion_fraccion: 0.1

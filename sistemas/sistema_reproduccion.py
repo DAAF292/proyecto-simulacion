@@ -80,7 +80,9 @@ from componentes.relaciones import Relaciones
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
 from nucleo.agua import celda_nacimiento_segura
-from nucleo.ciclo_vital import TICKS_POR_ANIO, edad_ticks, es_adulto
+from nucleo.ciclo_vital import (
+    TICKS_POR_ANIO, edad_ticks, es_adulto, factor_fecundidad_edad,
+)
 from nucleo.entidad import nacer_criatura
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
@@ -319,10 +321,26 @@ def actualizar(
         temperamento_hembra = gestor.obtener_componente(id_hembra, Temperamento)
         temperamento_macho = gestor.obtener_componente(id_macho, Temperamento)
         sociabilidad_media = (temperamento_hembra.sociabilidad + temperamento_macho.sociabilidad) / 2.0
+        # Ley biológica neutra de fecundidad por edad (spec
+        # 2026-09-10-fecundidad-edad-design.md): la probabilidad se
+        # modula por la edad relativa de la HEMBRA a su propia
+        # longevidad individual -- plena hasta el tramo final de su
+        # vida, en declive progresivo al final, 0 exacto al agotarla.
+        # Un único multiplicador en el único punto de concepción del
+        # motor; no toca el gate de saciedad ni el escalado de camada.
+        ciclo_vital_cfg = config.get("ciclo_vital", {})
+        dimensiones_hembra = gestor.obtener_componente(id_hembra, DimensionesFisicas)
+        factor_edad = factor_fecundidad_edad(
+            identidad_hembra, dimensiones_hembra, tick_actual,
+            inicio_declinacion=float(
+                ciclo_vital_cfg.get("inicio_declinacion_fecundidad", 0.6)
+            ),
+            exponente=float(ciclo_vital_cfg.get("exponente_fecundidad_edad", 2.0)),
+        )
         # probabilidad POR TICK: factor_base ya viene expresado en esa
         # unidad desde config/constantes.yaml, no hace falta ninguna
         # conversion aqui.
-        probabilidad = factor_base * sociabilidad_media
+        probabilidad = factor_base * sociabilidad_media * factor_edad
 
         if rng.random() >= probabilidad:
             continue

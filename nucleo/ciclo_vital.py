@@ -55,6 +55,43 @@ def probabilidad_muerte_vejez(
     return techo_probabilidad * min(1.0, ratio ** exponente)
 
 
+def factor_fecundidad_edad(
+    identidad, dims, tick_actual: int,
+    inicio_declinacion: float = 0.6, exponente: float = 2.0,
+) -> float:
+    """
+    Multiplicador de fecundidad por edad relativa -- ley biológica neutra
+    (spec 2026-09-10-fecundidad-edad-design.md, aprobada por Diego):
+    la fecundidad es plena hasta `inicio_declinacion` de la longevidad
+    INDIVIDUAL ya sorteada (mismo ancla que probabilidad_muerte_vejez:
+    dims.longevidad, no el mínimo racial de es_adulto), y decae
+    progresivamente hasta 0 al agotarla.
+
+    Diseño del tramo final (distinto del de la muerte por vejez a
+    propósito): la mortalidad concentrará su riesgo en un "muro" final
+    (exponente 8), pero la FERTILIDAD declina de forma perceptible desde
+    el inicio del tramo (exponente 2) -- una hembra muy vieja concibe
+    claramente peor que una en plenitud, que es lo que la investigación
+    de lobo 2026-09-10 detectó como hueco (madres al final de su vida
+    concibiendo con la misma probabilidad y perdiendo la gestación al
+    morir antes del término). PROVISIONAL, los dos parámetros.
+
+    ratio=0 (recién nacida) -> 1.0. ratio<=inicio -> 1.0.
+    ratio==1 o mayor -> 0.0 saturado, misma convención que la curva
+    de vejez (la longevidad individual es sorteo, no tope duro).
+    """
+    longevidad_ticks = dims.longevidad * TICKS_POR_ANIO
+    if longevidad_ticks <= 0:
+        return 0.0
+    ratio = edad_ticks(identidad.tick_nacimiento, tick_actual) / longevidad_ticks
+    if ratio >= 1.0:
+        return 0.0
+    if ratio <= inicio_declinacion:
+        return 1.0
+    fase = (ratio - inicio_declinacion) / (1.0 - inicio_declinacion)
+    return 1.0 - min(1.0, fase ** exponente)
+
+
 def es_adulto(edad_en_ticks: int, especie: str, rangos_raciales: dict, fraccion_madurez: float) -> bool:
     """Elegibilidad para reproducirse -- reutiliza el MISMO ancla que la
     muerte por vejez: el mínimo racial de longevidad. La madurez es una

@@ -95,6 +95,17 @@ _TABLAS_APP = (
 )
 
 
+class _ConexionConCierre(sqlite3.Connection):
+    """sqlite3.Connection cuyo context manager SI cierra la conexion al
+    salir del `with` -- el nativo solo hace commit/rollback y jamas
+    cierra (ver comentario en Persistencia._conectar)."""
+
+    def __exit__(self, tipo, valor, traza):
+        resultado = super().__exit__(tipo, valor, traza)
+        self.close()
+        return resultado
+
+
 class Persistencia:
     """Gestiona la base de datos SQLite para snapshots y crónica histórica.
 
@@ -120,7 +131,15 @@ class Persistencia:
         self._inicializar_tablas()
 
     def _conectar(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.ruta_db)
+        # (2026-09-10) La conexion se cierra al salir del `with`: el
+        # context manager nativo de sqlite3.Connection solo hace
+        # commit/rollback, JAMAS cierra -- cada llamada _conectar()
+        # dejaba una conexion abierta para siempre. En Linux es
+        # inofensivo (el unlink de ficheros abiertos es legal); en
+        # Windows bloquea el borrado del fichero .db (WinError 32),
+        # lo que explotaba en el cleanup de todos los roundtrips de
+        # test que viven en TemporaryDirectory.
+        return sqlite3.connect(self.ruta_db, factory=_ConexionConCierre)
 
     def _version_desactualizada(self, cur: sqlite3.Cursor) -> bool:
         """True si hay que purgar el esquema antes de (re)crear las tablas:

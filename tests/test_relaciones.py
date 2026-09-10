@@ -538,6 +538,12 @@ class _RngConcepcion:
 
 
 def _progenitor_adulto(gestor, config, rng, sexo, consciencia, tick_nacimiento=0):
+    # (2026-09-10) Los tests de concepcion usan ticks grandes (100_000):
+    # con la ley de fecundidad por edad (spec 2026-09-10), un
+    # tick_nacimiento=0 haria una madre gnomo de ~208 anios y esa
+    # concepcion se bloquearia CORRECTAMENTE por la ley nueva -- los
+    # 3 tests de concepcion pasan tick_nacimiento anclado al tick de la
+    # escena con edad adulta plena (~15 anios).
     """Crea un gnomo adulto reproductor en (0,0) con sexo/consciencia dados.
 
     Sobrescribe los componentes que crear_criatura sorteo aleatoriamente
@@ -564,8 +570,10 @@ def test_ley_concepcion_entre_dos_conscientes_escribe_afinidad_positiva_mutua():
     config = _config()
     gestor = GestorEntidades()
     rng = random.Random(71)
-    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8)
-    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.8)
+    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8,
+                                tick_nacimiento=100_000 - 7_200)
+    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.8,
+                               tick_nacimiento=100_000 - 7_200)
     tick = 100_000
     _concepcion(gestor, config, hembra, macho, tick)
     delta = float(config["relaciones"]["delta_afinidad_concepcion"])
@@ -580,8 +588,10 @@ def test_ley_concepcion_con_progenitor_no_consciente_solo_escribe_el_consciente(
     config = _config()
     gestor = GestorEntidades()
     rng = random.Random(81)
-    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8)
-    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.0)
+    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8,
+                                tick_nacimiento=100_000 - 7_200)
+    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.0,
+                               tick_nacimiento=100_000 - 7_200)
     tick = 100_000
     _concepcion(gestor, config, hembra, macho, tick)
     delta = float(config["relaciones"]["delta_afinidad_concepcion"])
@@ -595,8 +605,10 @@ def test_ley_concepcion_suma_la_afinidad_sobre_el_rencor_previo():
     config = _config()
     gestor = GestorEntidades()
     rng = random.Random(91)
-    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8)
-    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.8)
+    hembra = _progenitor_adulto(gestor, config, rng, Sexo.HEMBRA, 0.8,
+                                tick_nacimiento=100_000 - 7_200)
+    macho = _progenitor_adulto(gestor, config, rng, Sexo.MACHO, 0.8,
+                               tick_nacimiento=100_000 - 7_200)
     delta = float(config["relaciones"]["delta_afinidad_concepcion"])
     # rencor previo de la hembra hacia el macho (mismo cimiento, circulo 2)
     _rel(gestor, hembra).vinculos[macho] = Vinculo(afinidad=-0.25, ultima_actualizacion_tick=0)

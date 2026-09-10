@@ -61,7 +61,8 @@ return 1.0 - min(1.0, fase ** exponente_fecundidad_edad)   # nunca < 0
 # sistemas/sistema_reproduccion.py, donde se computa la probabilidad
 # (línea ~325 de la versión actual):
 probabilidad = factor_base * sociabilidad_media * factor_fecundidad_edad(
-    identidad_hembra, dims_hembra, tick_actual, config,
+    identidad_hembra, dims_hembra, tick_actual,
+    inicio_declinacion=..., exponente=...,
 )
 ```
 
@@ -70,8 +71,9 @@ camada por nutrición, ni ningún otro parámetro de concepción.
 
 ## Config
 
-`config/poblacion.yaml`, sección `ciclo_vital` (donde ya vive
-`fraccion_madurez` global) — DOS parámetros nuevos, PROVISIONALES,
+`config/fisiologia.yaml`, sección `ciclo_vital` (donde ya viven
+`techo_probabilidad_muerte_vejez` y `exponente_curva_vejez`) — DOS
+parámetros nuevos, PROVISIONALES:
 
 ```yaml
 ciclo_vital:
