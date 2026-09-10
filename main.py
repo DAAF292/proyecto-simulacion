@@ -710,7 +710,9 @@ def main() -> None:
             # coordenada de madriguera que no tenian antes en su propia
             # memoria. Solo observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] manadas por especie: "
+                "[BOSQUE_AUTO_TICKS] manadas por especie (acumulado, dias con "
+                "al menos 1 manada sumados sobre toda la corrida, no un "
+                "snapshot del ultimo dia): "
                 f"{sistemas['manada']._stats_manadas_por_especie}"
             )
             print(

@@ -44,6 +44,11 @@ class SistemaManada:
         # cuántas manadas se forman por especie, y cuántas coordenadas de
         # madriguera se sincronizaron de verdad. Solo observación, ningún
         # camino de decisión los lee.
+        # CORREGIDO 2026-09-10: acumulado día a día (suma sobre toda la
+        # corrida), no un snapshot del último día -- un snapshot final
+        # da 0 para cualquier especie ya extinta o dispersa ese día
+        # concreto, aunque haya formado manada con normalidad durante
+        # toda su vida (hallazgo real, ver CLAUDE.md).
         self._stats_manadas_por_especie: dict[str, int] = {}
         self._stats_madrigueras_sincronizadas: int = 0
         # Miembros que recibieron un sitio de "refugio" que NO tenian
@@ -105,7 +110,10 @@ class SistemaManada:
                     self._sincronizar_madriguera(gestor, especie, zona_idx, grupo)
 
         mundo.manadas = nuevas
-        self._stats_manadas_por_especie = stats
+        for especie_val, n in stats.items():
+            self._stats_manadas_por_especie[especie_val] = (
+                self._stats_manadas_por_especie.get(especie_val, 0) + n
+            )
 
     def _sincronizar_madriguera(
         self,
