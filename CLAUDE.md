@@ -8093,3 +8093,57 @@ reforzada: verificar contra el motor real, y estar dispuesto a
 cuestionar el propio diseño recién implementado en vez de defenderlo,
 sigue siendo más valioso que cualquier razonamiento sobre el papel --
 mismo patrón ya documentado media docena de veces en este proyecto.
+
+### A/B real contra el objetivo de fondo -- 0 muertes de caballo por
+### depredación en AMBAS condiciones, resultado nulo, no una mejora
+### confirmada (2026-09-10, mismo día, pedido explícito de Diego "y ha
+### funcionado?" / "adelante, pruébalo")
+
+Diego cuestionó con razón que confirmar "el mecanismo se dispara" no
+es lo mismo que "ha funcionado" -- el objetivo real de todo este arco
+(desde "¿por qué los lobos en manada no cazan caballos?") era que la
+caza en manada contra caballo empezara a darse de verdad, no solo que
+`_stats_manada_cohesion_fallback_caza` subiera. Medido con el mismo
+método ya usado para el radio de caza (worktree en el commit ANTERIOR
+a todo este mecanismo -- `0a5c851`, sin aullido ni cohesión -- frente a
+`master` con la cohesión ya aplicada, mismas 8 semillas nuevas
+850001-850008, hasta 6000 ticks, `herramientas/harness_calibracion.py`).
+
+**Resultado, contando `muertes_por_especie["caballo"]["depredacion"]`
+en las 16 corridas totales (8 por condición)**: **0 en ambas
+condiciones, sin ninguna excepción**. Venado (cazable en solitario,
+sin depender de la manada) sí muestra depredación real en las dos
+(30 antes, 34 después -- diferencia dentro del ruido esperado por
+desplazamiento de secuencia de `rng`, no una señal). Lobo tampoco
+mostró ninguna extinción en ninguna condición (0/8 ambas), población
+final 1-16 en rangos similares.
+
+**Conclusión honesta, sin inflar el resultado**: la cohesión de manada
+NO mostró ningún efecto medible sobre el objetivo real que motivó todo
+el arco -- con 0 eventos en las dos condiciones, no hay señal que
+comparar, ni a favor ni en contra. Coherente con el propio hallazgo
+del mismo día ("aliados cazando cerca" alcanza el umbral necesario en
+solo 1.92% de los momentos observados): una ventana de hasta 6000
+ticks con una población de lobo de 1-16 individuos parece
+estructuralmente demasiado corta/pequeña para que el evento ocurra ni
+una sola vez, con o sin el empujón de cohesión hacia el centro de la
+manada. Esto NO invalida la corrección biológica del diseño (el
+aullido seguía siendo peor, por las razones ya documentadas), pero sí
+cierra con honestidad la pregunta de Diego: **no, no se ha confirmado
+que haya funcionado para el objetivo real** -- solo que el mecanismo
+se ejerce (ver arriba, 10/0/3/16 disparos en la verificación previa).
+
+**Pendiente real, explícito, más concreto que antes**: para medir esto
+de verdad haría falta o (a) una ventana mucho más larga (el harness
+completo de referencia, 12000 ticks, nunca corrido hasta el final por
+límite de tiempo del entorno), o (b) una población de lobo
+artificialmente mayor solo para esta medición (riesgo ya señalado:
+"subir lobos_iniciales no arregla nada" para supervivencia, pero no se
+ha probado específicamente para frecuencia de eventos de manada), o
+(c) aceptar que la caza en manada contra caballo es, en la práctica,
+un evento tan raro que ninguna mejora de coordinación por sí sola
+(aullido, cohesión, ni ninguna futura) lo hará observable sin tocar
+también `factor_ampliacion_techo_manada` o `radio_apoyo_grupal` --
+ambas palancas numéricas ya señaladas como candidatas el mismo día y
+sin probar todavía. Worktree temporal (`0a5c851`) retirado tras la
+comparación, no forma parte del repositorio.
