@@ -7919,3 +7919,99 @@ fue que las manadas fueran pequeñas (no lo son, llegan a 7) ni que
 faltara presa viable (venado y caballo ya están ahí) -- es la
 coincidencia temporal exacta de varios cazadores activos a la vez,
 un umbral mucho más fino que "cuántos lobos hay cerca".
+
+### Aullido de caza en manada -- cierra el hallazgo de arriba,
+### implementado directamente por Claude a petición explícita de Diego
+### (2026-09-10, mismo día)
+
+Diego generalizó el diagnóstico: "la función de una manada de lobos es
+cazar, protegerse, aparearse -- si no hay forma de que esos ciclos se
+sincronicen como en la naturaleza, no sirve de nada". Corroborado
+contra el código antes de aceptarlo sin más: `protección` y
+`apareamiento` YA cobran su beneficio real solo de la cohesión espacial
+que `Manada` construye bien (`bono_defensa_por_aliado` en
+`sistema_necesidades.py` usa `solo_cazando=False`, cualquier
+conespecífico cerca cuenta, sin exigir sincronía de ninguna acción; la
+concepción exige contacto en la misma celda, que la cohesión ya
+favorece) -- **caza es la única de las tres que necesita coincidencia
+temporal exacta y la única para la que el motor no tenía ningún
+mecanismo que la produjera**. Diego propuso el mecanismo concreto: un
+lobo que detecta una presa que no puede intentar solo, aúlla, y eso
+hace que la manada converja sobre ella.
+
+Spec:
+`docs/superpowers/specs/2026-09-10-aullido-caza-manada-design.md`.
+**Un único círculo, más pequeño de lo que parecía al proponerlo**: la
+mitad "convergencia real hacia el mismo objetivo" (que se había
+planteado como posible círculo B aparte en la conversación previa)
+resultó gratuita reutilizando el fallback de sonido ya existente
+(2026-09-06, círculo 4b) -- un cazador sin presa válida propia YA
+camina hacia el sonido audible más cercano, así que basta con que el
+aullido exista como fuente de sonido real para que la convergencia
+ocurra sin ningún código nuevo de movimiento.
+
+**Implementado directamente por Claude** (pipeline sin disponibilidad
+en este contenedor, mismo escenario ya documentado varias veces esta
+sesión; "Diego lo pide explícitamente").
+
+- `sistema_movimiento.py:_calcular_caza`: dentro del bucle de
+  candidatos, un candidato que falla EXCLUSIVAMENTE por el techo de
+  manada (`dims_p.peso >= peso_maximo_presa`, con los aliados que el
+  cazador YA tiene cazando cerca en este instante -- el caso real de
+  "esto no puedo yo solo/con lo que tengo ahora", no cualquier presa
+  vista) dispara un aullido: `emitir_sonido` en la posición PROPIA del
+  cazador (no la de la presa -- el sonido nace de quien lo emite, la
+  física de `nucleo/sonido.py` no tiene forma de "teletransportar" la
+  ubicación de un tercero, y no hace falta: una vez que compañeros
+  llegan cerca, `aliados_cazando` sube en la siguiente evaluación y
+  desbloquea la presa vía el mismo mecanismo de techo de manada ya
+  existente). Magnitud `peso_cazador + peso_presa`, mismo convenio ya
+  usado por las otras dos emisiones de sonido existentes -- ninguna
+  constante nueva que calibrar. Como máximo un aullido por cazador y
+  tick (`aullido_emitido`).
+- **Bug real encontrado y corregido durante la propia implementación,
+  antes de comitear** (no al fallar en caliente): la primera versión
+  no acotaba el aullido por distancia -- cuando `self._indice_actual`
+  es `None` (llamadas directas sin índice, como los propios tests),
+  `candidatos` recorre TODAS las entidades del gestor sin filtrar por
+  `radio`, y el chequeo del techo de manada se evaluaba antes de
+  calcular ninguna distancia. Un lobo habría podido "detectar" y aullar
+  por un caballo al otro lado del mapa. Corregido moviendo el cálculo
+  de `dist` antes del chequeo de techo y descartando cualquier
+  candidato con `dist > radio` antes de considerar el aullido -- mismo
+  alcance que `radio_efectivo_por_peso` ya garantiza para presas
+  válidas (siempre `<= radio`).
+
+**Limitación real, señalada con honestidad en el propio spec, no
+resuelta aquí**: solo responden al aullido los compañeros que YA
+estaban ejecutando `Accion.CAZAR` este tick (por su propio hambre) pero
+sin presa válida propia que perseguir -- `_calcular_caza` es la única
+función que consulta el sonido de caza, y solo se llama cuando el
+individuo ya eligió cazar por su cuenta. El aullido NO recluta a un
+lobo que este tick prefiere beber, dormir o socializar, por hambriento
+que esté en términos generales -- más estrecho que "cualquier miembro
+de la manada se anima a cazar", aunque defendible (un lobo no abandona
+lo que esté haciendo por cualquier aullido lejano).
+
+**Verificado**: 432/432 tests (7 nuevos,
+`tests/test_aullido_caza_manada.py` -- gate exacto por techo de manada,
+posición correcta del sonido, magnitud, regresión sin zona/sin presa,
+como máximo un aullido por tick, y un test de integración con dos
+lobos confirmando que el segundo -- sin presa propia y fuera de su
+propio radio de detección del caballo -- converge hacia la posición
+del primero vía el fallback 4b sin tocarlo). `BOSQUE_AUTO_TICKS=3000`
+con la semilla por defecto, sin ninguna excepción: **130 aullidos** en
+la corrida -- el mecanismo se dispara con fuerza real en juego libre
+desde el primer día, a diferencia de varias piezas anteriores de este
+proyecto que quedaron "correctas pero invisibles" durante semanas.
+
+**Pendiente real, explícito**: no se ha medido todavía si esto sube de
+verdad la tasa de caza exitosa de lobo contra caballo/venado en manada
+(el propio objetivo que motivó todo el arco) -- 130 aullidos confirma
+que el mecanismo se EJERCE, no que cierre el hallazgo de fondo
+(1.92% de coincidencia de aliados cazando a la vez); candidato directo
+para una medición A/B similar a las ya hechas en este proyecto (varias
+semillas nuevas, comparar capturas de caballo/venado por lobo antes/
+después) si se quiere confirmar el efecto real, no solo que el
+mecanismo dispara. La limitación de "solo responde quien ya iba a
+cazar" tampoco se ha medido cuánto la acota en la práctica.

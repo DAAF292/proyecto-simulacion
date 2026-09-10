@@ -120,6 +120,14 @@ class SistemaMovimiento:
         self._stats_sonido_caza_fallback_caza: int = 0
         self._stats_sonido_caza_fallback_carrona: int = 0
         self._stats_sonido_caza_fallback_nulo: int = 0
+        # Aullido de caza en manada (2026-09-10, ver CLAUDE.md y spec
+        # docs/superpowers/specs/2026-09-10-aullido-caza-manada-design.md):
+        # cuantas veces un cazador emitio sonido al toparse con una presa
+        # que su techo de manada actual todavia no le permite intentar --
+        # para la verificacion obligatoria contra BOSQUE_AUTO_TICKS. Solo
+        # observacion, ningun camino de decision lo lee (el efecto real
+        # pasa por el fallback de sonido 4b ya existente, sin cambios).
+        self._stats_aullido_caza_manada: int = 0
         # Rumor social (2026-09-06, circulo 5a -- ver spec
         # docs/superpowers/specs/2026-09-06-rumor-social-design.md): cuantos
         # rumores se propagaron de verdad (cada direccion emisor->receptor que
@@ -1360,6 +1368,28 @@ class SistemaMovimiento:
            (cualquier especie con conespecíficos cazando cerca se
            beneficia igual, no una regla especial de lobo), coherente con
            el resto de usos ya existentes de esta misma función.
+        Aullido de caza en manada (2026-09-10, ver CLAUDE.md -- "Si hay
+        manadas y hay presas, por que los lobos en manada no cazan
+        caballos?" y spec docs/superpowers/specs/
+        2026-09-10-aullido-caza-manada-design.md): una manada de lobo
+        grande (4-7 miembros con normalidad) casi nunca cazaba en grupo
+        porque nada sincronizaba CUANDO cada miembro decide cazar -- cada
+        uno tira su propio dado de hambre en un tick distinto. Cuando un
+        candidato se descarta EXCLUSIVAMENTE por el techo de manada
+        (peso_maximo_presa, con los aliados que el cazador YA tiene
+        cazando cerca en este instante -- el caso real de "esto no puedo
+        yo solo/con lo que tengo ahora", no cualquier presa vista), el
+        cazador aulla: emite sonido en su PROPIA posicion (el sonido nace
+        de quien lo emite, no de un tercero). Sin codigo nuevo de
+        movimiento: un companyero sin presa valida propia ya converge
+        hacia ese sonido via el fallback 4b de mas abajo, y una vez cerca
+        aliados_cazando sube en la siguiente evaluacion, desbloqueando la
+        presa que antes quedaba excluida. Limitacion real, senyalada en
+        el spec: solo responde quien YA eligio CAZAR este tick por su
+        propio hambre y no tenia presa que perseguir -- no recluta a
+        quien este tick prefiere beber o dormir, por hambriento que este
+        en general.
+
         Fallback de sonido (2026-09-06, circulo 4b): si no queda ninguna
         presa valida, se intenta primero sonido_mas_cercano (consumido tal
         cual de nucleo/sonido.py) con radio_busqueda_maxima_sonido, tick_actual
@@ -1381,6 +1411,7 @@ class SistemaMovimiento:
             1.0 + aliados_cazando * self.factor_ampliacion_techo_manada
         )
         presas = []
+        aullido_emitido = False
         # radio_efectivo_por_peso siempre devuelve <= radio (reduce el
         # alcance para presas por debajo del peso de referencia, nunca lo
         # amplia) -- indice.en_radio(radio) es una sobre-aproximacion
@@ -1398,9 +1429,25 @@ class SistemaMovimiento:
             dims_p = gestor.obtener_componente(eid, DimensionesFisicas)
             if not (pos_p and dims_p) or pos_p.zona_idx != zona_idx:
                 continue
-            if dims_p.peso >= peso_maximo_presa or dims_p.peso < peso_minimo_viable:
+            if dims_p.peso < peso_minimo_viable:
                 continue
             dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
+            if dist > radio:
+                # Mismo alcance que radio_efectivo_por_peso ya garantiza
+                # (siempre <= radio) -- el aullido no debe disparar por
+                # una presa fuera del radio sensorial del cazador, y
+                # cuando self._indice_actual es None (tests directos sin
+                # indice) `candidatos` no viene pre-filtrado por radio.
+                continue
+            if dims_p.peso >= peso_maximo_presa:
+                if zona is not None and not aullido_emitido:
+                    emitir_sonido(
+                        zona, pos_x, pos_y, tick_actual,
+                        peso_cazador + dims_p.peso,
+                    )
+                    self._stats_aullido_caza_manada += 1
+                    aullido_emitido = True
+                continue
             radio_efectivo = radio_efectivo_por_peso(
                 radio, dims_p.peso, self.peso_referencia_deteccion_plena
             )
