@@ -1,5 +1,5 @@
 """Test de roundtrip de MemoriaEspacial.recuerdos (2026-09-09, bug real
-encontrado verificando el roundtrip de las especies venado/cabra_montes).
+encontrado verificando el roundtrip de las especies venado/cabra_montesa).
 
 JSON no tiene tupla -- cada sitio (x,y) volvia como [x,y] tras
 json.loads. nucleo/memoria.py:registrar_recuerdo/purgar_recuerdo_invalido

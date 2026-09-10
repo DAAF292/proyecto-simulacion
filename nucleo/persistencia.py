@@ -901,7 +901,7 @@ class Persistencia:
                     )
 
                 # Bug real encontrado el 2026-09-09 (verificacion de
-                # roundtrip de las especies venado/cabra_montes): JSON no
+                # roundtrip de las especies venado/cabra_montesa): JSON no
                 # tiene tupla, asi que cada sitio (x,y) volvia como [x,y]
                 # tras json.loads -- nucleo/memoria.py:registrar_recuerdo/
                 # purgar_recuerdo_invalido comparan por identidad de tupla

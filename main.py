@@ -191,8 +191,8 @@ def sembrar_poblacion_inicial(
             celdas_pradera if celdas_pradera else candidatas_bosque,
         ),
         (
-            Especie.CABRA_MONTES,
-            poblacion_cfg.get("cabras_montes_iniciales", 8),
+            Especie.CABRA_MONTESA,
+            poblacion_cfg.get("cabras_montesas_iniciales", 8),
             celdas_montana,
         ),
     ]

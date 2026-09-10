@@ -22,16 +22,19 @@ _PLANTILLA_GENERICA = "Tick {tick}: evento {tipo} (entidad {entidad_id})."
 # cerrado de las 4 especies reales (componentes/identidad.py); una especie
 # nueva que no aparezca aqui cae al masculino por defecto ("un"), mismo
 # criterio permisivo que el resto de tablas de este tipo en el proyecto.
-_ESPECIES_FEMENINAS = {"ardilla", "cabra_montes"}
+_ESPECIES_FEMENINAS = {"ardilla", "cabra_montesa"}
 
-# Nombre legible para la cronica (2026-09-09, especie cabra_montes):
+# Nombre legible para la cronica (2026-09-09, especie cabra_montesa --
+# renombrada de "cabra_montes" el 2026-09-10, ver CLAUDE.md):
 # Especie.value es un identificador tecnico (snake_case, sin tildes),
 # correcto para persistencia/config pero no para texto narrado -- todas
 # las especies anteriores eran ya una sola palabra legible tal cual
-# (gnomo, lobo, conejo, ardilla, caballo, venado); cabra_montes es la
+# (gnomo, lobo, conejo, ardilla, caballo, venado); cabra_montesa es la
 # primera con mas de una palabra. Solo entra aqui quien lo necesite --
-# el resto sigue usando especie.value sin cambios.
-_NOMBRES_LEGIBLES = {"cabra_montes": "cabra montés"}
+# el resto sigue usando especie.value sin cambios. El nombre legible en
+# si ("cabra montés") es el termino real en español para la especie
+# (Capra pyrenaica) y no cambia con el rename del identificador.
+_NOMBRES_LEGIBLES = {"cabra_montesa": "cabra montés"}
 
 
 def _es_femenino(especie: str | None) -> bool:

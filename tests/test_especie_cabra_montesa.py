@@ -1,5 +1,6 @@
-"""Tests de la especie cabra_montes (2026-09-09, ver docs/superpowers/specs/
-2026-09-09-especie-cabra-montes-design.md).
+"""Tests de la especie cabra_montesa (2026-09-09, ver docs/superpowers/specs/
+2026-09-09-especie-cabra-montes-design.md; identificador renombrado de
+"cabra_montes" a "cabra_montesa" el 2026-09-10, ver CLAUDE.md).
 
 Primera fauna de TipoTerreno.MONTANA -- bioma que solo tenia flora
 propia hasta ahora. Sin fallback a otro bioma: si una semilla no genera
@@ -33,33 +34,33 @@ class _PersistenciaNoOp:
         pass
 
 
-def test_especie_cabra_montes_existe_y_es_distinta():
+def test_especie_cabra_montesa_existe_y_es_distinta():
     especies = {
         Especie.GNOMO, Especie.LOBO, Especie.CONEJO, Especie.ARDILLA,
-        Especie.CABALLO, Especie.VENADO, Especie.CABRA_MONTES,
+        Especie.CABALLO, Especie.VENADO, Especie.CABRA_MONTESA,
     }
     assert len(especies) == 7
 
 
-def test_crear_criatura_cabra_montes_produce_entidad_completa_en_rango():
+def test_crear_criatura_cabra_montesa_produce_entidad_completa_en_rango():
     config = _config()
     rng = random.Random(1)
     gestor = GestorEntidades()
-    rango_peso = config["rangos_raciales"]["cabra_montes"]["peso"]
+    rango_peso = config["rangos_raciales"]["cabra_montesa"]["peso"]
     for _ in range(20):
-        eid = crear_criatura(gestor, Especie.CABRA_MONTES, 0, 0, config, rng)
+        eid = crear_criatura(gestor, Especie.CABRA_MONTESA, 0, 0, config, rng)
         dims = gestor.obtener_componente(eid, DimensionesFisicas)
         assert rango_peso[0] <= dims.peso <= rango_peso[1]
         ident = gestor.obtener_componente(eid, Identidad)
-        assert ident.especie == Especie.CABRA_MONTES
+        assert ident.especie == Especie.CABRA_MONTESA
 
 
-def test_nacer_criatura_cabra_montes_produce_entidad_completa():
+def test_nacer_criatura_cabra_montesa_produce_entidad_completa():
     config = _config()
     rng = random.Random(2)
     gestor = GestorEntidades()
-    madre = crear_criatura(gestor, Especie.CABRA_MONTES, 0, 0, config, rng)
-    padre = crear_criatura(gestor, Especie.CABRA_MONTES, 0, 0, config, rng)
+    madre = crear_criatura(gestor, Especie.CABRA_MONTESA, 0, 0, config, rng)
+    padre = crear_criatura(gestor, Especie.CABRA_MONTESA, 0, 0, config, rng)
     from componentes.gestacion import Gestacion
     from componentes.capacidad_mental import CapacidadMental
     from componentes.reproduccion import Reproduccion
@@ -75,15 +76,15 @@ def test_nacer_criatura_cabra_montes_produce_entidad_completa():
     )
     mutacion = float(config.get("reproduccion", {}).get("mutacion_fraccion", 0.1))
     eid = nacer_criatura(
-        gestor, rng, 0, 0, Especie.CABRA_MONTES, config["rangos_raciales"], tick_actual=0,
+        gestor, rng, 0, 0, Especie.CABRA_MONTESA, config["rangos_raciales"], tick_actual=0,
         id_madre=madre, gestacion=gestacion, mutacion_fraccion=mutacion,
     )
     ident = gestor.obtener_componente(eid, Identidad)
-    assert ident.especie == Especie.CABRA_MONTES
+    assert ident.especie == Especie.CABRA_MONTESA
     assert ident.id_madre == madre
 
 
-def test_siembra_inicial_coloca_cabras_montes_solo_en_montana():
+def test_siembra_inicial_coloca_cabras_montesas_solo_en_montana():
     config = _config()
     rng = random.Random(3)
     gestor = GestorEntidades()
@@ -93,7 +94,7 @@ def test_siembra_inicial_coloca_cabras_montes_solo_en_montana():
 
     cabras = [
         eid for eid in gestor.entidades_con(Identidad)
-        if gestor.obtener_componente(eid, Identidad).especie == Especie.CABRA_MONTES
+        if gestor.obtener_componente(eid, Identidad).especie == Especie.CABRA_MONTESA
     ]
     zona = mundo.territorio.zonas[0]
     for eid in cabras:
@@ -105,7 +106,7 @@ def test_siembra_inicial_coloca_cabras_montes_solo_en_montana():
 
 def test_siembra_sin_montana_no_crea_cabras_ni_lanza_excepcion():
     """Ley neutra: sin celdas de montaña disponibles, la siembra de
-    cabra_montes simplemente no coloca ninguna -- mismo guard genérico
+    cabra_montesa simplemente no coloca ninguna -- mismo guard genérico
     'if not celdas_candidatas: continue' ya usado para el resto del
     catálogo, sin ningún caso especial nuevo."""
     config = _config()
@@ -124,10 +125,10 @@ def test_siembra_sin_montana_no_crea_cabras_ni_lanza_excepcion():
         sembrar_poblacion_inicial(g, m, config, random.Random(semilla), _PersistenciaNoOp())
 
 
-def test_narrador_cabra_montes_concuerda_en_femenino():
+def test_narrador_cabra_montesa_concuerda_en_femenino():
     ev = Evento(
         tick=42, tipo="Muerte", severidad=Severidad.NOTABLE, entidad_id=7,
-        datos={"especie": "cabra_montes", "causa": "vejez"},
+        datos={"especie": "cabra_montesa", "causa": "vejez"},
     )
     frases = narrar([ev], None)
     assert frases == ["Tick 42: una cabra montés ha muerto por vejez."]

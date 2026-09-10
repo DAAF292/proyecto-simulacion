@@ -16,7 +16,7 @@ poblacion:
   ardillas_iniciales: 30
   caballos_iniciales: 9  # PROVISIONAL -- ver 2026-09-05-especie-caballo-design.md
   venados_iniciales: 10  # PROVISIONAL -- ver 2026-09-09-especie-venado-design.md
-  cabras_montes_iniciales: 8  # PROVISIONAL -- ver 2026-09-09-especie-cabra-montes-design.md
+  cabras_montesas_iniciales: 8  # PROVISIONAL -- ver 2026-09-09-especie-cabra-montes-design.md (renombrada de cabra_montes a cabra_montesa el 2026-09-10)
   techo_fraccion_edad_inicial_longevidad: 0.7
 
 rangos_raciales:
@@ -484,17 +484,18 @@ rangos_raciales:
     estabilidad_mental_maxima: [0.4, 0.6]
     consciencia: [0.0, 0.1]
 
-  # CABRA_MONTES (2026-09-09, ver docs/superpowers/specs/
-  # 2026-09-09-especie-cabra-montes-design.md): primera fauna de
-  # TipoTerreno.MONTANA -- bioma que solo tenia flora propia hasta
-  # ahora. Biodiversidad genuina, sin relacion con el problema
-  # nutricional de lobo (montana no tiene ningun depredador que la
-  # ronde todavia). Dieta = las dos unicas fuentes de alimento reales de
-  # montana (liquen, bayas_montanas). Sin ninguna ventaja de
+  # CABRA_MONTESA (2026-09-09, ver docs/superpowers/specs/
+  # 2026-09-09-especie-cabra-montes-design.md; renombrada de
+  # "cabra_montes" a "cabra_montesa" el 2026-09-10, ver CLAUDE.md):
+  # primera fauna de TipoTerreno.MONTANA -- bioma que solo tenia flora
+  # propia hasta ahora. Biodiversidad genuina, sin relacion con el
+  # problema nutricional de lobo (montana no tiene ningun depredador que
+  # la ronde todavia). Dieta = las dos unicas fuentes de alimento reales
+  # de montana (liquen, bayas_montanas). Sin ninguna ventaja de
   # escalada/movimiento propio de terreno -- usa las mismas reglas de
   # pendiente_maxima_transitable que el resto de fauna. Todo
   # PROVISIONAL, sin calibrar contra el harness completo.
-  cabra_montes:
+  cabra_montesa:
     medio_alimentacion: recolectar
     dieta: [liquen, bayas_montanas]
     peso: [25, 45]
@@ -504,7 +505,7 @@ rangos_raciales:
     camada: [1, 2]
     fraccion_madurez: 0.2
     factor_base_concepcion: 0.015
-    puntos_agarre: 0  # una cabra montes no sujeta objetos
+    puntos_agarre: 0  # una cabra montesa no sujeta objetos
     fuerza: [0.3, 0.6]
     agilidad: [0.7, 0.95]
     velocidad: [0.5, 0.8]

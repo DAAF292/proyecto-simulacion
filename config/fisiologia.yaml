@@ -332,9 +332,10 @@ necesidades:
     tasa_perdida_hidratacion_por_tick: 0.0008
     probabilidad_muerte_deshidratacion: 0.0004
 
-  cabra_montes:
+  cabra_montesa:
     # AÑADIDO 2026-09-09 (arco de biodiversidad de fauna, ver
-    # docs/superpowers/specs/2026-09-09-especie-cabra-montes-design.md).
+    # docs/superpowers/specs/2026-09-09-especie-cabra-montes-design.md;
+    # renombrada de "cabra_montes" a "cabra_montesa" el 2026-09-10).
     # Mismo par ya validado, mismo criterio que venado.
     tasa_perdida_saciedad_por_tick: 0.0008
     probabilidad_muerte_saciedad_critica: 0.0004
@@ -382,7 +383,7 @@ consumo:
     conejo: 0.952        # 6-8h/día forrajeando (RWAF) -- 7h usadas
     ardilla: 0.884        # 2.5-5.5h/día de forraje real (red squirrel activity budget) -- 4h usadas
     venado: 0.826         # patrón de 5 comidas cortas/día (HuntWise) -- 7h usadas, estimado
-    cabra_montes: 0.680   # sin dato de campo propio -- mismo proxy rumiante que venado, 7h
+    cabra_montesa: 0.680  # sin dato de campo propio -- mismo proxy rumiante que venado, 7h
     # gnomo: forrajero humanoide consciente, sin equivalente animal --
     # anclado a trabajo de subsistencia real de sociedades cazadoras-
     # recolectoras (!Kung, Agta: 2.8-7.6h/día de trabajo de subsistencia

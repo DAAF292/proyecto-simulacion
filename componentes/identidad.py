@@ -52,11 +52,13 @@ class Especie(Enum):
     # por la via normal (sin pasar por el techo de presa por manada),
     # ver docs/superpowers/specs/2026-09-09-especie-venado-design.md.
     VENADO = "venado"
-    # CABRA_MONTES: primera fauna de TipoTerreno.MONTANA, bioma que solo
+    # CABRA_MONTESA: primera fauna de TipoTerreno.MONTANA, bioma que solo
     # tenia flora hasta ahora -- ver docs/superpowers/specs/
     # 2026-09-09-especie-cabra-montes-design.md. Sin depredador real en
     # montana todavia, biodiversidad genuina, no ligada al problema de lobo.
-    CABRA_MONTES = "cabra_montes"
+    # Renombrada de "cabra_montes" a "cabra_montesa" el 2026-09-10 (ver
+    # CLAUDE.md) -- mismo individuo, solo corrige el identificador.
+    CABRA_MONTESA = "cabra_montesa"
 
 
 @dataclass
