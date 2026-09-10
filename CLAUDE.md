@@ -7740,3 +7740,67 @@ los datos directos de caballo/conejo/ardilla (medidos en fuentes
 reales específicas de esas especies) -- señalado con honestidad, no
 presentado con la misma solidez; todos los valores siguen
 PROVISIONALES, sin calibrar contra el harness completo.
+
+## Rename cabra_montes -> cabra_montesa + primera verificación real de
+## "orillas vadeables" + "tasa de consumo por especie" juntas (2026-09-10,
+## misma sesión)
+
+Dos correcciones pedidas por Diego tras cerrar la pieza anterior.
+
+**Rename**: `Especie.CABRA_MONTES` → `Especie.CABRA_MONTESA` (y el
+identificador string `cabra_montes` → `cabra_montesa` en todas las claves
+de config que lo usan como llave de especie --
+`rangos_raciales.cabra_montesa`, `necesidades.cabra_montesa`,
+`tasa_consumo_al_comer_por_especie.cabra_montesa`,
+`cabras_montesas_iniciales`) -- corrige el identificador técnico,
+gramaticalmente incorrecto tal cual estaba (`cabra_montes` quedaba como
+adjetivo sin concordar). El nombre legible de la crónica ("cabra montés",
+término real en español para *Capra pyrenaica*, invariable en género para
+esta especie concreta) no cambia -- solo el identificador interno.
+`tests/test_especie_cabra_montes.py` renombrado a
+`test_especie_cabra_montesa.py`, contenido actualizado. 425/425 tests en
+verde, `BOSQUE_AUTO_TICKS=1500` sin excepciones, confirmado en el propio
+log de la corrida que `cabra_montesa` forma manada con su nuevo nombre.
+
+**Verificación de "un par de semillas"** (2 semillas nuevas, 610001 y
+610002, `herramientas/harness_calibracion.py`, hasta 6000 ticks, 480s de
+tope por semilla -- 610001 cortada por tiempo a los 4973 ticks, 610002
+completó los 6000), pedida explícitamente para medir el efecto conjunto
+de "orillas vadeables" y "tasa de consumo al comer por especie" (las dos
+piezas cerradas justo antes del rename en esta misma sesión) sobre el
+equilibrio del ecosistema:
+
+- **Criterio maestro de Diego (5 especies vivas a la vez): 2/2 (100%)** --
+  y de hecho las 7 especies del catálogo completo (incluyendo venado y
+  cabra_montesa) quedaron vivas en ambas semillas.
+- **Deshidratación, prácticamente desaparecida como causa de muerte**:
+  solo 2 muertes de ardilla y 1 de caballo por deshidratación en las
+  ~11000 ticks combinadas -- frente a las cifras dominantes que esta
+  misma investigación documentó antes de "orillas vadeables" (ardilla
+  53.8%, conejo con la deshidratación como causa relevante en varias
+  corridas del harness de 15 semillas del 2026-09-09). Dirección
+  coherente con el propio objetivo de la pieza: dar acceso real a agua a
+  las especies pequeñas.
+- Conejo repitió su patrón de explosión ya conocido y sin relación con
+  hoy (388 individuos en la semilla 610001, boom-bust ya documentado
+  varias veces en este proyecto) -- no es un efecto colateral de los
+  cambios de hoy.
+- Funnel reproductivo, asentamientos (2/2), almacén (2/2), salón común
+  (2/2), cocina (1/2), parejas estables de gnomo (12, presentes en las 2
+  semillas) -- todos los mecanismos sociales/de construcción siguen
+  disparándose con fuerza real, sin indicio de regresión.
+
+**Honestidad explícita sobre el tamaño de la muestra**: n=2 es
+exactamente lo que Diego pidió ("un par de semillas"), no una
+calibración -- direccional, no una confirmación estadística. El 100% del
+criterio maestro en 2/2 es una señal alentadora, coherente con el efecto
+esperado de ambos cambios (más acceso a agua, ritmo de forrajeo más
+realista), pero con un tamaño de muestra tan pequeño no se puede
+descartar que sea favorable por casualidad -- el harness completo
+(15×12000) sigue siendo la referencia de rigor pendiente para dar esto
+por cerrado de verdad. `resultados guardados en
+/tmp/.../scratchpad/verif_rename.json` (fuera del repo, no comiteado).
+
+Commits: rename del identificador (dos commits, uno del `git mv` del
+test y otro del contenido) -- sin cambios de comportamiento del motor,
+solo el nombre.
