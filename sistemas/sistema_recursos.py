@@ -89,6 +89,15 @@ class SistemaRecursos:
         cfg_cons = self.config.get("consumo", {})
         self.tasa_consumo_comer: float = float(cfg_cons.get("tasa_consumo_al_comer", 0.5))
         self.tasa_consumo_beber: float = float(cfg_cons.get("tasa_consumo_al_beber", 0.2))
+        # tasa_consumo_al_comer_por_especie (2026-09-10, ver config/
+        # fisiologia.yaml): solo para forraje vegetal (Accion.COMER),
+        # anclado al tiempo real de alimentación de cada especie -- NO
+        # afecta al carroñeo (self.tasa_consumo_comer sigue siendo el
+        # universal ahí) ni a tasa_consumo_beber (beber ya es rápido y
+        # universal en la realidad, sin relación con el peso).
+        self.tasa_consumo_comer_por_especie: dict[str, float] = {
+            k: float(v) for k, v in cfg_cons.get("tasa_consumo_al_comer_por_especie", {}).items()
+        }
         # Cocinar (2026-09-08, ver docs/superpowers/specs/
         # 2026-09-08-como-cocinar-design.md). PROVISIONAL.
         self.tasa_cocinar_kg_tick: float = float(cfg_cons.get("tasa_cocinar_kg_tick", 0.5))
@@ -1018,6 +1027,15 @@ class SistemaRecursos:
         # 2. Evaluación de Forrajeo Vegetal
         cfg_esp = self.config.get("rangos_raciales", {}).get(identidad.especie.value, {})
         dieta = cfg_esp.get("dieta", [])
+        # Tasa de ingesta propia de esta especie (config/fisiologia.yaml:
+        # consumo.tasa_consumo_al_comer_por_especie) -- fallback al valor
+        # universal si la especie no tiene entrada (p.ej. lobo, que no
+        # forrajea vegetal en la práctica). Usada en TODA esta sección de
+        # forrajeo vegetal (celda, provisiones, alacena) -- el carroñeo de
+        # arriba sigue usando self.tasa_consumo_comer sin cambios.
+        tasa_comer_especie = self.tasa_consumo_comer_por_especie.get(
+            identidad.especie.value, self.tasa_consumo_comer
+        )
 
         recursos_disponibles = []
         for r, cant in celda.recursos.items():
@@ -1034,7 +1052,7 @@ class SistemaRecursos:
         if recursos_disponibles:
             nombre_rec = recursos_disponibles[0]
             cant_actual = celda.recursos[nombre_rec]
-            consumo = min(cant_actual, self.tasa_consumo_comer)
+            consumo = min(cant_actual, tasa_comer_especie)
             celda.recursos[nombre_rec] = max(0.0, cant_actual - consumo)
 
             consciente = (
@@ -1131,7 +1149,7 @@ class SistemaRecursos:
                     espacio = espacio_disponible_provisiones_kg(
                         inv.provisiones, dims.peso, self.fraccion_provisiones_maxima
                     )
-                    a_guardar = min(sobra_en_celda, self.tasa_consumo_comer, espacio)
+                    a_guardar = min(sobra_en_celda, tasa_comer_especie, espacio)
                     if a_guardar > 0.0:
                         inv.provisiones[nombre_rec] = (
                             inv.provisiones.get(nombre_rec, 0.0) + a_guardar
@@ -1166,7 +1184,7 @@ class SistemaRecursos:
                 )
                 if recurso_guardado is not None:
                     disponible = inv.provisiones[recurso_guardado]
-                    consumo = min(disponible, self.tasa_consumo_comer)
+                    consumo = min(disponible, tasa_comer_especie)
                     val_nut = self._valor_nutricional_efectivo(recurso_guardado)
                     val_hid = self._valor_hidratacion_efectiva(recurso_guardado)
                     nec.saciedad = min(1.0, nec.saciedad + (consumo * val_nut))
@@ -1233,7 +1251,7 @@ class SistemaRecursos:
                     )
                     if recurso_alacena is not None:
                         disponible = cocina.provisiones[recurso_alacena]
-                        consumo = min(disponible, self.tasa_consumo_comer)
+                        consumo = min(disponible, tasa_comer_especie)
                         val_nut = self._valor_nutricional_efectivo(recurso_alacena)
                         val_hid = self._valor_hidratacion_efectiva(recurso_alacena)
                         nec.saciedad = min(1.0, nec.saciedad + (consumo * val_nut))

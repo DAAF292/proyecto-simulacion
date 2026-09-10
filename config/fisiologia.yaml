@@ -342,8 +342,54 @@ necesidades:
     probabilidad_muerte_deshidratacion: 0.0004
 
 consumo:
+  # tasa_consumo_al_comer (2026-09-10, ver docs/superpowers/specs/
+  # 2026-09-10-tasa-consumo-por-especie-design.md): valor UNIVERSAL de
+  # fallback -- usado por el carroñeo de Necromasa (sin datos reales de
+  # "velocidad de ingesta de carroña" investigados, ningún consciente
+  # come carne hoy) y por cualquier especie sin entrada propia en
+  # tasa_consumo_al_comer_por_especie más abajo (p.ej. lobo, cuya dieta
+  # real es depredación -- su patrón festín/ayuno ya lo resuelve
+  # sistema_depredacion.py, sin relación con esta sección).
   tasa_consumo_al_comer: 0.5
+  # tasa_consumo_al_beber (2026-09-10, investigado y CONFIRMADO correcto
+  # tal cual, sin relación con el peso): en la naturaleza, beber es
+  # rápido y prácticamente independiente del tamaño del animal -- un
+  # caballo (450kg) solo dedica 5-6 minutos/día a beber pese a ser la
+  # especie más grande del catálogo, un conejo bebe "poco y a menudo"
+  # (hasta 15 visitas/día), un lobo puede pasar días sin beber
+  # directamente (obtiene agua de la presa). _resolver_beber ya aplica
+  # este valor de forma universal, sin val_hid de por medio
+  # (hidratacion += tasa_consumo_al_beber directo) -- 5 ticks para
+  # saciar desde 0, ya en el orden de magnitud correcto. NO se
+  # diferencia por especie a propósito: el peso determina el ACCESO
+  # (ver orillas vadeables, 2026-09-10) pero no la velocidad de bebida.
   tasa_consumo_al_beber: 0.2
+  # tasa_consumo_al_comer_por_especie (2026-09-10): sustituye el valor
+  # universal de arriba SOLO para Accion.COMER (forraje vegetal -- ver
+  # sistema_recursos.py:_resolver_comer), anclado al tiempo REAL que
+  # cada especie dedica a alimentarse en la naturaleza (no a una fórmula
+  # de peso -- medido que el tiempo de alimentación real no escala de
+  # forma simple con el tamaño, depende sobre todo del tipo de dieta:
+  # caballo, el herbívoro más grande, es también el que MÁS tiempo
+  # dedica en términos absolutos, 10-17h/día, por la baja densidad
+  # calórica de la hierba). tasa = 1 / (horas_objetivo *
+  # valor_nutricional_medio_de_la_dieta), calculado contra los val_nut
+  # reales de config/flora.yaml. Sin entrada para lobo (depredación, no
+  # forraje vegetal -- ver arriba). PROVISIONAL, sin calibrar contra el
+  # harness completo; horas_objetivo real usada entre paréntesis:
+  tasa_consumo_al_comer_por_especie:
+    caballo: 0.657       # 10-17h/día pastando (KER, IFCE) -- 13h usadas
+    conejo: 0.952        # 6-8h/día forrajeando (RWAF) -- 7h usadas
+    ardilla: 0.884        # 2.5-5.5h/día de forraje real (red squirrel activity budget) -- 4h usadas
+    venado: 0.826         # patrón de 5 comidas cortas/día (HuntWise) -- 7h usadas, estimado
+    cabra_montes: 0.680   # sin dato de campo propio -- mismo proxy rumiante que venado, 7h
+    # gnomo: forrajero humanoide consciente, sin equivalente animal --
+    # anclado a trabajo de subsistencia real de sociedades cazadoras-
+    # recolectoras (!Kung, Agta: 2.8-7.6h/día de trabajo de subsistencia
+    # total, 12-19h/semana ~1.7-2.7h/día de forrajeo puro según el
+    # estudio de los !Kung) -- 4h usadas, sin duplicar el tiempo que en
+    # el motor ya cubre Accion.RECOLECTAR/CONSTRUIR por separado.
+    gnomo: 1.250
   # tasa_cocinar_kg_tick (2026-09-08, ver docs/superpowers/specs/
   # 2026-09-08-como-cocinar-design.md): cuanto se transforma de crudo a
   # elaborado por tick de Accion.COCINAR -- mismo orden de magnitud que

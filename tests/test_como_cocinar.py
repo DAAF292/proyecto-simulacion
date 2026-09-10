@@ -195,7 +195,10 @@ def test_comer_elaborado_de_provisiones_da_mas_saciedad_que_crudo():
 
     nec = gestor.obtener_componente(eid, Necesidades)
     val_nut_base = sistema.nutricion_flora["manzanas"]
-    esperado = 0.3 + (sistema.tasa_consumo_comer * val_nut_base * sistema.factor_mejora_elaboracion)
+    # tasa por especie (gnomo) topada por lo disponible en la despensa (1.0)
+    tasa_gnomo = sistema.tasa_consumo_comer_por_especie.get("gnomo", sistema.tasa_consumo_comer)
+    consumo = min(1.0, tasa_gnomo)
+    esperado = 0.3 + (consumo * val_nut_base * sistema.factor_mejora_elaboracion)
     assert abs(nec.saciedad - esperado) < 1e-9
 
 
@@ -293,7 +296,10 @@ def test_preferencia_por_elaborado_al_comer_de_provisiones():
 
     # se consumio de la elaborada, la cruda sigue intacta
     assert inv.provisiones["raices"] == 1.0
-    assert inv.provisiones["raices_elaborada"] == 1.0 - sistema.tasa_consumo_comer
+    # tasa por especie (gnomo, 1.25) supera lo disponible (1.0) -- se
+    # consume todo y la clave se purga por completo, no queda una
+    # cantidad residual (comportamiento distinto de la tasa universal).
+    assert "raices_elaborada" not in inv.provisiones
 
 
 def test_toxico_crudo_desde_provisiones_con_tirada_forzada_mata():

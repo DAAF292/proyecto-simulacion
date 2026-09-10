@@ -73,7 +73,8 @@ def test_ley_consciente_guarda_excedente_si_esta_lleno_y_sobra_comida():
     gestor = GestorEntidades()
     # raices (hierba_silvestre, sin competencia de espacio -- no exige
     # ninguna Planta real en la celda, a diferencia de manzanas/manzano).
-    # saciedad 0.85 + consumo 0.5*val_nut(0.15) = 0.925 >= umbral 0.9
+    # tasa por especie de gnomo (2026-09-10, config/fisiologia.yaml):
+    # saciedad 0.85 + consumo 1.25*val_nut(0.15) topa en 1.0 >= umbral 0.9
     eid = _gnomo(gestor, config, rng, consciencia=0.8, saciedad=0.85)
     celda = Celda(tipo_terreno=TipoTerreno.BOSQUE, recursos={"raices": 5.0})
     sistema = SistemaRecursos(config, rng)
@@ -81,9 +82,9 @@ def test_ley_consciente_guarda_excedente_si_esta_lleno_y_sobra_comida():
     _comer(sistema, gestor, eid, celda)
 
     inv = gestor.obtener_componente(eid, Inventario)
-    assert inv.provisiones.get("raices") == 0.5
-    # comio 0.5 + guardo 0.5 = 1.0 de los 5.0 originales
-    assert celda.recursos["raices"] == 4.0
+    assert inv.provisiones.get("raices") == 1.25
+    # comio 1.25 + guardo 1.25 = 2.5 de los 5.0 originales
+    assert celda.recursos["raices"] == 2.5
 
 
 def test_ley_no_consciente_nunca_guarda_provisiones():
@@ -97,7 +98,8 @@ def test_ley_no_consciente_nunca_guarda_provisiones():
     _comer(sistema, gestor, eid, celda)
 
     nec = gestor.obtener_componente(eid, Necesidades)
-    assert nec.saciedad == 0.85 + (0.5 * 0.15)  # confirma que SI comio (rama correcta)
+    # tasa por especie gnomo=1.25: 0.85+1.25*0.15=1.0375, topa en 1.0
+    assert nec.saciedad == 1.0  # confirma que SI comio (rama correcta)
 
     inv = gestor.obtener_componente(eid, Inventario)
     assert inv.provisiones == {}
@@ -114,7 +116,8 @@ def test_ley_sin_saciedad_alta_no_guarda_nada():
     _comer(sistema, gestor, eid, celda)
 
     nec = gestor.obtener_componente(eid, Necesidades)
-    assert nec.saciedad == 0.1 + (0.5 * 0.15)  # confirma que SI comio (rama correcta)
+    # tasa por especie gnomo=1.25, sin tope (0.1+1.25*0.15=0.2875<1.0)
+    assert nec.saciedad == 0.1 + (1.25 * 0.15)  # confirma que SI comio (rama correcta)
     inv = gestor.obtener_componente(eid, Inventario)
     assert inv.provisiones == {}
 
@@ -168,8 +171,10 @@ def test_ley_come_de_provisiones_si_la_celda_no_tiene_su_dieta():
     _comer(sistema, gestor, eid, celda)
 
     nec = gestor.obtener_componente(eid, Necesidades)
-    assert nec.saciedad == 0.3 + (0.5 * 0.4)  # consumo=0.5, val_nut manzanas=0.4
-    assert inv.provisiones["manzanas"] == 0.5
+    # tasa por especie gnomo=1.25 supera lo disponible (1.0) -- se come
+    # todo de una vez, val_nut manzanas=0.4
+    assert nec.saciedad == 0.3 + (1.0 * 0.4)
+    assert "manzanas" not in inv.provisiones  # consumido por completo, purgado
 
 
 def test_ley_comer_de_provisiones_no_purga_memoria_de_comida():

@@ -7630,3 +7630,113 @@ motor, no se asume aquí; la vía de "ganancia por bocado escalada por
 peso" (saciedad, problema distinto del de hidratación) sigue sin
 diseñar, aparcada en la misma conversación en favor de resolver primero
 el acceso a agua.
+
+## Tasa de consumo al comer por especie -- anclada a datos reales de
+## alimentación animal, no a una fórmula de peso, implementado
+## directamente por Claude (2026-09-10, misma sesión)
+
+Continuación directa de "Orillas vadeables": con el acceso a agua ya
+resuelto, se retomó la pregunta original de Diego sobre peso/hidratación,
+ahora aplicada a `tasa_consumo_al_comer` (cuánta comida se ingiere por
+tick de `Accion.COMER`) -- universal hasta ahora (0.5, sin relación con
+ninguna especie).
+
+**Dos errores propios, corregidos con honestidad antes de fijar
+nada** -- mismo patrón de autocrítica ya varias veces documentado en este
+proyecto:
+1. Primer intento: dividir la ganancia por bocado entre `peso^exponente`
+   (mismo patrón que ya funcionó para "orillas"). Diego señaló con razón
+   que el resultado era absurdo -- con exponente 0.5, caballo pasaría de
+   17 a 107 ticks (4.5 días) solo para saciarse. **Corrección real, no
+   solo un ajuste de exponente**: el baseline de 17 ticks (17h) ya
+   coincide con datos reales de campo (caballos pastan 10-17h/día), así
+   que el error no era el punto de partida, era escalarlo sin ningún
+   ancla real -- ninguna fórmula matemática pura de peso reproduce el
+   patrón real observado (ver más abajo, no es monótona en el peso).
+2. Segundo error, encontrado al buscar datos de hidratación: los
+   cálculos previos de "46-91 ticks para hidratarse" (sección de arriba)
+   estaban mal -- usaban por error la fórmula de "hidratación al comer"
+   (`consumo*val_hid`) en vez del mecanismo real de `Accion.BEBER`
+   (`_resolver_beber`: `hidratacion += tasa_consumo_al_beber` directo,
+   SIN `val_hid` de por medio) -- 5 ticks reales, no 46-91.
+
+**Investigación real (WebSearch, no inventado) de tiempo de alimentación
+y bebida en la naturaleza, antes de diseñar nada**:
+- **Beber es rápido y prácticamente independiente del peso**: caballo
+  (450kg, la especie más grande) solo dedica 5-6 minutos/día a beber
+  pese a beber 20-55L; conejo bebe "poco y a menudo" (hasta 15
+  visitas/día); ciervo 1-2 veces/día; ardilla ~2 veces/día (gran parte de
+  su hidratación viene de la comida); lobo puede pasar días sin beber
+  directamente (agua de la presa + agua metabólica). **Conclusión: el
+  mecanismo de `BEBER` (5 ticks, universal) ya estaba bien calibrado --
+  no se tocó nada, y NO se diferencia por especie a propósito** (el peso
+  determina el ACCESO, ya resuelto con orillas, pero no la velocidad).
+- **Comer, en cambio, sí varía por especie de forma real, aunque no
+  como función simple del peso**: caballo 10-17h/día (dieta pobre, baja
+  densidad calórica, el que MÁS tiempo dedica en términos absolutos
+  pese a ser el más grande); conejo 6-8h/día; ardilla ~2.5-5.5h/día
+  (47-50% de su actividad real en forraje); ciervo, patrón de 5 comidas
+  cortas repartidas en 24h (~7h estimadas); lobo -- patrón cualitativamente
+  distinto, festín-y-ayuno, no comparable a un "tiempo diario" (ya
+  resuelto de otra forma, ver abajo). Cazadores-recolectores humanos
+  (!Kung, Agta): 2.8-7.6h/día de trabajo de subsistencia total, ~1.7-2.7h/
+  día de forrajeo puro (estudio !Kung) -- usado como ancla para gnomo,
+  a petición explícita de Diego ("un gnomo debería alimentarse como un
+  humano recolector").
+
+**Diseño**: en vez de una fórmula de peso^exponente (descartada, no
+reproduce el patrón real observado -- caballo > conejo > ardilla en
+horas absolutas no es una función simple del tamaño, depende del tipo de
+dieta), `tasa_consumo_al_comer_por_especie` por especie
+(`config/fisiologia.yaml`), calculada como
+`1/(horas_objetivo*val_nut_medio_de_la_dieta)` contra los valores
+nutricionales reales del catálogo:
+
+| Especie | Horas reales/día | tasa_consumo_al_comer |
+|---|---|---|
+| gnomo | 4h (proxy cazador-recolector) | 1.250 |
+| conejo | 7h | 0.952 |
+| ardilla | 4h | 0.884 |
+| venado | 7h (estimado) | 0.826 |
+| cabra_montes | 7h (proxy venado, sin dato propio) | 0.680 |
+| caballo | 13h | 0.657 |
+| lobo | — (depredación, no forraje vegetal) | sin entrada, usa el universal 0.5 |
+
+**Alcance real, deliberadamente limitado**: solo afecta a
+`Accion.COMER` sobre forraje vegetal (celda, provisiones propias,
+alacena de cocina) -- el **carroñeo de Necromasa sigue usando el valor
+universal** (0.5, sin datos reales de velocidad de ingesta de carroña
+investigados, ningún consciente come carne hoy). `sistema_recursos.py`
+calcula `tasa_comer_especie` una vez al principio del bloque de
+forrajeo vegetal (`identidad.especie.value`, ya disponible ahí para la
+dieta) y sustituye las 4 apariciones relevantes de
+`self.tasa_consumo_comer`; el carroñeo (línea aparte, antes en el
+método) queda intacto.
+
+**Efecto colateral real, detectado al correr los tests, no un bug**:
+con `tasa_comer_especie` de gnomo (1.25) mayor que la cantidad
+disponible en varios tests dirigidos (`Inventario.provisiones` con solo
+1.0kg guardado), el consumo real queda topado por lo disponible y la
+purga automática (`restante <= umbral_purga_provisiones`) borra la
+clave por completo en vez de dejar un residuo -- 6 tests existentes
+(`test_provisiones_alimento.py`, `test_como_cocinar.py`) asumían
+implícitamente el valor universal (0.5) de antes de este cambio,
+corregidos para reflejar los nuevos números exactos.
+
+**Verificado**: 425/425 tests (4 nuevos,
+`tests/test_tasa_consumo_por_especie.py` -- gnomo consume más rápido
+que el universal, caballo tiene su propia tasa distinta de gnomo, una
+especie sin entrada -- lobo -- cae al universal, el carroñeo NUNCA usa
+la tasa por especie). `BOSQUE_AUTO_TICKS=3000` sin ninguna excepción.
+
+**Pendiente real, explícito**: ninguna verificación A/B de población
+tras este cambio -- desplaza la secuencia de `rng` como cualquier
+cambio de config (mismo fenómeno metodológico ya documentado
+repetidas veces en este proyecto), no medido si afecta al criterio
+maestro de Diego; los tiempos objetivo de venado/cabra_montes/gnomo
+son estimaciones razonadas (patrón de comidas cortas, proxy de
+rumiante similar, proxy de cazador-recolector humano) más flojas que
+los datos directos de caballo/conejo/ardilla (medidos en fuentes
+reales específicas de esas especies) -- señalado con honestidad, no
+presentado con la misma solidez; todos los valores siguen
+PROVISIONALES, sin calibrar contra el harness completo.
