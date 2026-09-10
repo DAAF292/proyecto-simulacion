@@ -7804,3 +7804,51 @@ por cerrado de verdad. `resultados guardados en
 Commits: rename del identificador (dos commits, uno del `git mv` del
 test y otro del contenido) -- sin cambios de comportamiento del motor,
 solo el nombre.
+
+## "No se forma ninguna manada" era un artefacto de medición, no un
+## hallazgo real -- bug real corregido en el harness (2026-09-10, misma
+## sesión)
+
+Diego, tras ver la corrida de una semilla nueva (999001, hasta 9155
+ticks) donde `manadas_por_especie` reportaba `{'gnomo': 4, 'caballo': 1,
+'venado': 2}` -- 0 para lobo/conejo/ardilla/cabra_montesa -- preguntó si
+hacía falta agrupar a los fundadores de fauna al nacer (mismo patrón que
+"parejas fundadoras" para reproducción, 2026-09-06). Antes de evaluar esa
+propuesta, se verificó la premisa contra el motor real (mismo criterio de
+siempre: nunca aceptar un hallazgo sin comprobarlo).
+
+**La premisa era falsa**: `sistema_manada.py:_stats_manadas_por_especie`
+se SOBREESCRIBÍA cada día (`self._stats_manadas_por_especie = stats`) en
+vez de acumularse -- el harness/`BOSQUE_AUTO_TICKS` solo leen su valor al
+final de la corrida, así que cualquier especie ya extinta (ardilla,
+cabra_montesa) o con población dispersa ese día concreto (conejo, a
+punto de extinguirse) mostraba 0, indistinguible de "nunca formó
+manada". Instrumentado un arnés dedicado que muestrea el stat día a día
+en vez de solo al final, misma semilla 999001: **las 7 especies
+formaron manada con regularidad durante casi toda su vida** -- lobo en
+348 de ~374 días, conejo en 343, ardilla en 251, cabra_montesa en 220,
+caballo en 361, venado en 374, gnomo en 374. Coherente además con las
+7948 sincronizaciones de madriguera de conejo ya reportadas en la misma
+corrida (solo ocurren dentro de una manada de conejo activa) -- un dato
+que ya contradecía la lectura de "0 manadas" antes de instrumentar nada,
+solo que nadie lo había cruzado hasta ahora.
+
+**Corregido** (`sistemas/sistema_manada.py`, `main.py`): el stat pasa a
+ser acumulado (suma de días con al menos 1 manada sobre toda la
+corrida), con la etiqueta de impresión aclarando explícitamente que ya
+no es un snapshot del último día. Sin cambios de comportamiento del
+motor -- `mundo.manadas` (lo que de verdad usan `_calcular_deambular` y
+la madriguera) siempre se recalculó correctamente día a día, el bug
+estaba solo en el contador de observación. 425/425 tests en verde,
+`BOSQUE_AUTO_TICKS=1500` sin excepciones, confirmado el nuevo formato
+acumulado en la salida real.
+
+**Conclusión sobre la pregunta original de Diego**: agrupar fundadores
+de fauna al nacer NO es el fix que hacía falta -- el mecanismo de manada
+ya funciona bien y desde el principio para las 7 especies, el problema
+real de conejo/ardilla/cabra_montesa (extinción en esa semilla concreta)
+sigue siendo el ya documentado (alta varianza de ardilla, boom-bust de
+conejo, margen reproductivo ajustado de cabra_montesa) -- sin relación
+con si se agrupan o no al nacer. Ninguna implementación de "fundadores
+de fauna agrupados" se hizo, por no estar justificada por el hallazgo
+real.
