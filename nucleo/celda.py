@@ -136,6 +136,24 @@ class Celda:
     haga falta tratar "cualquier agua bebible ahora mismo" sin importar
     el origen, usar nucleo/agua.py:hay_agua_potable/profundidad_efectiva
     en vez de comparar este campo solo."""
+    profundidad_orilla: float = 0.0
+    """Orilla vadeable, en METROS (2026-09-10, ver docs/superpowers/specs/
+    2026-09-10-orillas-vadeables-design.md) -- capa geográfica
+    independiente de profundidad_agua, presente SOLO en el anillo de
+    celdas de tierra firme 4-vecinas de un cuerpo de agua permanente
+    (nucleo/agua.py:generar_orillas_vadeables), con un valor fijo y bajo
+    (config agua.profundidad_orilla_metros) por debajo de la altura
+    mínima de cualquier especie del catálogo. Modela el vado/erosión
+    natural que produce cualquier cuerpo de agua real -- sin esto, el
+    umbral binario profundidad_agua<=altura deja a las especies pequeñas
+    (ardilla, conejo) con menos del 12% de acceso real a agua permanente
+    (medido contra el motor: mediana de profundidad_agua muy por encima
+    de su altura). Deliberadamente NO toca tipo_agua/tiene_agua -- la
+    celda de orilla sigue siendo tierra de verdad, mismo tipo_sustrato,
+    sigue colonizable por flora y construible; solo gana acceso a agua
+    somera. Estática como profundidad_agua (generada una vez, nunca
+    muta en juego), NO se persiste por el mismo motivo -- determinista a
+    partir de la misma geometría de cuenca."""
     tipo_sustrato: str = ""
     """Clave del catálogo de materiales (piedra/arcilla/arena/tierra),
     derivada del bioma en generación (materiales.sustrato_por_bioma) --

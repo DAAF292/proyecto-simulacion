@@ -21,7 +21,7 @@ posibles por mundo, no exactamente uno siempre).
 """
 import random
 
-from nucleo.agua import generar_cuerpos_agua
+from nucleo.agua import generar_cuerpos_agua, generar_orillas_vadeables
 from nucleo.bioma import clasificar_bioma
 from nucleo.orografia import (
     campo_elevacion_orografico,
@@ -230,6 +230,15 @@ def generar_zona_bioma(
     # rio/lago/poza segun donde termine cada descenso de pendiente (ver
     # nucleo/agua.py).
     cuerpos_agua = generar_cuerpos_agua(campo_elevacion, rng, config_agua, ancho, alto)
+    # Orillas vadeables (2026-09-10, ver docs/superpowers/specs/
+    # 2026-09-10-orillas-vadeables-design.md): anillo de tierra firme
+    # alrededor de cada cuerpo de agua, deliberadamente FUERA de
+    # cuerpos_agua (no se le asigna tipo_agua/tiene_agua -- sigue siendo
+    # tierra normal, ver Celda.profundidad_orilla).
+    orillas_vadeables = generar_orillas_vadeables(
+        cuerpos_agua, ancho, alto,
+        float(config_agua.get("profundidad_orilla_metros", 0.1)),
+    )
 
     # Mapeo bioma->material (ver config/materiales.yaml y
     # nucleo/celda.py:tipo_sustrato/humedad_subsuelo), mismo criterio de
@@ -372,7 +381,9 @@ def generar_zona_bioma(
                 lluvia=campo_lluvia[x][y], temperatura=campo_temperatura[x][y],
                 recursos=recursos_iniciales, tiene_recurso=tiene_recurso,
                 tipo_recurso=especie_key, tiene_agua=tiene_agua, tipo_agua=tipo_agua,
-                profundidad_agua=profundidad_agua, tipo_sustrato=tipo_sustrato,
+                profundidad_agua=profundidad_agua,
+                profundidad_orilla=orillas_vadeables.get((x, y), 0.0),
+                tipo_sustrato=tipo_sustrato,
                 humedad_subsuelo=humedad_subsuelo, deposito_mineral=deposito_mineral,
                 masa_mineral_restante=masa_mineral_restante,
                 fertilidad=fertilidad_por_celda[(x, y)],

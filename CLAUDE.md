@@ -7530,3 +7530,103 @@ una señal real o todavía ruido.
 
 Worktree temporal (`scratchpad/worktree-antes`) retirado tras la
 comparación -- no forma parte del repositorio.
+
+## Orillas vadeables -- acceso real a agua para especies pequeñas,
+## implementado directamente por Claude (2026-09-10)
+
+Diego preguntó por qué `tasa_perdida_hidratacion_por_tick`/
+`probabilidad_muerte_deshidratacion` se calibran especie por especie sin
+ninguna relación con `DimensionesFisicas.peso`/`altura` -- el propio
+docstring de `componentes/dimensiones_fisicas.py` ya reconocía el hueco
+para peso ("el enlace peso -> tasa de saciedad vía metabolismo queda
+pendiente, sin construir"). Investigado en conversación antes de tocar
+nada: aplicar una ley de Kleiber real a la TASA DE PÉRDIDA habría ido en
+la dirección CONTRARIA a la que el motor necesitó empíricamente estos
+últimos días (especies pequeñas necesitaron decaer MÁS LENTO, no más
+rápido, para sobrevivir) -- indicio real de que esos ajustes compensaban
+mecánica de forrajeo que no escala con el tamaño corporal (consumo/
+valor nutricional universales), no metabolismo real. Diego redirigió el
+diseño hacia la causa concreta que él mismo señaló: el ACCESO a fuentes
+de agua, no el metabolismo.
+
+**Diagnóstico contra el motor real, tres mediciones antes de diseñar
+nada** (arnés de sesión, 8 semillas nuevas):
+1. Solo 5.1-9.5% del agua permanente (río/lago/poza) es vadeable para
+   ardilla, 7.6-11.4% para conejo -- frente a 44-62% para gnomo/caballo.
+   `profundidad_agua_potable(celda) <= altura` es un umbral binario duro,
+   mediana real de profundidad 1.26m.
+2. Charcos efímeros cubren 57-82% del mapa cuando llueve (siempre
+   vadeables, `techo_profundidad_charco=0.03m`), pero hay rachas reales
+   de 70-190 ticks (~3-8 días) de sequía total sin un solo charco --
+   ardilla/conejo dependen enteramente del agua permanente en esas
+   ventanas.
+3. **Vía descartada, medida antes de elegir**: curvar
+   `nucleo/agua.py:_profundidades_cuenca` (hoy lineal en `[0,banda]`)
+   con un exponente >1 mejora la vadeabilidad de forma real (9.5%→20.4%
+   con exponente 2.5) pero con techo bajo -- incluso exponente 5.0
+   (mediana global cayendo de 1.26m a 0.96m) solo llega a 27-29%, porque
+   la mayoría de celdas de una cuenca caen cerca del mínimo por la
+   resolución del grid (10m/celda), no distribuidas parejo en [0,1].
+
+**Diseño elegido por Diego, con datos que lo respaldan**: un cuerpo de
+agua real tiene orilla por el propio desgaste del agua -- medido ANTES
+de implementar que el anillo de celdas de tierra firme 4-vecinas de
+cualquier celda de agua tiene, en las mismas 8 semillas, **el mismo
+tamaño que el propio cuerpo de agua** (634 celdas de anillo frente a 632
+de agua, ratio 1.00). Spec:
+`docs/superpowers/specs/2026-09-10-orillas-vadeables-design.md`.
+
+**Implementado directamente por Claude** -- este contenedor cloud no
+tiene `OPENROUTER_API_KEY` ni `mini-swe-agent` instalado ni centinela
+corriendo (mismo escenario ya documentado con venado/cabra_montes),
+Diego pidió implementar directamente en vez de dejarlo en cola.
+
+- `nucleo/celda.py`: nuevo campo `profundidad_orilla: float = 0.0` --
+  capa geográfica estática (como `profundidad_agua`, nunca se persiste,
+  se regenera desde la semilla), independiente de `tiene_agua`/
+  `tipo_agua` -- la celda de orilla sigue siendo tierra de verdad, mismo
+  `tipo_sustrato`, sigue colonizable por flora y construible.
+- `nucleo/agua.py:generar_orillas_vadeables` (nueva): toda celda de
+  tierra firme 4-vecina de al menos una celda de `cuerpos_agua` recibe
+  `profundidad_orilla_metros` fijo -- llamada una vez sobre el resultado
+  ya unificado de río+lago+poza (`nucleo/zona_bioma.py`, justo tras
+  `generar_cuerpos_agua`), igual para los tres tipos, sin distinción
+  (ley neutra). `hay_agua_potable`/`profundidad_agua_potable` extendidas
+  para mirar también esta capa, mismo patrón `or`/`max` que ya combinan
+  `profundidad_agua`/`profundidad_charco` -- como estas dos funciones ya
+  son las que consume `_calcular_hidratacion` y la validación de
+  movimiento, el enganche es automático sin tocar nada más.
+- `config/hidrologia.yaml`: `profundidad_orilla_metros: 0.1`
+  (PROVISIONAL) -- por debajo incluso de la altura mínima de ardilla
+  (0.15m), vadeable por cualquier especie del catálogo.
+- `celdas_con_agua` (exclusión de flora-sobre-agua, fix del 2026-09-02)
+  deliberadamente sin tocar -- sigue mirando solo `tipo_agua != ""`, el
+  anillo nunca cuenta como sumergido.
+- 8 tests nuevos (`tests/test_orillas_vadeables.py`): geometría del
+  anillo (solo 4-vecinos, nunca sobrescribe agua real, nunca diagonal),
+  `hay_agua_potable`/`profundidad_agua_potable` con la nueva capa sola y
+  combinada (regresión de las dos capas ya existentes), anillo real
+  sobre un mundo generado, y regresión explícita de que una celda de
+  orilla generada por `generar_zona_bioma` conserva `tipo_sustrato` y NO
+  aparece como agua para flora.
+
+**Verificado contra el motor real, no solo geometría aislada**: 429/429
+tests en verde (421 previos + 8 nuevos), `BOSQUE_AUTO_TICKS=3000` sin
+ninguna excepción. Medido el efecto real combinando agua permanente +
+orilla (`hay_agua_potable`/`profundidad_agua_potable` sobre las mismas 8
+semillas): **ardilla 9.5%→54.8%, conejo 11.4%→55.8%** de vadeabilidad
+real -- muy por encima del techo de ~27-29% que daba la vía de la curva
+descartada, y acercando a ardilla/conejo al mismo orden de magnitud que
+gnomo/lobo (72-75%) en vez de quedar muy por detrás.
+
+**Pendiente real, explícito**: `profundidad_orilla_metros=0.1`
+PROVISIONAL, sin calibrar contra el harness completo; las tasas de
+hidratación por especie (lobo/ardilla/gnomo/conejo, todas rebajadas del
+valor universal durante la investigación de estabilidad de
+2026-09-05/06/09) siguen sin tocar -- con acceso real mejorado podría
+haber margen para revisar si esos alivios siguen haciendo falta con la
+misma magnitud, pero eso exige su propia investigación A/B contra el
+motor, no se asume aquí; la vía de "ganancia por bocado escalada por
+peso" (saciedad, problema distinto del de hidratación) sigue sin
+diseñar, aparcada en la misma conversación en favor de resolver primero
+el acceso a agua.

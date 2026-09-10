@@ -438,11 +438,37 @@ def fraccion_escurrida_por_pendiente(pendiente: float, config_charcos: dict) -> 
 
 
 def hay_agua_potable(celda) -> bool:
-    return celda.tiene_agua or celda.profundidad_charco > 0.0
+    return celda.tiene_agua or celda.profundidad_charco > 0.0 or celda.profundidad_orilla > 0.0
 
 
 def profundidad_agua_potable(celda) -> float:
-    return max(celda.profundidad_agua, celda.profundidad_charco)
+    return max(celda.profundidad_agua, celda.profundidad_charco, celda.profundidad_orilla)
+
+
+def generar_orillas_vadeables(cuerpos_agua: dict, ancho: int, alto: int, profundidad_orilla_metros: float) -> dict:
+    """Anillo de orilla vadeable (ver docstring de Celda.profundidad_orilla
+    y docs/superpowers/specs/2026-09-10-orillas-vadeables-design.md):
+    toda celda de TIERRA FIRME (ausente de `cuerpos_agua`) que sea
+    4-vecina de al menos una celda presente en `cuerpos_agua` recibe
+    `profundidad_orilla_metros` -- valor fijo, sin gradación (medido: la
+    vía de curvar el gradiente interno de cada cuenca tiene techo bajo,
+    ~27-29% incluso con curva agresiva, porque la resolución del grid
+    concentra casi todas las celdas de una cuenca cerca de su mínimo; el
+    anillo perimetral en cambio mide el mismo tamaño que el propio
+    cuerpo de agua, ratio 1:1, así que cubre cualquier cuerpo sin
+    depender de su geometría interna).
+
+    Llamada UNA vez sobre el resultado ya unificado de río+lago+poza
+    (generar_cuerpos_agua), no dentro de cada función individual -- una
+    sola pasada, igual para los tres tipos, sin distinción (ley neutra).
+    Una celda ya presente en `cuerpos_agua` nunca se sobrescribe (ya
+    tiene su propia profundidad_agua real, más honda)."""
+    resultado: dict = {}
+    for (x, y) in cuerpos_agua:
+        for nx, ny in _vecinos(x, y, ancho, alto):
+            if (nx, ny) not in cuerpos_agua:
+                resultado[(nx, ny)] = profundidad_orilla_metros
+    return resultado
 
 
 # Combinación entre cuerpos distintos: las riberas de un río pueden

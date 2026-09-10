@@ -26,6 +26,15 @@ agua:
   tope_tamano_orilla_rio: 3
   piso_banda_rio: 0.001
   techo_banda_rio: 0.03
+  # profundidad_orilla_metros (2026-09-10, ver docs/superpowers/specs/
+  # 2026-09-10-orillas-vadeables-design.md y nucleo/agua.py:
+  # generar_orillas_vadeables): profundidad fija del anillo de tierra
+  # firme alrededor de cualquier cuerpo de agua permanente -- por debajo
+  # incluso de la altura mínima de ardilla (0.15m, config/poblacion.yaml)
+  # para que cualquier especie del catálogo, presente o futura dentro de
+  # ese rango, pueda vadearlo. PROVISIONAL, sin calibrar contra el
+  # harness completo.
+  profundidad_orilla_metros: 0.1
 
 charcos:
   techo_profundidad_charco: 0.03
