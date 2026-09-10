@@ -7852,3 +7852,70 @@ conejo, margen reproductivo ajustado de cabra_montesa) -- sin relación
 con si se agrupan o no al nacer. Ninguna implementación de "fundadores
 de fauna agrupados" se hizo, por no estar justificada por el hallazgo
 real.
+
+### "Si hay manadas y hay presas, ¿por qué los lobos en manada no cazan
+### caballos?" -- dos conceptos distintos del motor, medidos por
+### separado sobre la misma semilla, ninguno es un bug (2026-09-10,
+### mismo día)
+
+Pregunta de seguimiento directa de Diego, una vez descartado que
+"0 manadas" fuera real. Investigado con dos arneses instrumentados
+nuevos sobre la MISMA semilla ya en marcha (999001, la que Diego pidió
+"lanzar ahora... que se desarrolle lo suficiente") en vez de razonar
+solo desde el código -- mismo criterio de siempre.
+
+**Medición 1 -- tamaño real de manada de lobo, día a día** (8136 ticks
+reales, 500s de tope): tamaño MÁXIMO observado en cualquier día = 7;
+distribución real de tamaños `{2: 53, 3: 22, 4: 82, 5: 72, 6: 49, 7:
+38}` -- una manada de lobo alcanza con normalidad 4-7 miembros, **no
+"casi siempre 1-2" como decía la documentación anterior de este mismo
+arco** (esa cifra se basaba en la lectura de `_stats_manadas_por_especie`,
+que en aquel momento SEGUÍA teniendo el bug de snapshot-del-último-día
+ya corregido arriba -- una manada de 1-2 lobos en el último día de vida
+de la especie no es representativa de su tamaño real durante la partida).
+Población total de lobo en esos mismos días: min/max/media 3/13/8.4 --
+manadas de 4-7 sobre una población de 3-13 significa que la INMENSA
+MAYORÍA de los lobos vivos en un momento dado pertenecen a la manada
+grande, no están dispersos.
+
+**Medición 2 -- "aliados cazando activamente cerca", la condición REAL
+que exige el techo de presa por manada** (7464 ticks reales, 400s de
+tope, muestreo cada 10 ticks de la función de producción real
+`nucleo/disposicion.py:contar_conspecificos_cercanos(..., solo_cazando=
+True)` dentro de `social.radio_apoyo_grupal=3`, no `manada.
+radio_manada_celdas=8`): máximo observado = **4** aliados cazando a la
+vez; distribución sobre 6457 muestras `{0: 4284, 1: 692, 2: 629, 3: 728,
+4: 124}` -- solo el **1.92%** de los momentos alcanza 4 o más aliados
+cazando simultáneamente, y 4 nunca llegó a superarse en ninguna muestra.
+
+**La respuesta real a la pregunta de Diego**: `Manada` (agrupamiento
+social/espacial diario, radio 8, sin exigir que nadie esté cazando) y
+"aliados cazando cerca" (el chequeo momentáneo que de verdad activa el
+techo de presa por manada, radio 3, exige `Accion.CAZAR` LITERAL y
+SIMULTÁNEA en cada aliado) son dos conceptos completamente distintos del
+motor -- pertenecer a una manada grande de 4-7 lobos NO significa que
+esos 4-7 estén cazando al mismo tiempo ni cerca unos de otros en el
+instante exacto en que uno de ellos se plantea perseguir un caballo. La
+fórmula (`peso_cazador * (1 + aliados_cazando_cerca) >=
+peso_presa`, `config/combate.yaml:factor_ampliacion_techo_manada=1.0`)
+necesita típicamente 4-6 aliados cazando a la vez para que un lobo medio
+pueda plantearse un caballo medio -- el máximo real medido (4) está justo
+en el borde inferior de ese rango, y se da en menos de 1 de cada 50
+momentos observados. No es un bug: el mecanismo está verificado correcto
+por sus propios tests dirigidos y por esta medición en juego libre --
+es, sencillamente, una condición demasiado exigente para que la
+dispersión natural de "quién está cazando en este preciso instante"
+dentro de una manada ya grande la cumpla con frecuencia real.
+
+**Ningún cambio de código en este círculo** -- diagnóstico puro, sin
+decisión de diseño de Diego todavía sobre si tocarlo. Candidatos ya
+señalados el 2026-09-09 siguen siendo los mismos, ahora con datos
+mucho más precisos que entonces: bajar `factor_ampliacion_techo_manada`
+(exigiría menos aliados, palanca numérica directa) o ampliar
+`radio_apoyo_grupal` (más candidatos entran en el chequeo de
+"cazando cerca" en un instante dado) -- ninguno probado todavía.
+Descartado explícitamente por esta misma medición: el problema NUNCA
+fue que las manadas fueran pequeñas (no lo son, llegan a 7) ni que
+faltara presa viable (venado y caballo ya están ahí) -- es la
+coincidencia temporal exacta de varios cazadores activos a la vez,
+un umbral mucho más fino que "cuántos lobos hay cerca".
