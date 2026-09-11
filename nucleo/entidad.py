@@ -31,6 +31,7 @@ from componentes.reproduccion import Reproduccion, Sexo
 from componentes.relaciones import Relaciones
 from componentes.semillas import Semillas
 from componentes.temperamento import Temperamento
+from componentes.vocacion import Vocacion
 from nucleo.ciclo_vital import TICKS_POR_ANIO
 from nucleo.eventos import BusEventos, Evento, Severidad
 
@@ -476,6 +477,11 @@ def crear_criatura(
     # para las 4 especies por igual. Este circulo solo escribe rencor en
     # individuos conscientes (fauna queda vacío indefinidamente).
     gestor.anadir_componente(entidad_id, Relaciones())
+    # Vocacion (2026-09-11, ver componentes/vocacion.py y nucleo/
+    # vocacion.py) -- mismo criterio que Agarre/Semillas/Relaciones:
+    # componente universal, contadores en cero al nacer, solo se
+    # incrementa de verdad para individuos conscientes.
+    gestor.anadir_componente(entidad_id, Vocacion())
 
     dur_gest = _sortear_valor(rng, cfg_esp.get("duracion_gestacion_dias", [30.0, 60.0]))
     gestor.anadir_componente(
@@ -690,6 +696,10 @@ def nacer_criatura(
     # para las 4 especies por igual. Un recién nacido no hereda los
     # vínculos de sus progenitores.
     gestor.anadir_componente(entidad_id, Relaciones())
+    # Vocacion (2026-09-11, ver componentes/vocacion.py) -- mismo criterio
+    # que Agarre/Semillas/Relaciones: un recién nacido no hereda la
+    # práctica acumulada de sus progenitores, empieza en cero.
+    gestor.anadir_componente(entidad_id, Vocacion())
 
     dur_gestacion = heredar(
         "duracion_gestacion_dias", rep_madre.duracion_gestacion_dias, gestacion.duracion_gestacion_padre

@@ -26,6 +26,7 @@ from componentes.necromasa import Necromasa
 from componentes.planta import Planta
 from componentes.posicion import Posicion
 from componentes.semillas import Semillas
+from componentes.vocacion import Vocacion
 from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
 from nucleo.armas import (
     celda_ofrece_material_arma,
@@ -300,6 +301,13 @@ class SistemaRecursos:
 
             zona = mundo.territorio.zonas[pos.zona_idx]
             celda = zona.obtener_celda(pos.x, pos.y)
+            # consciente: usado tanto por RECOLECTAR (ya lo necesitaba)
+            # como por el contador de Vocacion (2026-09-11, ver
+            # componentes/vocacion.py) -- solo individuos conscientes
+            # practican de verdad las 4 cubetas vocacionales hoy.
+            consciente = (
+                cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia
+            )
 
             if intencion.accion == Accion.COMER:
                 self._resolver_comer(
@@ -315,18 +323,17 @@ class SistemaRecursos:
                 self._resolver_construir(
                     gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual, bus_eventos
                 )
+                self._incrementar_vocacion(gestor, eid, consciente, "conteo_constructor")
             elif intencion.accion == Accion.RECOLECTAR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 dims = gestor.obtener_componente(eid, DimensionesFisicas)
                 agarre = gestor.obtener_componente(eid, Agarre)
-                consciente = (
-                    cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia
-                )
                 self._resolver_recolectar(
                     inv, dims, celda, agarre, ident.especie.value, consciente,
                     recolectar_arma=intencion.recolectar_motivo_arma,
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
                 )
+                self._incrementar_vocacion(gestor, eid, consciente, "conteo_forrajero")
             elif intencion.accion == Accion.ENCENDER_FUEGO:
                 agarre_fuego = gestor.obtener_componente(eid, Agarre)
                 self._resolver_encender_fuego(
@@ -335,6 +342,7 @@ class SistemaRecursos:
                 )
             elif intencion.accion == Accion.COCINAR:
                 self._resolver_cocinar(gestor, eid, pos.x, pos.y, pos.zona_idx)
+                self._incrementar_vocacion(gestor, eid, consciente, "conteo_cocinero")
             elif intencion.accion == Accion.FABRICAR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 agarre_fabricar = gestor.obtener_componente(eid, Agarre)
@@ -342,12 +350,27 @@ class SistemaRecursos:
                     gestor, eid, inv, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
                     intencion.fabricar_categoria, agarre=agarre_fabricar,
                 )
+                self._incrementar_vocacion(gestor, eid, consciente, "conteo_artesano")
 
         # Fogatas: consumo de combustible propio y extincion (ver
         # componentes/fogata.py) -- independiente de la Accion de nadie,
         # mismo criterio que _actualizar_charcos: se procesa cada tick
         # para TODA fogata existente, no solo para quien la encendio.
         self._consumir_fogatas(gestor)
+
+    def _incrementar_vocacion(self, gestor, eid: int, consciente: bool, campo: str) -> None:
+        """Contador de práctica real (2026-09-11, ver componentes/
+        vocacion.py) -- incrementado en el DESPACHO de la acción (no
+        tras confirmar éxito del resolver), mismo criterio que el resto
+        de contadores de observación de este sistema: representa "ticks
+        dedicados a esta labor", no "kg conseguidos" -- solo consciente,
+        fauna nunca practica estas 4 acciones hoy."""
+        if not consciente:
+            return
+        voc = gestor.obtener_componente(eid, Vocacion)
+        if voc is None:
+            return
+        setattr(voc, campo, getattr(voc, campo) + 1)
 
     def _actualizar_charcos(self, zona: Any) -> None:
         """Genera/evapora charco y llena/drena humedad de subsuelo según el

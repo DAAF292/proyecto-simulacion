@@ -29,6 +29,7 @@ from componentes.madriguera import Madriguera
 from componentes.reproduccion import Sexo
 from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
+from componentes.vocacion import Vocacion
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.eventos import BusEventos
@@ -39,6 +40,7 @@ from nucleo import asentamiento as nucleo_asentamiento
 from nucleo import sonido as nucleo_sonido
 from nucleo.persistencia import Persistencia
 from nucleo.reloj import Reloj
+from nucleo.vocacion import vocacion_dominante
 from presentacion.narrador import narrar
 from presentacion.vista_web import ServidorWeb, construir_instantanea
 from sistemas.sistema_asentamiento import SistemaAsentamiento
@@ -836,6 +838,16 @@ def main() -> None:
                 f"{sistemas['recursos']._stats_muertes_intoxicacion} muertes por intoxicacion, "
                 f"{sistemas['recursos']._stats_alacena_consumida} alacena consumida"
             )
+            # Verificacion obligatoria de aptitud vocacional (2026-09-11,
+            # ver docs/superpowers/specs/2026-09-11-aptitud-vocacional-design.md):
+            # distribucion real de vocacion_dominante entre vivos con
+            # consciencia real -- confirma que Vocacion.conteo_* se
+            # incrementa de verdad en juego libre, no solo en tests.
+            distribucion_vocacion = collections.Counter(
+                vocacion_dominante(gestor.obtener_componente(eid, Vocacion))
+                for eid in gestor.entidades_con(Vocacion, Identidad)
+            )
+            print(f"[BOSQUE_AUTO_TICKS] vocacion dominante (entre vivos): {dict(distribucion_vocacion)}")
 
     except KeyboardInterrupt:
         pass

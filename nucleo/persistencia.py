@@ -40,6 +40,7 @@ from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.relaciones import Relaciones, Vinculo
 from componentes.semillas import Semillas
+from componentes.vocacion import Vocacion
 from componentes.temperamento import Temperamento
 from nucleo.celda import Celda
 from nucleo.entidad import GestorEntidades
@@ -79,7 +80,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.36-fase0"
+VERSION_ESQUEMA = "0.37-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -244,7 +245,13 @@ class Persistencia:
                     -- Relaciones.vinculos, mismo criterio que agarre/semillas
                     -- -- perder los vinculos al recargar seria una regresion
                     -- silenciosa en un mecanismo con efecto real conectado.
-                    relaciones TEXT
+                    relaciones TEXT,
+                    -- vocacion (2026-09-11, ver componentes/vocacion.py):
+                    -- contadores de practica por cubeta vocacional, mismo
+                    -- criterio que agarre/semillas/relaciones -- perderlos
+                    -- al recargar borraria la unica observabilidad real de
+                    -- este circulo.
+                    vocacion TEXT
                 )
                 """
             )
@@ -520,6 +527,7 @@ class Persistencia:
                 agarre = gestor.obtener_componente(eid, Agarre)
                 semillas = gestor.obtener_componente(eid, Semillas)
                 relaciones = gestor.obtener_componente(eid, Relaciones)
+                vocacion = gestor.obtener_componente(eid, Vocacion)
 
                 if pos and nec and dims and pf and temp and cm and pm and rep:
                     filas_criaturas.append(
@@ -589,6 +597,14 @@ class Persistencia:
                                     for oid, v in (relaciones.vinculos.items() if relaciones else {}.items())
                                 }
                             ) if relaciones else None,
+                            json.dumps(
+                                {
+                                    "conteo_forrajero": vocacion.conteo_forrajero,
+                                    "conteo_constructor": vocacion.conteo_constructor,
+                                    "conteo_artesano": vocacion.conteo_artesano,
+                                    "conteo_cocinero": vocacion.conteo_cocinero,
+                                }
+                            ) if vocacion else None,
                         )
                     )
             cur.executemany(
@@ -596,7 +612,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -836,8 +852,10 @@ class Persistencia:
             # después de agarre, como fila[49], y desplaza en +1 esos
             # índices una vez más (fila[50]..fila[54]); relaciones se
             # añadió después de semillas, como fila[50], y desplaza en
-            # +1 esos índices otra vez más (fila[51]..fila[55]). La columna
-            # inventario (fila[46]) guarda un JSON único con
+            # +1 esos índices otra vez más (fila[51]..fila[55]); vocacion
+            # (2026-09-11) se añadió después de relaciones, como fila[51],
+            # y desplaza en +1 esos índices otra vez más (fila[52]..fila[56]).
+            # La columna inventario (fila[46]) guarda un JSON único con
             # {"contenidos": ..., "objetos": ...} desde armas primitivas v2
             # (2026-09-03) -- ver carga de Inventario más abajo. Ninguno
             # de los índices anteriores (0..46, incluida la instantánea
@@ -966,15 +984,25 @@ class Persistencia:
                         }
                     ),
                 )
+                vocacion_dict = json.loads(fila[51]) if fila[51] else {}
+                gestor.anadir_componente(
+                    eid,
+                    Vocacion(
+                        conteo_forrajero=int(vocacion_dict.get("conteo_forrajero", 0)),
+                        conteo_constructor=int(vocacion_dict.get("conteo_constructor", 0)),
+                        conteo_artesano=int(vocacion_dict.get("conteo_artesano", 0)),
+                        conteo_cocinero=int(vocacion_dict.get("conteo_cocinero", 0)),
+                    ),
+                )
                 gestor.anadir_componente(eid, Intencion(accion=Accion.DEAMBULAR))
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[51]),
-                        nombre=fila[52],
-                        tick_nacimiento=fila[53],
-                        id_madre=fila[54],
-                        id_padre=fila[55],
+                        especie=Especie(fila[52]),
+                        nombre=fila[53],
+                        tick_nacimiento=fila[54],
+                        id_madre=fila[55],
+                        id_padre=fila[56],
                     ),
                 )
 

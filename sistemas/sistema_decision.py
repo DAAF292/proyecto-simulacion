@@ -222,6 +222,13 @@ from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.inventario import espacio_disponible_kg
 from nucleo.percepcion import radio_individual
+from nucleo.vocacion import (
+    aptitud_artesano,
+    aptitud_cocinero,
+    aptitud_constructor,
+    aptitud_forrajero,
+    factor_aptitud,
+)
 
 _ACCIONES_CRISIS = (Accion.HUIDA_ERRATICA, Accion.CRISIS_VIOLENTA, Accion.CATATONIA)
 
@@ -529,6 +536,14 @@ def actualizar(
     config_asentamiento = config.get("asentamiento", {})
     radio_cluster_asentamiento = int(config_asentamiento.get("radio_cluster_celdas", 6))
     rangos_raciales = config["rangos_raciales"]
+    # Aptitud vocacional (2026-09-11, ver nucleo/vocacion.py y
+    # docs/superpowers/specs/2026-09-11-aptitud-vocacional-design.md):
+    # cuanto pesa la aptitud derivada de cada individuo al modular la
+    # utilidad de RECOLECTAR/CONSTRUIR/FABRICAR/COCINAR -- 0.0 = sin
+    # efecto (comportamiento identico a antes de esta pieza). PROVISIONAL.
+    peso_aptitud_vocacional = float(
+        config.get("vocacion", {}).get("peso_aptitud_vocacional", 0.3)
+    )
 
     # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
     # docstring del modulo): cache local por llamada -- cuatro especies x
@@ -822,6 +837,36 @@ def actualizar(
         categoria_fabricar_ganadora, utilidad_fabricar = max(
             candidatos_fabricar, key=lambda c: c[1]
         )
+
+        # Aptitud vocacional (2026-09-11, ver nucleo/vocacion.py): sesga
+        # las CUATRO cubetas vocacionales ya existentes segun cuanto
+        # encaja el individuo con cada una -- combinacion pura de
+        # DimensionesFisicas/Temperamento/CapacidadMental YA sorteados,
+        # sin sortear nada nuevo. Aplicado al valor FINAL de cada
+        # utilidad (tras cualquier eslabon heredado, ej. RECOLECTAR por
+        # fuego/arma), MULTIPLICATIVO -- nunca crea utilidad donde no la
+        # habia (una utilidad ya en 0.0 sigue en 0.0 con cualquier
+        # aptitud), solo modula cuando ya existe un motivo real para
+        # actuar. Mismo gate de consciencia que el resto de este bloque
+        # -- fauna nunca ejecuta estas 4 acciones hoy, la aptitud no
+        # tendria a que aplicarse.
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            if utilidad_recolectar > 0.0:
+                utilidad_recolectar *= factor_aptitud(
+                    aptitud_forrajero(dims), peso_aptitud_vocacional
+                )
+            if utilidad_construir > 0.0:
+                utilidad_construir *= factor_aptitud(
+                    aptitud_constructor(dims, cap_mental), peso_aptitud_vocacional
+                )
+            if utilidad_fabricar > 0.0:
+                utilidad_fabricar *= factor_aptitud(
+                    aptitud_artesano(cap_mental, temperamento), peso_aptitud_vocacional
+                )
+            if utilidad_cocinar > 0.0:
+                utilidad_cocinar *= factor_aptitud(
+                    aptitud_cocinero(cap_mental, dims), peso_aptitud_vocacional
+                )
 
         # Requisito de manos libres (2026-09-11): manipular
         # conscientemente el mundo fisico exige tener una forma fisica de

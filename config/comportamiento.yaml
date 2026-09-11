@@ -250,3 +250,21 @@ manada:
   # asentamiento.radio_cluster_celdas (6) porque la fauna roza mas
   # terreno que un refugio fijo. PROVISIONAL, sin calibrar.
   radio_manada_celdas: 8
+
+# Aptitud vocacional (2026-09-11, ver nucleo/vocacion.py y spec
+# docs/superpowers/specs/2026-09-11-aptitud-vocacional-design.md).
+# Primer circulo del arco "fabricacion y uso de herramientas": las
+# cuatro cubetas vocacionales ya existentes en el motor (forrajero/
+# minero -> RECOLECTAR, constructor -> CONSTRUIR, artesano -> FABRICAR,
+# cocinero -> COCINAR) se sesgan segun la aptitud derivada de cada
+# individuo -- ninguna profesion autorada, ningun atributo nuevo
+# sorteado. El REPARTO de que atributos componen cada aptitud (60/40)
+# vive en codigo (nucleo/vocacion.py), es una decision de diseno sobre
+# que importa para cada oficio, no una magnitud de calibracion.
+vocacion:
+  # Cuanto pesa la aptitud al modular multiplicativamente la utilidad de
+  # las 4 acciones vocacionales -- 0.0 = sin efecto (comportamiento
+  # identico a antes de esta pieza), 1.0 = el individuo menos apto ve su
+  # utilidad anulada, el mas apto la dobla. PROVISIONAL, sin calibrar
+  # contra el harness completo.
+  peso_aptitud_vocacional: 0.3

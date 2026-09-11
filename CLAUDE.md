@@ -8605,3 +8605,104 @@ del proyecto.
   manos libres + robo + rename, en 7 commits) se implementaron todas
   directamente por Claude, sin pasar por el pipeline, mismo patrón ya
   establecido en sesiones recientes en este entorno concreto.
+
+## Aptitud vocacional -- Círculo 1 del arco "fabricación y uso de
+## herramientas", implementado directamente por Claude (2026-09-11)
+
+Diego arrancó el arco pidiendo plantear "fabricación y uso de
+herramientas", con una intención de fondo explícita: que las
+herramientas sean la base de profesiones que emerjan solas, "no un
+catálogo de profesiones que se asignen con un guion, si no que de las
+necesidades de un individuo o grupo junto a las habilidades y
+temperamento del individuo nazcan una serie de profesiones". Tres
+decisiones cerradas con Diego antes de diseñar (`AskUserQuestion`):
+alcance del primer círculo (solo tendencia + observabilidad, sin mejora
+por práctica -- evita reabrir "mutación causal de rasgos", ya aplazada
+una vez en el arco de hilo individual -- ni reconocimiento social);
+cubetas vocacionales (las 4 acciones YA existentes: forrajero/minero
+-> RECOLECTAR, constructor -> CONSTRUIR, artesano -> FABRICAR,
+cocinero -> COCINAR, sin ningún verbo nuevo); orden (aptitud derivada
+primero, herramientas físicas vía FABRICAR quedan para el círculo
+siguiente).
+
+**Por qué no es un catálogo autorado (principio 5)**: dos piezas
+deliberadamente separadas, ninguna escribe jamás un string de
+profesión. (1) **Aptitud** (`nucleo/vocacion.py:aptitud_forrajero/
+aptitud_constructor/aptitud_artesano/aptitud_cocinero`): función PURA
+de atributos que YA se sortean al nacer (`DimensionesFisicas`,
+`Temperamento`, `CapacidadMental`) -- nada nuevo que sortear, nada que
+persistir. Reparto fijo 60/40 por cubeta (atributo principal/secundario,
+decisión de diseño en código, no magnitud de calibración en config):
+forrajero = agudeza_sensorial+fuerza; constructor = fuerza+voluntad
+(**primer consumidor real de `CapacidadMental.voluntad`**, cuyo propio
+docstring esperaba justo esto: "necesidades superiores -- propósito,
+trabajo"); artesano = inteligencia+curiosidad (**primer consumidor real
+de `CapacidadMental.inteligencia`**, cuyo docstring decía literalmente
+"espera... profesión emergente"); cocinero = inteligencia+agudeza_
+sensorial. (2) **Vocación practicada** (`componentes/vocacion.py:
+Vocacion`, mismo molde universal que Agarre/Semillas/Relaciones):
+contador de ticks despachados por cubeta, `nucleo/vocacion.py:
+vocacion_dominante()` la deriva por lectura (mismo criterio que
+`biografia_de()`), puede DIVERGIR de la aptitud -- esa divergencia es
+la parte genuinamente emergente.
+
+**Mecanismo real**: `factor_aptitud(aptitud, peso) = 1.0 + peso *
+(aptitud-0.5) * 2.0`, multiplicador centrado en 1.0, aplicado al valor
+FINAL de cada una de las 4 utilidades en `sistema_decision.py` (tras
+cualquier eslabón heredado -- RECOLECTAR por fuego/arma) y SOLO si esa
+utilidad ya es >0.0 -- multiplicativo, nunca crea utilidad donde no la
+había, misma causalidad que ya exige el resto del motor. Gateado a
+consciente (mismo `umbral_consciencia_agencia` de siempre).
+`vocacion.peso_aptitud_vocacional=0.3` (PROVISIONAL,
+`config/comportamiento.yaml`). Contador incrementado en el DESPACHO de
+cada acción (`sistemas/sistema_recursos.py:_incrementar_vocacion`, no
+tras confirmar éxito) -- representa "ticks dedicados a esta labor".
+Persistido (`componentes_estado.vocacion`, JSON, mismo molde que
+agarre/relaciones), `VERSION_ESQUEMA` sube a `0.37-fase0`.
+
+**Del "necesidades de un individuo o grupo" que mencionaba Diego, solo
+se modela hoy lo que ya existía** (`objetivo_construccion_actual` ya
+hace depender CONSTRUIR/RECOLECTAR de qué necesita el asentamiento) --
+ninguna señal nueva de escasez de vocación a nivel de grupo (p.ej.
+"nadie cocina, sube la utilidad de COCINAR para todos"). Señalado como
+pendiente real, explícitamente fuera de este primer círculo
+(reconocimiento social, declinado por Diego).
+
+Spec: `docs/superpowers/specs/2026-09-11-aptitud-vocacional-design.md`.
+**Implementado directamente por Claude** -- mismo escenario ya
+documentado repetidas veces esta semana: centinela parado desde el
+incidente de madriguera-física-A, este contenedor cloud tampoco tiene
+`OPENROUTER_API_KEY`/`mini-swe-agent`.
+
+**Verificado**: 485/485 tests en verde (14 nuevos,
+`tests/test_vocacion.py` -- las 4 fórmulas de aptitud, `factor_aptitud`
+en sus tres zonas, `vocacion_dominante` con empate/vacío/ganador claro,
+un test de integración real contra `sistema_decision.py` que calibra un
+competidor exacto -- SOCIALIZAR -- al punto medio entre el factor
+mínimo y máximo de aptitud, y confirma que RECOLECTAR gana con aptitud
+alta y pierde con aptitud baja, no solo que el número interno cambia;
+gate del contador solo consciente; roundtrip de persistencia).
+`BOSQUE_AUTO_TICKS=3000` sin excepciones, `BOSQUE_CONTINUAR=1` con 200
+ticks más sin excepciones (roundtrip real, no solo de test). El
+mecanismo se ejerce de verdad en juego libre: 23-24 gnomos vivos con
+"forrajero" como vocación dominante en ambas corridas -- coherente con
+que RECOLECTAR ya era, por frecuencia, la cubeta más disputada antes de
+esta pieza (13831 disparos del gate de manos libres en RECOLECTAR
+frente a 9 resoluciones de COCINAR en la misma corrida de 3000 ticks).
+
+**Pendiente real, explícito**: `peso_aptitud_vocacional=0.3` y el
+reparto 60/40 por cubeta son PROVISIONALES, sin calibrar contra el
+harness completo; en ninguna de las dos corridas de verificación
+llegó a dominar constructor/artesano/cocinero (solo forrajero) --
+correcto por los tests dirigidos, pero no confirmado que las otras 3
+cubetas lleguen a ser dominantes en juego libre con una ventana más
+larga; reconocimiento social y necesidad de grupo como señal de
+escasez, fuera de este círculo; mejora por práctica, fuera de este
+círculo (abriría mutación causal de rasgos); sin ninguna herramienta
+física todavía -- el círculo 2 real de este arco, ya acordado con
+Diego, es fabricación de herramientas vía `Accion.FABRICAR` (categoría
+"herramienta", el resolutor `candidatos_fabricar` ya preparado para un
+segundo candidato desde el rename `FABRICAR_ARMA -> FABRICAR` del
+2026-09-11); sin ningún consumidor de `vocacion_dominante` en narrador/
+vista_web todavía -- presentación, deliberadamente sin tocar (motor
+primero).
