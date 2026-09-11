@@ -8825,3 +8825,90 @@ corrección dedicado o dejarlo así por ahora; con esto, el arco
 "fabricación y uso de herramientas" tiene sus dos círculos planteados
 originalmente implementados (aptitud vocacional, fabricación de
 herramientas) -- ningún círculo nuevo de este arco decidido todavía.
+
+## Prioridad consciente -- corrección real al hallazgo de "sin espacio"
+## de arriba, más un SEGUNDO hallazgo distinto sin resolver (2026-09-11,
+## mismo día)
+
+Diego, leyendo el hallazgo de "sin corregir en este círculo" de arriba,
+lo cuestionó con precisión: *"esto es un problema, y no tiene sentido,
+el ser consciente debería poder decidir qué carga, si quiere fabricar
+un arma pero no tiene espacio en el inventario para recolectar los
+materiales necesarios, lo lógico es que se desprenda de algo que tenga
+para liberar el espacio y lograr su intención"*. Corrección real, no
+una calibración numérica -- una ley nueva pequeña y bien acotada:
+
+**Implementado**: `nucleo/inventario.py:descartar_contenidos_para_
+liberar(contenidos, peso_a_liberar) -> float` -- función pura. Descarta
+bulto de `Inventario.contenidos` (empezando por el material del que más
+se porta -- el sacrificio más eficiente, menos materiales distintos
+tocados, sin ninguna noción de "valor" entre materiales que el motor no
+tiene), nunca más de lo pedido. El material descartado se pierde sin
+más -- mismo criterio ya establecido el mismo día en la sesión de
+Bloque A para la piedra de percusión del fuego una vez gastada: un
+descarte deliberado y simbólico, no un sistema nuevo de "tirar al
+suelo" con su propia física. Conectado en
+`sistema_recursos.py:_via_material_crudo` (compartido por Vía 2 arma y
+Vía 3 herramienta): si la intención causal YA GANADORA este tick
+(`recolectar_arma`/`recolectar_herramienta`, ambas motivadas por
+`sistema_decision.py` antes de llegar aquí -- nunca una intención
+inventada en este punto) no tiene sitio para el material que necesita,
+se descarta justo lo necesario de `contenidos` antes de reintentar.
+Nunca toca `inv.objetos` -- ni armas ya fabricadas ni material ya
+recolectado para la misma intención se sacrifican por esto. Contador de
+observación `_stats_material_descartado_por_prioridad_kg`, impreso en
+`BOSQUE_AUTO_TICKS`.
+
+**Verificado**: 6 tests nuevos (la función pura en sus tres casos --
+libera lo mínimo empezando por el mayor, agota sin pasarse si no
+alcanza, no-op si no hace falta nada -- más 3 de integración real en
+`_via_material_crudo`), 503/503 tests en verde con el resto de la
+suite, `BOSQUE_AUTO_TICKS=3000` (6.00 kg descartados) y
+`BOSQUE_CONTINUAR=1` (1.00 kg descartado, roundtrip sin excepciones) --
+el mecanismo se ejerce de verdad en juego libre, no solo en tests
+dirigidos.
+
+**Segundo hallazgo real, distinto, encontrado al repetir el diagnóstico
+multi-semilla tras el fix -- NO resuelto en este círculo**. La falta de
+espacio no era el único bloqueo: repetido el mismo arnés (semillas
+80301/80302, ~5000-5300 ticks cada una tras el fix), `con_madera`
+empieza a aparecer con más frecuencia que antes del fix, pero
+`con_piedra` sigue en 0 en TODAS las semillas probadas, antes y después
+-- ningún gnomo llegó a portar madera+piedra simultáneamente en
+ninguna corrida, y `herramientas fabricadas` sigue en 0 en todas.
+Causa real, distinta de "sin espacio": `_resolver_recolectar` corre la
+Vía 1 (piedra_suelta para fuego) SIEMPRE PRIMERO, sin comprobar si el
+motivo real que trajo a esta entidad a RECOLECTAR este tick fue
+realmente fuego -- mientras al individuo le falten sus 2 piedras para
+encender fuego y la celda tenga piedra_suelta, Vía 1 la agarra e
+interrumpe la resolución (`return`) antes de que la Vía 2/3
+(arma/herramienta) llegue a considerar esa misma piedra_suelta como
+material "piedra". El resultado: aunque `Intencion.recolectar_motivo_
+herramienta`/`recolectar_motivo_arma` se activa con fuerza real (decenas
+a miles de veces por semilla, confirmado por instrumentación), casi
+nunca se traduce en portar "piedra" -- Vía 1 se la queda primero casi
+siempre. `madera` no sufre esta competencia (Vía 1 solo mira
+`piedra_suelta`, nunca materiales de flora), lo que explica la asimetría
+observada (madera empieza a aparecer, piedra no).
+
+**Deliberadamente NO corregido en este círculo** -- es una decisión de
+diseño real sobre PRECEDENCIA entre dos motivos causales que compiten
+por el mismo recurso físico (piedra_suelta), no una calibración
+numérica ni un bug mecánico como el de espacio de arriba. Candidatos sin
+explorar, ninguno decidido: (a) que Vía 1 solo dispare cuando el motivo
+real de RECOLECTAR este tick fue efectivamente el heredado de fuego
+(exigiría que `sistema_decision.py` marque también ese motivo, hoy solo
+implícito en la utilidad elevada de RECOLECTAR, sin su propio flag como
+sí tienen arma/herramienta); (b) que el propio ser consciente priorice
+cuál necesidad (fuego vs. arma/herramienta) es más urgente antes de que
+RECOLECTAR decida cuál piedra agarrar, en vez de que gane siempre quien
+comprueba primero en el código. Pendiente de que Diego decida el
+enfoque antes de tocar `_resolver_recolectar` otra vez.
+
+**Pendiente real, explícito**: el segundo hallazgo de arriba (Vía 1
+interceptando piedra_suelta antes que arma/herramienta) sigue bloqueando
+la fabricación real de cualquier herramienta/arma que necesite piedra en
+juego libre -- `herramientas fabricadas` y `armas fabricadas` siguen sin
+observarse en ninguna semilla probada hasta ahora, con o sin el fix de
+espacio. Nada más nuevo PROVISIONAL en este círculo (reutiliza toda la
+config ya existente, sin ninguna constante numérica nueva).

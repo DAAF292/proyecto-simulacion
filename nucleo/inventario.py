@@ -94,3 +94,39 @@ def espacio_disponible_provisiones_kg(
         capacidad_provisiones_kg(peso_propio, fraccion_provisiones_maxima)
         - float(sum(provisiones.values())),
     )
+
+
+def descartar_contenidos_para_liberar(
+    contenidos: dict[str, float], peso_a_liberar: float
+) -> float:
+    """Descarta bulto de `contenidos` para liberar espacio de carga ante
+    una intención real y activa que lo necesita (2026-09-11, ver
+    sistema_recursos.py:_via_material_crudo -- un ser consciente que
+    quiere fabricar un arma/herramienta y no tiene sitio para el material
+    crudo se desprende de lo que ya porta en vez de renunciar a su
+    intención). Nunca descarta más de lo pedido: empieza por el material
+    del que más se porta (el sacrificio más eficiente -- menos materiales
+    distintos tocados, no necesariamente el "menos valioso"; el motor no
+    tiene ninguna noción de valor relativo entre materiales de
+    construcción). Se detiene en cuanto libera lo pedido o se queda sin
+    nada más que descartar. Devuelve el peso real descartado (puede ser
+    menor que `peso_a_liberar` si `contenidos` no tenía tanto).
+
+    El material descartado se pierde sin más -- no vuelve a la celda, no
+    reaparece en ningún sitio. Mismo criterio ya establecido para la
+    piedra de percusión del fuego una vez gastada (2026-09-11, círculos
+    pequeños de la sesión de Bloque A): un descarte deliberado y
+    simbólico, no un sistema de "tirar al suelo" con su propia física."""
+    if peso_a_liberar <= 0.0:
+        return 0.0
+    liberado = 0.0
+    for material in sorted(contenidos, key=lambda m: -contenidos[m]):
+        if liberado >= peso_a_liberar:
+            break
+        disponible = contenidos[material]
+        a_descartar = min(disponible, peso_a_liberar - liberado)
+        contenidos[material] -= a_descartar
+        if contenidos[material] <= 0.0:
+            del contenidos[material]
+        liberado += a_descartar
+    return liberado

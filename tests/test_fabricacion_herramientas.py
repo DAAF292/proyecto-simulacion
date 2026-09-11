@@ -305,3 +305,114 @@ def test_ley_decision_sin_necesidad_de_trabajo_nunca_motiva_herramienta():
 
     intencion = gestor.obtener_componente(eid, Intencion)
     assert intencion.fabricar_categoria != "herramienta"
+
+
+# ---------------------------------------------------------------------------
+# Prioridad consciente (2026-09-11, mismo día -- hallazgo real del
+# diagnóstico multi-semilla de este círculo): un ser consciente con una
+# intención activa que no tiene sitio para el material que necesita se
+# desprende de bulto ya cargado en vez de renunciar a su intención.
+# ---------------------------------------------------------------------------
+
+def test_ley_descartar_contenidos_libera_lo_minimo_necesario():
+    """nucleo/inventario.py:descartar_contenidos_para_liberar nunca
+    descarta más de lo pedido -- se detiene en cuanto libera el peso
+    exacto solicitado."""
+    from nucleo.inventario import descartar_contenidos_para_liberar
+
+    contenidos = {"arcilla": 2.0, "hierro": 5.0}
+    liberado = descartar_contenidos_para_liberar(contenidos, 3.0)
+
+    assert liberado == 3.0
+    # Empieza por el material del que más se porta (hierro, 5.0 > 2.0) --
+    # el sacrificio más eficiente, arcilla queda intacta.
+    assert contenidos == {"arcilla": 2.0, "hierro": 2.0}
+
+
+def test_ley_descartar_contenidos_agota_sin_pasarse_si_no_alcanza():
+    """Si contenidos no tiene tanto como se pide, se descarta todo lo que
+    hay (contenidos queda vacío) y se devuelve el peso real liberado, no
+    el pedido."""
+    from nucleo.inventario import descartar_contenidos_para_liberar
+
+    contenidos = {"arcilla": 1.0}
+    liberado = descartar_contenidos_para_liberar(contenidos, 10.0)
+
+    assert liberado == 1.0
+    assert contenidos == {}
+
+
+def test_ley_descartar_contenidos_nada_que_liberar_es_no_op():
+    from nucleo.inventario import descartar_contenidos_para_liberar
+
+    contenidos = {"arcilla": 4.0}
+    liberado = descartar_contenidos_para_liberar(contenidos, 0.0)
+
+    assert liberado == 0.0
+    assert contenidos == {"arcilla": 4.0}
+
+
+def test_ley_prioridad_consciente_descarta_bulto_para_hacer_sitio_a_herramienta():
+    """Un gnomo con el inventario lleno de material a granel (arcilla,
+    camino a completar un refugio) que encuentra madera con motivo real
+    de herramienta NO se queda sin recogerla -- se desprende de lo mínimo
+    de arcilla necesario para que quepa, y recoge la madera igual."""
+    config = _config()
+    sistema = SistemaRecursos(config, random.Random(1))
+    celda = _celda_con_madera()
+    dims = _dims(peso=50.0)  # capacidad_carga_kg = 50*0.25 = 12.5 kg
+
+    inv = Inventario(contenidos={"arcilla": 12.5})  # inventario a tope, 0 kg libres
+    assert sistema._stats_material_descartado_por_prioridad_kg == 0.0
+
+    sistema._resolver_recolectar(
+        inv, dims, celda, Agarre(), "gnomo", True, recolectar_herramienta=True
+    )
+
+    assert "madera" in inv.objetos
+    peso_madera = float(config["peso_objeto_kg"]["madera"])
+    # Se descartó justo lo necesario (peso_madera kg), ni más ni menos --
+    # 12.5 - peso_madera de arcilla debe seguir en el inventario.
+    assert inv.contenidos["arcilla"] == 12.5 - peso_madera
+    assert sistema._stats_material_descartado_por_prioridad_kg == peso_madera
+
+
+def test_ley_prioridad_consciente_no_descarta_si_ya_hay_espacio():
+    """Con espacio de sobra, la recolección con motivo real de herramienta
+    nunca toca `contenidos` -- el descarte es un último recurso, no un
+    comportamiento por defecto."""
+    config = _config()
+    sistema = SistemaRecursos(config, random.Random(1))
+    celda = _celda_con_madera()
+    dims = _dims(peso=50.0)
+
+    inv = Inventario(contenidos={"arcilla": 1.0})  # inventario casi vacío
+    sistema._resolver_recolectar(
+        inv, dims, celda, Agarre(), "gnomo", True, recolectar_herramienta=True
+    )
+
+    assert "madera" in inv.objetos
+    assert inv.contenidos["arcilla"] == 1.0  # intacto, no hizo falta descartar nada
+    assert sistema._stats_material_descartado_por_prioridad_kg == 0.0
+
+
+def test_ley_prioridad_consciente_nunca_descarta_objetos_ya_recolectados():
+    """El descarte por prioridad solo toca `contenidos` (bulto a granel) --
+    nunca `inv.objetos` (un arma ya fabricada, o material ya recolectado
+    para esta misma intención), aunque el inventario siga sin espacio tras
+    descartar todo el bulto disponible."""
+    config = _config()
+    sistema = SistemaRecursos(config, random.Random(1))
+    celda = Celda(
+        tipo_terreno=TipoTerreno.BOSQUE, recursos={"madera": 5.0}, tipo_sustrato="arcilla"
+    )
+    dims = _dims(peso=2.0)  # capacidad_carga_kg = 2*0.25 = 0.5 kg -- minúscula
+
+    # peso_objeto de "piedra" (1.0kg) ya deja el inventario a tope por sí
+    # solo; sin nada de contenidos que descartar, no cabe otro objeto más.
+    inv = Inventario(objetos=["piedra"])
+    sistema._resolver_recolectar(
+        inv, dims, celda, Agarre(), "gnomo", True, recolectar_herramienta=True
+    )
+
+    assert inv.objetos == ["piedra"]  # madera NO se recogió, y piedra sigue intacta

@@ -857,6 +857,13 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] herramientas fabricadas: "
                 f"{sistemas['recursos']._stats_herramientas_fabricadas}"
             )
+            # Verificacion obligatoria de "prioridad consciente" (2026-09-11,
+            # ver nucleo/inventario.py:descartar_contenidos_para_liberar).
+            # Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] material descartado por prioridad: "
+                f"{sistemas['recursos']._stats_material_descartado_por_prioridad_kg:.2f} kg"
+            )
 
     except KeyboardInterrupt:
         pass

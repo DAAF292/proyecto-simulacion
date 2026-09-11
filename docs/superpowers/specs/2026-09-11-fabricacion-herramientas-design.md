@@ -107,13 +107,57 @@ candidato ("herramienta" junto a "arma").
   -- ver el hallazgo real documentado en CLAUDE.md, sección de cierre
   de este círculo.
 
+## Corrección real -- prioridad consciente (mismo día, tras reportar el hallazgo)
+
+Diego, ante el hallazgo de "sin espacio" de arriba, cuestionó la
+conclusión de "señalado, sin corregir": *"esto es un problema, y no
+tiene sentido, el ser consciente debería poder decidir qué carga, si
+quiere fabricar un arma pero no tiene espacio en el inventario para
+recolectar los materiales necesarios, lo lógico es que se desprenda de
+algo que tenga para liberar el espacio y lograr su intención"*.
+Corregido:
+
+- `nucleo/inventario.py:descartar_contenidos_para_liberar(contenidos,
+  peso_a_liberar) -> float` -- función pura nueva. Descarta bulto de
+  `contenidos` (empezando por el material del que más se porta, el
+  sacrificio más eficiente en número de materiales tocados), nunca más
+  de lo pedido. El material se pierde sin más -- mismo criterio ya
+  establecido el mismo día para la piedra de percusión del fuego
+  gastada (círculos pequeños de Bloque A): un descarte deliberado y
+  simbólico, no un sistema de "tirar al suelo" con su propia física.
+- `sistema_recursos.py:_via_material_crudo` -- si no hay espacio para
+  el objeto que la intención causal YA ganadora este tick necesita
+  (Vía 2 arma o Vía 3 herramienta, ambas ya motivadas causalmente antes
+  de llegar aquí), se descarta justo lo necesario de `contenidos` antes
+  de reintentar. Nunca toca `inv.objetos` (armas fabricadas, u otro
+  material ya recolectado para la misma intención).
+- Contador de observación `_stats_material_descartado_por_prioridad_kg`,
+  impreso en `BOSQUE_AUTO_TICKS`.
+
+**Verificado**: 6 tests nuevos (3 de la función pura, 3 de integración
+en `_via_material_crudo` -- descarta lo mínimo, no descarta si ya hay
+espacio, nunca toca objetos discretos), 503/503 tests en verde,
+`BOSQUE_AUTO_TICKS=3000` y roundtrip sin excepciones (6.00 kg y 1.00 kg
+descartados respectivamente -- el mecanismo se ejerce de verdad).
+
+**Segundo hallazgo real, distinto y NO resuelto por este fix -- ver
+CLAUDE.md para el detalle completo**: el diagnóstico multi-semilla
+repetido tras el fix confirma que la falta de espacio no era el único
+bloqueo. `con_madera` empieza a aparecer con más frecuencia, pero
+`con_piedra` sigue en 0 en todas las semillas probadas -- causa
+distinta, ajena a este círculo: la Vía 1 (piedra_suelta para fuego)
+corre SIEMPRE primero en `_resolver_recolectar`, sin comprobar si el
+motivo real de este RECOLECTAR fue fuego o herramienta/arma, así que
+intercepta casi cualquier piedra_suelta disponible antes de que la Vía
+2/3 pueda reclamarla como material "piedra". Señalado, no corregido --
+decisión de diseño pendiente de Diego.
+
 ## Pendiente real, explícito
 
 - `factor_bono_tasa_recolectar_con_herramienta`/
   `factor_bono_tasa_aporte_construccion_con_herramienta` PROVISIONALES,
   sin calibrar -- y sin observarse en juego libre todavía (ningún
-  gnomo llegó a fabricar una herramienta en la muestra medida).
-- El hallazgo real del diagnóstico (competencia por capacidad de carga
-  entre material a granel y objeto discreto) queda señalado, sin
-  ninguna corrección aplicada en este círculo -- decisión pendiente de
-  Diego sobre si merece un círculo de corrección propio.
+  gnomo llegó a fabricar una herramienta en la muestra medida, ni antes
+  ni después del fix de prioridad consciente).
+- El hallazgo de Vía 1 interceptando piedra_suelta antes que Vía 2/3
+  (arriba) queda señalado, sin corregir -- decisión pendiente de Diego.

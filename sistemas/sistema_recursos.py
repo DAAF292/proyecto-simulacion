@@ -51,7 +51,11 @@ from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.flora import intentar_colonizar_celda
 from nucleo.indice_espacial import construir_indice_espacial
-from nucleo.inventario import espacio_disponible_kg, espacio_disponible_provisiones_kg
+from nucleo.inventario import (
+    descartar_contenidos_para_liberar,
+    espacio_disponible_kg,
+    espacio_disponible_provisiones_kg,
+)
 from nucleo.memoria import capacidad_memoria, purgar_recuerdo_invalido, registrar_recuerdo
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
@@ -278,6 +282,11 @@ class SistemaRecursos:
         # Observacion (2026-09-11), solo _stats -- confirma que la pieza
         # se ejerce de verdad en juego libre.
         self._stats_herramientas_fabricadas: int = 0
+        # Observacion (2026-09-11, "cargar con prioridad" -- ver
+        # nucleo/inventario.py:descartar_contenidos_para_liberar): kg
+        # totales descartados por un consciente para liberar sitio a
+        # material de arma/herramienta que su intencion activa necesita.
+        self._stats_material_descartado_por_prioridad_kg: float = 0.0
 
     def ejecutar(
         self,
@@ -806,9 +815,20 @@ class SistemaRecursos:
         Devuelve True si `_resolver_recolectar` debe terminar AQUÍ este
         tick (se recogió algo, o se determinó que la pista competidora no
         ofrece nada real que recoger); False si debe seguir probando la
-        recolección a granel de más abajo (celda sin material crudo, o sin
-        espacio de carga para el objeto -- en ese caso cae a granel en vez
-        de perder el tick entero)."""
+        recolección a granel de más abajo (celda sin material crudo, o
+        sigue sin espacio de carga tras descartar bulto -- en ese caso cae
+        a granel en vez de perder el tick entero).
+
+        PRIORIDAD CONSCIENTE (2026-09-11, hallazgo real del diagnóstico
+        multi-semilla de este mismo círculo -- ver CLAUDE.md): si no hay
+        espacio de carga para el objeto, un ser consciente con esta
+        intención ya GANADORA este tick (Vía 2/3 solo se llama con
+        recolectar_arma/recolectar_herramienta ya causalmente motivados
+        por sistema_decision.py) se desprende de bulto de `contenidos`
+        (nucleo/inventario.py:descartar_contenidos_para_liberar) -- lo
+        mínimo necesario para que quepa, nunca más -- en vez de renunciar
+        a su intención sin más. Nunca toca `inv.objetos` (armas ya
+        fabricadas o material ya recolectado para esta misma intención)."""
         if ya_posee or not celda_ofrece_material_arma(celda, self.catalogo_materiales):
             return False
         material = recolectar_material_arma_de_celda(celda, self.catalogo_materiales)
@@ -826,6 +846,12 @@ class SistemaRecursos:
         espacio = espacio_disponible_kg(
             inv.contenidos, dims.peso, self.fraccion_carga_maxima, inv.objetos, self.peso_objeto_kg,
         )
+        if espacio < peso_objeto:
+            descartado = descartar_contenidos_para_liberar(inv.contenidos, peso_objeto - espacio)
+            self._stats_material_descartado_por_prioridad_kg += descartado
+            espacio = espacio_disponible_kg(
+                inv.contenidos, dims.peso, self.fraccion_carga_maxima, inv.objetos, self.peso_objeto_kg,
+            )
         if espacio >= peso_objeto:
             inv.objetos.append(material)
             return True
