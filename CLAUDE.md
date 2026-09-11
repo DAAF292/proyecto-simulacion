@@ -8147,3 +8147,155 @@ también `factor_ampliacion_techo_manada` o `radio_apoyo_grupal` --
 ambas palancas numéricas ya señaladas como candidatas el mismo día y
 sin probar todavía. Worktree temporal (`0a5c851`) retirado tras la
 comparación, no forma parte del repositorio.
+
+## Investigación de fondo del lobo -- el embudo ya funciona, 0 extinciones
+## en 39 semillas nuevas de esta sesión, y la ley de fecundidad por edad
+## cerrada encima (2026-09-10, mismo día)
+
+Diego pidió analizar bien por qué el lobo no prospera. Investigación con
+arnés nuevo de instrumentación fina (scratchpad de sesión,
+`diag_lobo_profundo.py`, no en el repo), un nivel más profundo que el
+harness agregado: embudo completo por gestación (Concepcion -> término o
+muerte de la madre), por lobo individual (fundador vs nacido en partida,
+edad y saciedad al último muestreo, causa de muerte, capturas atribuidas
+por `cazador_id`, muestreo de estado cada 100 ticks) y trayectoria diaria
+de población. **Resultado que invierte parcialmente el diagnóstico
+histórico**: en 36 semillas nuevas medidas en dos tandas (911001-911112,
+911101-911112, ventanas 3132-6457 ticks por límite de tiempo real) el
+lobo se sostiene en TODAS, sin una sola extinción, con embudo
+reproductivo activo de forma medible:
+
+- Embudo real (agregado de las dos tandas): ~79-81% de las gestaciones
+  resueltas llegan a término; los fallos (~21%) son por muerte de la
+  madre, y de esos fallos ~3/4 son por VEJEZ (madres que conciben ya
+  viejas y mueren de historia natural a ~44-50 días de una gestación de
+  60-75 días — gestaciones de 1440-1800 ticks).
+- Las muertes de lobo fundador son el recambio natural (vejez a edad
+  media 4506-4680 ticks, ~9.4-9.8 años de longevidad 8-14), no colapso.
+- La caza nueva de venado se ejerce a escala (53-55 capturas por tanda
+  de 12 semillas, frente a prácticamente 0 antes del radio de caza),
+  con variedad real (ardilla 241, conejo 182, gnomo 75 por tanda).
+
+**Harness de referencia del repo también corrido el mismo día** (15
+semillas nuevas 921001-921015, cortadas todas a 1500s entre 3990-7966
+de 12000 ticks): **lobo 0/15 extinción (0%)**, población final media 10.7
+(min 3, max 27); criterio maestro de Diego (5 especies vivas a la vez)
+**11/15 (73%)**, la mejor medición grande de todo el proyecto. Conejo 7%
+y ardilla 27% de extinción — el cuello de botella residual deja de ser
+el lobo. Atribución honesta, sin cerrar: no se puede atribuir este giro
+a una sola pieza sin A/B contra el commit previo (la corrida del 47% del
+2026-09-09 llevaba el mismo código salvo radio de caza + cohesión de
+manada + orillas + tasa de consumo; y 47% estaba dentro de la varianza
+ya documentada de lobo). Inanición sigue siendo la causa #1 de muerte
+de lobo (98 vs 82 por vejez en el harness): vive al borde, y lo que
+ahora funciona es que la reproducción lo compensa.
+
+### Fecundidad por edad — ley biológica neutra, cerrada (spec, implementado
+### directamente por Claude, A/B contra el motor con hallazgo honesto)
+
+Diego cuestionó el hallazgo ("muerte de la madre por vejez embarazada no
+cuadra con la realidad animal"). Contrastado con la biología real:
+concebir y perder la gestación por muerte natural EXISTE en fauna
+salvaje (la fertilidad persiste hasta cerca de la muerte en la mayoría
+de mamíferos), pero lo que NO cuadraba era que el motor no modelara
+ninguna senescencia reproductiva — `factor_base_concepcion` era
+constante con la edad. Tres formas discutidas (declive tardío espejo de
+vejez / lineal desde madurez / ventana fértil discreta); Diego eligió
+la 1. Spec:
+`docs/superpowers/specs/2026-09-10-fecundidad-edad-design.md`.
+
+**Implementado directamente por Claude** (pipeline sin disponibilidad en
+este contenedor, excepción pedida explícitamente por Diego):
+
+- `nucleo/ciclo_vital.py:factor_fecundidad_edad()` (nueva, pura): 1.0
+  hasta `inicio_declinacion_fecundidad` (PROVISIONAL 0.6) de la
+  longevidad INDIVIDUAL (mismo ancla que `probabilidad_muerte_vejez`),
+  declive progresivo `1 - fase**exponente_fecundidad_edad` (PROVISIONAL
+  2.0 — a diferencia del exponente 8 del muro de muerte, el declive de
+  FERTILIDAD es perceptible desde el inicio del tramo: al 80% de vida
+  factor ~0.75, al 90% ~0.36) y 0.0 saturado al agotar la longevidad
+  (misma convención que la curva de vejez). Solo la hembra (la tirada de
+  concepción ya es por hembra); fecundidad masculina diferida, YAGNI.
+- `sistemas/sistema_reproduccion.py:actualizar` (línea ~325, el ÚNICO
+  punto de concepción del motor): `probabilidad = factor_base *
+  sociabilidad_media * factor_edad`. Sin tocar el gate de saciedad ni el
+  escalado de camada. Sin persistencia (deriva de edad + longevidad ya
+  persistidos).
+- `config/fisiologia.yaml` sección `ciclo_vital`: los dos parámetros
+  nuevos, PROVISIONALES, con el A/B requerido documentado en el propio
+  comentario.
+- 5 tests de ley (`tests/test_fecundidad_edad.py`, declarativos + 2 por
+  el despacho real: hembra con longevidad agotada JAMÁS concibe a través
+  de `actualizar`, hembra joven sí).
+
+**Hallazgo de test expuesto por la ley, no causado por ella**: 3 tests de
+concepción de `tests/test_relaciones.py` fallaban al activar la ley —
+su fixture usaba `tick_actual=100_000` con `tick_nacimiento=0`, es decir
+probar la concepción con una madre gnomo de ~208 AÑOS. La ley bloquea
+esa concepción CORRECTAMENTE (razón de edad desbordada); fixtures
+corregidos con edad adulta plena anclada al tick de la escena (7200
+ticks). La ley no regresó nada más: 436/436 tras el fix.
+
+**A/B contra el motor real, criterio del spec NO del todo cumplido —
+decisión de Diego: dejar la ley así**: con 12 semillas nuevas
+(911201-911212): 0/12 extinción, motor estable, frecuencia de concepción
+baja ~35% (53 -> 35 gestaciones resueltas por tanda comparable) y la
+reproducción se concentra en hembras más jóvenes — pero el % de
+gestaciones perdidas por muerte de madre NO bajó de forma clara (21% ->
+31%, entre ruido, mismo conteo absoluto 11): las madres fracasadas
+conciben en la zona ratio 0.75-0.9, donde el factor de la curva aún
+concede 0.4-0.6. Incumplimiento parcial del criterio de cierre del spec
+("tasa baja de forma clara"), aceptado explícitamente por Diego como
+mejora de realismo (el embarazo tardío absoluto sí baja). Tres caminos
+se plantearon para el % residual (recalibrar curva más agresiva, aceptar
+como ley, o gestación como riesgo propio — la vieja Propuesta C) y
+Diego eligió aceptar ("dejémoslo así").
+
+**Limitación honesta de la verificación del A/B**: n=12/tanda, ventanas
+de 3.5-5k ticks, comparar gestaciones entre tandas comparte el ruido de
+desplazamiento de secuencia de rng ya documentado — no una calibración
+cerrada; ambos parámetros siguen PROVISIONALES ante el harness completo.
+
+### Corrección de infraestructura de paso — conexión SQLite nunca cerrada
+### (bug preexistente, 8 tests roundtrip rojos en Windows)
+
+Al correr la suite completa en este entorno (Python 3.14/Windows), 8
+tests de roundtrip de persistencia fallaban YA EN `master` sin relación
+con los cambios de hoy. Causa raíz verificada: `Persistencia._conectar()`
+abre una conexión nueva POR OPERACIÓN y ninguna se cierra nunca — el
+context manager nativo de `sqlite3.Connection` solo hace
+commit/rollback, JAMÁS cierra. En Linux/WSL2 es inofensivo (unlink de
+ficheros abiertos es legal); en Windows fija el fichero .db y el cleanup
+del `TemporaryDirectory` explota con WinError 32. Corregido en UN punto
+central: factory `_ConexionConCierre(sqlite3.Connection)` con `__exit__`
+que cierra tras el commit/rollback nativo, cero cambios en los 7 call
+sites (`with self._conectar() as con:`). 8/8 roundtrips en verde,
+ninguna otra prueba tocada.
+
+### Pendiente real, explícito, tras esta sesión
+
+- Lobo: el vórtice de extinción no apareció en ninguna de las 39 semillas
+  nuevas de hoy (24 finas + 15 del harness), con embudo reproductivo
+  activo y fundadores recambiéndose de forma natural — el mejor estado
+  de esta especie desde que se construyó el motor. Aun así, inanición
+  sigue siendo su causa #1 de muerte (vive al borde) y el harness se
+  cortó por tiempo en 15/15: la ventana 8k-12k sigue sin medirse nunca
+  en una corrida completa. Un A/B contra el commit previo a
+  radio-de-caza podría cuantificar cuánto del giro se debe a las piezas
+  de esa semana frente a varianza — no perseguido por ahora (Diego:
+  "dejémoslo así").
+- Gestaciones perdidas por muerte de madre (~21-31% de las resueltas):
+  el % no se movió con la ley. Si algún día se quiere cortar de raíz,
+  el candidato de diseño es la Propuesta C (gestación como estado físico
+  con coste real de movilidad/exposición), no más curvas de fecundidad.
+- Caza en manada contra caballo: sigue sin observarse (0 eventos en el
+  A/B de cohesión de este mismo día) — Quedan las dos palancas
+  numéricas ya señaladas sin probar
+  (`factor_ampliacion_techo_manada`, `radio_apoyo_grupal`).
+- Ardilla (27% de extinción en el harness de 15) y conejo (7%) son ahora
+  los eslabones más frágiles del criterio maestro, no el lobo.
+- Centinela del pipeline: sigue parado en la máquina histórica, y este
+  contenedor no tiene la infraestructura (sin `OPENROUTER_API_KEY` ni
+  `mini-swe-agent`) — el cierre de este arco se hizo por implementación
+  directa a petición de Diego, la cuarta pieza consecutiva así en este
+  entorno.
