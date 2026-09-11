@@ -776,6 +776,19 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] compartir por confianza: "
                 f"{sistemas['movimiento']._stats_compartir_confianza} veces"
             )
+            # Verificacion obligatoria del decaimiento de afinidad
+            # (2026-09-11): cuantos vinculos se purgaron por caer bajo el
+            # umbral tras decaer. Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] decaimiento de afinidad: "
+                f"{sistemas['descomposicion']._stats_vinculos_purgados_por_decaimiento} "
+                "vinculos purgados por decaimiento"
+            )
+            # Verificacion obligatoria de la llamada de alarma
+            # (2026-09-11, tercer uso de nucleo/sonido.py): no tiene
+            # contador propio -- se pliega dentro del total ya impreso
+            # arriba ("sonido emitido: N sonidos en total"), junto a
+            # depredacion y conflicto verbal.
             # Verificacion obligatoria del Salon comun (2026-09-08, ver
             # docs/superpowers/specs/2026-09-08-salon-comun-design.md):
             # cuantos salones comunes reales se completan, y si el

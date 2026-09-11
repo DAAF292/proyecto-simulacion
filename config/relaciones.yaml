@@ -91,3 +91,19 @@ relaciones:
   umbral_confianza_compartir: 0.3
   probabilidad_base_compartir_confianza: 0.05
   saciedad_maxima_para_recibir_compartido: 0.5
+  # Decaimiento de afinidad (2026-09-11): hasta ahora rencor/amistad/
+  # pareja solo se acumulaban, nunca se diluian con el tiempo -- hueco
+  # senalado desde el cimiento (2026-09-04) y repetido en las tres
+  # piezas que lo consumen. Ley simetrica y neutra (mismo ritmo para
+  # positivo y negativo, sin razon fisica para que un agravio dure mas
+  # que un afecto) -- consumidor: sistema_descomposicion.py, cadencia
+  # diaria, mismo criterio que Necromasa/Construccion/provisiones
+  # ("nada dura para siempre"). Multiplicativo (fraccion hacia 0), no
+  # lineal -- con 0.02/dia una relacion sin reforzar cae a la mitad en
+  # ~34 dias; una activamente reforzada (p.ej. amistad de convivencia,
+  # +0.05/dia) sigue creciendo neta. PROVISIONAL, sin calibrar.
+  tasa_decaimiento_dia_afinidad: 0.02
+  # Vinculos que decaen por debajo de este umbral se purgan (liberan
+  # cupo), mismo criterio de purga que umbral_purga_masa en
+  # descomposicion. PROVISIONAL.
+  umbral_purga_afinidad: 0.02

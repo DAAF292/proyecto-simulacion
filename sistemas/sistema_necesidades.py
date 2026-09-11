@@ -80,6 +80,7 @@ from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_individual
 from nucleo.relaciones import pareja_presente
 from nucleo.reloj import Reloj
+from nucleo.sonido import emitir_sonido
 
 
 class SistemaNecesidades:
@@ -209,6 +210,12 @@ class SistemaNecesidades:
         # consumidores de nucleo/amenaza.py.
         self.radio_busqueda_maxima_sonido: int = int(
             self.config.get("sonido", {}).get("radio_busqueda_maxima_sonido", 0)
+        )
+        # Llamada de alarma (2026-09-11): tercer uso real de
+        # nucleo/sonido.py, ver el comentario en ejecutar() donde se
+        # emite. PROVISIONAL.
+        self.probabilidad_alarma_por_tick: float = float(
+            self.config.get("sonido", {}).get("probabilidad_alarma_por_tick", 0.0)
         )
 
         # Bono de defensa en grupo -- ver
@@ -472,6 +479,24 @@ class SistemaNecesidades:
                 indice=self._indice_actual,
             )
             if amenaza_pos is not None:
+                # Llamada de alarma (2026-09-11): un individuo que percibe
+                # una amenaza REAL (cualquiera de las tres fuentes ya
+                # combinadas por posicion_amenaza_mas_cercana -- criatura,
+                # ambiental o sonido) puede emitir su propio sonido en su
+                # propia posicion, mas barato que un combate. Comportamiento
+                # animal genuino: reutiliza el mismo canal ya construido
+                # (nucleo/sonido.py, tercer uso real tras deteccion de
+                # amenaza y pista de caza) -- ningun consumidor nuevo que
+                # escribir, sonido_mas_cercano YA es una fuente de amenaza
+                # para cualquier otro individuo cercano que perciba esta
+                # emision, alertandolo sin necesitar linea de vision al
+                # peligro original. Probabilistico (no cada tick mientras
+                # dure la amenaza) para no saturar sonidos_activos con la
+                # misma celda repetida; magnitud = peso propio, mismo
+                # convenio que las otras dos emisiones (suma de pesos de
+                # ambas partes), aqui de un unico individuo.
+                if self.probabilidad_alarma_por_tick > 0.0 and self.rng.random() < self.probabilidad_alarma_por_tick:
+                    emitir_sonido(zona, pos.x, pos.y, reloj.tick_actual, dims.peso)
                 # Bono de defensa en grupo: seguridad en numeros --
                 # conespecificos cercanos (cualquiera, no solo cazando)
                 # reducen el drenaje, escalados por la sociabilidad

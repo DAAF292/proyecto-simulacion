@@ -27,11 +27,12 @@ vive en Agarre como herramienta de fuego (Vía 1 de _resolver_recolectar
 en sistema_recursos.py) y NO es un arma -- el reflejo empuñar/guardar
 no la mueve (rompería el ciclo causal frío → recoger piedras →
 encender fuego: un individuo seguro pero con frío soltaría las piedras
-cada tick antes de poder acumular dos). Se deposita a
-Inventario.objetos cuando la fogata se enciende con éxito, en
-_resolver_encender_fuego -- mismo resultado observable que buscaba la
-spec (no quedarse fija para siempre en Agarre), sin lógica de arma
-especial en el reflejo genérico.
+cada tick antes de poder acumular dos). Se DESCARTA (nunca pasa por
+Inventario) cuando la fogata se enciende con éxito, en
+_resolver_encender_fuego -- CORREGIDO 2026-09-11: la versión original
+las movía a Inventario.objetos, con un bug real encontrado en
+auditoría (el tope de transferencia dejaba las piedras de cualquier
+fuego posterior atascadas en Agarre para siempre, ver historial).
 
 Historial de diseño y decisiones: docs/historial_componentes.md.
 """

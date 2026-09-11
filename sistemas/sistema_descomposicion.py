@@ -27,6 +27,7 @@ from componentes.construccion import Construccion
 from componentes.inventario import Inventario
 from componentes.necromasa import Necromasa
 from componentes.posicion import Posicion
+from componentes.relaciones import Relaciones
 from nucleo.construccion import masa_minima_para, progreso_construccion
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
@@ -44,6 +45,10 @@ class SistemaDescomposicion:
         self.config = config
         self.rng = rng
         self._cachear_configuracion()
+        # Observacion para BOSQUE_AUTO_TICKS (2026-09-11, decaimiento de
+        # afinidad): cuantos vinculos se purgaron por caer bajo el
+        # umbral. Solo observacion, ningun camino de juego lo lee.
+        self._stats_vinculos_purgados_por_decaimiento: int = 0
 
     def _cachear_configuracion(self) -> None:
         """Extrae y tipa los coeficientes de degradación edáfica desde constantes.yaml."""
@@ -96,6 +101,17 @@ class SistemaDescomposicion:
         # genérica de materia orgánica").
         self.config_construccion: dict[str, Any] = self.config.get("construccion", {})
 
+        # Decaimiento de afinidad (2026-09-11, ver config/relaciones.yaml
+        # para el razonamiento completo): misma ley "nada dura para
+        # siempre" aplicada a vinculos sociales en vez de materia fisica.
+        cfg_rel = self.config.get("relaciones", {})
+        self.tasa_decaimiento_dia_afinidad: float = float(
+            cfg_rel.get("tasa_decaimiento_dia_afinidad", 0.0)
+        )
+        self.umbral_purga_afinidad: float = float(
+            cfg_rel.get("umbral_purga_afinidad", 0.0)
+        )
+
     def ejecutar(
         self,
         gestor: GestorEntidades,
@@ -105,11 +121,13 @@ class SistemaDescomposicion:
     ) -> None:
         """
         Ejecuta la degradación sobre todas las entidades Necromasa en el mundo,
-        y el deterioro pasivo de las Construccion existentes.
+        el deterioro pasivo de las Construccion existentes, la caducidad de
+        provisiones guardadas, y el decaimiento de afinidad (Relaciones).
         Invocado a cadencia de día (Fase de cierre de ciclo).
         """
         self._descomponer_construcciones(gestor, mundo, reloj, bus_eventos)
         self._descomponer_provisiones(gestor)
+        self._decaer_relaciones(gestor)
 
         # Factor de humedad calculado UNA VEZ POR ZONA (cada ZonaBioma
         # tiene su propio clima_actual), luego aplicado a cada Necromasa
@@ -233,6 +251,34 @@ class SistemaDescomposicion:
                     del inv.provisiones[recurso]
                 else:
                     inv.provisiones[recurso] = restante
+
+    def _decaer_relaciones(self, gestor: GestorEntidades) -> None:
+        """
+        Decaimiento de afinidad (2026-09-11, ver config/relaciones.yaml):
+        cada vinculo de Relaciones (rencor Y amistad, misma ley simetrica)
+        decae una FRACCION hacia 0 cada dia -- si nadie lo refuerza ese
+        dia, se diluye; si algo lo refuerza (amistad de convivencia,
+        lealtad, socializar...) con un delta mayor que lo que decae ese
+        dia, sigue creciendo neto sin ningun caso especial aqui. Universal
+        -- Relaciones se anade a las 4 especies (no solo consciente), y
+        fauna la escribe via afinidad por concepcion.
+
+        Vinculos que caen por debajo de umbral_purga_afinidad se purgan
+        (liberan cupo para relaciones nuevas), mismo criterio de purga
+        que Necromasa/Construccion/provisiones arriba.
+        """
+        if self.tasa_decaimiento_dia_afinidad <= 0.0:
+            return
+        for eid in sorted(gestor.entidades_con(Relaciones)):
+            rel = gestor.obtener_componente(eid, Relaciones)
+            if rel is None or not rel.vinculos:
+                continue
+            for otro_id in list(rel.vinculos.keys()):
+                vinculo = rel.vinculos[otro_id]
+                vinculo.afinidad *= (1.0 - self.tasa_decaimiento_dia_afinidad)
+                if abs(vinculo.afinidad) < self.umbral_purga_afinidad:
+                    del rel.vinculos[otro_id]
+                    self._stats_vinculos_purgados_por_decaimiento += 1
 
     def _descomponer_construcciones(
         self,

@@ -328,11 +328,10 @@ class SistemaRecursos:
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
                 )
             elif intencion.accion == Accion.ENCENDER_FUEGO:
-                inv_fuego = gestor.obtener_componente(eid, Inventario)
                 agarre_fuego = gestor.obtener_componente(eid, Agarre)
                 self._resolver_encender_fuego(
                     gestor, celda, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
-                    inv_fuego, agarre_fuego,
+                    agarre_fuego,
                 )
             elif intencion.accion == Accion.COCINAR:
                 self._resolver_cocinar(gestor, eid, pos.x, pos.y, pos.zona_idx)
@@ -755,7 +754,6 @@ class SistemaRecursos:
         zona_idx: int,
         bus_eventos: BusEventos,
         tick_actual: int,
-        inv: Inventario | None = None,
         agarre: Agarre | None = None,
     ) -> None:
         """
@@ -770,13 +768,26 @@ class SistemaRecursos:
         Solo se consume yesca de Celda.recursos -- mismo catálogo
         apto_construccion + combustibilidad que ya usa RECOLECTAR para
         material de flora. En cuanto la fogata se enciende con éxito, las
-        piedras de percusión dejan de ser necesarias en la mano y vuelven
-        a Inventario.objetos como objeto discreto (armas primitivas v2:
-        nada debe quedarse fijo en Agarre para siempre -- sin lógica de
-        arma especial en el reflejo empuñar/guardar, porque un individuo
-        seguro pero con frío soltaría las piedras antes de poder
-        acumularlas: la liberación ocurre aquí, al completarse la causa
-        real que las tenía sujetas).
+        piedras de percusión dejan de ser necesarias en la mano y se
+        DESCARTAN -- no son un arma (nucleo/armas.py las excluye a
+        propósito) ni material de construcción (fuera del catálogo
+        apto_construccion), así que no tienen ningún uso futuro real.
+
+        CORREGIDO (2026-09-11, bug real encontrado en auditoría de
+        funcionalidades): la versión anterior las movía a
+        Inventario.objetos en vez de descartarlas, con un tope de
+        transferencia (`< piedras_necesarias_fuego` YA presentes en el
+        inventario) pensado para no acumular sin límite. Ese tope tenía
+        un efecto secundario no anticipado -- verificado con un arnés
+        dedicado, no solo razonado: tras el PRIMER fuego de cualquier
+        individuo, el inventario ya alcanza ese tope, así que las
+        piedras de CUALQUIER fuego posterior dejan de poder transferirse
+        y se quedan atascadas en Agarre para siempre, ocupando de forma
+        permanente los puntos de agarre (2 en gnomo -- el 100% de su
+        capacidad) sin que el individuo pueda volver a empuñar un arma
+        en lo que le queda de vida. Descartarlas sin más (nunca pasan
+        por Inventario) evita el problema de raíz, sin ningún tope que
+        gestionar.
         """
         if self.rng.random() >= self.probabilidad_encender_fuego:
             return  # golpear piedra contra piedra no siempre prende
@@ -789,12 +800,8 @@ class SistemaRecursos:
                 continue
             consumido = min(self.masa_yesca_consumida, cantidad_disponible)
             celda.recursos[nombre] = cantidad_disponible - consumido
-            if inv is not None and agarre is not None:
-                while agarre.objetos.count("piedra_suelta") > 0 and len([
-                    o for o in inv.objetos if o == "piedra_suelta"
-                ]) < self.piedras_necesarias_fuego:
-                    agarre.objetos.remove("piedra_suelta")
-                    inv.objetos.append("piedra_suelta")
+            if agarre is not None:
+                agarre.objetos = [o for o in agarre.objetos if o != "piedra_suelta"]
             fid = crear_fogata(gestor, pos_x, pos_y, self.combustible_inicial_fogata, zona_idx=zona_idx)
             bus_eventos.emitir(
                 Evento(

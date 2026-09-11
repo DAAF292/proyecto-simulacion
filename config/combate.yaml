@@ -184,3 +184,4 @@ sonido:
   peso_referencia_sonido: 90.0  # PROVISIONAL -- mismo orden que la referencia visual de 90kg ya usada en el visor; NO reutilizar peso_referencia_deteccion_plena (0.1kg), que sirve para el proposito opuesto (floor de detectabilidad de presas diminutas)
   duracion_sonido_ticks: 5  # PROVISIONAL -- ventana corta, sobrevive al menos un ciclo de decision del tick siguiente
   radio_busqueda_maxima_sonido: 12  # PROVISIONAL -- techo de escaneo (no el alcance real), generoso para no recortar eventos grandes
+  probabilidad_alarma_por_tick: 0.05  # PROVISIONAL (2026-09-11, llamada de alarma) -- probabilidad por tick de que un individuo amenazado emita su propio sonido de alarma. Bajado de 0.3 a 0.05 tras un primer smoke test real: 0.3 disparo el volumen total de sonido de ~1500 a ~47000 en 3000 ticks, demasiado agresivo para un "grito ocasional" -- sigue sin calibrar contra el harness completo
