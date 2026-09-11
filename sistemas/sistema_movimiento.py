@@ -631,6 +631,12 @@ class SistemaMovimiento:
             return self._paso_aleatorio()
 
         ax, ay = amenaza_pos
+        if (ax, ay) == (pos_x, pos_y):
+            # La amenaza ambiental esta en la propia celda (2026-09-11,
+            # p.ej. de pie sobre fuego) -- "huir de uno mismo" no tiene
+            # una direccion bien definida (dx=dy=0), un paso aleatorio
+            # saca del sitio peligroso igual de bien.
+            return self._paso_aleatorio()
         dx = 0 if ax == pos_x else (1 if pos_x > ax else -1)
         dy = 0 if ay == pos_y else (1 if pos_y > ay else -1)
         return dx, dy
@@ -2280,9 +2286,18 @@ class SistemaMovimiento:
         de responsabilidades que COMER/BEBER (este sistema decide hacia
         dónde ir, sistema_recursos.py decide qué pasa al llegar).
         """
+        # indice=None deliberado (bug real encontrado en auditoria de
+        # codigo, 2026-09-11): el indice congelado al principio del tick
+        # dejaba a almacen_cercano/construccion_completada_de_asentamiento
+        # sin ver una construccion comunal recien creada por OTRO miembro
+        # este mismo tick, permitiendo que dos gnomos llegaran al centro
+        # del asentamiento y crearan cada uno su propio almacen/salon/
+        # cocina duplicado en la misma celda -- justo lo que el propio
+        # docstring de almacen_cercano ("busqueda EN VIVO") decia evitar.
+        # Coste acotado: solo entidades que ejecutan CONSTRUIR este tick.
         objetivo = objetivo_construccion_actual(
             gestor, mundo, entidad_id, self.radio_cluster_asentamiento,
-            indice=self._indice_actual,
+            indice=None,
         )
         if objetivo is None:
             return (0, 0)

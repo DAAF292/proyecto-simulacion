@@ -151,7 +151,13 @@ class SistemaManada:
 
         sitio = max(conteo, key=lambda s: conteo[s])
 
-        madriguera_id = madriguera_en(gestor, sitio[0], sitio[1], zona_idx, indice=self._indice_actual)
+        # indice=None deliberado (bug real, 2026-09-11): dos grupos
+        # coloniales de la misma especie+zona con el mismo sitio
+        # mayoritario, procesados en este mismo ejecutar(), verian ambos
+        # el indice congelado pre-bucle y crearian cada uno su propia
+        # Madriguera duplicada en la misma celda. Cadencia diaria -- el
+        # coste de un escaneo en vivo aqui es despreciable.
+        madriguera_id = madriguera_en(gestor, sitio[0], sitio[1], zona_idx, indice=None)
         if madriguera_id is None:
             rango = self.rangos_raciales.get(especie.value, {}).get(
                 "capacidad_madriguera", [10, 10]

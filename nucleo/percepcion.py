@@ -78,10 +78,10 @@ def celda_percibida(zona, x: int, y: int, radio: int, cumple):
     entre las que caen dentro del radio de percepción (distancia
     Manhattan) del individuo. None si no percibe ninguna.
 
-    Función genérica, reutilizada por sistema_movimiento.py (comida,
-    agua) y por nucleo/amenaza.py (peligro ambiental) -- un único patrón
-    de búsqueda en vez de dos implementaciones idénticas en módulos
-    distintos."""
+    Función genérica, reutilizada por nucleo/amenaza.py (peligro
+    ambiental) y nucleo/agua.py. sistema_movimiento.py:_calcular_forrajeo/
+    _calcular_hidratacion NO la reutilizan todavía -- tienen su propio
+    escaneo equivalente sin consolidar (deuda real, no corregida aquí)."""
     mejor = None
     mejor_dist = None
     for dx in range(-radio, radio + 1):

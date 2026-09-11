@@ -229,7 +229,11 @@ def id_en_contacto_por_disposicion(gestor, id_propio: int, x: int, y: int,
     construido, opcional -- si se pasa, se consulta indice.en_celda (ya
     filtra por zona y celda exacta) en vez del escaneo lineal O(N) sobre
     toda la población. Sin indice, comportamiento identico a antes."""
-    candidatos = (
+    # sorted() (bug real, 2026-09-11): ni indice.en_celda ni
+    # entidades_con() (un set sin ordenar) garantizan el orden "menor id"
+    # que este docstring promete -- sin sorted(), el desempate real
+    # dependia del orden de iteracion interno del set.
+    candidatos = sorted(
         indice.en_celda(x, y, zona_idx)
         if indice is not None
         else gestor.entidades_con(Posicion, DimensionesFisicas)

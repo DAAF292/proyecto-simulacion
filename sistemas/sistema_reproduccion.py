@@ -100,7 +100,11 @@ def _macho_elegible_en_contacto(
     filtra por Reproduccion/Identidad -- se añaden guards explícitos
     para candidatos que no las tengan (p.ej. una Construccion en la
     misma celda). Sin indice, comportamiento identico a antes."""
-    fuente = (
+    # sorted() (bug real, 2026-09-11): tanto candidatos (list(set)) como
+    # indice.en_celda no garantizan orden -- el desempate "menor id" que
+    # este modulo documenta desde su creacion dependia en la practica del
+    # orden de iteracion interno de un set de Python, no de una regla real.
+    fuente = sorted(
         indice.en_celda(posicion_hembra.x, posicion_hembra.y, posicion_hembra.zona_idx)
         if indice is not None
         else candidatos

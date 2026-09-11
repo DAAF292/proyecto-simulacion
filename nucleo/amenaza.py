@@ -113,7 +113,19 @@ def posicion_amenaza_mas_cercana(gestor, zona, id_propio: int, x: int, y: int,
         valentia_propia=valentia_propia, factor_valentia_amenaza=factor_valentia_amenaza,
         indice=indice,
     )
-    amenaza_ambiental = celda_percibida(zona, x, y, radio, _es_celda_peligrosa)
+    # La propia celda primero (bug real, 2026-09-11): celda_percibida
+    # excluye por diseno la celda propia (dx=0,dy=0) -- correcto para
+    # buscar comida/agua en OTRO sitio, pero significaba que un individuo
+    # de pie sobre fuego nunca percibia esa amenaza por este camino (solo
+    # el dano directo del incendio, sin ninguna razon para huir salvo que
+    # otra cosa lo moviera). Si la celda propia ya es peligrosa, es la
+    # amenaza ambiental mas cercana posible (distancia 0) -- no hace
+    # falta seguir buscando otra.
+    celda_propia = zona.celda(x, y)
+    if _es_celda_peligrosa(celda_propia):
+        amenaza_ambiental = (x, y)
+    else:
+        amenaza_ambiental = celda_percibida(zona, x, y, radio, _es_celda_peligrosa)
 
     candidato_sonido = None
     if radio_busqueda_sonido > 0 and config is not None:
