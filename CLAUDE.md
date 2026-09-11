@@ -8299,3 +8299,309 @@ ninguna otra prueba tocada.
   `mini-swe-agent`) — el cierre de este arco se hizo por implementación
   directa a petición de Diego, la cuarta pieza consecutiva así en este
   entorno.
+
+## Deuda técnica + tres círculos pequeños + rediseño de Agarre (manos
+## libres) + extensión de robo + rename FABRICAR -- sesión completa
+## (2026-09-11)
+
+Sesión arrancada con "vamos a entrar en añadir mejoras en los sistemas
+actuales" -- Diego pidió enfocarse primero en deuda técnica ("Bloque
+A": consolidar funciones duplicadas, quitar comentarios innecesarios
+-- esto último aplazado explícitamente, "dejamos los comentarios de
+lado de momento" -- y optimizar sonido) antes de tocar funcionalidad
+nueva. El harness completo se descartó de entrada para esta sesión:
+este contenedor solo tiene 4 núcleos, la calibración de 15×12000 sigue
+reservada para la máquina de Diego con 15.
+
+### Bloque A -- auditoría de código + consolidación, cuatro commits
+
+**Auditoría con el skill `code-review`** sobre `nucleo/` y `sistemas/`
+completo (`de8255a`): 6 hallazgos, 5 confirmados contra el código real
+(1 descartado explícitamente por ser una recomendación incorrecta --
+cambiar `compartir_confianza` a `_pares_ordenados` habría alterado el
+orden de tiradas de `rng`, mismo tipo de riesgo ya documentado
+repetidas veces en este proyecto). Los 4 aprobados por Diego, cada uno
+verificado con un arnés dedicado que reproduce el bug ANTES del fix,
+no solo razonado sobre el papel:
+
+1. **Índice espacial congelado ocultaba construcciones/madrigueras
+   recién creadas por otro miembro en el mismo tick**:
+   `sistema_movimiento.py:_calcular_construir` y
+   `sistema_manada.py:_sincronizar_madriguera` consultaban
+   `almacen_cercano`/`madriguera_en` a través del índice espacial
+   congelado al principio del tick (optimización del 2026-09-08) --
+   dos gnomos podían crear cada uno su propio almacén/salón/cocina
+   duplicado en la misma celda, y dos manadas coloniales podían
+   duplicar una `Madriguera`. Corregido volviendo a búsqueda EN VIVO
+   (`indice=None`) solo en estos dos puntos de CREACIÓN -- el resto de
+   usos del índice (navegación, no creación, donde un tick de retraso
+   es inofensivo) queda intacto. El propio docstring de
+   `almacen_cercano` ya prometía "búsqueda EN VIVO... para no perder
+   una construcción arrancada por otro miembro este mismo día" --
+   contradicho en la práctica desde que el índice se introdujo.
+2. **Desempate "menor id" no determinista**:
+   `nucleo/disposicion.py:id_en_contacto_por_disposicion` y
+   `sistema_reproduccion.py:_macho_elegible_en_contacto` prometían
+   desde su creación un desempate por id más bajo, pero dependían en
+   la práctica del orden de iteración de un `set` de Python sin
+   ordenar -- añadido `sorted()` explícito en ambos.
+3. **Fuego en la propia celda nunca se percibía como amenaza**:
+   `celda_percibida` excluye por diseño la celda propia (correcto para
+   buscar comida/agua en OTRO sitio), así que un individuo de pie
+   sobre fuego nunca lo detectaba por el camino de amenaza -- solo
+   sufría el daño directo, sin ningún impulso de huir. Corregido en
+   `nucleo/amenaza.py:posicion_amenaza_mas_cercana` (chequeo de la
+   celda propia primero) y `sistema_movimiento.py:_calcular_huida`
+   (caso especial para amenaza en la posición propia -- huir de uno
+   mismo daría dirección (0,0), reemplazado por un paso aleatorio).
+4. **Docstring falso**: `nucleo/percepcion.py:celda_percibida` decía
+   que `sistema_movimiento.py` la reutiliza para buscar comida/agua --
+   falso, esos escaneos siguen sin consolidar con ella. Corregido el
+   texto.
+
+**Consolidación de deuda técnica real, dos commits, ambos verificados
+como refactors puros (comportamiento byte-idéntico)**:
+- `0bcb230`: `_entidad_cercana_cualquiera`/
+  `_entidad_cercana_cualquiera_con_id`/`_consciente_mas_cercano_con_id`
+  (el mismo bucle de búsqueda por índice espacial repetido tres veces
+  para HUIDA_ERRATICA/CRISIS_VIOLENTA/SOCIALIZAR, señalado como smell
+  ya en la auditoría post-cierre del arco de comunicación del
+  2026-09-07) fusionadas en `_buscar_entidad_cercana(...,
+  solo_conscientes)`.
+- `a723244`: los cinco bucles triple-anidados de `_procesar_roce_social`/
+  `_procesar_robo`/`_procesar_compartir_confianza`/
+  `_procesar_memoria_compartida`/`_procesar_rumor` sobre `por_celda`
+  (crecido de 3 a 5 copias con el arco de robo/intercambio, mismo
+  hallazgo del 2026-09-07) extraídos a `_pares_no_ordenados` (i<j, una
+  vez por par) y `_pares_ordenados` (las dos direcciones). Verificado
+  con el máximo rigor que exige este proyecto para un refactor: salida
+  de `BOSQUE_AUTO_TICKS=2000` byte a byte idéntica antes/después con la
+  misma semilla (mismos 52031 transferencias de memoria, 14950
+  rumores, 2 robos, 2 comparticiones -- cero desplazamiento de la
+  secuencia de `rng`).
+
+Sonido: investigado como candidato de optimización del Bloque A,
+descartado de inmediato -- `nucleo/sonido.py:sonido_mas_cercano` YA
+estaba optimizado desde el Círculo 4 del 2026-09-08
+(`ZonaBioma.sonidos_activos`), la cita original en mi propio plan era
+un error de lectura mío, corregido antes de proponer nada.
+
+### Tres círculos pequeños de mejora (`6459b7a`)
+
+Diseñados e implementados directamente (pipeline sin disponibilidad en
+este contenedor -- sin `OPENROUTER_API_KEY`/`mini-swe-agent`, mismo
+patrón ya establecido varias veces en el proyecto).
+
+**Decaimiento de afinidad**: `Relaciones` (rencor/amistad/pareja) solo
+se acumulaba desde su diseño (2026-09-04) -- nunca se diluía con el
+tiempo, hueco señalado en 3+ piezas distintas del arco de relaciones
+sin cerrar nunca. `sistema_descomposicion.py:_decaer_relaciones` aplica
+la misma ley "nada dura para siempre" que ya rige Necromasa/
+Construccion/provisiones -- decaimiento multiplicativo SIMÉTRICO (mismo
+ritmo para rencor y amistad, sin razón física para que un agravio dure
+más que un afecto), purga por debajo de umbral, cadencia diaria,
+universal (las 4 especies fauna, no solo consciente -- fauna también
+escribe `Relaciones` vía afinidad por concepción).
+
+**Piedras de percusión del fuego, se descartan en vez de acumularse**:
+al diseñar "soltar objeto de Agarre" se encontró que ya estaba resuelto
+para armas desde armas primitivas v2 (2026-09-03) -- el problema real,
+más grave de lo que el pendiente de esa sesión documentaba, era que las
+piedras gastadas se movían a `Inventario.objetos` con un tope de
+transferencia que, verificado con un arnés dedicado contra el código
+real, dejaba las piedras de CUALQUIER fuego posterior al primero
+atascadas en `Agarre` para siempre -- ocupando el 100% de los puntos de
+agarre de un gnomo, bloqueando cualquier arma futura de por vida.
+Corregido descartándolas sin más al gastarse -- no son arma ni material
+de construcción, no tienen uso futuro real.
+
+**Llamada de alarma, tercer uso real de `nucleo/sonido.py`**: un
+individuo que percibe una amenaza real (cualquiera de las tres fuentes
+ya combinadas -- disposición por peso, valentía propia, sonido) puede
+emitir su propio sonido en su posición -- reutiliza `sonido_mas_cercano`,
+YA una fuente de amenaza para cualquier otro individuo cercano, sin
+ningún consumidor nuevo que escribir. Calibración corregida tras un
+primer smoke test real: `probabilidad_alarma_por_tick=0.3` disparó el
+sonido total de ~1500 a ~47000 en 3000 ticks -- demasiado agresivo para
+un grito ocasional, bajado a 0.05 ANTES de comitear, reverificado en
+~6416.
+
+Verificado los tres círculos juntos: 448/448 tests (17 nuevos),
+`BOSQUE_AUTO_TICKS=3000` sin excepciones. Todos los valores nuevos
+PROVISIONALES, sin calibrar contra el harness completo.
+
+### Agarre pasa de reflejo de miedo a recurso físico compartido --
+### "requisito de manos libres" (`83ad591`)
+
+Diego cuestionó el diseño original de `Agarre` (armas primitivas v2,
+2026-09-03) al verlo en la práctica: "debería ser un comportamiento
+meramente físico, como lo es andar... ¿en qué momento necesitamos tener
+puntos de agarre libres? Pues cuando nuestra intención es agarrar algo
+-- quiero comer, pues tendré que tener al menos 1 mano libre, o si voy
+a recolectar, o las dos manos libres si estoy cocinando". Hallazgo real
+que confirmó el problema: ninguna Acción del motor comprobaba nunca si
+tenía manos libres para ejecutarse -- `Agarre` solo existía como
+depósito pasivo de armas.
+
+Diseñado en conversación (`AskUserQuestion`, cinco decisiones cerradas
+antes de escribir código):
+- **Solo aplica a consciente** (gnomo hoy, mismo
+  `umbral_consciencia_agencia`) -- fauna come/recolecta con boca o
+  patas, sin mano que gatear (conejo tiene `puntos_agarre=0` fijo; un
+  gate literal universal lo habría extinguido al instante).
+- **Sin manos suficientes, la utilidad de esa Acción cae a 0.0 ese
+  tick** -- sin mecanismo de "soltar forzado" (descartado el mismo día
+  por sobreingeniería, con el hallazgo de piedras de fuego fresco en la
+  memoria: un individuo ya tiene motivos reales para soltar cuando
+  hacen falta -- CONSTRUIR/FABRICAR compiten por prioridad como
+  siempre).
+- **Manos requeridas**: COMER=1, RECOLECTAR=1, COCINAR=2, CONSTRUIR=1,
+  FABRICAR_ARMA=2 (hoy `manos_requeridas_fabricar_arma`, sin renombrar
+  en el rename posterior -- ver más abajo). CONSTRUIR=1 es
+  deliberadamente el mismo para todo tipo de construcción hoy (todos
+  primitivos, trabajo manual sin herramienta específica) -- un futuro
+  "templo" que exigiera herramientas reales queda documentado como
+  sistema pendiente, no construido (necesitaría fabricación de
+  herramientas más allá de armas, que no existía en este momento de la
+  sesión -- ver el círculo siguiente para cuándo se convirtió en el
+  próximo real). ENCENDER_FUEGO ya tenía su propio requisito INVERSO
+  (manos OCUPADAS con `piedra_suelta`), sin tocar.
+- El reflejo de empuñar arma (`_ajustar_empunadura`) se queda como
+  ajuste paralelo, sin tocar -- el nuevo gate ya lo hace competir de
+  forma indirecta (si el arma ocupa manos, COMER/RECOLECTAR/COCINAR
+  dejan de estar disponibles mientras siga empuñada).
+
+`nucleo/armas.py:manos_libres(puntos_agarre, objetos_agarre) -> int` --
+función pura nueva. Gate aplicado una sola vez al valor FINAL de cada
+utilidad (tras cualquier eslabón heredado de RECOLECTAR), justo antes
+de construir `candidatas`, en vez de repetir el chequeo en cada rama.
+De paso: `puntos_agarre`/`Agarre` pasan a leerse una sola vez por
+entidad al principio del bucle de `sistema_decision.py` (antes se
+recalculaban en tres puntos distintos de la misma función).
+
+**Verificado**: 461/461 tests (13 nuevos, incluidos los dos casos
+límite de cada acción), `BOSQUE_AUTO_TICKS=3000` sin excepciones, y un
+contador de observación nuevo confirma que el gate se dispara **16638
+veces** en esa misma corrida -- se ejerce con fuerza real desde el
+primer día, no "correcto pero invisible", sin disparar ninguna
+mortalidad anómala por inanición. Todos los valores nuevos
+PROVISIONALES, sin calibrar contra el harness completo.
+
+### Robo extendido más allá de comida -- materiales de construcción y
+### armas (`15a7aa1`)
+
+Diego, tras cerrar manos libres, retomó robo: "el tema del robo es
+interesante, no sé si sería muy factible que le puedas quitar algo de
+la mano a alguien así sin más, pero de sus inventarios sí. Por otro
+lado, ¿qué motiva el robo?". Dos decisiones cerradas antes de
+implementar:
+
+- **Agarre nunca es robable -- solo `Inventario`** (contenidos/
+  objetos/provisiones). Lo activamente empuñado exigiría un mecanismo
+  de desarme, distinto de un hurto discreto; Diego lo descartó de
+  entrada con criterio físico simple.
+- **Motivación, sin inventar una "necesidad de robar" nueva**: cada
+  tipo de robo reutiliza la MISMA señal de déficit que el motor ya usa
+  para decidir si RECOLECTAR/CONSTRUIR/FABRICAR_ARMA -- mismo patrón de
+  herencia causal que el proyecto ya usa dos veces (RECOLECTAR hereda
+  la utilidad de ENCENDER_FUEGO/FABRICAR_ARMA cuando faltan piedras/
+  material). Comida: hambre (ya existía, círculo previo del
+  2026-09-07). Materiales: falta de masa apta para el
+  `objetivo_construccion_actual` del ladrón (mismo chequeo que ya usa
+  RECOLECTAR/CONSTRUIR). Armas: inseguridad real (1 - seguridad, mismo
+  driver que FABRICAR_ARMA), solo si el ladrón no porta ya ningún
+  objeto `apto_arma` (ni empuñado ni guardado).
+
+`_intentar_robo_material`/`_intentar_robo_arma`, mismo molde exacto que
+`_intentar_robo` (mismo resolutor `resolver_disputa`, mismo_grupo/
+familia → COMPARTE automático) llamados desde `_procesar_robo` junto al
+ya existente. Robo de material transfiere vía `transferir_recurso`
+(mismo primitivo dict-based, 2026-09-07); robo de arma manipula
+`Inventario.objetos` directamente (lista de objetos discretos, mecánica
+distinta de un dict de kg) con su propio chequeo de capacidad de carga.
+
+**Verificado**: 471/471 tests (10 nuevos), `BOSQUE_AUTO_TICKS=3000` sin
+excepciones. Robo de materiales se dispara con fuerza real en juego
+libre (**1115 intentos, 24 exitosos** en esa corrida). Robo de armas en
+0 en esta semilla concreta -- exige la combinación más rara de
+inseguridad real + cero armas propias + víctima con algo guardado (no
+empuñado); mismo patrón "correcto pero raro en esta semilla" ya visto
+varias veces en este proyecto, necesita más semillas para observarse.
+Todos los valores nuevos PROVISIONALES, sin calibrar.
+
+### Rename Accion.FABRICAR_ARMA -> Accion.FABRICAR, genérico por
+### categoría (`ec03777`)
+
+Diego trajo una propuesta completa ya redactada (de una sesión/
+instancia de Claude distinta, sin rastro visible en esta conversación
+-- se le pidió explícitamente que la pegara entera antes de opinar,
+mismo criterio de honestidad de siempre: nunca fingir memoria de algo
+que no está en el contexto visible). Propuesta: renombrar
+`Accion.FABRICAR_ARMA` → `Accion.FABRICAR`, con "arma" como única
+categoría real implementada hoy (sin inventar "herramienta" todavía,
+sin tocar COCINAR), pero con la mecánica ya preparada para que sumar
+una segunda categoría el día que haga falta sea añadir un candidato al
+resolutor interno, no crear `Accion.FABRICAR_HERRAMIENTA` desde cero.
+`CREAR` (acción genérica de construir-cualquier-cosa) quedó fuera por
+completo -- sin caso de uso real todavía, sería autoría de una acción
+sin ley que la sostenga.
+
+Objeción real planteada antes de aceptar sin más: construir
+"infraestructura de resolutor" para un único candidato es sobre-
+ingeniería si "herramienta" es solo hipotética. Diego la corrigió con
+información nueva y concreta: **"el segundo círculo con el que nos
+vamos a meter directamente es el tema de la fabricación de
+herramientas"** -- herramienta no es hipotética, es el próximo círculo
+real. Retirada la objeción, confirmado el diseño.
+
+`Intencion` gana `fabricar_categoria: str = ""` (transitorio, no
+persistido, mismo criterio que `recolectar_motivo_arma`).
+`sistema_decision.py` resuelve la categoría ganadora con un resolutor
+interno mínimo (`candidatos_fabricar: list[tuple[str, float]]` + `max()`,
+mismo molde que `objetivo_construccion_actual:tipos_paralelos` del
+2026-09-08), hoy con un único candidato ("arma"). `sistema_recursos.py:
+_resolver_fabricar_arma` → `_resolver_fabricar`, gana el parámetro
+`categoria: str` y un guard temprano (`if categoria != "arma": return`).
+`recolectar_motivo_arma` se deja INTACTO a propósito -- confirmado en
+la conversación de diseño que es un mecanismo independiente (RECOLECTAR
+heredando utilidad del eslabón de FABRICAR), no parte de esta
+generalización.
+
+**Verificado**: 471/471 tests (actualizados los que referenciaban el
+nombre anterior en `tests/test_armas_primitivas_v2.py` y
+`tests/test_manos_libres.py`, incluidas 2 llamadas reales al método
+renombrado, no solo texto), `BOSQUE_AUTO_TICKS=3000` sin excepciones.
+Las menciones "renombrada desde FABRICAR_ARMA" que quedan en comentarios
+(`sistema_decision.py`, `sistema_recursos.py`, `componentes/intencion.py`)
+son históricas, intencionales -- mismo criterio de honestidad del resto
+del proyecto.
+
+### Pendiente real, explícito, tras esta sesión
+
+- Los 4 bugs de la auditoría de código y los tres círculos pequeños
+  (decaimiento, piedras de fuego, alarma) se verificaron con arneses
+  dirigidos y `BOSQUE_AUTO_TICKS`, pero ninguno se midió contra el
+  harness completo (15×12000) -- todos sus valores numéricos nuevos
+  siguen PROVISIONALES.
+- **El siguiente círculo real, ya confirmado por Diego, es fabricación
+  de herramientas** -- `manos_requeridas_fabricar_arma` y el resolutor
+  `candidatos_fabricar` de FABRICAR quedan ya preparados para ese
+  círculo (un candidato "herramienta" más, sin Acción nueva que crear).
+- `Accion.CREAR` (verbo genérico de construir-cualquier-cosa) queda
+  explícitamente fuera de alcance hasta que exista un caso de uso real
+  que lo justifique -- no autorar una acción sin ley que la sostenga.
+- Si se retoma COCINAR bajo el mismo paraguas de FABRICAR (pregunta que
+  quedó abierta en la propuesta original de Diego, nunca cerrada): el
+  precedente en contra (COCINAR ya tiene su propia Acción con su propio
+  gate de Fogata, sin ningún resolutor de categorías) sigue siendo
+  válido -- no se ha decidido nada al respecto en esta sesión.
+- Robo de armas sigue sin observarse en juego libre en ninguna semilla
+  probada hasta ahora -- candidato a revisar con más semillas si se
+  quiere confirmar que se dispara de verdad, no solo que es correcto
+  por los tests dirigidos.
+- Centinela del pipeline sigue parado en la máquina histórica; este
+  contenedor sigue sin `OPENROUTER_API_KEY`/`mini-swe-agent` -- las 7
+  piezas de esta sesión (4 fixes + 2 consolidaciones + 3 círculos +
+  manos libres + robo + rename, en 7 commits) se implementaron todas
+  directamente por Claude, sin pasar por el pipeline, mismo patrón ya
+  establecido en sesiones recientes en este entorno concreto.
