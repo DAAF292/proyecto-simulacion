@@ -146,8 +146,8 @@ def test_ley_indice_asertividad_social_suma_arma_empunada():
 
 def test_ley_recolectar_material_arma_requiere_motivo_real():
     """El material de arma SOLO se recoge a Inventario.objetos cuando el
-    RECOLECTAR de este tick está motivado por el eslabón heredado de
-    FABRICAR_ARMA (recolectar_arma=True) -- nunca un RECOLECTAR elegido
+    RECOLECTAR de este tick está motivado por el eslabón heredado de la
+    categoría "arma" de FABRICAR (recolectar_arma=True) -- nunca un RECOLECTAR elegido
     por construcción carga un palo "porque se lo encuentra" (la Vía 2
     original sin causa queda retirada)."""
     config = _config()
@@ -195,7 +195,7 @@ def test_ley_fabricar_arma_consume_materiales_y_emite_evento():
     gestor = GestorEntidades()
     bus = BusEventos()
     inv = Inventario(objetos=["madera"])
-    sistema._resolver_fabricar_arma(gestor, 1, inv, 3, 4, 0, bus, 5)
+    sistema._resolver_fabricar(gestor, 1, inv, 3, 4, 0, bus, 5, "arma")
     assert inv.objetos == ["lanza"]
     eventos = [e for e in bus.eventos_del_tick if e.tipo == "ArmaFabricada"]
     assert len(eventos) == 1
@@ -232,7 +232,7 @@ def test_ley_empunyar_guardar_es_reversible():
 def test_ley_decision_recolectar_material_arma_con_inseguridad_real():
     """Un individuo con seguridad baja y material apto_arma en la celda
     desarrolla interés real: RECOLECTAR se elige por el eslabón heredado
-    de FABRICAR_ARMA (marcado en Intencion.recolectar_motivo_arma) y el
+    de la categoría "arma" de FABRICAR (marcado en Intencion.recolectar_motivo_arma) y el
     material acabará en Inventario.objetos. Se fuerza agotamiento para
     anular HUIR (que comparte la fórmula 1.0 - seguridad y gana el
     empate por orden -- hallazgo documentado de la spec anterior)."""
@@ -286,8 +286,8 @@ def test_ley_ciclo_completo_recolectar_fabricar_empunyar() -> None:
     Inventario.objetos, fabrica el arma (reaccionando al presente, sin
     planificar a futuro) y acaba empunando el arma fabricada. Cubre el
     hallazgo real de la implementacion: el reflejo empunyar/guardar puede
-    mover el crudo a Agarre en el mismo tick en que se decide FABRICAR_ARMA,
-    y la resolución debe poder consumirlo de donde este (Inventario o
+    mover el crudo a Agarre en el mismo tick en que se decide FABRICAR
+    (categoría "arma"), y la resolución debe poder consumirlo de donde este (Inventario o
     Agarre) -- si solo mirara Inventario, una criatura asustada que empunya
     el unico palo que tiene se quedaria en un ciclo de recolectar sin cerrar
     el circulo."""
@@ -315,9 +315,9 @@ def test_ley_ciclo_completo_recolectar_fabricar_empunyar() -> None:
             sistema._resolver_recolectar(
                 inv, dims, zona.obtener_celda(5, 5), agarre, "gnomo", True, recolectar_arma=True
             )
-        if intencion.accion == Accion.FABRICAR_ARMA:
-            sistema._resolver_fabricar_arma(
-                gestor, eid, inv, 5, 5, 0, bus, tick, agarre=agarre
+        if intencion.accion == Accion.FABRICAR:
+            sistema._resolver_fabricar(
+                gestor, eid, inv, 5, 5, 0, bus, tick, "arma", agarre=agarre
             )
 
     # Se fabrico un arma de nivel >= 2 y (a partir de ese momento) el

@@ -335,12 +335,12 @@ class SistemaRecursos:
                 )
             elif intencion.accion == Accion.COCINAR:
                 self._resolver_cocinar(gestor, eid, pos.x, pos.y, pos.zona_idx)
-            elif intencion.accion == Accion.FABRICAR_ARMA:
+            elif intencion.accion == Accion.FABRICAR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 agarre_fabricar = gestor.obtener_componente(eid, Agarre)
-                self._resolver_fabricar_arma(
+                self._resolver_fabricar(
                     gestor, eid, inv, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
-                    agarre=agarre_fabricar,
+                    intencion.fabricar_categoria, agarre=agarre_fabricar,
                 )
 
         # Fogatas: consumo de combustible propio y extincion (ver
@@ -559,8 +559,8 @@ class SistemaRecursos:
         2. MATERIAL ARMA CON CAUSA (armas primitivas v2): mientras el
            individuo no tenga NINGÚN arma de nivel ≥2 fabricada (ni en
            Inventario ni en Agarre), sistema_decision.py eleva la utilidad
-           de RECOLECTAR heredando el valor de FABRICAR_ARMA
-           (1.0 - seguridad) cuando la celda actual ofrece un recurso
+           de RECOLECTAR heredando el valor que tendría la categoria
+           "arma" de FABRICAR (1.0 - seguridad) cuando la celda actual ofrece un recurso
            apto_arma. La resolución SOLO recoge ese material (como OBJETO
            DISCRETO a Inventario.objetos -- un palo entero, una piedra
            entera, topado por la capacidad de carga por peso) cuando ese
@@ -633,7 +633,7 @@ class SistemaRecursos:
         # Vía 2: material apto_arma CON CAUSA (armas primitivas v2) -- ver
         # docstring arriba. Mismo eslabón heredado que ENCENDER_FUEGO:
         # sistema_decision.py eleva la utilidad de RECOLECTAR con el valor
-        # de FABRICAR_ARMA (1.0 - seguridad) mientras no tenga arma de
+        # de la categoria "arma" de FABRICAR (1.0 - seguridad) mientras no tenga arma de
         # nivel ≥2 y la celda ofrezca material apto_arma -- y solo cuando
         # ese eslabón fue el MOTIVO del RECOLECTAR elegido (marcado en
         # Intencion.recolectar_motivo_arma) se recoge material de arma.
@@ -861,7 +861,7 @@ class SistemaRecursos:
         if transformado > 0.0:
             self._stats_cocinar_resuelto += 1
 
-    def _resolver_fabricar_arma(
+    def _resolver_fabricar(
         self,
         gestor: GestorEntidades,
         entidad_id: int,
@@ -871,23 +871,31 @@ class SistemaRecursos:
         zona_idx: int,
         bus_eventos: BusEventos,
         tick_actual: int,
+        categoria: str,
         agarre: Agarre | None = None,
     ) -> None:
         """
-        FABRICAR_ARMA (ver componentes/intencion.py y config/armas.yaml).
-        sistema_decision.py ya comprobó las precondiciones (consciente,
-        sin arma de nivel >=2 fabricada, con material apto_arma en crudo
-        entre lo que ya se porta) antes de elegir esta Accion. Aquí se
-        resuelve de forma determinista (tallar no es un suceso de azar, a
-        diferencia de encender fuego): busca la mejor receta completable
-        AHORA con lo que ya se porta (prioriza el nivel más alto
-        alcanzable con el material disponible en este instante -- no
-        espera a conseguir un material mejor, reacciona al presente,
-        coherente con que el resto de la Utility AI no planifica a
-        futuro), consume los materiales crudos de esa receta, añade el
-        nombre del arma resultante a Inventario.objetos y emite un Evento
-        ArmaFabricada (NOTABLE). Sin desplazamiento, igual que
-        RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
+        FABRICAR (2026-09-11, renombrada desde FABRICAR_ARMA -- ver
+        componentes/intencion.py y config/armas.yaml). Ramifica por
+        `categoria` (Intencion.fabricar_categoria, ya decidida por el
+        resolutor interno de sistema_decision.py) -- "arma" es hoy la
+        UNICA implementada; cualquier otra cae al no-op de abajo (no
+        deberia poder llegar aqui salvo que se anada una categoria nueva
+        a sistema_decision.py sin su propia resolucion todavia).
+
+        Categoria "arma": sistema_decision.py ya comprobó las
+        precondiciones (consciente, sin arma de nivel >=2 fabricada, con
+        material apto_arma en crudo entre lo que ya se porta) antes de
+        elegir esta Accion. Aquí se resuelve de forma determinista
+        (tallar no es un suceso de azar, a diferencia de encender fuego):
+        busca la mejor receta completable AHORA con lo que ya se porta
+        (prioriza el nivel más alto alcanzable con el material disponible
+        en este instante -- no espera a conseguir un material mejor,
+        reacciona al presente, coherente con que el resto de la Utility
+        AI no planifica a futuro), consume los materiales crudos de esa
+        receta, añade el nombre del arma resultante a Inventario.objetos
+        y emite un Evento ArmaFabricada (NOTABLE). Sin desplazamiento,
+        igual que RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
 
         Los materiales se buscan en Inventario.objetos Y en Agarre.objetos
         (lo que la criatura tiene en la mano es tan suyo como lo que lleva
@@ -899,6 +907,8 @@ class SistemaRecursos:
         tests/test_armas_primitivas_v2.py). El arma resultante siempre
         nace en Inventario.objetos.
         """
+        if categoria != "arma":
+            return
         if inv is None:
             return
         objetos_portados = list(inv.objetos)

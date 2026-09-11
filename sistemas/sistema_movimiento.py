@@ -1035,7 +1035,7 @@ class SistemaMovimiento:
 
         Tres tipos de robo, cada uno motivado por la MISMA señal de
         déficit que ya usa el motor para decidir si RECOLECTAR/CONSTRUIR/
-        FABRICAR_ARMA (2026-09-11): comida (hambre), materiales de
+        FABRICAR categoria "arma" (2026-09-11): comida (hambre), materiales de
         construcción (falta de masa apta para el objetivo actual) y
         objetos apto_arma (inseguridad real) -- nunca de Agarre, solo de
         Inventario (lo activamente empuñado no es robable)."""
@@ -1212,7 +1212,7 @@ class SistemaMovimiento:
     ) -> None:
         """Robo de un objeto apto_arma (2026-09-11, extensión del círculo
         de robo más allá de comida). Motivado por la MISMA señal que ya
-        activa FABRICAR_ARMA -- inseguridad real (1 - seguridad) -- solo
+        activa la categoría "arma" de FABRICAR -- inseguridad real (1 - seguridad) -- solo
         si el ladrón todavía no porta ningún objeto apto_arma, ni
         empuñado (Agarre) ni guardado (Inventario.objetos): quien ya
         tiene con qué defenderse no tiene motivo real para robar otro.

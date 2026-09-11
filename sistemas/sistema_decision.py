@@ -752,11 +752,21 @@ def actualizar(
                 if tiene_crudo:
                     utilidad_cocinar = utilidad_cocinar_base
 
-        # FABRICAR_ARMA (armas primitivas v2, ver componentes/intencion.py,
-        # config/armas.yaml y nucleo/armas.py). Misma compuerta de
-        # consciencia que CONSTRUIR/RECOLECTAR. Utilidad = 1.0 - seguridad
-        # (responde a una necesidad real de defensa, mismo patron causal
-        # que ENCENDER_FUEGO con el frio -- un individuo que nunca ha
+        # FABRICAR (2026-09-11, renombrada desde FABRICAR_ARMA -- ver
+        # componentes/intencion.py, config/armas.yaml y nucleo/armas.py).
+        # Verbo GENERICO, mismo criterio que ya aplica CONSTRUIR: "arma"
+        # es hoy la UNICA categoria real, calculada como un candidato
+        # dentro de candidatos_fabricar (mismo molde que
+        # objetivo_construccion_actual:tipos_paralelos) y resuelta por
+        # max() en utilidad_fabricar/categoria_fabricar_ganadora -- una
+        # futura categoria (herramienta) se anadiria como una tupla mas
+        # a esa lista, sin tocar Accion.FABRICAR ni el resto de la
+        # Utility AI.
+        #
+        # Categoria "arma": misma compuerta de consciencia que
+        # CONSTRUIR/RECOLECTAR. Utilidad = 1.0 - seguridad (responde a
+        # una necesidad real de defensa, mismo patron causal que
+        # ENCENDER_FUEGO con el frio -- un individuo que nunca ha
         # sentido inseguridad real nunca desarrolla interes en tallar un
         # palo). Gateada a 0.0 si ya hay un arma de nivel >=2 fabricada
         # (el gate se cierra para siempre en este circulo) o si todavia
@@ -767,14 +777,18 @@ def actualizar(
         # regla de "recoge palos porque si" aunque el individuo jamas haya
         # sentido inseguridad real (misma correccion causal que
         # piedra_suelta para el fuego). La utilidad de RECOLECTAR hereda
-        # el valor que FABRICAR_ARMA tendria SI YA tuviera el material en
-        # bruto -- solo cuando la celda actual ofrece un recurso apto_arma.
-        utilidad_fabricar_arma = 0.0
+        # el valor que la categoria "arma" tendria SI YA tuviera el
+        # material en bruto -- solo cuando la celda actual ofrece un
+        # recurso apto_arma.
+        utilidad_categoria_arma = 0.0
         # True si el eslabon heredado de material de arma es el motivo que
         # ELEVA la utilidad de RECOLECTAR en este tick (1.0 - seguridad
         # supera la utilidad que RECOLECTAR ya tuviera por construccion) --
         # se vuelca a Intencion.recolectar_motivo_arma si ademas RECOLECTAR
-        # acaba ganando el argmax (armas primitivas v2).
+        # acaba ganando el argmax (armas primitivas v2). Vía independiente
+        # de la categoria "arma" de FABRICAR -- RECOLECTAR nunca necesita
+        # saber que Accion.FABRICAR es generica, solo que hay un deficit
+        # real de seguridad y un recurso apto_arma en la celda.
         recolectar_con_motivo_arma = False
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             objetos_totales = list(inventario.objetos)
@@ -789,7 +803,7 @@ def actualizar(
                     for obj in objetos_totales
                 )
                 if tiene_material_crudo:
-                    utilidad_fabricar_arma = 1.0 - necesidades.seguridad
+                    utilidad_categoria_arma = 1.0 - necesidades.seguridad
                 zona_arma = mundo.territorio.zonas[pos.zona_idx]
                 celda_arma = zona_arma.obtener_celda(pos.x, pos.y)
                 if celda_ofrece_material_arma(celda_arma, catalogo_materiales):
@@ -800,6 +814,14 @@ def actualizar(
                     utilidad_recolectar = max(
                         utilidad_recolectar, 1.0 - necesidades.seguridad
                     )
+
+        # Resolutor interno de FABRICAR: hoy un unico candidato ("arma"),
+        # asi que es casi un passthrough -- pero la forma ya esta puesta
+        # para cuando exista un segundo candidato real.
+        candidatos_fabricar: list[tuple[str, float]] = [("arma", utilidad_categoria_arma)]
+        categoria_fabricar_ganadora, utilidad_fabricar = max(
+            candidatos_fabricar, key=lambda c: c[1]
+        )
 
         # Requisito de manos libres (2026-09-11): manipular
         # conscientemente el mundo fisico exige tener una forma fisica de
@@ -829,9 +851,9 @@ def actualizar(
                     sistema_decision._stats_gate_manos_libres_disparado += 1
                 utilidad_construir = 0.0
             if manos_disponibles < manos_requeridas_fabricar_arma:
-                if utilidad_fabricar_arma > 0.0 and sistema_decision is not None:
+                if utilidad_fabricar > 0.0 and sistema_decision is not None:
                     sistema_decision._stats_gate_manos_libres_disparado += 1
-                utilidad_fabricar_arma = 0.0
+                utilidad_fabricar = 0.0
 
         candidatas = (
             (utilidad_huir, Accion.HUIR),
@@ -841,22 +863,23 @@ def actualizar(
             (1.0 - necesidades.aliviado, Accion.ALIVIARSE),
             (utilidad_buscar_pareja, Accion.BUSCAR_PAREJA),
             # CUIDADO con el orden (hallazgo real ya documentado con HUIR
-            # en la implementacion anterior): FABRICAR_ARMA y HUIR
-            # comparten literalmente la formula 1.0 - seguridad, y max()
-            # conserva el primer maximo en un empate. HUIR es la primera
-            # candidata a proposito -- huir de una amenaza real antecede a
-            # tallar un arma; FABRICAR_ARMA se coloca DESPUES de HUIR para
-            # que un empate resuelva a favor de HUIR.
+            # en la implementacion anterior): la categoria "arma" de
+            # FABRICAR y HUIR comparten literalmente la formula
+            # 1.0 - seguridad, y max() conserva el primer maximo en un
+            # empate. HUIR es la primera candidata a proposito -- huir de
+            # una amenaza real antecede a tallar un arma; FABRICAR se
+            # coloca DESPUES de HUIR para que un empate resuelva a favor
+            # de HUIR.
             #
-            # FABRICAR_ARMA va ANTES de RECOLECTAR por el mismo motivo:
+            # FABRICAR va ANTES de RECOLECTAR por el mismo motivo:
             # RECOLECTAR tambien hereda 1.0 - seguridad cuando la celda
             # ofrece material apto_arma, y si ya se porta crudo un empate
             # debe resolver a favor de tallar (se recolecta hasta tener lo
             # necesario, se consume al completar -- no se acumulan palos
             # sin fin). Con el crudo en la mano (reflejo empunyar) la
-            # criatura sigue pudiendo fabricar: _resolver_fabricar_arma
+            # criatura sigue pudiendo fabricar: _resolver_fabricar
             # consume de Inventario y Agarre.
-            (utilidad_fabricar_arma, Accion.FABRICAR_ARMA),
+            (utilidad_fabricar, Accion.FABRICAR),
             (utilidad_recolectar, Accion.RECOLECTAR),
             (utilidad_construir, Accion.CONSTRUIR),
             (utilidad_encender_fuego, Accion.ENCENDER_FUEGO),
@@ -913,12 +936,20 @@ def actualizar(
         # Vuelca a Intencion la causalidad del RECOLECTAR (armas
         # primitivas v2): solo se recolecta material de arma a
         # Inventario.objetos cuando RECOLECTAR se eligio por el eslabon
-        # heredado de FABRICAR_ARMA (celda con apto_arma y deficit real
-        # de seguridad), nunca cuando fue por construccion o deambular --
-        # un individuo con seguridad siempre alta no desarrolla interes
-        # en cargar un palo.
+        # heredado de la categoria "arma" (celda con apto_arma y deficit
+        # real de seguridad), nunca cuando fue por construccion o
+        # deambular -- un individuo con seguridad siempre alta no
+        # desarrolla interes en cargar un palo.
         intencion.recolectar_motivo_arma = (
             intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_arma
+        )
+        # Vuelca a Intencion que categoria gano el resolutor interno de
+        # FABRICAR (2026-09-11), solo si FABRICAR es de verdad la accion
+        # FINAL tras el compromiso de satisfaccion -- mismo criterio que
+        # recolectar_motivo_arma arriba. sistema_recursos.py:
+        # _resolver_fabricar ramifica por este valor.
+        intencion.fabricar_categoria = (
+            categoria_fabricar_ganadora if intencion.accion == Accion.FABRICAR else ""
         )
 
         # Empunyar/guardar (armas primitivas v2, ver config/armas.yaml):

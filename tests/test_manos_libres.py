@@ -1,6 +1,7 @@
 """Requisito de manos libres (2026-09-11): manipular conscientemente el
 mundo fisico exige tener una forma fisica de hacerlo -- coger un objeto
-implica agarre. COMER/RECOLECTAR/COCINAR/CONSTRUIR/FABRICAR_ARMA quedan
+implica agarre. COMER/RECOLECTAR/COCINAR/CONSTRUIR/FABRICAR (categoría
+"arma") quedan
 gateadas a 0.0 si no quedan suficientes puntos de agarre libres (ver
 nucleo/armas.py:manos_libres y sistema_decision.py, junto a
 "candidatas"). Solo aplica a consciente -- fauna come/recolecta con
@@ -206,7 +207,7 @@ def test_ley_construir_se_elige_sin_agarre_ocupado():
 
 
 # ---------------------------------------------------------------------------
-# FABRICAR_ARMA (requisito: 2)
+# FABRICAR, categoría "arma" (requisito: 2)
 # ---------------------------------------------------------------------------
 
 def test_ley_fabricar_arma_bloqueado_con_solo_una_mano_libre():
@@ -223,7 +224,7 @@ def test_ley_fabricar_arma_bloqueado_con_solo_una_mano_libre():
 
     actualizar(gestor, mundo, config, BusEventos(), 1)
 
-    assert gestor.obtener_componente(eid, Intencion).accion != Accion.FABRICAR_ARMA
+    assert gestor.obtener_componente(eid, Intencion).accion != Accion.FABRICAR
 
 
 def test_ley_fabricar_arma_se_elige_con_ambas_manos_libres():
@@ -239,7 +240,7 @@ def test_ley_fabricar_arma_se_elige_con_ambas_manos_libres():
 
     actualizar(gestor, mundo, config, BusEventos(), 1)
 
-    assert gestor.obtener_componente(eid, Intencion).accion == Accion.FABRICAR_ARMA
+    assert gestor.obtener_componente(eid, Intencion).accion == Accion.FABRICAR
 
 
 # ---------------------------------------------------------------------------

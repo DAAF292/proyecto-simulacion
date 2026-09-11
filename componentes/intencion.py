@@ -58,16 +58,26 @@ class Accion(Enum):
     # Inventario.provisiones. Sin desplazamiento -- se resuelve donde ya
     # se esté.
     COCINAR = "cocinar"
-    # FABRICAR_ARMA: exclusiva de quien supera
-    # decision.umbral_consciencia_agencia (gnomo hoy) -- fabricar un arma
-    # es agencia consciente, no instinto. Gateada por necesidad real
-    # (Necesidades.seguridad, mismo patron causal que ENCENDER_FUEGO con
-    # el frio): un individuo que nunca ha sentido inseguridad real nunca
-    # desarrolla interes en tallar un palo. Se resuelve donde se esta, sin
+    # FABRICAR (2026-09-11, renombrada desde FABRICAR_ARMA -- ver
+    # historial de conversacion de diseno, docs/superpowers/specs/ si se
+    # llega a escribir spec): verbo GENERICO, mismo criterio que ya
+    # aplica CONSTRUIR (Construccion.tipo abierto, resuelto en runtime)
+    # -- "arma" es hoy la UNICA categoria real implementada
+    # (Intencion.fabricar_categoria), no parte del nombre de la Accion.
+    # Exclusiva de quien supera decision.umbral_consciencia_agencia
+    # (gnomo hoy) -- fabricar es agencia consciente, no instinto. La
+    # categoria "arma" esta gateada por necesidad real (Necesidades.
+    # seguridad, mismo patron causal que ENCENDER_FUEGO con el frio): un
+    # individuo que nunca ha sentido inseguridad real nunca desarrolla
+    # interes en tallar un palo. Se resuelve donde se esta, sin
     # desplazamiento propio (como RECOLECTAR/ALIVIARSE) -- consume
     # materiales crudos apto_arma de Inventario.objetos y produce un arma
     # de nivel >= 2 (ver config/armas.yaml:recetas) en Inventario.objetos.
-    FABRICAR_ARMA = "fabricar_arma"
+    # Una segunda categoria futura (herramienta) se anadiria como un
+    # candidato mas al resolutor interno de sistema_decision.py (mismo
+    # molde que objetivo_construccion_actual:tipos_paralelos), sin crear
+    # una Accion nueva.
+    FABRICAR = "fabricar"
     # SOCIALIZAR (2026-09-06, ocio consciente -- ver
     # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
     # accion nueva e INDEPENDIENTE del sesgo gregario de DEAMBULAR (que se
@@ -102,3 +112,10 @@ class Intencion:
     # recoge armas "porque se lo encuentra". NO se persiste -- se
     # recalcula cada tick, como la propia accion.
     recolectar_motivo_arma: bool = False
+    # Transitorio por tick (2026-09-11, rename FABRICAR_ARMA -> FABRICAR):
+    # que categoria gano el resolutor interno de FABRICAR este tick --
+    # "arma" (unica categoria real hoy) o "" si Accion.FABRICAR no fue
+    # la elegida. sistema_recursos.py:_resolver_fabricar ramifica por
+    # este valor para saber que receta/catalogo aplicar. NO se persiste,
+    # se recalcula cada tick como la propia accion.
+    fabricar_categoria: str = ""

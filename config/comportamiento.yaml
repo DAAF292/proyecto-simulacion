@@ -233,7 +233,8 @@ conflicto:
   probabilidad_base_robo_material: 0.05
   urgencia_robo_material: 0.5
   # Robo de un objeto apto_arma (2026-09-11): motivado por la MISMA
-  # senal que ya activa FABRICAR_ARMA (inseguridad real, 1 - seguridad)
+  # senal que ya activa la categoria "arma" de FABRICAR (inseguridad
+  # real, 1 - seguridad)
   # -- solo si el ladron no porta ya ningun objeto apto_arma (ni
   # empunado ni guardado). Nunca roba de Agarre, solo de
   # Inventario.objetos -- lo activamente empunado no es robable (ver
