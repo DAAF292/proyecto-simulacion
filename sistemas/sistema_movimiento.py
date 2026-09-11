@@ -635,12 +635,11 @@ class SistemaMovimiento:
         dy = 0 if ay == pos_y else (1 if pos_y > ay else -1)
         return dx, dy
 
-    # HUIDA_ERRATICA y CRISIS_VIOLENTA (crisis mental,
-    # sistema_decision.py) reaccionan a CUALQUIER entidad cercana, no a
-    # una amenaza calculada por disposicion (a diferencia de HUIR arriba)
-    # -- de ahi que necesiten su propia busqueda en vez de reutilizar
-    # posicion_amenaza_mas_cercana.
-    def _entidad_cercana_cualquiera(
+    # HUIDA_ERRATICA, CRISIS_VIOLENTA y SOCIALIZAR reaccionan a CUALQUIER
+    # entidad cercana (o a cualquier consciente cercano), no a una amenaza
+    # calculada por disposicion -- de ahi que necesiten su propia busqueda
+    # en vez de reutilizar posicion_amenaza_mas_cercana.
+    def _buscar_entidad_cercana(
         self,
         gestor: GestorEntidades,
         entidad_id: int,
@@ -648,66 +647,35 @@ class SistemaMovimiento:
         pos_y: int,
         radio: int,
         zona_idx: int = 0,
-    ) -> tuple[int, int] | None:
-        """Posicion de la entidad con Posicion mas cercana dentro del
-        radio, de CUALQUIER tipo (cualquier especie, criatura o
-        necromasa), sin filtro de amenaza ni de disposicion por tamano
-        -- una crisis mental no razona sobre quien es peligroso o presa,
-        reacciona a la presencia en si.
+        solo_conscientes: bool = False,
+    ) -> tuple[int | None, tuple[int, int] | None]:
+        """Entidad con Posicion mas cercana dentro del radio, excluyendo a
+        quien busca. Sin filtro de amenaza ni de disposicion por tamano --
+        una crisis mental no razona sobre quien es peligroso o presa.
 
-        2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
-        si esta disponible, en vez del escaneo O(N) sobre toda la
-        poblacion -- sin el, comportamiento identico a antes."""
-        mejor: tuple[int, int] | None = None
-        mejor_dist = radio + 1
+        solo_conscientes=True filtra a CapacidadMental.consciencia >=
+        umbral_consciencia_agencia (cualquier especie, no solo la propia --
+        a diferencia de _buscar_conspecifico_mas_cercano).
+
+        Usa self._indice_actual si esta disponible (no filtra por
+        CapacidadMental, el guard se aplica aparte); sin el, escanea toda
+        la poblacion."""
+        componentes = (Posicion, CapacidadMental) if solo_conscientes else (Posicion,)
         fuente = (
             self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
             if self._indice_actual is not None
-            else gestor.entidades_con(Posicion)
+            else gestor.entidades_con(*componentes)
         )
-        for otro_id in fuente:
-            if otro_id == entidad_id:
-                continue
-            pos_o = gestor.obtener_componente(otro_id, Posicion)
-            if pos_o is None or pos_o.zona_idx != zona_idx:
-                continue
-            dist = abs(pos_o.x - pos_x) + abs(pos_o.y - pos_y)
-            if dist <= radio and dist < mejor_dist:
-                mejor = (pos_o.x, pos_o.y)
-                mejor_dist = dist
-        return mejor
-
-    def _entidad_cercana_cualquiera_con_id(
-        self,
-        gestor: GestorEntidades,
-        entidad_id: int,
-        pos_x: int,
-        pos_y: int,
-        radio: int,
-        zona_idx: int = 0,
-    ) -> tuple[int | None, tuple[int, int] | None]:
-        """Variante de _entidad_cercana_cualquiera que ademas devuelve el
-        ID de la entidad mas cercana, no solo su posicion -- CRISIS_VIOLENTA
-        la necesita desde 2026-09-06 (conflicto verbal): con contacto real
-        (distancia 0) el resolutor compartido _resolver_conflicto_entre
-        exige los DOS ids, no basta la celda. _calcular_huida_erratica
-        sigue usando la variante original sin id, intacta -- un vuelco
-        no necesita saber a quien huye, solo en que direccion.
-
-        2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
-        si esta disponible, en vez del escaneo O(N) sobre toda la
-        poblacion -- sin el, comportamiento identico a antes."""
         mejor_id: int | None = None
         mejor: tuple[int, int] | None = None
         mejor_dist = radio + 1
-        fuente = (
-            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
-            if self._indice_actual is not None
-            else gestor.entidades_con(Posicion)
-        )
         for otro_id in fuente:
             if otro_id == entidad_id:
                 continue
+            if solo_conscientes:
+                cap_otro = gestor.obtener_componente(otro_id, CapacidadMental)
+                if cap_otro is None or cap_otro.consciencia < self.umbral_consciencia_agencia:
+                    continue
             pos_o = gestor.obtener_componente(otro_id, Posicion)
             if pos_o is None or pos_o.zona_idx != zona_idx:
                 continue
@@ -727,45 +695,9 @@ class SistemaMovimiento:
         radio: int,
         zona_idx: int = 0,
     ) -> tuple[int | None, tuple[int, int] | None]:
-        """Variante de _entidad_cercana_cualquiera_con_id filtrada a
-        CONSCIENTES -- cualquier especie, no solo la propia (a diferencia
-        de _buscar_conspecifico_mas_cercano, que sí filtra por especie).
-        Es el molde de _entidad_cercana_cualquiera_con_id (conflicto
-        verbal) con el filtro de consciencia en vez de "cualquier tipo"
-        (2026-09-06, ocio consciente / SOCIALIZAR). Excluye a quien
-        busca; requiere CapacidadMental.consciencia >=
-        self.umbral_consciencia_agencia (mismo umbral que gatea la agencia
-        en la decisión). Devuelve (id, posicion) del mas cercano dentro
-        del radio o (None, None) si no hay ningun consciente.
-
-        2026-09-08 (nucleo/indice_espacial.py): usa self._indice_actual
-        si esta disponible, en vez del escaneo O(N) sobre toda la
-        poblacion -- el indice no filtra por CapacidadMental, se añade
-        el guard explicito ya presente abajo. Sin indice, comportamiento
-        identico a antes."""
-        mejor_id: int | None = None
-        mejor: tuple[int, int] | None = None
-        mejor_dist = radio + 1
-        fuente = (
-            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
-            if self._indice_actual is not None
-            else gestor.entidades_con(Posicion, CapacidadMental)
+        return self._buscar_entidad_cercana(
+            gestor, entidad_id, pos_x, pos_y, radio, zona_idx, solo_conscientes=True
         )
-        for otro_id in fuente:
-            if otro_id == entidad_id:
-                continue
-            cap_otro = gestor.obtener_componente(otro_id, CapacidadMental)
-            if cap_otro is None or cap_otro.consciencia < self.umbral_consciencia_agencia:
-                continue
-            pos_o = gestor.obtener_componente(otro_id, Posicion)
-            if pos_o is None or pos_o.zona_idx != zona_idx:
-                continue
-            dist = abs(pos_o.x - pos_x) + abs(pos_o.y - pos_y)
-            if dist <= radio and dist < mejor_dist:
-                mejor_id = otro_id
-                mejor = (pos_o.x, pos_o.y)
-                mejor_dist = dist
-        return mejor_id, mejor
 
     def _calcular_huida_erratica(
         self,
@@ -780,8 +712,8 @@ class SistemaMovimiento:
         una amenaza real (valentia baja ante la crisis, no ante un
         peligro concreto) -- mismo patron de direccion que
         _calcular_huida, sobre un objetivo encontrado por
-        _entidad_cercana_cualquiera en vez de posicion_amenaza_mas_cercana."""
-        objetivo = self._entidad_cercana_cualquiera(gestor, entidad_id, pos_x, pos_y, radio, zona_idx)
+        _buscar_entidad_cercana en vez de posicion_amenaza_mas_cercana."""
+        _, objetivo = self._buscar_entidad_cercana(gestor, entidad_id, pos_x, pos_y, radio, zona_idx)
         if objetivo is None:
             return self._paso_aleatorio()
         ox, oy = objetivo
@@ -812,7 +744,7 @@ class SistemaMovimiento:
         No es una fuente nueva de riesgo: CRISIS_VIOLENTA ya ocurría a la
         misma frecuencia; esta pieza solo le da consecuencia. Devuelve
         (0, 0) tras resolver (no se mueve en el tick del contacto)."""
-        objetivo_id, objetivo_pos = self._entidad_cercana_cualquiera_con_id(
+        objetivo_id, objetivo_pos = self._buscar_entidad_cercana(
             gestor, entidad_id, pos_x, pos_y, radio, zona_idx
         )
         if objetivo_id is None:
