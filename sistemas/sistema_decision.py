@@ -208,6 +208,7 @@ from nucleo.armas import (
     celda_ofrece_material_arma,
     manos_libres,
     mejor_objeto_para_empunar,
+    mejor_receta_completable,
     nivel_arma,
     tiene_arma_nivel2_o_mas,
 )
@@ -220,6 +221,7 @@ from nucleo.construccion import (
 )
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
+from nucleo.herramientas import tiene_herramienta
 from nucleo.inventario import espacio_disponible_kg
 from nucleo.percepcion import radio_individual
 from nucleo.vocacion import (
@@ -495,6 +497,13 @@ def actualizar(
     umbral_base_empunar = float(config_armas.get("umbral_base_empunar", 0.5))
     margen_valentia_empunar = float(config_armas.get("margen_valentia_empunar", 0.3))
     peso_objeto_kg = config.get("peso_objeto_kg", {})
+    # Herramientas (2026-09-11, circulo 2 del arco "fabricacion y uso de
+    # herramientas" -- ver docs/superpowers/specs/
+    # 2026-09-11-fabricacion-herramientas-design.md y config/herramientas.yaml):
+    # mismo molde exacto que config_armas de arriba -- recetas por
+    # combinacion de materiales crudos apto_arma reutilizados.
+    config_herramientas = config.get("herramientas", {})
+    recetas_herramientas = config_herramientas.get("recetas", [])
     # Percepcion para el reflejo empunyar/guardar: reutiliza la MISMA señal
     # de amenaza que ya usa HUIR (posicion_amenaza_mas_cercana) con el
     # mismo radio por agudeza sensorial y el mismo umbral de disposicion
@@ -830,10 +839,63 @@ def actualizar(
                         utilidad_recolectar, 1.0 - necesidades.seguridad
                     )
 
-        # Resolutor interno de FABRICAR: hoy un unico candidato ("arma"),
-        # asi que es casi un passthrough -- pero la forma ya esta puesta
-        # para cuando exista un segundo candidato real.
-        candidatos_fabricar: list[tuple[str, float]] = [("arma", utilidad_categoria_arma)]
+        # FABRICAR, categoria "herramienta" (2026-09-11, circulo 2 del
+        # arco "fabricacion y uso de herramientas" -- ver docs/superpowers/
+        # specs/2026-09-11-fabricacion-herramientas-design.md). A
+        # diferencia de "arma" (necesidad propia real: inseguridad), una
+        # herramienta NO responde a ninguna necesidad de Necesidades --
+        # eso violaria el principio 5 (un individuo que jamas ha
+        # necesitado recolectar/construir no desarrollaria interes en
+        # tallar un hacha). La utilidad HEREDA, SIN DESCONTAR, el maximo
+        # de utilidad_recolectar/utilidad_construir YA calculadas (el
+        # trabajo que la herramienta serviria de verdad) -- mismo patron
+        # EXACTO que la categoria "arma" hereda 1.0-seguridad sin
+        # descuento. Un descuento aqui (probado y descartado durante el
+        # diseno: factor<1.0) deja a FABRICAR-herramienta matematicamente
+        # incapaz de ganarle nunca a la propia RECOLECTAR/CONSTRUIR que
+        # la origina -- nunca se fabricaria nada. Sin descuento, un
+        # empate exacto se resuelve a favor de FABRICAR por el orden de
+        # `candidatas` mas abajo (mismo criterio ya documentado ahi para
+        # "arma": "se recolecta hasta tener lo necesario... un empate
+        # debe resolver a favor de tallar"). Gateada a 0.0 si ya se posee
+        # una herramienta fabricada (nunca se persigue una segunda en
+        # este circulo) o si no hay receta completable con el material
+        # crudo ya portado.
+        utilidad_categoria_herramienta = 0.0
+        # Mismo mecanismo que recolectar_con_motivo_arma arriba, via
+        # independiente: RECOLECTAR hereda el valor que la categoria
+        # "herramienta" tendria SI YA tuviera el material en bruto,
+        # solo cuando la celda actual ofrece un recurso apto_arma
+        # (mismos materiales reutilizados, ver nucleo/herramientas.py).
+        recolectar_con_motivo_herramienta = False
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            objetos_totales_h = list(inventario.objetos)
+            if agarre is not None:
+                objetos_totales_h.extend(agarre.objetos)
+            necesidad_trabajo = max(utilidad_recolectar, utilidad_construir)
+            if necesidad_trabajo > 0.0 and not tiene_herramienta(
+                objetos_totales_h, recetas_herramientas
+            ):
+                receta_h = mejor_receta_completable(objetos_totales_h, recetas_herramientas)
+                if receta_h is not None:
+                    utilidad_categoria_herramienta = necesidad_trabajo
+                else:
+                    zona_h = mundo.territorio.zonas[pos.zona_idx]
+                    celda_h = zona_h.obtener_celda(pos.x, pos.y)
+                    if celda_ofrece_material_arma(celda_h, catalogo_materiales):
+                        utilidad_recolectar_sin_herramienta = utilidad_recolectar
+                        recolectar_con_motivo_herramienta = (
+                            necesidad_trabajo > utilidad_recolectar_sin_herramienta
+                        )
+                        utilidad_recolectar = max(utilidad_recolectar, necesidad_trabajo)
+
+        # Resolutor interno de FABRICAR: dos candidatos ("arma",
+        # "herramienta" -- 2026-09-11, el segundo real desde el rename
+        # FABRICAR_ARMA -> FABRICAR).
+        candidatos_fabricar: list[tuple[str, float]] = [
+            ("arma", utilidad_categoria_arma),
+            ("herramienta", utilidad_categoria_herramienta),
+        ]
         categoria_fabricar_ganadora, utilidad_fabricar = max(
             candidatos_fabricar, key=lambda c: c[1]
         )
@@ -987,6 +1049,11 @@ def actualizar(
         # desarrolla interes en cargar un palo.
         intencion.recolectar_motivo_arma = (
             intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_arma
+        )
+        # Mismo criterio que recolectar_motivo_arma, via independiente
+        # para la categoria "herramienta" (2026-09-11).
+        intencion.recolectar_motivo_herramienta = (
+            intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_herramienta
         )
         # Vuelca a Intencion que categoria gano el resolutor interno de
         # FABRICAR (2026-09-11), solo si FABRICAR es de verdad la accion

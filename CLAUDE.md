@@ -8706,3 +8706,122 @@ segundo candidato desde el rename `FABRICAR_ARMA -> FABRICAR` del
 2026-09-11); sin ningún consumidor de `vocacion_dominante` en narrador/
 vista_web todavía -- presentación, deliberadamente sin tocar (motor
 primero).
+
+## Fabricación de herramientas -- Círculo 2 del arco "fabricación y uso
+## de herramientas", implementado directamente por Claude, hallazgo real
+## sobre por qué nunca se ejerce en juego libre (2026-09-11, mismo día)
+
+Diego dio la señal de continuar ("sigue") tras cerrar Círculo 1
+(aptitud vocacional, arriba). Spec:
+`docs/superpowers/specs/2026-09-11-fabricacion-herramientas-design.md`.
+Reutiliza sin inventar nada nuevo: los mismos materiales crudos
+madera/piedra de "armas primitivas v2" (2026-09-03), el mismo
+mecanismo de recolección causal (`_via_material_crudo`, ya extraído y
+compartido en la sesión de Bloque A del mismo día), y el resolutor
+`candidatos_fabricar` que el rename `Accion.FABRICAR_ARMA ->
+Accion.FABRICAR` (Bloque A, mismo día) ya había dejado preparado para
+un segundo candidato.
+
+**Implementado**: `nucleo/herramientas.py:tiene_herramienta` (función
+pura, deliberadamente SIN "todo es una herramienta" -- a diferencia de
+armas, material crudo sin fabricar no tiene ningún efecto de
+herramienta); `config/herramientas.yaml` con una única receta
+(`hacha_primitiva`, madera+piedra, nivel 1 -- deliberadamente pequeño
+para este primer círculo) y los dos bonos multiplicativos de velocidad
+(recolección a granel, aporte a construcción), ambos PROVISIONALES;
+`sistema_decision.py` gana el bloque `utilidad_categoria_herramienta`
+(mismo molde que "arma": RECOLECTAR hereda `necesidad_trabajo =
+max(utilidad_recolectar, utilidad_construir)` cuando no hay receta
+completable con lo que ya se porta y la celda ofrece material crudo);
+`componentes/intencion.py:recolectar_motivo_herramienta`;
+`sistema_recursos.py` gana la Vía 3 de `_resolver_recolectar`
+(comparte `_via_material_crudo` con la Vía 2 de arma, gateada por
+`tiene_herramienta` en vez de `tiene_arma_nivel2_o_mas`) y la rama
+"herramienta" de `_resolver_fabricar` (emite `Evento(tipo=
+"HerramientaFabricada", severidad=NOTABLE)`).
+
+**Bug de diseño real, encontrado y corregido ANTES de comitear, no al
+fallar en caliente**: el primer intento descontaba la utilidad heredada
+(`necesidad_trabajo * factor_urgencia_herramienta`, 0.5) -- igual que
+un error ya evitado una vez con "arma" en su día, este descuento deja a
+FABRICAR-herramienta matemáticamente incapaz de ganarle nunca a la
+propia necesidad de RECOLECTAR/CONSTRUIR que lo origina, así que nunca
+llegaría a fabricarse nada. Detectado por dos tests de
+`sistema_decision.py` fallando antes de comitear, corregido eliminando
+el descuento por completo (mismo patrón sin descuento que ya usa
+"arma": `1.0 - seguridad` sin multiplicador) -- `factor_urgencia_
+herramienta` retirado de `config/herramientas.yaml`, sustituido por un
+comentario documentando por qué se descartó. Efecto colateral real,
+también corregido: la interacción con el Círculo 1 (aptitud
+vocacional, mismo día) rompía la comparación numérica exacta que un
+test de decisión asumía -- los atributos de aptitud se sortean por
+individuo, así que dos utilidades que "deberían" empatar quedaban
+moduladas por factores distintos. Corregido neutralizando los 5
+atributos relevantes de aptitud a 0.5 en el fixture del test
+(`factor_aptitud=1.0` para las 4 cubetas), aislando el comportamiento
+bajo prueba del ruido de otro círculo cerrado el mismo día.
+
+**Verificado**: 497/497 tests en verde (12 nuevos,
+`tests/test_fabricacion_herramientas.py`), `BOSQUE_AUTO_TICKS=3000` y
+`BOSQUE_CONTINUAR=1` (roundtrip) sin ninguna excepción.
+
+**Hallazgo real del diagnóstico multi-semilla, no anticipado en el
+spec -- el mecanismo nunca se ejerce en juego libre, y se identificó
+por qué**. Arnés de sesión (scratchpad, no en el repo, reutilizando
+`main.py:ejecutar_tick` tal cual con una `Persistencia` no-op): 10
+semillas nuevas combinadas (70101-70105, 80201-80203, 80301-80302),
+entre 2200 y 6500 ticks cada una según el presupuesto de tiempo real
+disponible en este entorno de cómputo limitado. **`HerramientaFabricada`
+nunca se disparó en ninguna de las 10** -- ni un solo gnomo llegó a
+portar madera+piedra simultáneamente, y `con_hacha_en_inventario_o_
+agarre` fue 0 en todas.
+
+Instrumentado el propio arnés (monkeypatch en memoria, sin tocar el
+repo) para distinguir "el mecanismo nunca se activa" de "se activa
+pero algo bloquea la recolección real" -- resultado inequívoco:
+`Intencion.recolectar_motivo_herramienta` se activó con mucha
+frecuencia (245 a 1620 veces por semilla en las últimas 5 semillas
+medidas, 4583 en total) -- el eslabón causal de `sistema_decision.py`
+está lejos de ser "correcto pero invisible", se ejerce con fuerza real.
+El bloqueo real está en la resolución física: de 1152 llamadas a
+`_via_material_crudo` bajo motivo activo (últimas 2 semillas
+instrumentadas), **882 y 270 fallaron por falta de espacio de carga**
+(`via_sin_espacio`, `espacio_disponible_kg` insuficiente) -- un gnomo
+que ya porta cargas de material a granel (arcilla, hierba_seca... para
+CONSTRUIR) casi siempre tiene su `Inventario` lleno hasta el límite de
+peso, sin sitio para un objeto discreto adicional (madera o piedra
+enteras). Solo 13 de esas 1152 llamadas (`via_exito`) lograron recoger
+material con éxito -- y ninguno de esos 13 casos sobrevivió hasta el
+final de su corrida (el gnomo murió, o el material se perdió por otra
+vía como robo, antes de completar el par madera+piedra necesario para
+fabricar).
+
+**Conclusión honesta**: el círculo está mecánicamente correcto (12
+tests dirigidos lo confirman, incluido el ciclo completo recolectar→
+fabricar en aislamiento) y el eslabón causal de decisión se activa con
+fuerza real en juego libre -- pero la fabricación de herramientas en sí
+es, en la práctica, casi inalcanzable con la configuración actual, por
+una causa estructural distinta y más sutil que cualquiera de los casos
+previos de "correcto pero invisible" de este proyecto (ENCENDER_FUEGO
+original, salón común, pareja estable...): no falta motivo, ni
+material en el mundo, ni tiempo -- falta espacio de carga libre en el
+momento exacto en que el motivo está activo, porque el mismo individuo
+que necesita una herramienta para trabajar suele estar ya cargado de
+lo que esa misma necesidad de trabajo le hizo recolectar a granel.
+Señalado con honestidad, sin corregir en este círculo -- ninguna
+decisión de diseño tomada sobre si merece su propio círculo de
+corrección (candidatos sin explorar: reservar un margen de carga para
+objetos discretos, o que el motivo de "necesidad de trabajo" primero
+vacíe/deposite la carga a granel antes de intentar portar material de
+herramienta).
+
+**Pendiente real, explícito**: `factor_bono_tasa_recolectar_con_
+herramienta=1.5`/`factor_bono_tasa_aporte_construccion_con_
+herramienta=1.3` PROVISIONALES, sin calibrar, y sin haberse observado
+nunca en juego libre (ningún gnomo llegó a fabricar una herramienta en
+la muestra medida); el hallazgo de competencia por capacidad de carga
+queda señalado, pendiente de que Diego decida si abrir un círculo de
+corrección dedicado o dejarlo así por ahora; con esto, el arco
+"fabricación y uso de herramientas" tiene sus dos círculos planteados
+originalmente implementados (aptitud vocacional, fabricación de
+herramientas) -- ningún círculo nuevo de este arco decidido todavía.

@@ -1,0 +1,34 @@
+# ==============================================================================
+# config/herramientas.yaml
+# Círculo 2 del arco "fabricación y uso de herramientas" (2026-09-11,
+# ver docs/superpowers/specs/2026-09-11-fabricacion-herramientas-design.md
+# y nucleo/herramientas.py). Mismo molde exacto que config/armas.yaml:
+# recetas por combinación de materiales crudos apto_arma (madera/piedra,
+# reutilizados sin duplicar el flag -- ver nucleo/herramientas.py), sin
+# nombres de herramienta hardcodeados en Python.
+#
+# A diferencia de armas.yaml, aquí NO hay "todo es una herramienta"
+# (material crudo sin efecto) -- una sola receta para este primer
+# círculo, deliberadamente pequeño.
+# ==============================================================================
+
+herramientas:
+  recetas:
+    - materiales: [madera, piedra]
+      nombre: hacha_primitiva
+      nivel: 1
+  # La utilidad de fabricar una herramienta hereda, SIN DESCONTAR, el
+  # máximo de utilidad_recolectar/utilidad_construir YA calculadas --
+  # mismo patrón EXACTO que la categoría "arma" hereda 1.0-seguridad sin
+  # descuento (ver sistema_decision.py). Un factor de descuento <1.0 se
+  # probó al diseñar esta pieza y se descartó -- deja a FABRICAR-
+  # herramienta matemáticamente incapaz de ganarle nunca a la propia
+  # necesidad que la origina, así que nunca llegaría a fabricarse nada.
+  # Bonos de velocidad al portar una herramienta fabricada (Inventario.
+  # objetos o Agarre.objetos, no exige tenerla empuñada -- abstracción
+  # deliberada: "la lleva en su kit, la usa mientras trabaja", sin
+  # inventar un mecanismo de equipar/guardar herramienta aparte del ya
+  # existente para armas). PROVISIONALES, sin calibrar contra el harness
+  # completo.
+  factor_bono_tasa_recolectar_con_herramienta: 1.5
+  factor_bono_tasa_aporte_construccion_con_herramienta: 1.3

@@ -35,6 +35,7 @@ from nucleo.armas import (
     recolectar_material_arma_de_celda,
     tiene_arma_nivel2_o_mas,
 )
+from nucleo.herramientas import tiene_herramienta
 from nucleo.celda import Celda
 from nucleo.construccion import (
     construccion_de_tipo_en,
@@ -260,6 +261,23 @@ class SistemaRecursos:
         self.config_armas: dict[str, Any] = self.config.get("armas", {})
         self.recetas_armas: list[dict[str, Any]] = self.config_armas.get("recetas", [])
         self.peso_objeto_kg: dict[str, float] = self.config.get("peso_objeto_kg", {})
+        # Herramientas (2026-09-11, circulo 2 del arco "fabricacion y uso
+        # de herramientas" -- ver docs/superpowers/specs/
+        # 2026-09-11-fabricacion-herramientas-design.md y
+        # config/herramientas.yaml). Bonos PROVISIONALES, sin calibrar.
+        self.config_herramientas: dict[str, Any] = self.config.get("herramientas", {})
+        self.recetas_herramientas: list[dict[str, Any]] = self.config_herramientas.get("recetas", [])
+        self.factor_bono_tasa_recolectar_con_herramienta: float = float(
+            self.config_herramientas.get("factor_bono_tasa_recolectar_con_herramienta", 1.5)
+        )
+        self.factor_bono_tasa_aporte_construccion_con_herramienta: float = float(
+            self.config_herramientas.get(
+                "factor_bono_tasa_aporte_construccion_con_herramienta", 1.3
+            )
+        )
+        # Observacion (2026-09-11), solo _stats -- confirma que la pieza
+        # se ejerce de verdad en juego libre.
+        self._stats_herramientas_fabricadas: int = 0
 
     def ejecutar(
         self,
@@ -331,6 +349,7 @@ class SistemaRecursos:
                 self._resolver_recolectar(
                     inv, dims, celda, agarre, ident.especie.value, consciente,
                     recolectar_arma=intencion.recolectar_motivo_arma,
+                    recolectar_herramienta=intencion.recolectar_motivo_herramienta,
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
                 )
                 self._incrementar_vocacion(gestor, eid, consciente, "conteo_forrajero")
@@ -514,11 +533,17 @@ class SistemaRecursos:
         if construccion is None or construccion.progreso >= 1.0:
             return
 
+        # Herramienta fabricada (2026-09-11): bono multiplicativo a la
+        # tasa de aporte, mismo criterio que RECOLECTAR -- portarla
+        # basta, sin exigir Agarre (ver config/herramientas.yaml).
+        tasa_aporte_efectiva = self.tasa_aporte_construccion
+        if tiene_herramienta(inv.objetos, self.recetas_herramientas):
+            tasa_aporte_efectiva *= self.factor_bono_tasa_aporte_construccion_con_herramienta
         transferir_a_construccion(
             inv.contenidos,
             construccion.materiales,
             self.catalogo_materiales,
-            self.tasa_aporte_construccion,
+            tasa_aporte_efectiva,
         )
         masa_minima = masa_minima_para(construccion.tipo, self.config_construccion)
         construccion.progreso = progreso_construccion(
@@ -551,6 +576,7 @@ class SistemaRecursos:
         especie: str | None = None,
         consciente: bool = False,
         recolectar_arma: bool = False,
+        recolectar_herramienta: bool = False,
         gestor: GestorEntidades | None = None,
         pos_x: int = 0,
         pos_y: int = 0,
@@ -634,6 +660,22 @@ class SistemaRecursos:
         sustrato (siempre disponible, nunca se agota): ninguna Utility AI
         lo decide, es simplemente qué hay de más a menos especial en el
         sitio donde ya se está.
+
+        3. MATERIAL HERRAMIENTA CON CAUSA (2026-09-11, circulo 2 del arco
+           "fabricacion y uso de herramientas"): mismo eslabon heredado
+           que la Via 2 de arriba, mismos materiales (madera/piedra
+           reutilizados, ver nucleo/herramientas.py) -- solo que gateado
+           por "ya tiene herramienta fabricada" en vez de "ya tiene arma
+           nivel>=2", y disparado por Intencion.recolectar_motivo_herramienta
+           (el parametro recolectar_herramienta de este metodo). La Via 2
+           y esta Via 3 comparten `_via_material_crudo` -- el mismo
+           mecanismo fisico de "agarrar un palo o una piedra enteros",
+           cada una con su propio gate de "ya posee".
+
+        La herramienta ya fabricada (Inventario.objetos) aplica un bono
+        multiplicativo a la tasa de recoleccion a granel de este mismo
+        metodo (mineral/flora/sustrato, mas abajo) -- ver
+        factor_bono_tasa_recolectar_con_herramienta.
         """
         if inv is None or dims is None:
             return
@@ -667,28 +709,38 @@ class SistemaRecursos:
             objetos_totales = list(inv.objetos)
             if agarre is not None:
                 objetos_totales.extend(agarre.objetos)
-            if (
-                not tiene_arma_nivel2_o_mas(objetos_totales, self.catalogo_materiales, self.recetas_armas)
-                and celda_ofrece_material_arma(celda, self.catalogo_materiales)
+            ya_tiene_arma = tiene_arma_nivel2_o_mas(
+                objetos_totales, self.catalogo_materiales, self.recetas_armas
+            )
+            if self._via_material_crudo(
+                inv, dims, celda, gestor, pos_x, pos_y, zona_idx, ya_tiene_arma
             ):
-                material = recolectar_material_arma_de_celda(celda, self.catalogo_materiales)
-                if material is not None:
-                    # Pista competidora (2026-09-03): el crudo apto_arma de
-                    # una especie competidora solo existe si hay una Planta
-                    # real de esa especie en la celda -- mismo criterio que
-                    # el bucle de materiales de abajo.
-                    if gestor is not None and not self._hay_recurso_competidor_disponible(
-                        gestor, pos_x, pos_y, zona_idx, material
-                    ):
-                        return
-                    peso_objeto = float(self.peso_objeto_kg.get(material, 0.0))
-                    espacio = espacio_disponible_kg(
-                        inv.contenidos, dims.peso, self.fraccion_carga_maxima,
-                        inv.objetos, self.peso_objeto_kg,
-                    )
-                    if espacio >= peso_objeto:
-                        inv.objetos.append(material)
-                        return
+                return
+
+        # Vía 3: material apto_arma CON CAUSA (herramienta, 2026-09-11) --
+        # ver docstring arriba. Mismos materiales que la Vía 2, mismo
+        # helper compartido, gateada por "ya posee una herramienta
+        # fabricada" en vez de "ya posee arma nivel>=2".
+        if recolectar_herramienta:
+            objetos_totales_h = list(inv.objetos)
+            if agarre is not None:
+                objetos_totales_h.extend(agarre.objetos)
+            ya_tiene_herramienta = tiene_herramienta(objetos_totales_h, self.recetas_herramientas)
+            if self._via_material_crudo(
+                inv, dims, celda, gestor, pos_x, pos_y, zona_idx, ya_tiene_herramienta
+            ):
+                return
+
+        # Herramienta fabricada (2026-09-11): bono multiplicativo a la
+        # tasa de recoleccion a granel (mineral/flora/sustrato, abajo) --
+        # portarla basta, no exige tenerla empuñada (ver
+        # config/herramientas.yaml).
+        tasa_recoleccion_efectiva = self.tasa_recoleccion
+        objetos_para_bono = list(inv.objetos)
+        if agarre is not None:
+            objetos_para_bono.extend(agarre.objetos)
+        if tiene_herramienta(objetos_para_bono, self.recetas_herramientas):
+            tasa_recoleccion_efectiva *= self.factor_bono_tasa_recolectar_con_herramienta
 
         espacio = espacio_disponible_kg(
             inv.contenidos, dims.peso, self.fraccion_carga_maxima, inv.objetos, self.peso_objeto_kg
@@ -698,7 +750,7 @@ class SistemaRecursos:
 
         if celda.deposito_mineral and celda.masa_mineral_restante > 0.0:
             material = celda.deposito_mineral
-            cantidad = min(self.tasa_recoleccion, espacio, celda.masa_mineral_restante)
+            cantidad = min(tasa_recoleccion_efectiva, espacio, celda.masa_mineral_restante)
             inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
             celda.masa_mineral_restante -= cantidad
             if celda.masa_mineral_restante <= 0.0:
@@ -720,7 +772,7 @@ class SistemaRecursos:
                 gestor, pos_x, pos_y, zona_idx, nombre
             ):
                 continue
-            cantidad = min(self.tasa_recoleccion, espacio, cantidad_disponible)
+            cantidad = min(tasa_recoleccion_efectiva, espacio, cantidad_disponible)
             inv.contenidos[nombre] = inv.contenidos.get(nombre, 0.0) + cantidad
             celda.recursos[nombre] = cantidad_disponible - cantidad
             return
@@ -731,8 +783,53 @@ class SistemaRecursos:
         info = self.catalogo_materiales.get(material, {})
         if not info.get("apto_construccion", False):
             return
-        cantidad = min(self.tasa_recoleccion, espacio)
+        cantidad = min(tasa_recoleccion_efectiva, espacio)
         inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
+
+    def _via_material_crudo(
+        self,
+        inv: Inventario,
+        dims: DimensionesFisicas,
+        celda: Celda,
+        gestor: GestorEntidades | None,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+        ya_posee: bool,
+    ) -> bool:
+        """Vía compartida de recolección de material crudo apto_arma como
+        objeto discreto -- Vía 2 (arma) y Vía 3 (herramienta, 2026-09-11),
+        mismos materiales, cada una con su propio gate de "ya posee" (arma
+        nivel>=2 fabricada, o herramienta fabricada). Extraída de la Vía 2
+        original de armas primitivas v2 sin cambiar su comportamiento.
+
+        Devuelve True si `_resolver_recolectar` debe terminar AQUÍ este
+        tick (se recogió algo, o se determinó que la pista competidora no
+        ofrece nada real que recoger); False si debe seguir probando la
+        recolección a granel de más abajo (celda sin material crudo, o sin
+        espacio de carga para el objeto -- en ese caso cae a granel en vez
+        de perder el tick entero)."""
+        if ya_posee or not celda_ofrece_material_arma(celda, self.catalogo_materiales):
+            return False
+        material = recolectar_material_arma_de_celda(celda, self.catalogo_materiales)
+        if material is None:
+            return False
+        # Pista competidora (2026-09-03): el crudo apto_arma de una
+        # especie competidora solo existe si hay una Planta real de esa
+        # especie en la celda -- mismo criterio que el bucle de
+        # materiales a granel.
+        if gestor is not None and not self._hay_recurso_competidor_disponible(
+            gestor, pos_x, pos_y, zona_idx, material
+        ):
+            return True
+        peso_objeto = float(self.peso_objeto_kg.get(material, 0.0))
+        espacio = espacio_disponible_kg(
+            inv.contenidos, dims.peso, self.fraccion_carga_maxima, inv.objetos, self.peso_objeto_kg,
+        )
+        if espacio >= peso_objeto:
+            inv.objetos.append(material)
+            return True
+        return False
 
     def _hay_recurso_competidor_disponible(
         self,
@@ -901,24 +998,23 @@ class SistemaRecursos:
         FABRICAR (2026-09-11, renombrada desde FABRICAR_ARMA -- ver
         componentes/intencion.py y config/armas.yaml). Ramifica por
         `categoria` (Intencion.fabricar_categoria, ya decidida por el
-        resolutor interno de sistema_decision.py) -- "arma" es hoy la
-        UNICA implementada; cualquier otra cae al no-op de abajo (no
-        deberia poder llegar aqui salvo que se anada una categoria nueva
-        a sistema_decision.py sin su propia resolucion todavia).
+        resolutor interno de sistema_decision.py) -- "arma" y
+        "herramienta" (2026-09-11, circulo 2 del arco "fabricacion y uso
+        de herramientas") son las dos implementadas hoy; cualquier otra
+        cae al no-op de abajo (no deberia poder llegar aqui salvo que se
+        anada una categoria nueva a sistema_decision.py sin su propia
+        resolucion todavia).
 
-        Categoria "arma": sistema_decision.py ya comprobó las
-        precondiciones (consciente, sin arma de nivel >=2 fabricada, con
-        material apto_arma en crudo entre lo que ya se porta) antes de
-        elegir esta Accion. Aquí se resuelve de forma determinista
-        (tallar no es un suceso de azar, a diferencia de encender fuego):
-        busca la mejor receta completable AHORA con lo que ya se porta
+        Ambas categorias comparten el mismo patron determinista (tallar
+        no es un suceso de azar, a diferencia de encender fuego): busca
+        la mejor receta completable AHORA con lo que ya se porta
         (prioriza el nivel más alto alcanzable con el material disponible
         en este instante -- no espera a conseguir un material mejor,
         reacciona al presente, coherente con que el resto de la Utility
         AI no planifica a futuro), consume los materiales crudos de esa
-        receta, añade el nombre del arma resultante a Inventario.objetos
-        y emite un Evento ArmaFabricada (NOTABLE). Sin desplazamiento,
-        igual que RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
+        receta, añade el nombre del objeto resultante a Inventario.objetos
+        y emite un Evento (NOTABLE). Sin desplazamiento, igual que
+        RECOLECTAR/ALIVIARSE -- se resuelve donde ya se está.
 
         Los materiales se buscan en Inventario.objetos Y en Agarre.objetos
         (lo que la criatura tiene en la mano es tan suyo como lo que lleva
@@ -927,17 +1023,21 @@ class SistemaRecursos:
         y sin mirar ambas fuentes una criatura asustada que empuña el único
         palo que tiene nunca llegaria a fabricar -- se quedaria en un ciclo
         de recolectar/huir sin cerrar el circulo (hallazgo real, ver
-        tests/test_armas_primitivas_v2.py). El arma resultante siempre
+        tests/test_armas_primitivas_v2.py). El objeto resultante siempre
         nace en Inventario.objetos.
         """
-        if categoria != "arma":
-            return
         if inv is None:
             return
         objetos_portados = list(inv.objetos)
         if agarre is not None:
             objetos_portados.extend(agarre.objetos)
-        receta = mejor_receta_completable(objetos_portados, self.recetas_armas)
+        if categoria == "arma":
+            recetas = self.recetas_armas
+        elif categoria == "herramienta":
+            recetas = self.recetas_herramientas
+        else:
+            return
+        receta = mejor_receta_completable(objetos_portados, recetas)
         if receta is None:
             return
         for material in receta.get("materiales", []):
@@ -945,18 +1045,36 @@ class SistemaRecursos:
                 inv.objetos.remove(material)
             elif agarre is not None and material in agarre.objetos:
                 agarre.objetos.remove(material)
-        arma = str(receta.get("nombre", ""))
-        nivel = int(receta.get("nivel", 0))
-        inv.objetos.append(arma)
-        bus_eventos.emitir(
-            Evento(
-                tipo="ArmaFabricada",
-                severidad=Severidad.NOTABLE,
-                tick=tick_actual,
-                entidad_id=entidad_id,
-                datos={"x": pos_x, "y": pos_y, "zona_idx": zona_idx, "arma": arma, "nivel": nivel},
+        nombre_objeto = str(receta.get("nombre", ""))
+        inv.objetos.append(nombre_objeto)
+        if categoria == "arma":
+            nivel = int(receta.get("nivel", 0))
+            bus_eventos.emitir(
+                Evento(
+                    tipo="ArmaFabricada",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=entidad_id,
+                    datos={
+                        "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
+                        "arma": nombre_objeto, "nivel": nivel,
+                    },
+                )
             )
-        )
+        else:
+            self._stats_herramientas_fabricadas += 1
+            bus_eventos.emitir(
+                Evento(
+                    tipo="HerramientaFabricada",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=entidad_id,
+                    datos={
+                        "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
+                        "herramienta": nombre_objeto,
+                    },
+                )
+            )
 
     def _consumir_fogatas(self, gestor: GestorEntidades) -> None:
         """Cada Fogata existente quema su propio combustible cada tick,

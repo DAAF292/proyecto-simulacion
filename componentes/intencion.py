@@ -112,6 +112,13 @@ class Intencion:
     # recoge armas "porque se lo encuentra". NO se persiste -- se
     # recalcula cada tick, como la propia accion.
     recolectar_motivo_arma: bool = False
+    # Transitorio por tick (2026-09-11, circulo 2 "fabricacion de
+    # herramientas" -- ver nucleo/herramientas.py): mismo mecanismo que
+    # recolectar_motivo_arma, arriba, pero para el eslabon heredado de
+    # la categoria "herramienta" de FABRICAR (RECOLECTAR elevado porque
+    # falta material crudo para una herramienta, no un arma). NO se
+    # persiste -- se recalcula cada tick.
+    recolectar_motivo_herramienta: bool = False
     # Transitorio por tick (2026-09-11, rename FABRICAR_ARMA -> FABRICAR):
     # que categoria gano el resolutor interno de FABRICAR este tick --
     # "arma" (unica categoria real hoy) o "" si Accion.FABRICAR no fue

@@ -848,6 +848,15 @@ def main() -> None:
                 for eid in gestor.entidades_con(Vocacion, Identidad)
             )
             print(f"[BOSQUE_AUTO_TICKS] vocacion dominante (entre vivos): {dict(distribucion_vocacion)}")
+            # Verificacion obligatoria de fabricacion de herramientas
+            # (2026-09-11, circulo 2 del arco "fabricacion y uso de
+            # herramientas" -- ver docs/superpowers/specs/
+            # 2026-09-11-fabricacion-herramientas-design.md). Solo
+            # observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] herramientas fabricadas: "
+                f"{sistemas['recursos']._stats_herramientas_fabricadas}"
+            )
 
     except KeyboardInterrupt:
         pass
