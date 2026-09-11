@@ -779,6 +779,18 @@ def main() -> None:
                 f"{sistemas['movimiento']._stats_robos_intentados} intentos, "
                 f"{sistemas['movimiento']._stats_robos_exitosos} exitosos"
             )
+            # Verificacion obligatoria de robo de materiales/armas
+            # (2026-09-11, extension mas alla de comida). Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] robo de materiales: "
+                f"{sistemas['movimiento']._stats_robos_material_intentados} intentos, "
+                f"{sistemas['movimiento']._stats_robos_material_exitosos} exitosos"
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] robo de armas: "
+                f"{sistemas['movimiento']._stats_robos_arma_intentados} intentos, "
+                f"{sistemas['movimiento']._stats_robos_arma_exitosos} exitosos"
+            )
             print(
                 "[BOSQUE_AUTO_TICKS] compartir por confianza: "
                 f"{sistemas['movimiento']._stats_compartir_confianza} veces"

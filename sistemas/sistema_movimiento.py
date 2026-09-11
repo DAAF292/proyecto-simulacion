@@ -34,13 +34,13 @@ from componentes.reproduccion import Reproduccion
 from componentes.relaciones import Relaciones
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
-from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma
+from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma, nivel_arma, objetos_arma
 from nucleo.asentamiento import almacen_cercano, asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.intercambio import transferir_recurso
-from nucleo.inventario import espacio_disponible_provisiones_kg
+from nucleo.inventario import espacio_disponible_kg, espacio_disponible_provisiones_kg
 from nucleo.manada import manada_de
 from nucleo.parentesco import es_familia_directa
 from nucleo.construccion import (
@@ -48,6 +48,7 @@ from nucleo.construccion import (
     construccion_propia,
     espacio_disponible_para_construir,
     huella_m2_para,
+    material_suficiente_para,
     objetivo_construccion_actual,
 )
 from nucleo.entidad import GestorEntidades, crear_construccion
@@ -89,6 +90,10 @@ class SistemaMovimiento:
         # arco "robo/intercambio de recursos"). Solo observacion.
         self._stats_robos_intentados: int = 0
         self._stats_robos_exitosos: int = 0
+        self._stats_robos_material_intentados: int = 0
+        self._stats_robos_material_exitosos: int = 0
+        self._stats_robos_arma_intentados: int = 0
+        self._stats_robos_arma_exitosos: int = 0
         self._stats_compartir_confianza: int = 0
         # Memoria espacial compartida (2026-09-06, ver spec
         # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md):
@@ -252,6 +257,25 @@ class SistemaMovimiento:
         self.probabilidad_base_robo: float = float(
             self.config_conflicto.get("probabilidad_base_robo", 0.05)
         )
+        # Robo de materiales/armas (2026-09-11, extension mas alla de
+        # comida -- ver docstring de _intentar_robo_material/
+        # _intentar_robo_arma). PROVISIONAL.
+        self.probabilidad_base_robo_material: float = float(
+            self.config_conflicto.get("probabilidad_base_robo_material", 0.05)
+        )
+        self.urgencia_robo_material: float = float(
+            self.config_conflicto.get("urgencia_robo_material", 0.5)
+        )
+        self.probabilidad_base_robo_arma: float = float(
+            self.config_conflicto.get("probabilidad_base_robo_arma", 0.05)
+        )
+        # Capacidad de carga compartida (contenidos+objetos) -- ver
+        # nucleo/inventario.py:espacio_disponible_kg. Necesaria para topar
+        # cuanto puede recibir un ladron de material/arma.
+        self.fraccion_carga_maxima: float = float(
+            self.config.get("inventario", {}).get("fraccion_carga_maxima", 0.25)
+        )
+        self.peso_objeto_kg: dict[str, Any] = self.config.get("peso_objeto_kg", {})
         # Capacidad de provisiones (2026-09-07, ver componentes/inventario.py:
         # Inventario.provisiones) -- necesaria aqui para topar cuanto puede
         # recibir un ladron o un receptor de reparto por confianza.
@@ -1007,7 +1031,14 @@ class SistemaMovimiento:
         b, luego b robando a a) -- sin necesidad de lógica de dedup
         propia, el propio _resolver_conflicto_entre ya descarta un
         segundo intento sobre el mismo par este tick devolviendo
-        COMPARTE (ningún efecto)."""
+        COMPARTE (ningún efecto).
+
+        Tres tipos de robo, cada uno motivado por la MISMA señal de
+        déficit que ya usa el motor para decidir si RECOLECTAR/CONSTRUIR/
+        FABRICAR_ARMA (2026-09-11): comida (hambre), materiales de
+        construcción (falta de masa apta para el objetivo actual) y
+        objetos apto_arma (inseguridad real) -- nunca de Agarre, solo de
+        Inventario (lo activamente empuñado no es robable)."""
         if por_celda is None:
             por_celda = self._agrupar_conscientes_por_celda(gestor)
 
@@ -1016,6 +1047,18 @@ class SistemaMovimiento:
                 gestor, mundo, a_id, b_id, tick_actual, celda_x, celda_y, celda_zona_idx
             )
             self._intentar_robo(
+                gestor, mundo, b_id, a_id, tick_actual, celda_x, celda_y, celda_zona_idx
+            )
+            self._intentar_robo_material(
+                gestor, mundo, a_id, b_id, tick_actual, celda_x, celda_y, celda_zona_idx
+            )
+            self._intentar_robo_material(
+                gestor, mundo, b_id, a_id, tick_actual, celda_x, celda_y, celda_zona_idx
+            )
+            self._intentar_robo_arma(
+                gestor, mundo, a_id, b_id, tick_actual, celda_x, celda_y, celda_zona_idx
+            )
+            self._intentar_robo_arma(
                 gestor, mundo, b_id, a_id, tick_actual, celda_x, celda_y, celda_zona_idx
             )
 
@@ -1083,6 +1126,152 @@ class SistemaMovimiento:
         )
         if cantidad > 0.0:
             self._stats_robos_exitosos += 1
+
+    def _intentar_robo_material(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        ladron_id: int,
+        victima_id: int,
+        tick_actual: int,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+    ) -> None:
+        """Robo de materiales de construcción (2026-09-11, extensión del
+        círculo de robo más allá de comida, ver docstring de
+        _procesar_robo). Mismo molde que _intentar_robo, pero motivado
+        por la MISMA señal de déficit que ya activa RECOLECTAR/CONSTRUIR
+        -- material insuficiente para el objetivo de construcción actual
+        del ladrón -- en vez de inventar una "necesidad de robar"
+        aparte. Déficit binario (no una magnitud continua como el
+        hambre), así que la probabilidad y la urgencia pasada al
+        resolutor son valores FIJOS (mismo criterio que
+        utilidad_construir_base/utilidad_recolectar_base, también fijas)."""
+        inv_ladron = gestor.obtener_componente(ladron_id, Inventario)
+        inv_victima = gestor.obtener_componente(victima_id, Inventario)
+        if inv_ladron is None or inv_victima is None or not inv_victima.contenidos:
+            return
+        objetivo = objetivo_construccion_actual(
+            gestor, mundo, ladron_id, self.radio_cluster_asentamiento, indice=self._indice_actual
+        )
+        if objetivo is None:
+            return
+        tipo_objetivo, cid_objetivo, _ = objetivo
+        suficiente = material_suficiente_para(
+            gestor, cid_objetivo, tipo_objetivo, inv_ladron.contenidos,
+            self.catalogo_materiales, self.config_construccion,
+        )
+        if suficiente:
+            return
+
+        if self.rng.random() >= self.probabilidad_base_robo_material:
+            return
+
+        temp_ladron = gestor.obtener_componente(ladron_id, Temperamento)
+        temp_victima = gestor.obtener_componente(victima_id, Temperamento)
+        if temp_ladron is None or temp_victima is None:
+            return
+
+        self._stats_robos_material_intentados += 1
+        resultado = self._resolver_conflicto_entre(
+            gestor, mundo, ladron_id, victima_id, temp_ladron, temp_victima, tick_actual,
+            pos_x, pos_y, zona_idx,
+            urgencia_a=self.urgencia_robo_material,
+        )
+        if resultado != ResultadoDisputa.CEDE_B:
+            return
+
+        dims_ladron = gestor.obtener_componente(ladron_id, DimensionesFisicas)
+        if dims_ladron is None:
+            return
+        recurso = next(iter(inv_victima.contenidos), None)
+        if recurso is None:
+            return
+        espacio = espacio_disponible_kg(
+            inv_ladron.contenidos, dims_ladron.peso, self.fraccion_carga_maxima,
+            inv_ladron.objetos, self.peso_objeto_kg,
+        )
+        cantidad = transferir_recurso(
+            inv_victima.contenidos, inv_ladron.contenidos, recurso,
+            inv_victima.contenidos.get(recurso, 0.0), espacio,
+        )
+        if cantidad > 0.0:
+            self._stats_robos_material_exitosos += 1
+
+    def _intentar_robo_arma(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        ladron_id: int,
+        victima_id: int,
+        tick_actual: int,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+    ) -> None:
+        """Robo de un objeto apto_arma (2026-09-11, extensión del círculo
+        de robo más allá de comida). Motivado por la MISMA señal que ya
+        activa FABRICAR_ARMA -- inseguridad real (1 - seguridad) -- solo
+        si el ladrón todavía no porta ningún objeto apto_arma, ni
+        empuñado (Agarre) ni guardado (Inventario.objetos): quien ya
+        tiene con qué defenderse no tiene motivo real para robar otro.
+        Roba SOLO de Inventario.objetos de la víctima -- nunca de su
+        Agarre (lo activamente empuñado no es robable, ver docstring del
+        módulo: quitarle un arma de la mano a alguien sería un desarme,
+        un mecanismo distinto que no existe)."""
+        nec_ladron = gestor.obtener_componente(ladron_id, Necesidades)
+        inv_ladron = gestor.obtener_componente(ladron_id, Inventario)
+        inv_victima = gestor.obtener_componente(victima_id, Inventario)
+        if nec_ladron is None or inv_ladron is None or inv_victima is None:
+            return
+        agarre_ladron = gestor.obtener_componente(ladron_id, Agarre)
+        objetos_propios = list(inv_ladron.objetos)
+        if agarre_ladron is not None:
+            objetos_propios.extend(agarre_ladron.objetos)
+        if objetos_arma(objetos_propios, self.catalogo_materiales, self.recetas_armas):
+            return  # ya porta algo apto_arma, sin motivo para robar
+
+        objeto_robable = next(
+            (
+                o for o in inv_victima.objetos
+                if nivel_arma(o, self.catalogo_materiales, self.recetas_armas) > 0
+            ),
+            None,
+        )
+        if objeto_robable is None:
+            return
+
+        urgencia = 1.0 - nec_ladron.seguridad
+        if self.rng.random() >= self.probabilidad_base_robo_arma * urgencia:
+            return
+
+        temp_ladron = gestor.obtener_componente(ladron_id, Temperamento)
+        temp_victima = gestor.obtener_componente(victima_id, Temperamento)
+        if temp_ladron is None or temp_victima is None:
+            return
+
+        self._stats_robos_arma_intentados += 1
+        resultado = self._resolver_conflicto_entre(
+            gestor, mundo, ladron_id, victima_id, temp_ladron, temp_victima, tick_actual,
+            pos_x, pos_y, zona_idx,
+            urgencia_a=urgencia,
+        )
+        if resultado != ResultadoDisputa.CEDE_B:
+            return
+
+        dims_ladron = gestor.obtener_componente(ladron_id, DimensionesFisicas)
+        if dims_ladron is None:
+            return
+        espacio = espacio_disponible_kg(
+            inv_ladron.contenidos, dims_ladron.peso, self.fraccion_carga_maxima,
+            inv_ladron.objetos, self.peso_objeto_kg,
+        )
+        if espacio < float(self.peso_objeto_kg.get(objeto_robable, 0.0)):
+            return
+        inv_victima.objetos.remove(objeto_robable)
+        inv_ladron.objetos.append(objeto_robable)
+        self._stats_robos_arma_exitosos += 1
 
     def _procesar_compartir_confianza(
         self,

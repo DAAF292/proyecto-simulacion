@@ -222,6 +222,23 @@ conflicto:
   # probable el intento). PROVISIONAL, sin calibrar.
   umbral_saciedad_para_robar: 0.3
   probabilidad_base_robo: 0.05
+  # Robo de materiales de construccion (2026-09-11, extension mas alla
+  # de comida -- ver sistemas/sistema_movimiento.py:_intentar_robo_material):
+  # motivado por la MISMA senal de deficit que ya activa RECOLECTAR/
+  # CONSTRUIR (material insuficiente para el objetivo de construccion
+  # actual), no una "necesidad de robar" inventada. Deficit binario (no
+  # una magnitud continua como el hambre), asi que urgencia_robo_material
+  # es un valor FIJO -- mismo criterio que utilidad_construir_base/
+  # utilidad_recolectar_base, tambien fijas. PROVISIONAL, sin calibrar.
+  probabilidad_base_robo_material: 0.05
+  urgencia_robo_material: 0.5
+  # Robo de un objeto apto_arma (2026-09-11): motivado por la MISMA
+  # senal que ya activa FABRICAR_ARMA (inseguridad real, 1 - seguridad)
+  # -- solo si el ladron no porta ya ningun objeto apto_arma (ni
+  # empunado ni guardado). Nunca roba de Agarre, solo de
+  # Inventario.objetos -- lo activamente empunado no es robable (ver
+  # docstring del modulo). PROVISIONAL, sin calibrar.
+  probabilidad_base_robo_arma: 0.05
 
 # Manada -- estructuras gregarias reales en fauna (2026-09-07, ver
 # nucleo/manada.py, sistemas/sistema_manada.py y spec

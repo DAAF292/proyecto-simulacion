@@ -269,6 +269,200 @@ def test_ley_sin_disparar_la_tirada_no_hay_intento():
 
 
 # ---------------------------------------------------------------------------
+# Robo de materiales de construcción (2026-09-11)
+# ---------------------------------------------------------------------------
+
+def test_ley_ladron_sin_material_suficiente_roba_de_la_victima():
+    config = _config()
+    rng = random.Random(20)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    # urgencia_robo_material es FIJA (0.5, no una magnitud extrema como el
+    # hambre) -- a diferencia del test de comida, aqui el ladron necesita
+    # temperamento razonable (no debil a proposito) para que esa urgencia
+    # moderada le baste frente a una victima segura (urgencia real 0).
+    ladron = _gnomo(gestor, config, rng, _temp(dominancia=0.5, agresividad=0.3, valentia=0.5))
+    victima = _gnomo(gestor, config, rng, _temp(dominancia=0.3, agresividad=0.1, valentia=0.3), seguridad=1.0)
+    _inv(gestor, victima).contenidos["arcilla"] = 5.0
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_material_intentados == 1
+    assert sistema._stats_robos_material_exitosos == 1
+    assert _inv(gestor, ladron).contenidos.get("arcilla") == 5.0
+    assert "arcilla" not in _inv(gestor, victima).contenidos
+
+
+def test_ley_ladron_con_material_suficiente_nunca_roba():
+    config = _config()
+    rng = random.Random(21)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(gestor, config, rng, _temp())
+    _inv(gestor, ladron).contenidos["arcilla"] = 20.0  # ya basta para su refugio
+    victima = _gnomo(gestor, config, rng, _temp())
+    _inv(gestor, victima).contenidos["arcilla"] = 5.0
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_material_intentados == 0
+
+
+def test_ley_victima_sin_materiales_nunca_se_intenta_robo_material():
+    config = _config()
+    rng = random.Random(22)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(gestor, config, rng, _temp())
+    victima = _gnomo(gestor, config, rng, _temp())  # sin nada guardado
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_material_intentados == 0
+
+
+def test_ley_robo_material_mismo_asentamiento_nunca_roba():
+    config = _config()
+    rng = random.Random(23)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(gestor, config, rng, _temp())
+    victima = _gnomo(gestor, config, rng, _temp())
+    _inv(gestor, victima).contenidos["arcilla"] = 5.0
+    mundo.asentamientos[1] = Asentamiento(id=1, centro=(0, 0), miembros=frozenset({ladron, victima}))
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert _inv(gestor, ladron).contenidos == {}
+    assert _inv(gestor, victima).contenidos.get("arcilla") == 5.0
+
+
+# ---------------------------------------------------------------------------
+# Robo de un objeto apto_arma (2026-09-11)
+# ---------------------------------------------------------------------------
+
+def test_ley_ladron_inseguro_y_desarmado_roba_el_arma_de_la_victima():
+    config = _config()
+    rng = random.Random(24)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(
+        gestor, config, rng, _temp(dominancia=0.1, agresividad=0.1, valentia=0.1), seguridad=0.2,
+    )
+    victima = _gnomo(gestor, config, rng, _temp(dominancia=0.5, agresividad=0.1, valentia=0.5))
+    _inv(gestor, victima).objetos = ["madera"]
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_arma(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_arma_intentados == 1
+    assert sistema._stats_robos_arma_exitosos == 1
+    assert _inv(gestor, ladron).objetos == ["madera"]
+    assert _inv(gestor, victima).objetos == []
+
+
+def test_ley_ladron_que_ya_porta_arma_nunca_roba_otra():
+    config = _config()
+    rng = random.Random(25)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(gestor, config, rng, _temp(), seguridad=0.2)
+    _inv(gestor, ladron).objetos = ["madera"]  # ya porta algo apto_arma
+    victima = _gnomo(gestor, config, rng, _temp())
+    _inv(gestor, victima).objetos = ["madera"]
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_arma(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_arma_intentados == 0
+
+
+def test_ley_agarre_empunado_del_ladron_tambien_cuenta_como_ya_armado():
+    """Ley: un arma ya EMPUÑADA (Agarre, no Inventario) cuenta igual que
+    una guardada -- el chequeo mira ambas listas."""
+    from componentes.agarre import Agarre
+    config = _config()
+    rng = random.Random(26)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(gestor, config, rng, _temp(), seguridad=0.2)
+    gestor.obtener_componente(ladron, Agarre).objetos = ["madera"]
+    victima = _gnomo(gestor, config, rng, _temp())
+    _inv(gestor, victima).objetos = ["madera"]
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_arma(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_arma_intentados == 0
+
+
+def test_ley_victima_sin_nada_apto_arma_nunca_se_intenta():
+    config = _config()
+    rng = random.Random(27)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(gestor, config, rng, _temp(), seguridad=0.2)
+    victima = _gnomo(gestor, config, rng, _temp())  # nada en objetos
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_arma(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_arma_intentados == 0
+
+
+def test_ley_seguridad_plena_nunca_intenta_robar_arma():
+    """Ley: urgencia = 1 - seguridad; con seguridad plena la probabilidad
+    es exactamente 0, sin importar que la tirada este forzada a exito."""
+    config = _config()
+    rng = random.Random(28)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(gestor, config, rng, _temp(), seguridad=1.0)
+    victima = _gnomo(gestor, config, rng, _temp())
+    _inv(gestor, victima).objetos = ["madera"]
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_arma(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_arma_intentados == 0
+
+
+def test_ley_robo_arma_nunca_toca_el_agarre_de_la_victima():
+    """Ley central del diseño: lo activamente empuñado no es robable --
+    solo Inventario.objetos, nunca Agarre.objetos."""
+    from componentes.agarre import Agarre
+    config = _config()
+    rng = random.Random(29)
+    gestor = GestorEntidades()
+    mundo = Mundo(6, 6, config, random.Random(1))
+    ladron = _gnomo(
+        gestor, config, rng, _temp(dominancia=0.1, agresividad=0.1, valentia=0.1), seguridad=0.2,
+    )
+    victima = _gnomo(gestor, config, rng, _temp(dominancia=0.5, agresividad=0.1, valentia=0.5))
+    gestor.obtener_componente(victima, Agarre).objetos = ["madera"]  # solo empuñado, nada en Inventario
+    sistema = SistemaMovimiento(config, rng)
+    sistema.rng.random = lambda: 0.0
+
+    sistema._intentar_robo_arma(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
+
+    assert sistema._stats_robos_arma_intentados == 0
+    assert gestor.obtener_componente(victima, Agarre).objetos == ["madera"]
+
+
+# ---------------------------------------------------------------------------
 # Compartir por confianza
 # ---------------------------------------------------------------------------
 
