@@ -17,6 +17,16 @@ from __future__ import annotations
 from typing import Any
 
 
+def manos_libres(puntos_agarre: int, objetos_agarre: list[str]) -> int:
+    """Puntos de agarre fisicamente libres ahora mismo -- capacidad de la
+    especie menos lo que ya esta sujeto (arma empuñada, piedra_suelta a
+    la espera de fuego...). Nunca negativo. Consumidor: requisito de
+    manos libres por Accion (2026-09-11, sistema_decision.py) -- manipular
+    conscientemente el mundo fisico (comer, recolectar, cocinar,
+    construir, fabricar) exige tener una forma fisica de hacerlo."""
+    return max(0, puntos_agarre - len(objetos_agarre))
+
+
 def nivel_arma(objeto: str, catalogo_materiales: dict[str, Any], recetas: list[dict[str, Any]]) -> int:
     """Nivel de arma de un objeto -- 0 si no es arma (nada en la mano),
     1 si es material crudo apto_arma (un palo o una piedra sueltos), o el

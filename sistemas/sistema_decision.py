@@ -206,6 +206,7 @@ from nucleo.asentamiento import disposicion_a_aportar
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.armas import (
     celda_ofrece_material_arma,
+    manos_libres,
     mejor_objeto_para_empunar,
     nivel_arma,
     tiene_arma_nivel2_o_mas,
@@ -411,6 +412,11 @@ class SistemaDecision:
         # camino de decision lo lee -- mismo patron que los _stats_* de
         # SistemaMovimiento.
         self._stats_socializar_elegidas: int = 0
+        # Contador de observacion para BOSQUE_AUTO_TICKS (2026-09-11,
+        # requisito de manos libres): cuantas veces el gate REALMENTE
+        # bloqueo una utilidad que de otro modo habria sido positiva (no
+        # cuenta los casos triviales donde ya era 0 por otro motivo).
+        self._stats_gate_manos_libres_disparado: int = 0
         # Sonido fisico (2026-09-06, circulo 4a -- ver
         # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
         # techo de escaneo (no el alcance real) para la tercera fuente de
@@ -461,6 +467,16 @@ def actualizar(
     # 2026-09-08-como-cocinar-design.md): base FIJA, no derivada de una
     # necesidad -- cocinar es preparar para mas tarde, no una urgencia.
     utilidad_cocinar_base = float(config["decision"].get("utilidad_cocinar_base", 0.25))
+    # Requisito de manos libres (2026-09-11, ver docstring del modulo mas
+    # abajo, junto a "candidatas"): manipular conscientemente el mundo
+    # fisico exige una forma fisica de hacerlo -- ninguna clave presente
+    # equivale a 0 (sin cambio de comportamiento).
+    cfg_manos_libres = config["decision"].get("manos_libres_requeridas", {})
+    manos_requeridas_comer = int(cfg_manos_libres.get("comer", 0))
+    manos_requeridas_recolectar = int(cfg_manos_libres.get("recolectar", 0))
+    manos_requeridas_cocinar = int(cfg_manos_libres.get("cocinar", 0))
+    manos_requeridas_construir = int(cfg_manos_libres.get("construir", 0))
+    manos_requeridas_fabricar_arma = int(cfg_manos_libres.get("fabricar_arma", 0))
     catalogo_materiales = config.get("materiales", {})
     config_construccion = config.get("construccion", {})
     fraccion_carga_maxima = float(config.get("inventario", {}).get("fraccion_carga_maxima", 0.25))
@@ -546,6 +562,11 @@ def actualizar(
         inventario = gestor.obtener_componente(id_entidad, Inventario)
         dims = gestor.obtener_componente(id_entidad, DimensionesFisicas)
         pos = gestor.obtener_componente(id_entidad, Posicion)
+        agarre = gestor.obtener_componente(id_entidad, Agarre)
+        puntos_agarre = int(
+            rangos_raciales.get(identidad.especie.value, {}).get("puntos_agarre", 0)
+        )
+        manos_disponibles = manos_libres(puntos_agarre, agarre.objetos if agarre is not None else [])
         agotado = pool.resistencia <= 0.0
         # Transitorio por tick: el motivo del RECOLECTAR de ESTE tick se
         # recalcula aqui (armas primitivas v2) -- nunca puede arrastrarse
@@ -690,7 +711,6 @@ def actualizar(
         # Celda.recursos, independiente de tipo_sustrato.
         utilidad_encender_fuego = 0.0
         if cap_mental.consciencia >= umbral_consciencia_agencia:
-            agarre = gestor.obtener_componente(id_entidad, Agarre)
             piedras = agarre.objetos.count("piedra_suelta") if agarre is not None else 0
             if piedras < piedras_necesarias_fuego:
                 # Eslabón heredado: "cuánto valdría encender fuego si ya
@@ -780,6 +800,38 @@ def actualizar(
                     utilidad_recolectar = max(
                         utilidad_recolectar, 1.0 - necesidades.seguridad
                     )
+
+        # Requisito de manos libres (2026-09-11): manipular
+        # conscientemente el mundo fisico exige tener una forma fisica de
+        # hacerlo -- coger un objeto implica agarre. Aplicado al valor
+        # FINAL de cada utilidad (tras cualquier eslabon heredado de
+        # RECOLECTAR), una sola vez, en vez de repetir el chequeo en cada
+        # rama que la modifica. Solo consciente (fauna come/recolecta con
+        # boca o patas, sin mano que gatear -- mismo criterio que el resto
+        # de acciones ya gateadas por consciencia). ENCENDER_FUEGO tiene
+        # su propio requisito INVERSO (manos OCUPADAS con piedra_suelta,
+        # ver arriba), sin tocar aqui.
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            if accion_alimentarse == Accion.COMER and manos_disponibles < manos_requeridas_comer:
+                if utilidad_alimentarse > 0.0 and sistema_decision is not None:
+                    sistema_decision._stats_gate_manos_libres_disparado += 1
+                utilidad_alimentarse = 0.0
+            if manos_disponibles < manos_requeridas_recolectar:
+                if utilidad_recolectar > 0.0 and sistema_decision is not None:
+                    sistema_decision._stats_gate_manos_libres_disparado += 1
+                utilidad_recolectar = 0.0
+            if manos_disponibles < manos_requeridas_cocinar:
+                if utilidad_cocinar > 0.0 and sistema_decision is not None:
+                    sistema_decision._stats_gate_manos_libres_disparado += 1
+                utilidad_cocinar = 0.0
+            if manos_disponibles < manos_requeridas_construir:
+                if utilidad_construir > 0.0 and sistema_decision is not None:
+                    sistema_decision._stats_gate_manos_libres_disparado += 1
+                utilidad_construir = 0.0
+            if manos_disponibles < manos_requeridas_fabricar_arma:
+                if utilidad_fabricar_arma > 0.0 and sistema_decision is not None:
+                    sistema_decision._stats_gate_manos_libres_disparado += 1
+                utilidad_fabricar_arma = 0.0
 
         candidatas = (
             (utilidad_huir, Accion.HUIR),
@@ -895,9 +947,6 @@ def actualizar(
         deseo_empunar = amenaza_ahora or (
             (1.0 - necesidades.seguridad)
             > (umbral_base_empunar + temperamento.valentia * margen_valentia_empunar)
-        )
-        puntos_agarre = int(
-            rangos_raciales.get(identidad.especie.value, {}).get("puntos_agarre", 0)
         )
         _ajustar_empunadura(
             gestor, id_entidad, deseo_empunar, puntos_agarre,

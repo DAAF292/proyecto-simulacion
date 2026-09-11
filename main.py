@@ -643,6 +643,13 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] socializar elegidas: "
                 f"{sistemas['decision']._stats_socializar_elegidas}"
             )
+            # Verificacion obligatoria del requisito de manos libres
+            # (2026-09-11): cuantas veces el gate bloqueo de verdad una
+            # utilidad que habria sido positiva. Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] gate de manos libres disparado: "
+                f"{sistemas['decision']._stats_gate_manos_libres_disparado} veces"
+            )
             print(
                 "[BOSQUE_AUTO_TICKS] socializar contactos resueltos: "
                 f"{sistemas['movimiento']._stats_socializar_contacto}"
