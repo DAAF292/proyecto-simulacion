@@ -896,6 +896,36 @@ class SistemaMovimiento:
             por_celda.setdefault((pos.x, pos.y, pos.zona_idx), []).append(eid)
         return por_celda
 
+    def _pares_no_ordenados(
+        self, por_celda: dict[tuple[int, int, int], list[int]],
+    ):
+        """Cada par (a_id, b_id) con i<j de cada grupo de por_celda, una
+        sola vez por par -- para efectos simetricos (roce_social) o que
+        el propio llamador resuelve en ambas direcciones (robo,
+        compartir_confianza)."""
+        for celda_key, ids in por_celda.items():
+            if len(ids) < 2:
+                continue
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    yield celda_key, ids[i], ids[j]
+
+    def _pares_ordenados(
+        self, por_celda: dict[tuple[int, int, int], list[int]],
+    ):
+        """Cada par (emisor_id, receptor_id) de cada grupo de por_celda,
+        las DOS direcciones por separado -- para efectos asimetricos
+        (memoria compartida, rumor) donde cada direccion es un camino de
+        efecto independiente."""
+        for ids in por_celda.values():
+            if len(ids) < 2:
+                continue
+            for i in range(len(ids)):
+                for j in range(len(ids)):
+                    if i == j:
+                        continue
+                    yield ids[i], ids[j]
+
     def _procesar_roce_social(
         self,
         gestor: GestorEntidades,
@@ -930,36 +960,31 @@ class SistemaMovimiento:
         if por_celda is None:
             por_celda = self._agrupar_conscientes_por_celda(gestor)
 
-        for (celda_x, celda_y, celda_zona_idx), ids in por_celda.items():
-            if len(ids) < 2:
+        for (celda_x, celda_y, celda_zona_idx), a_id, b_id in self._pares_no_ordenados(por_celda):
+            temp_a = gestor.obtener_componente(a_id, Temperamento)
+            temp_b = gestor.obtener_componente(b_id, Temperamento)
+            pm_a = gestor.obtener_componente(a_id, PoolMental)
+            pm_b = gestor.obtener_componente(b_id, PoolMental)
+            nec_a = gestor.obtener_componente(a_id, Necesidades)
+            nec_b = gestor.obtener_componente(b_id, Necesidades)
+            if (
+                temp_a is None or temp_b is None
+                or pm_a is None or pm_b is None
+                or nec_a is None or nec_b is None
+            ):
                 continue
-            for i in range(len(ids)):
-                for j in range(i + 1, len(ids)):
-                    a_id, b_id = ids[i], ids[j]
-                    temp_a = gestor.obtener_componente(a_id, Temperamento)
-                    temp_b = gestor.obtener_componente(b_id, Temperamento)
-                    pm_a = gestor.obtener_componente(a_id, PoolMental)
-                    pm_b = gestor.obtener_componente(b_id, PoolMental)
-                    nec_a = gestor.obtener_componente(a_id, Necesidades)
-                    nec_b = gestor.obtener_componente(b_id, Necesidades)
-                    if (
-                        temp_a is None or temp_b is None
-                        or pm_a is None or pm_b is None
-                        or nec_a is None or nec_b is None
-                    ):
-                        continue
-                    estres = max(1.0 - pm_a.estabilidad, 1.0 - pm_b.estabilidad)
-                    prob = (
-                        self.probabilidad_base_roce_social
-                        + self.peso_agresividad_roce * (temp_a.agresividad + temp_b.agresividad) / 2.0
-                        + self.peso_estres_roce * estres
-                    )
-                    if self.rng.random() < prob:
-                        self._resolver_conflicto_entre(
-                            gestor, mundo, a_id, b_id, temp_a, temp_b, tick_actual,
-                            celda_x, celda_y, celda_zona_idx,
-                        )
-                        self._stats_roce_social_resueltos += 1
+            estres = max(1.0 - pm_a.estabilidad, 1.0 - pm_b.estabilidad)
+            prob = (
+                self.probabilidad_base_roce_social
+                + self.peso_agresividad_roce * (temp_a.agresividad + temp_b.agresividad) / 2.0
+                + self.peso_estres_roce * estres
+            )
+            if self.rng.random() < prob:
+                self._resolver_conflicto_entre(
+                    gestor, mundo, a_id, b_id, temp_a, temp_b, tick_actual,
+                    celda_x, celda_y, celda_zona_idx,
+                )
+                self._stats_roce_social_resueltos += 1
 
     def _procesar_robo(
         self,
@@ -971,26 +996,22 @@ class SistemaMovimiento:
         """Robo (2026-09-07, círculo 3 del arco "robo/intercambio de
         recursos" -- ver docs/superpowers/specs/
         2026-09-07-robo-compartir-confianza-design.md). Mismo molde de
-        recorrido que _procesar_roce_social, pero asimétrico: para cada
-        par prueba las DOS direcciones (a robando a b, luego b robando a
-        a) -- sin necesidad de lógica de dedup propia, el propio
-        _resolver_conflicto_entre ya descarta un segundo intento sobre el
-        mismo par este tick devolviendo COMPARTE (ningún efecto)."""
+        recorrido que _procesar_roce_social (_pares_no_ordenados), pero
+        asimétrico: para cada par prueba las DOS direcciones (a robando a
+        b, luego b robando a a) -- sin necesidad de lógica de dedup
+        propia, el propio _resolver_conflicto_entre ya descarta un
+        segundo intento sobre el mismo par este tick devolviendo
+        COMPARTE (ningún efecto)."""
         if por_celda is None:
             por_celda = self._agrupar_conscientes_por_celda(gestor)
 
-        for (celda_x, celda_y, celda_zona_idx), ids in por_celda.items():
-            if len(ids) < 2:
-                continue
-            for i in range(len(ids)):
-                for j in range(i + 1, len(ids)):
-                    a_id, b_id = ids[i], ids[j]
-                    self._intentar_robo(
-                        gestor, mundo, a_id, b_id, tick_actual, celda_x, celda_y, celda_zona_idx
-                    )
-                    self._intentar_robo(
-                        gestor, mundo, b_id, a_id, tick_actual, celda_x, celda_y, celda_zona_idx
-                    )
+        for (celda_x, celda_y, celda_zona_idx), a_id, b_id in self._pares_no_ordenados(por_celda):
+            self._intentar_robo(
+                gestor, mundo, a_id, b_id, tick_actual, celda_x, celda_y, celda_zona_idx
+            )
+            self._intentar_robo(
+                gestor, mundo, b_id, a_id, tick_actual, celda_x, celda_y, celda_zona_idx
+            )
 
     def _intentar_robo(
         self,
@@ -1065,20 +1086,15 @@ class SistemaMovimiento:
         """Compartir por confianza (2026-09-07, círculo 4 del arco
         "robo/intercambio de recursos"): unidireccional y voluntario, sin
         pasar por el resolutor de conflicto -- no es una disputa. Mismo
-        molde de recorrido que _procesar_robo, probando las dos
-        direcciones por par; ambas pueden dispararse el mismo tick (no
-        es adversarial, no hace falta dedup)."""
+        molde de recorrido que _procesar_robo (_pares_no_ordenados),
+        probando las dos direcciones por par; ambas pueden dispararse el
+        mismo tick (no es adversarial, no hace falta dedup)."""
         if por_celda is None:
             por_celda = self._agrupar_conscientes_por_celda(gestor)
 
-        for (_celda_x, _celda_y, _celda_zona_idx), ids in por_celda.items():
-            if len(ids) < 2:
-                continue
-            for i in range(len(ids)):
-                for j in range(i + 1, len(ids)):
-                    a_id, b_id = ids[i], ids[j]
-                    self._intentar_compartir_confianza(gestor, a_id, b_id)
-                    self._intentar_compartir_confianza(gestor, b_id, a_id)
+        for _celda_key, a_id, b_id in self._pares_no_ordenados(por_celda):
+            self._intentar_compartir_confianza(gestor, a_id, b_id)
+            self._intentar_compartir_confianza(gestor, b_id, a_id)
 
     def _intentar_compartir_confianza(
         self, gestor: GestorEntidades, donante_id: int, receptor_id: int,
@@ -1137,15 +1153,8 @@ class SistemaMovimiento:
         sitio mas cercano que el emisor conoce (objetivo_recordado desde SU
         posicion/capacidad mental -- ya perturbado por su propia imprecision)
         hacia el receptor, via registrar_recuerdo()."""
-        for ids in por_celda.values():
-            if len(ids) < 2:
-                continue
-            for i in range(len(ids)):
-                for j in range(len(ids)):
-                    if i == j:
-                        continue
-                    emisor_id, receptor_id = ids[i], ids[j]
-                    self._compartir_memoria(gestor, emisor_id, receptor_id)
+        for emisor_id, receptor_id in self._pares_ordenados(por_celda):
+            self._compartir_memoria(gestor, emisor_id, receptor_id)
 
     def _compartir_memoria(
         self, gestor: GestorEntidades, emisor_id: int, receptor_id: int
@@ -1190,14 +1199,8 @@ class SistemaMovimiento:
         Un mismo par se procesa DOS veces (una por direccion) porque cada
         direccion es un camino de efecto independiente: A puede contarle a B
         su opinion sobre C sin que B le cuente nada a A ese mismo tick."""
-        for ids in por_celda.values():
-            if len(ids) < 2:
-                continue
-            for i in range(len(ids)):
-                for j in range(len(ids)):
-                    if i == j:
-                        continue
-                    self._compartir_rumor(gestor, ids[i], ids[j], tick_actual)
+        for emisor_id, receptor_id in self._pares_ordenados(por_celda):
+            self._compartir_rumor(gestor, emisor_id, receptor_id, tick_actual)
 
     def _compartir_rumor(
         self, gestor: GestorEntidades, emisor_id: int, receptor_id: int, tick_actual: int,
