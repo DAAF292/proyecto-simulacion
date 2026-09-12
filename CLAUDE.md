@@ -8995,3 +8995,39 @@ para cualquier cifra de frecuencia real; con el arco "fabricación y
 uso de herramientas" ya cerrado en sus dos círculos planteados y
 verificado en juego libre, ningún círculo nuevo de este arco decidido
 todavía.
+
+## `hacha_primitiva` -- colisión de nombre entre armas.yaml y
+## herramientas.yaml, aceptada como decisión de diseño, no como
+## accidente sin resolver (2026-09-12, mismo día)
+
+Al preguntar Diego qué hace un `hacha_primitiva` una vez fabricado, se
+encontró que el objeto tiene DOS efectos reales simultáneos, sin que
+nadie lo hubiera decidido explícitamente al escribir
+`config/herramientas.yaml` (Círculo 2, 2026-09-11/12): es arma nivel 3
+(`config/armas.yaml`, "armas primitivas v2", 2026-09-03 --
+`nucleo/armas.py:nivel_arma()` la reconoce por nombre, alimentando
+`bono_defensivo_arma`/`indice_asertividad_social` en cualquier
+`resolver_disputa`) Y es herramienta nivel 1 (`config/herramientas.yaml`
+-- `nucleo/herramientas.py:tiene_herramienta()` la reconoce por el
+MISMO nombre, activando `factor_bono_tasa_recolectar_con_herramienta`
+=1.5x y `factor_bono_tasa_aporte_construccion_con_herramienta`=1.3x).
+Los dos catálogos usan la misma receta de materiales (madera+piedra)
+con el mismo nombre -- coincidencia entre dos piezas de diseño
+separadas, nunca cruzadas entre sí antes de esta pregunta.
+
+**Decisión de Diego: aceptado como comportamiento correcto, no como
+colisión a corregir** -- "es factible, un hacha primitiva cumple ambas
+funciones". Razonamiento explícito que lo sostiene, con una condición
+real para el futuro: hoy es la única receta en cada catálogo, así que
+funciona sin conflicto -- pero **el día que un catálogo crezca, la
+coincidencia de nombre deja de ser automáticamente correcta**. Ejemplo
+propio de Diego: un hipotético `hacha_de_guerra` (arma real, pensada
+para combate) NO debería heredar ningún bono de construcción solo por
+compartir nombre con una entrada de `herramientas.yaml` -- cada receta
+nueva de cualquiera de los dos catálogos necesita una decisión
+DELIBERADA (mismo nombre a propósito si el objeto es de verdad
+dual-purpose, nombre distinto si no lo es), nunca una coincidencia sin
+verificar cruzada entre los dos ficheros. Sin cambios de código en este
+círculo -- decisión de diseño pura, documentada para que ninguna sesión
+futura la trate como un bug latente ni añada una receta nueva sin
+cruzar ambos catálogos primero.
