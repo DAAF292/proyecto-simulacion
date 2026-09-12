@@ -9139,10 +9139,42 @@ este proyecto (fabricación de herramientas, salón común...).
 excepciones -- roundtrip limpio (aunque `pico` no añade estado nuevo
 persistido, viaja en `Inventario.objetos`, campo JSON ya existente).
 
-**Pendiente real, explícito**: diagnóstico multi-semilla (varias semillas
-nuevas, mismo criterio que "una sola semilla no basta para concluir
-invisibilidad") lanzado en segundo plano al cerrar este círculo --
-resultado real pendiente de añadir aquí en cuanto termine. Reparto de
-Círculo 2 (tala real, destruye una `Planta` por primera vez en el motor)
-y Círculo 3+ (niveles de construcción, conocimiento transmisible, tipos
-nuevos) sin empezar -- agricultura/ganadería aparcada como arco propio.
+**Diagnóstico multi-semilla, resultado real (2026-09-12, mismo día,
+completado tras cerrar el círculo)**: 6 semillas NUEVAS (101-106) × hasta
+8000 ticks (cortadas entre 2691-3164 por el límite de tiempo real del
+arnés, 60s/semilla) -- **0 picos fabricados en las 6**, mismo resultado
+que la semilla por defecto. El gate SÍ se ejerció de verdad en 2 de las 6
+(`vetas_bloqueadas_sin_pico=1` en semillas 105/106) -- confirma que el
+mecanismo se dispara en juego libre (3/7 semillas totales con al menos un
+bloqueo real), pero el ciclo completo (fabricar pico → extraer veta)
+nunca llegó a cerrarse en ninguna de las 7 semillas probadas hasta ahora.
+
+**Hipótesis real sobre la causa, verificada parcialmente, no confirmada
+del todo**: se descartó una hipótesis inicial antes de escribirla aquí
+como si fuera cierta -- "madera nunca está disponible en una celda de
+veta (terreno de montaña)" resultó FALSA, verificado contra
+`config/flora.yaml`: `pino` (bioma montaña) sí produce `madera` real. La
+hipótesis que queda en pie, sin confirmar con instrumentación dedicada
+todavía: el motivo de mineria es puramente OPORTUNISTA (solo se activa
+estando YA de pie sobre la veta, sin ningún sesgo de movimiento que
+lleve a un gnomo hacia una veta conocida) -- mismo patrón causal exacto
+que ya volvió casi inalcanzable `ENCENDER_FUEGO`/piedra_suelta en su
+momento (30-08), antes de la corrección de "piedra suelta". Con
+`_stats_veta_bloqueada_sin_pico` disparándose solo 2 veces en ~18000
+ticks combinados de las 6 semillas nuevas, simplemente PISAR una celda
+de veta sin pico ya parece ser el cuello de botella dominante, antes
+incluso de si esa misma celda ofrece o no material crudo para tallar.
+
+**Pendiente real, explícito, decisión de Diego, ninguna implementada
+todavía**: si se quiere que el ciclo se cierre de verdad en juego libre,
+candidatos sin decidir (mismo menú de opciones que ya se planteó una vez
+para piedra_suelta, ninguna implementada sin que Diego elija): (a) sesgo
+de movimiento hacia una veta ya conocida en memoria (mismo patrón que ya
+tira hacia refugio/manada); (b) ampliar el disparador del motivo más
+allá de "de pie exactamente sobre la veta"; (c) aceptar que minar es,
+narrativamente, un suceso poco frecuente y no perseguir más esto ahora,
+centrando el esfuerzo en el resto del roadmap (tala real, niveles de
+construcción, conocimiento). Reparto de Círculo 2 (tala real, destruye
+una `Planta` por primera vez en el motor) y Círculo 3+ (niveles de
+construcción, conocimiento transmisible, tipos nuevos) sin empezar --
+agricultura/ganadería aparcada como arco propio.
