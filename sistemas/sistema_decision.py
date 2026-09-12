@@ -734,13 +734,36 @@ def actualizar(
         # ningún interés en buscar piedra tampoco. Piedra_suelta vive en
         # Celda.recursos, independiente de tipo_sustrato.
         utilidad_encender_fuego = 0.0
+        # Mismo mecanismo que recolectar_con_motivo_arma/herramienta más
+        # abajo (2026-09-11, "prioridad consciente" -- ver CLAUDE.md):
+        # hasta ahora este eslabón elevaba utilidad_recolectar sin dejar
+        # rastro de si fue realmente el motivo ganador, así que
+        # _resolver_recolectar (Vía 1) agarraba piedra_suelta para fuego
+        # SIEMPRE que hubiera hueco en Agarre, con independencia de qué
+        # motivo real ganó el RECOLECTAR de este tick -- interceptando
+        # casi cualquier piedra_suelta antes de que arma/herramienta
+        # pudieran considerarla como material "piedra". Con el flag,
+        # Vía 1 solo se dispara cuando fuego fue de verdad el motivo que
+        # ganó, igual que ya exige Vía 2/3.
+        # Valor heredado CRUDO (no booleano) de cada eslabón que puede
+        # elevar RECOLECTAR este tick -- necesario para resolver
+        # correctamente CUÁL de los tres fue el motivo REAL ganador
+        # cuando más de uno se dispara en el mismo tick (ver más abajo,
+        # justo antes del resolutor de FABRICAR: los tres candidatos se
+        # comparan contra el valor FINAL de utilidad_recolectar, no
+        # contra el valor "hasta ahora" en su propio punto de la
+        # cascada -- una comparación secuencial ciega dejaría a un
+        # motivo temprano con su flag en True aunque un eslabón
+        # posterior lo hubiera superado después).
+        valor_heredado_fuego: float | None = None
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             piedras = agarre.objetos.count("piedra_suelta") if agarre is not None else 0
             if piedras < piedras_necesarias_fuego:
                 # Eslabón heredado: "cuánto valdría encender fuego si ya
                 # tuviera las piedras" empuja a RECOLECTAR, no una
                 # utilidad propia de "buscar piedra".
-                utilidad_recolectar = max(utilidad_recolectar, 1.0 - necesidades.confort_termico)
+                valor_heredado_fuego = 1.0 - necesidades.confort_termico
+                utilidad_recolectar = max(utilidad_recolectar, valor_heredado_fuego)
             else:
                 zona_fuego = mundo.territorio.zonas[pos.zona_idx]
                 celda_fuego = zona_fuego.obtener_celda(pos.x, pos.y)
@@ -813,7 +836,7 @@ def actualizar(
         # de la categoria "arma" de FABRICAR -- RECOLECTAR nunca necesita
         # saber que Accion.FABRICAR es generica, solo que hay un deficit
         # real de seguridad y un recurso apto_arma en la celda.
-        recolectar_con_motivo_arma = False
+        valor_heredado_arma: float | None = None
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             objetos_totales = list(inventario.objetos)
             if agarre is not None:
@@ -831,13 +854,8 @@ def actualizar(
                 zona_arma = mundo.territorio.zonas[pos.zona_idx]
                 celda_arma = zona_arma.obtener_celda(pos.x, pos.y)
                 if celda_ofrece_material_arma(celda_arma, catalogo_materiales):
-                    utilidad_recolectar_sin_arma = utilidad_recolectar
-                    recolectar_con_motivo_arma = (
-                        1.0 - necesidades.seguridad
-                    ) > utilidad_recolectar_sin_arma
-                    utilidad_recolectar = max(
-                        utilidad_recolectar, 1.0 - necesidades.seguridad
-                    )
+                    valor_heredado_arma = 1.0 - necesidades.seguridad
+                    utilidad_recolectar = max(utilidad_recolectar, valor_heredado_arma)
 
         # FABRICAR, categoria "herramienta" (2026-09-11, circulo 2 del
         # arco "fabricacion y uso de herramientas" -- ver docs/superpowers/
@@ -867,7 +885,7 @@ def actualizar(
         # "herramienta" tendria SI YA tuviera el material en bruto,
         # solo cuando la celda actual ofrece un recurso apto_arma
         # (mismos materiales reutilizados, ver nucleo/herramientas.py).
-        recolectar_con_motivo_herramienta = False
+        valor_heredado_herramienta: float | None = None
         if cap_mental.consciencia >= umbral_consciencia_agencia:
             objetos_totales_h = list(inventario.objetos)
             if agarre is not None:
@@ -883,11 +901,38 @@ def actualizar(
                     zona_h = mundo.territorio.zonas[pos.zona_idx]
                     celda_h = zona_h.obtener_celda(pos.x, pos.y)
                     if celda_ofrece_material_arma(celda_h, catalogo_materiales):
-                        utilidad_recolectar_sin_herramienta = utilidad_recolectar
-                        recolectar_con_motivo_herramienta = (
-                            necesidad_trabajo > utilidad_recolectar_sin_herramienta
-                        )
-                        utilidad_recolectar = max(utilidad_recolectar, necesidad_trabajo)
+                        valor_heredado_herramienta = necesidad_trabajo
+                        utilidad_recolectar = max(utilidad_recolectar, valor_heredado_herramienta)
+
+        # Resuelve CUÁL de los tres eslabones heredados de arriba (fuego,
+        # arma, herramienta) es el motivo REAL que explica el valor FINAL
+        # de utilidad_recolectar -- comparación contra el resultado ya
+        # cerrado de la cascada, no contra el valor "hasta ese punto"
+        # (2026-09-12, "prioridad consciente" -- ver CLAUDE.md). Sin
+        # esto, un eslabón temprano (p.ej. fuego) podía quedar marcado
+        # como motivo ganador aunque uno posterior (arma/herramienta) lo
+        # hubiera superado después en la misma cascada -- dos motivos
+        # simultáneamente `True` para el mismo RECOLECTAR, sin sentido
+        # físico (un individuo no puede recolectar por dos razones
+        # incompatibles a la vez). En empate exacto entre dos eslabones
+        # elegibles, se resuelve arbitrariamente por el primero
+        # comprobado (fuego > arma > herramienta) -- mismo criterio de
+        # "el primero que se comprueba gana el empate" ya usado en el
+        # resto de este módulo (ver `candidatas` más abajo).
+        recolectar_con_motivo_fuego = (
+            valor_heredado_fuego is not None and valor_heredado_fuego == utilidad_recolectar
+        )
+        recolectar_con_motivo_arma = (
+            not recolectar_con_motivo_fuego
+            and valor_heredado_arma is not None
+            and valor_heredado_arma == utilidad_recolectar
+        )
+        recolectar_con_motivo_herramienta = (
+            not recolectar_con_motivo_fuego
+            and not recolectar_con_motivo_arma
+            and valor_heredado_herramienta is not None
+            and valor_heredado_herramienta == utilidad_recolectar
+        )
 
         # Resolutor interno de FABRICAR: dos candidatos ("arma",
         # "herramienta" -- 2026-09-11, el segundo real desde el rename
@@ -1054,6 +1099,13 @@ def actualizar(
         # para la categoria "herramienta" (2026-09-11).
         intencion.recolectar_motivo_herramienta = (
             intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_herramienta
+        )
+        # Mismo criterio, via independiente para fuego (2026-09-12,
+        # "prioridad consciente" -- retrofit del patron motivo_X al
+        # eslabon de piedra_suelta, que lo antecede cronologicamente
+        # sin haberlo usado nunca hasta ahora).
+        intencion.recolectar_motivo_fuego = (
+            intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_fuego
         )
         # Vuelca a Intencion que categoria gano el resolutor interno de
         # FABRICAR (2026-09-11), solo si FABRICAR es de verdad la accion

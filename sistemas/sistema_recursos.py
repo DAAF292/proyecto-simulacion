@@ -359,6 +359,7 @@ class SistemaRecursos:
                     inv, dims, celda, agarre, ident.especie.value, consciente,
                     recolectar_arma=intencion.recolectar_motivo_arma,
                     recolectar_herramienta=intencion.recolectar_motivo_herramienta,
+                    recolectar_fuego=intencion.recolectar_motivo_fuego,
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
                 )
                 self._incrementar_vocacion(gestor, eid, consciente, "conteo_forrajero")
@@ -586,6 +587,7 @@ class SistemaRecursos:
         consciente: bool = False,
         recolectar_arma: bool = False,
         recolectar_herramienta: bool = False,
+        recolectar_fuego: bool = False,
         gestor: GestorEntidades | None = None,
         pos_x: int = 0,
         pos_y: int = 0,
@@ -612,7 +614,14 @@ class SistemaRecursos:
            actual la tiene. Un individuo que jamás ha necesitado fuego
            (confort_termico siempre alto) nunca llega a esta rama con
            utilidad real, así que nunca desarrolla interés en buscar
-           piedra tampoco.
+           piedra tampoco. Se recoge SOLO cuando ese eslabón fue el
+           MOTIVO real que ganó el RECOLECTAR de este tick, marcado en
+           Intencion.recolectar_motivo_fuego (el parámetro
+           recolectar_fuego de este método, 2026-09-12 -- mismo criterio
+           que arma/herramienta más abajo, retrofitado aquí: antes de
+           este fix, Vía 1 se disparaba siempre que hubiera hueco en
+           Agarre, interceptando piedra_suelta aunque el motivo real de
+           RECOLECTAR fuera otro).
 
         2. MATERIAL ARMA CON CAUSA (armas primitivas v2): mientras el
            individuo no tenga NINGÚN arma de nivel ≥2 fabricada (ni en
@@ -690,10 +699,21 @@ class SistemaRecursos:
             return
 
         # Vía 1: piedra_suelta CON CAUSA (fuego) -- ver docstring arriba.
-        # Solo conscientes, solo si todavía faltan piedras para fuego, solo
-        # si queda algún punto de agarre libre en total, solo si la celda
-        # actual tiene piedra_suelta.
-        if consciente and agarre is not None and especie is not None:
+        # Gateada por recolectar_fuego (2026-09-12, "prioridad consciente"
+        # -- ver CLAUDE.md): hasta esta pieza, esta Vía se disparaba
+        # SIEMPRE que hubiera hueco en Agarre y faltaran piedras, con
+        # independencia de si fuego fue de verdad el motivo que ganó el
+        # RECOLECTAR de este tick -- interceptaba casi cualquier
+        # piedra_suelta disponible antes de que Vía 2/3 (arma/herramienta)
+        # pudieran considerarla como material "piedra". Mismo patrón
+        # exacto que ya exigían Vía 2/3 desde su diseño original, solo que
+        # nunca se retrofitó aquí.
+        if (
+            recolectar_fuego
+            and consciente
+            and agarre is not None
+            and especie is not None
+        ):
             puntos_agarre_total = int(self.rangos_raciales.get(especie, {}).get("puntos_agarre", 0))
             piedras_agarradas = agarre.objetos.count("piedra_suelta")
             if (

@@ -152,12 +152,56 @@ intercepta casi cualquier piedra_suelta disponible antes de que la Vía
 2/3 pueda reclamarla como material "piedra". Señalado, no corregido --
 decisión de diseño pendiente de Diego.
 
+## Corrección real -- Vía 1 requiere motivo real (2026-09-12)
+
+Recomendado y cerrado el mismo día: dar a Vía 1 (fuego) el mismo
+`recolectar_motivo_X` que ya tenían arma/herramienta -- retrofit de un
+patrón cronológicamente anterior (piedra suelta, 30-08) que nunca lo
+adoptó. `Intencion.recolectar_motivo_fuego` nuevo;
+`sistema_recursos.py:_resolver_recolectar` gana `recolectar_fuego:
+bool = False`, y Vía 1 solo se dispara con ese flag activo.
+
+**Hallazgo real durante la implementación, corregido antes de
+comitear**: la primera versión de los tres flags (fuego/arma/
+herramienta) comparaba cada eslabón contra el valor de
+`utilidad_recolectar` "hasta ese punto" de la cascada secuencial --
+igual que ya hacían arma/herramienta desde su diseño original. Esto
+deja un motivo temprano (p.ej. fuego) marcado `True` aunque un eslabón
+posterior (arma/herramienta) lo superase después en la misma cascada,
+produciendo dos motivos simultáneamente verdaderos para un mismo
+RECOLECTAR -- sin sentido físico, y detectado por un test propio antes
+de comitear (`test_ley_decision_motivo_fuego_pierde_frente_a_necesidad_
+de_trabajo_mayor`). Corregido: los tres eslabones ahora guardan su
+valor CRUDO (`valor_heredado_fuego/arma/herramienta`), y los tres flags
+se resuelven en un único punto, al final de la cascada, comparando cada
+valor crudo contra el resultado YA cerrado de `utilidad_recolectar`
+(precedencia fuego > arma > herramienta en empate exacto). Mismo tipo
+de bug latente que ya tenían arma/herramienta entre sí (nunca disparado
+en la práctica hasta ahora), cerrado de paso para los tres a la vez.
+
+**Verificado**: 5 tests nuevos
+(`tests/test_prioridad_consciente_fuego.py`), 508/508 tests en verde,
+`BOSQUE_AUTO_TICKS=3000` y roundtrip sin excepciones (312.18 kg y 18.19
+kg descartados por prioridad respectivamente -- Vía 2/3 se ejercen
+mucho más ahora que Vía 1 ya no les intercepta el recurso).
+
+**Diagnóstico multi-semilla, resultado real -- el bloqueo queda
+desbloqueado**: repetido el mismo arnés con 4 semillas NUEVAS
+(80301/80302/90401/90402): **3 de 4 produjeron `HerramientaFabricada`
+real** (`con_piedra` ya no en 0 en ninguna de las 3), frente a 0 de 10
+en toda la investigación previa a este fix. La única semilla sin
+fabricación (90401) terminó con solo 2 gnomos vivos -- fragilidad de
+población ya conocida, no un fallo del mecanismo.
+
 ## Pendiente real, explícito
 
 - `factor_bono_tasa_recolectar_con_herramienta`/
   `factor_bono_tasa_aporte_construccion_con_herramienta` PROVISIONALES,
-  sin calibrar -- y sin observarse en juego libre todavía (ningún
-  gnomo llegó a fabricar una herramienta en la muestra medida, ni antes
-  ni después del fix de prioridad consciente).
-- El hallazgo de Vía 1 interceptando piedra_suelta antes que Vía 2/3
-  (arriba) queda señalado, sin corregir -- decisión pendiente de Diego.
+  sin calibrar contra el harness completo.
+- Solo 4 semillas verificadas (3/4 con fabricación real) -- direccional,
+  no una calibración cerrada; el harness completo (15×12000) sigue
+  pendiente para cualquier cifra de frecuencia real.
+- `factor_bono_tasa_recolectar_con_herramienta`/`...aporte_construccion...`
+  ahora sí tienen ocasión de observarse en juego libre (herramientas
+  reales existen), pero su efecto sobre la velocidad real no se ha
+  medido todavía, solo su existencia funcional.

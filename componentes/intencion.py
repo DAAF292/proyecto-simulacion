@@ -119,6 +119,15 @@ class Intencion:
     # falta material crudo para una herramienta, no un arma). NO se
     # persiste -- se recalcula cada tick.
     recolectar_motivo_herramienta: bool = False
+    # Transitorio por tick (2026-09-12, "prioridad consciente" -- ver
+    # sistema_recursos.py:_resolver_recolectar Vía 1): mismo mecanismo
+    # que recolectar_motivo_arma/herramienta, retrofitado al eslabón
+    # heredado de piedra_suelta para fuego (existía desde antes que este
+    # patrón, 2026-08-31, sin usarlo nunca) -- Vía 1 solo agarra
+    # piedra_suelta cuando fuego fue de verdad el motivo que ganó el
+    # RECOLECTAR de este tick, no siempre que haya hueco en Agarre. NO
+    # se persiste -- se recalcula cada tick.
+    recolectar_motivo_fuego: bool = False
     # Transitorio por tick (2026-09-11, rename FABRICAR_ARMA -> FABRICAR):
     # que categoria gano el resolutor interno de FABRICAR este tick --
     # "arma" (unica categoria real hoy) o "" si Accion.FABRICAR no fue

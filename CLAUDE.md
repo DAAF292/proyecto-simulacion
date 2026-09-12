@@ -8912,3 +8912,86 @@ juego libre -- `herramientas fabricadas` y `armas fabricadas` siguen sin
 observarse en ninguna semilla probada hasta ahora, con o sin el fix de
 espacio. Nada más nuevo PROVISIONAL en este círculo (reutiliza toda la
 config ya existente, sin ninguna constante numérica nueva).
+
+## Vía 1 requiere motivo real -- cierra el segundo hallazgo, primera vez
+## que se observa una herramienta fabricada en juego libre (2026-09-12)
+
+Diego, ante los dos enfoques planteados arriba, pidió recomendación
+("tiene que ser lo más natural posible"). Recomendado y cerrado el
+mismo día: **(a)**, retrofit del patrón `recolectar_motivo_X` (ya
+usado por arma/herramienta desde su diseño original) al eslabón de
+fuego -- cronológicamente anterior (piedra suelta, 30-08) y nunca
+adoptado. No son dos alternativas independientes: (b) -- "que el
+consciente priorice qué necesidad es más urgente" -- ya lo hace la
+capa de decisión (el `max()` entre los tres eslabones heredados); lo
+que faltaba era propagar esa arbitración a la resolución física en vez
+de que Vía 1 hiciera su propio chequeo ciego a qué motivo ganó
+realmente. (a) es la implementación concreta de (b), y la más
+"reutiliza antes de inventar": conecta con la arbitración que ya
+existía, sin inventar una segunda.
+
+**Implementado**: `Intencion.recolectar_motivo_fuego` nuevo, mismo
+molde que `recolectar_motivo_arma`/`recolectar_motivo_herramienta`.
+`sistema_recursos.py:_resolver_recolectar` gana `recolectar_fuego:
+bool = False`; Vía 1 (agarrar piedra_suelta para fuego) solo se
+dispara con ese flag activo -- antes se disparaba siempre que hubiera
+hueco en Agarre y faltaran piedras, con independencia de cuál fue el
+motivo real que ganó el RECOLECTAR de este tick.
+
+**Bug real encontrado y corregido ANTES de comitear, no al fallar en
+caliente**: la primera versión de los tres flags (fuego/arma/
+herramienta) seguía el patrón secuencial ya existente -- cada eslabón
+se comparaba contra `utilidad_recolectar` "hasta ese punto" de la
+cascada. Esto deja un motivo temprano (fuego) marcado `True` aunque un
+eslabón posterior (arma/herramienta) lo superase después en la misma
+cascada -- dos motivos simultáneamente verdaderos para un mismo
+RECOLECTAR, sin sentido físico (un individuo no recolecta por dos
+razones incompatibles a la vez). Detectado por un test propio antes de
+comitear (un escenario con frío casi irrelevante pero con la necesidad
+implícita de trabajo -- `utilidad_recolectar_base=0.35`, todo gnomo sin
+refugio la tiene -- superándolo). **Mismo bug latente que ya tenían
+arma/herramienta entre sí, preexistente, nunca disparado en la
+práctica** -- cerrado de paso para los tres a la vez, no solo para
+fuego: los tres eslabones ahora guardan su valor CRUDO
+(`valor_heredado_fuego/arma/herramienta`), y los tres flags se
+resuelven en un único punto al final de la cascada, comparando cada
+valor crudo contra el resultado YA cerrado de `utilidad_recolectar`
+(precedencia fuego > arma > herramienta en empate exacto -- mismo
+criterio de "el primero que se comprueba gana" ya usado en el resto
+del módulo).
+
+**Verificado**: 5 tests nuevos
+(`tests/test_prioridad_consciente_fuego.py` -- Vía 1 nunca dispara sin
+motivo, no intercepta piedra_suelta motivada por arma/herramienta, y
+dos tests de integración en la capa de decisión confirmando que fuego
+gana cuando es la mayor necesidad y pierde frente a la necesidad de
+trabajo implícita cuando su propio déficit es menor), 508/508 tests en
+verde con el resto de la suite, `BOSQUE_AUTO_TICKS=3000` (312.18 kg
+descartados por prioridad, frente a 6 kg antes -- Vía 2/3 se ejercen
+mucho más ahora que Vía 1 ya no les intercepta el recurso) y roundtrip
+sin excepciones.
+
+**Resultado real, el bloqueo queda desbloqueado**: repetido el mismo
+arnés multi-semilla con 4 semillas NUEVAS (80301/80302/90401/90402,
+las últimas dos nunca vistas antes de este fix): **3 de 4 produjeron
+`HerramientaFabricada` real** (`hacha_primitiva`, con `con_piedra` ya
+no en 0 en ninguna de las 3), frente a **0 de 10 en toda la
+investigación previa a este fix** (círculo 2, corrección de espacio, y
+ahora esta corrección de precedencia). La única semilla sin
+fabricación (90401) terminó con solo 2 gnomos vivos -- fragilidad de
+población ya conocida, no un fallo del mecanismo. Con esto, el arco
+"fabricación y uso de herramientas" tiene su Círculo 2 genuinamente
+verificado de punta a punta en juego libre, no solo por tests
+dirigidos.
+
+**Pendiente real, explícito**: `factor_bono_tasa_recolectar_con_
+herramienta`/`factor_bono_tasa_aporte_construccion_con_herramienta`
+ahora sí tienen ocasión de observarse en juego libre (herramientas
+reales existen), pero su efecto sobre la velocidad real no se ha
+medido todavía, solo su existencia funcional; solo 4 semillas
+verificadas (3/4 con fabricación real) -- direccional, no una
+calibración cerrada, el harness completo (15×12000) sigue pendiente
+para cualquier cifra de frecuencia real; con el arco "fabricación y
+uso de herramientas" ya cerrado en sus dos círculos planteados y
+verificado en juego libre, ningún círculo nuevo de este arco decidido
+todavía.
