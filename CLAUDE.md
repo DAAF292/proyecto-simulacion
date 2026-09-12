@@ -9031,3 +9031,133 @@ verificar cruzada entre los dos ficheros. Sin cambios de código en este
 círculo -- decisión de diseño pura, documentada para que ninguna sesión
 futura la trate como un bug latente ni añada una receta nueva sin
 cruzar ambos catálogos primero.
+
+## Informe de calibracion -- primer harness completo de 7 especies, y
+## arco de rendimiento -- tres paquetes verificados byte a byte (2026-09-12,
+## misma tarde, con 20 nucleos reales por primera vez desde el 09-09)
+
+Diego pidio lanzar la prueba de referencia ("ver que todos los mecanismos
+salten en el mundo real y el estado real de las criaturas") y luego, con el
+informe en mano, attackar el rendimiento primero.
+
+### Harness desactualizado -- corrigido antes de lanzar
+
+`herramientas/harness_calibracion.py` seguia en el estado de 5 especies
+(sin venado/cabra_montesa, commit `c7f0504`): ESPECIES a 7; criterio
+maestro en DOBLE version (5 originales para comparar contra toda la
+historia de CLAUDE.md, y 7 del catalogo completo); contadores nuevos de
+armas/herramientas fabricadas (eventos `ArmaFabricada`/`HerramientaFabricada`),
+robo de material y de arma, cohesive de manada fallback caza, sonido caza
+fallback, gate de manos libres, lealtad, vocaciones dominantes
+(nucleo.vocacion:vocacion_dominante leida al cierre), decaimiento de
+vinculos, material descartado, cupo de madriguera, reputacion (globals de
+nucleo/asentamiento) y sonidos (nucleo/sonido:SONIDOS_EMITIDOS_TOTALES,
+reset por semilla en cada worker).
+
+**Resultado, 15 semillas nuevas (1000001-1000015), todas cortadas por la
+salvaguarda de 3600s a 7202-10704 ticks** (12000 sigue sin completarse
+nunca): gnomo 0/15 y caballo 0/15 de extincion (resueltas de verdad),
+venado/cabra_montesa 27% c/u (nuevas, tooltip sano 89-91%), **lobo 60%,
+conejo 60%, ardilla 53%**, criterio maestro 5 especies 7% y 7 especies 0%.
+El total social se ejerce con fuerza real por primera vez a esta escala:
+135 parejas estables en 14/15 semillas (masivamente forrajero 231 vs
+constructor 12, sin artesanos/cocineros), salon comun 9/15 (antes 0),
+armas 299, herramientas 20, robos 535+636+37, cocinar 199. Conejo boom-bust
+sincronico (283->0; 3.321 muertes por vejez) y lobo con embudo reproductivo
+ACTIVO (2-6 concepciones -> 6-19 nacimientos) pero columnut a 0 por
+desgaste de adultos (130 por vejez + 117 por vejez... inanicion 130 y
+vejez 117 agregadas): el hueco es ecologico, no calibracion -- no hay
+ninguna ley natural que regule presa pequena (lobo no vive de conejo por
+ratio de saciedad). Caballo sigue en 0 depredaciones en las 15; sonido
+emitido reporta 0 (global de nucleo/sonido.py al parecer no se incrementa
+en alguna via real -- credibilidad sospechosa, no verificado, candidato a
+revisar). Informe completo entregado a Diego en conversacion con
+soluciones priorizadas; Decision de Diego: atacar rendimiento primero
+(calibrar contra ventanas truncadas es la leccion repetida del proyecto).
+
+### Rendimiento -- perfilado real y tres paquetes
+
+Perfilado con cProfile sobre main.py real (700 ticks, 108 entidades,
+persistencia real, con el contenedor sin 20 procesos compitiendo): **el
+cuadro del 08-09 habia caducado**. Mayor coste individual: obtener_
+componente ~30% (23.8M llamadas; el 29% de todas ellas de UNA funcion,
+_calcular_pareja), _actualizar_charcos ~18% (la mayor parte es pendiente_
+local recalculada cada tick), _calcular_pareja ~15%. SQLite: ya no aparece
+en el top-25 (el dato del 8.5% del 08-09 quedo obsoleto con el motor
+crescido). `nucleo/agua.py:pendiente_local` tenia el docstring que previa
+exactamente este momento ("se cachea cuando el perfilado lo pida, no
+antes") -- lo pido. Precondicion verificada antes de tocar: elevacion solo
+se escribe en generacion (grep de asignaciones), celda estatica.
+
+Paquete 1 (charcos): (a) cache de pendiente_local por zona (lazy, muere
+con la zona, NO persiste); (b) `ZonaBioma.celdas_humedas` (registro de
+celdas con charco>0 o humedad_subsuelo>0) + drenaje seco via
+_drenar_celdas_humedas: el LLENADO sigue escaneando completo en lluvia
+(cualquier celda puede empezar a guardar agua -- necesario de verdad, sino
+el registro se quedaria vacio y perdian incubas), el drenaje seco solo
+toca las registradas. profundidad_charco SI se persiste y se repuebla al
+cargar; humedad_subsuelo no se persiste (arranca 0.0 en tierra).
+**Bug real encontrado por el propio arnes de bisect tick a tick
+(PRIMER DIF: tick 169, zona 0, gota de 6.08e-06): la lisis hidrica de
+sistema_descomposicion.py TAMBIEN escribe profundidad_charco** (agua
+tisular de tejido blando sobre tierra seca) y mi registro no la conocia --
+con el drenaje por registro, la gota quedaba encharcada PARA SIEMPRE
+(drenaba solo las registradas). Fix real (no bypass): la lisis registra su
+celda en celdas_humedas. Regla fija para sesiones futuras: **TODO escritor
+de profundidad_charco/humedad_subsuelo debe entrar en el registro** --
+hoy: _actualizar_charcos (lluvia, barrido completo), lisis (descomposicion),
+repuebla al cargar. Un escritor nuevo que se olvide deja gotas encharcadas
+eternas sin crash. Idiam exacto ya usado por celdas_en_llamas (08-09):
+con lluvia/el fuego el escaneo completo es necesario de verdad al momento
+de IGNICION, el registro solo ahorra el barrido seco.
+
+Paquete 2 (pareja): (a) `nucleo/relaciones.py:pareja_presente` gana
+`indice=None` (mismo resultado booleano, no consume rng; el fallback sin
+indice intacto) -- sistema_necesidades pasa `indice=self._indice_actual`
+en sus dos llamadas; (b) `_calcular_pareja` usa un catalogo POR TICK
+(`self._catalogo_pareja`, poblada con la primera llamada del tick):
+especie/sexo/gestacion no mutan durante la fase de movimiento/decision
+(nacimientos/muertes ocurren en fases posteriores del tick, ver
+main.py:ejecutar_tick) -- la foto es exacta; **la POSICION sigue leyendose
+EN VIVO** (muta dentro del tick con el propio movimiento -- un snapshot de
+posicion habria desempatado distinto). El 29% de las llamadas a
+obtener_componente desaparece; _calcular_pareja cae de 5.6s a 2.4s en el
+perfil de 700 ticks.
+
+Paquete 3: `nucleo/entidad.py:obtener_componente` sin el literal {}.get()
+que asignaba un dict vacio en cada falla de tipo (23.8M veces).
+
+**Verificacion de los tres paquetes (el mas rigor que ha tenido cualquier
+piezas de rendimiento del proyecto)**: suite 508/508 siempre verde; (
+BOSQUE_AUTO_TICKS=2000 con persistencia real: salida byte a byte IDENTICA
+al baseline master en los tres paquetes, por separado; bisect tick a tick
+(semilla 42, 2000 ticks, poblacion + sumas de charco/humedad por tick y
+por zona) idéntico; roundtrip BOSQUE_CONTINUAR sin excepciones. Medicion
+final no-proxy (1400 ticks +50 de calentamiento, semilla 1000004): master
+22.8 -> 17.3 ms/tick a pop ~107 (-24%); a 6000 ticks (poblacion crecida)
+33.2 -> 25.6 ms/tick (-23%). Perfil de 700 ticks tras los paquetes:
+obtener_componente 23.8M -> 14.7M llamadas, _actualizar_charcos 6.7->6.0s,
+_calcular_pareja 5.6->2.4s, pendiente_local fuera del top.
+
+**Nota honesta sobre el coste residual**: `_actualizar_charcos` sigue aun
+6s en el perfil -- los ~2000 ticks de lluvia en la ventana siguen necesitando
+el barrido completo (el resto del año seco ahora es casi gratis). Los
+22.8 -> 17.3 reflejan el motor real completo, no solo lo que el perfil
+pmuestra. Commits: `c7f0504` (harness) y `9a03a94` (los tres paquetes de
+rendimiento juntos -- son un mismo arco de refactor, mismos tests de
+integridad).
+
+### Pendiente real tras esta sesion
+
+- Con el motor ~24% mas rapido, 12000 tick completos quedan a ~1.1x de
+  tiempo por semilla: un redine de 15 semillas SIN salvaguarda corta
+  (p.ej. limite 5400s) ya deberia llegar. Es EL siguiente paso natural
+  para calibrar con la ventana completa pendiente desde "Sobrepoblacion...".
+- El informe ecoloico del dia queda abierto con su recomendacion firmada:
+  (1) especie depredadora pequena nueva (disenar con Diego en brainstorming),
+  (2) densidad de venado para el valle de lobo, (3) factor de manada hacia
+  abajo (error de signo del 09-09 marcado), (4) vocacion a menos sesgo de
+  forrajero, (5) reputacion de 5a/5b en 0 usos. Ninguna implementada.
+- `sonidos_emitidos` del harness reporta 0 pese a sonidos reales (hay
+  amenaza por sonido con volumen positivo): sospecha de instrumentacion,
+  verificar global, no concluido.
