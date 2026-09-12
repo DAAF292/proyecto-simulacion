@@ -128,6 +128,13 @@ class Intencion:
     # RECOLECTAR de este tick, no siempre que haya hueco en Agarre. NO
     # se persiste -- se recalcula cada tick.
     recolectar_motivo_fuego: bool = False
+    # Transitorio por tick (2026-09-12, "minería real" -- ver
+    # docs/superpowers/specs/2026-09-12-mineria-real-design.md): mismo
+    # mecanismo que recolectar_motivo_arma/herramienta, cuarto eslabón
+    # heredado (RECOLECTAR elevado porque falta material crudo para un
+    # pico, junto a una veta sin explotar). NO se persiste -- se
+    # recalcula cada tick.
+    recolectar_motivo_mineria: bool = False
     # Transitorio por tick (2026-09-11, rename FABRICAR_ARMA -> FABRICAR):
     # que categoria gano el resolutor interno de FABRICAR este tick --
     # "arma" (unica categoria real hoy) o "" si Accion.FABRICAR no fue

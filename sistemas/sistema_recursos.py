@@ -279,9 +279,22 @@ class SistemaRecursos:
                 "factor_bono_tasa_aporte_construccion_con_herramienta", 1.3
             )
         )
+        # Minería real (2026-09-12, ver docs/superpowers/specs/
+        # 2026-09-12-mineria-real-design.md): catálogo SEPARADO de
+        # recetas_herramientas -- ver config/herramientas.yaml para el
+        # porqué.
+        self.recetas_mineria: list[dict[str, Any]] = self.config_herramientas.get(
+            "recetas_mineria", []
+        )
         # Observacion (2026-09-11), solo _stats -- confirma que la pieza
         # se ejerce de verdad en juego libre.
         self._stats_herramientas_fabricadas: int = 0
+        # Observacion (2026-09-12, minería real): picos fabricados, y
+        # cuántas veces el gate bloqueó de verdad una extracción de veta
+        # por falta de pico (confirma que el mecanismo se ejerce, no solo
+        # que existe).
+        self._stats_picos_fabricados: int = 0
+        self._stats_veta_bloqueada_sin_pico: int = 0
         # Observacion (2026-09-11, "cargar con prioridad" -- ver
         # nucleo/inventario.py:descartar_contenidos_para_liberar): kg
         # totales descartados por un consciente para liberar sitio a
@@ -360,6 +373,7 @@ class SistemaRecursos:
                     recolectar_arma=intencion.recolectar_motivo_arma,
                     recolectar_herramienta=intencion.recolectar_motivo_herramienta,
                     recolectar_fuego=intencion.recolectar_motivo_fuego,
+                    recolectar_mineria=intencion.recolectar_motivo_mineria,
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
                 )
                 self._incrementar_vocacion(gestor, eid, consciente, "conteo_forrajero")
@@ -588,6 +602,7 @@ class SistemaRecursos:
         recolectar_arma: bool = False,
         recolectar_herramienta: bool = False,
         recolectar_fuego: bool = False,
+        recolectar_mineria: bool = False,
         gestor: GestorEntidades | None = None,
         pos_x: int = 0,
         pos_y: int = 0,
@@ -665,13 +680,16 @@ class SistemaRecursos:
         Si la celda actual tiene una veta de mineral con masa restante
         (ver nucleo/cueva.py y componentes/celda.py:masa_mineral_restante),
         se extrae ESO en vez de tipo_sustrato -- a diferencia del
-        sustrato, la veta es finita y se agota de verdad. Ningún cambio
-        hace falta en sistema_decision.py: RECOLECTAR ya gatea
-        genéricamente por "masa apta de construcción pendiente"
-        (nucleo/construccion.py:material_suficiente_para), hierro/cobre
-        ya son apto_construccion=true en el catálogo -- para la Utility
-        AI, extraer mineral, madera o sustrato es indistinguible, solo
-        cambia qué clave del Inventario crece.
+        sustrato, la veta es finita y se agota de verdad, y (2026-09-12,
+        "minería real") EXIGE tener un `pico` fabricado -- ver más abajo.
+        Ningún cambio hace falta en sistema_decision.py para el gate
+        genérico de utilidad: RECOLECTAR ya gatea por "masa apta de
+        construcción pendiente" (nucleo/construccion.py:
+        material_suficiente_para), hierro/cobre ya son
+        apto_construccion=true en el catálogo -- para la Utility AI,
+        extraer mineral, madera o sustrato sigue siendo indistinguible a
+        nivel de utilidad, solo cambia qué clave del Inventario crece
+        (el gate real vive en la RESOLUCIÓN, aquí, no en la decisión).
 
         Orden de prioridad dentro de esta única celda -- mineral (más
         escaso y finito) > material de flora (finito por día, regenera) >
@@ -694,6 +712,24 @@ class SistemaRecursos:
         multiplicativo a la tasa de recoleccion a granel de este mismo
         metodo (mineral/flora/sustrato, mas abajo) -- ver
         factor_bono_tasa_recolectar_con_herramienta.
+
+        4. MATERIAL MINERIA CON CAUSA (2026-09-12, "minería real" -- ver
+           docs/superpowers/specs/2026-09-12-mineria-real-design.md):
+           mismo eslabón heredado que Vía 2/3, mismos materiales
+           (madera/piedra reutilizados), gateado por "ya posee un pico
+           fabricado" en vez de arma/herramienta -- disparado por
+           Intencion.recolectar_motivo_mineria (recolectar_mineria).
+           Comparte `_via_material_crudo` con Vía 2/3.
+
+        MINERÍA REAL (2026-09-12): la extracción de veta de abajo (mineral/
+        flora/sustrato) EXIGE ahora tener un `pico` fabricado
+        (recetas_mineria, catálogo separado de recetas_herramientas) --
+        antes de este círculo, extraer una veta era indistinguible de
+        recoger una rama caída, sin ningún requisito de herramienta. Sin
+        pico, la extracción de veta se SALTA (no se interrumpe la
+        resolución) y cae al siguiente nivel de prioridad ya existente
+        (material de flora, luego tipo_sustrato) -- un consciente sin
+        pico junto a una veta sigue recolectando lo que sí puede.
         """
         if inv is None or dims is None:
             return
@@ -760,6 +796,19 @@ class SistemaRecursos:
             ):
                 return
 
+        # Vía 4: material apto_arma CON CAUSA (mineria, 2026-09-12) -- ver
+        # docstring arriba. Mismos materiales/helper que Vía 2/3, gateada
+        # por "ya posee un pico fabricado" en vez de arma/herramienta.
+        if recolectar_mineria:
+            objetos_totales_m = list(inv.objetos)
+            if agarre is not None:
+                objetos_totales_m.extend(agarre.objetos)
+            ya_tiene_pico = tiene_herramienta(objetos_totales_m, self.recetas_mineria)
+            if self._via_material_crudo(
+                inv, dims, celda, gestor, pos_x, pos_y, zona_idx, ya_tiene_pico
+            ):
+                return
+
         # Herramienta fabricada (2026-09-11): bono multiplicativo a la
         # tasa de recoleccion a granel (mineral/flora/sustrato, abajo) --
         # portarla basta, no exige tenerla empuñada (ver
@@ -778,14 +827,16 @@ class SistemaRecursos:
             return
 
         if celda.deposito_mineral and celda.masa_mineral_restante > 0.0:
-            material = celda.deposito_mineral
-            cantidad = min(tasa_recoleccion_efectiva, espacio, celda.masa_mineral_restante)
-            inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
-            celda.masa_mineral_restante -= cantidad
-            if celda.masa_mineral_restante <= 0.0:
-                celda.masa_mineral_restante = 0.0
-                celda.deposito_mineral = ""
-            return
+            if tiene_herramienta(objetos_para_bono, self.recetas_mineria):
+                material = celda.deposito_mineral
+                cantidad = min(tasa_recoleccion_efectiva, espacio, celda.masa_mineral_restante)
+                inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
+                celda.masa_mineral_restante -= cantidad
+                if celda.masa_mineral_restante <= 0.0:
+                    celda.masa_mineral_restante = 0.0
+                    celda.deposito_mineral = ""
+                return
+            self._stats_veta_bloqueada_sin_pico += 1
 
         for nombre, cantidad_disponible in celda.recursos.items():
             if cantidad_disponible <= 0.0:
@@ -1044,12 +1095,12 @@ class SistemaRecursos:
         FABRICAR (2026-09-11, renombrada desde FABRICAR_ARMA -- ver
         componentes/intencion.py y config/armas.yaml). Ramifica por
         `categoria` (Intencion.fabricar_categoria, ya decidida por el
-        resolutor interno de sistema_decision.py) -- "arma" y
-        "herramienta" (2026-09-11, circulo 2 del arco "fabricacion y uso
-        de herramientas") son las dos implementadas hoy; cualquier otra
-        cae al no-op de abajo (no deberia poder llegar aqui salvo que se
-        anada una categoria nueva a sistema_decision.py sin su propia
-        resolucion todavia).
+        resolutor interno de sistema_decision.py) -- "arma", "herramienta"
+        (2026-09-11) y "mineria" (2026-09-12, ver docs/superpowers/specs/
+        2026-09-12-mineria-real-design.md) son las tres implementadas hoy;
+        cualquier otra cae al no-op de abajo (no deberia poder llegar aqui
+        salvo que se anada una categoria nueva a sistema_decision.py sin
+        su propia resolucion todavia).
 
         Ambas categorias comparten el mismo patron determinista (tallar
         no es un suceso de azar, a diferencia de encender fuego): busca
@@ -1081,6 +1132,8 @@ class SistemaRecursos:
             recetas = self.recetas_armas
         elif categoria == "herramienta":
             recetas = self.recetas_herramientas
+        elif categoria == "mineria":
+            recetas = self.recetas_mineria
         else:
             return
         receta = mejor_receta_completable(objetos_portados, recetas)
@@ -1107,7 +1160,7 @@ class SistemaRecursos:
                     },
                 )
             )
-        else:
+        elif categoria == "herramienta":
             self._stats_herramientas_fabricadas += 1
             bus_eventos.emitir(
                 Evento(
@@ -1118,6 +1171,20 @@ class SistemaRecursos:
                     datos={
                         "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
                         "herramienta": nombre_objeto,
+                    },
+                )
+            )
+        else:
+            self._stats_picos_fabricados += 1
+            bus_eventos.emitir(
+                Evento(
+                    tipo="PicoFabricado",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=entidad_id,
+                    datos={
+                        "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
+                        "pico": nombre_objeto,
                     },
                 )
             )

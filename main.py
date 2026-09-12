@@ -864,6 +864,15 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] material descartado por prioridad: "
                 f"{sistemas['recursos']._stats_material_descartado_por_prioridad_kg:.2f} kg"
             )
+            # Verificacion obligatoria de "mineria real" (2026-09-12, ver
+            # docs/superpowers/specs/2026-09-12-mineria-real-design.md).
+            # Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] picos fabricados: "
+                f"{sistemas['recursos']._stats_picos_fabricados}, "
+                "vetas bloqueadas sin pico: "
+                f"{sistemas['recursos']._stats_veta_bloqueada_sin_pico}"
+            )
 
     except KeyboardInterrupt:
         pass

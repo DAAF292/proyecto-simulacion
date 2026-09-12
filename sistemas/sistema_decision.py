@@ -504,6 +504,12 @@ def actualizar(
     # combinacion de materiales crudos apto_arma reutilizados.
     config_herramientas = config.get("herramientas", {})
     recetas_herramientas = config_herramientas.get("recetas", [])
+    # Minería real (2026-09-12, ver docs/superpowers/specs/
+    # 2026-09-12-mineria-real-design.md): catálogo SEPARADO de
+    # recetas_herramientas -- ver el comentario en config/herramientas.yaml
+    # para el porqué (evita ambigüedad en mejor_receta_completable entre
+    # pico y hacha_primitiva).
+    recetas_mineria = config_herramientas.get("recetas_mineria", [])
     # Percepcion para el reflejo empunyar/guardar: reutiliza la MISMA señal
     # de amenaza que ya usa HUIR (posicion_amenaza_mas_cercana) con el
     # mismo radio por agudeza sensorial y el mismo umbral de disposicion
@@ -904,21 +910,56 @@ def actualizar(
                         valor_heredado_herramienta = necesidad_trabajo
                         utilidad_recolectar = max(utilidad_recolectar, valor_heredado_herramienta)
 
-        # Resuelve CUÁL de los tres eslabones heredados de arriba (fuego,
-        # arma, herramienta) es el motivo REAL que explica el valor FINAL
-        # de utilidad_recolectar -- comparación contra el resultado ya
-        # cerrado de la cascada, no contra el valor "hasta ese punto"
-        # (2026-09-12, "prioridad consciente" -- ver CLAUDE.md). Sin
-        # esto, un eslabón temprano (p.ej. fuego) podía quedar marcado
-        # como motivo ganador aunque uno posterior (arma/herramienta) lo
-        # hubiera superado después en la misma cascada -- dos motivos
-        # simultáneamente `True` para el mismo RECOLECTAR, sin sentido
-        # físico (un individuo no puede recolectar por dos razones
-        # incompatibles a la vez). En empate exacto entre dos eslabones
-        # elegibles, se resuelve arbitrariamente por el primero
-        # comprobado (fuego > arma > herramienta) -- mismo criterio de
-        # "el primero que se comprueba gana el empate" ya usado en el
-        # resto de este módulo (ver `candidatas` más abajo).
+        # FABRICAR, categoria "mineria" (2026-09-12, "minería real" -- ver
+        # docs/superpowers/specs/2026-09-12-mineria-real-design.md). Mismo
+        # patrón EXACTO que "herramienta" arriba (utilidad heredada de
+        # necesidad_trabajo, sin descuento, mismos materiales crudos
+        # reutilizados) -- pero con un disparador MÁS ESPECÍFICO: solo se
+        # activa si la celda actual tiene de verdad una veta de mineral
+        # sin explotar (celda.deposito_mineral con masa restante), no
+        # "necesito trabajar" en abstracto. Un individuo que nunca ha
+        # estado junto a una veta sin pico nunca desarrolla interés en
+        # fabricar uno (principio 5, leyes neutras). Recetas en un
+        # catálogo SEPARADO (recetas_mineria) del de "herramienta" -- ver
+        # el comentario de config/herramientas.yaml.
+        utilidad_categoria_mineria = 0.0
+        valor_heredado_mineria: float | None = None
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            objetos_totales_m = list(inventario.objetos)
+            if agarre is not None:
+                objetos_totales_m.extend(agarre.objetos)
+            zona_m = mundo.territorio.zonas[pos.zona_idx]
+            celda_m = zona_m.obtener_celda(pos.x, pos.y)
+            hay_veta_sin_explotar = (
+                bool(celda_m.deposito_mineral) and celda_m.masa_mineral_restante > 0.0
+            )
+            if hay_veta_sin_explotar and not tiene_herramienta(
+                objetos_totales_m, recetas_mineria
+            ):
+                necesidad_trabajo_mineria = max(utilidad_recolectar, utilidad_construir)
+                if necesidad_trabajo_mineria > 0.0:
+                    receta_m = mejor_receta_completable(objetos_totales_m, recetas_mineria)
+                    if receta_m is not None:
+                        utilidad_categoria_mineria = necesidad_trabajo_mineria
+                    elif celda_ofrece_material_arma(celda_m, catalogo_materiales):
+                        valor_heredado_mineria = necesidad_trabajo_mineria
+                        utilidad_recolectar = max(utilidad_recolectar, valor_heredado_mineria)
+
+        # Resuelve CUÁL de los cuatro eslabones heredados de arriba (fuego,
+        # arma, herramienta, mineria) es el motivo REAL que explica el
+        # valor FINAL de utilidad_recolectar -- comparación contra el
+        # resultado ya cerrado de la cascada, no contra el valor "hasta
+        # ese punto" (2026-09-12, "prioridad consciente" -- ver CLAUDE.md).
+        # Sin esto, un eslabón temprano (p.ej. fuego) podía quedar marcado
+        # como motivo ganador aunque uno posterior (arma/herramienta/
+        # mineria) lo hubiera superado después en la misma cascada -- dos
+        # motivos simultáneamente `True` para el mismo RECOLECTAR, sin
+        # sentido físico (un individuo no puede recolectar por dos
+        # razones incompatibles a la vez). En empate exacto entre dos
+        # eslabones elegibles, se resuelve arbitrariamente por el primero
+        # comprobado (fuego > arma > herramienta > mineria) -- mismo
+        # criterio de "el primero que se comprueba gana el empate" ya
+        # usado en el resto de este módulo (ver `candidatas` más abajo).
         recolectar_con_motivo_fuego = (
             valor_heredado_fuego is not None and valor_heredado_fuego == utilidad_recolectar
         )
@@ -933,13 +974,21 @@ def actualizar(
             and valor_heredado_herramienta is not None
             and valor_heredado_herramienta == utilidad_recolectar
         )
+        recolectar_con_motivo_mineria = (
+            not recolectar_con_motivo_fuego
+            and not recolectar_con_motivo_arma
+            and not recolectar_con_motivo_herramienta
+            and valor_heredado_mineria is not None
+            and valor_heredado_mineria == utilidad_recolectar
+        )
 
-        # Resolutor interno de FABRICAR: dos candidatos ("arma",
-        # "herramienta" -- 2026-09-11, el segundo real desde el rename
-        # FABRICAR_ARMA -> FABRICAR).
+        # Resolutor interno de FABRICAR: tres candidatos ("arma",
+        # "herramienta", "mineria" -- 2026-09-12, el tercero real desde el
+        # rename FABRICAR_ARMA -> FABRICAR).
         candidatos_fabricar: list[tuple[str, float]] = [
             ("arma", utilidad_categoria_arma),
             ("herramienta", utilidad_categoria_herramienta),
+            ("mineria", utilidad_categoria_mineria),
         ]
         categoria_fabricar_ganadora, utilidad_fabricar = max(
             candidatos_fabricar, key=lambda c: c[1]
@@ -1106,6 +1155,11 @@ def actualizar(
         # sin haberlo usado nunca hasta ahora).
         intencion.recolectar_motivo_fuego = (
             intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_fuego
+        )
+        # Mismo criterio, cuarto eslabón, para la categoría "mineria"
+        # (2026-09-12, "minería real").
+        intencion.recolectar_motivo_mineria = (
+            intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_mineria
         )
         # Vuelca a Intencion que categoria gano el resolutor interno de
         # FABRICAR (2026-09-11), solo si FABRICAR es de verdad la accion

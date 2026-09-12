@@ -9031,3 +9031,118 @@ verificar cruzada entre los dos ficheros. Sin cambios de código en este
 círculo -- decisión de diseño pura, documentada para que ninguna sesión
 futura la trate como un bug latente ni añada una receta nueva sin
 cruzar ambos catálogos primero.
+
+## Cómo desarrollar asentamientos/profesiones -- brainstorming de arco,
+## corrección real de Diego sobre "minería ya existe", Círculo 1
+## (minería real) cerrado (2026-09-12, misma sesión)
+
+Diego pidió plantear cómo desarrollar el arco recién cerrado de
+profesiones (aptitud vocacional + fabricación de herramientas) hacia
+"asentamientos primitivos" -- intención explícita: que el desarrollo de
+un asentamiento sea GRADUAL, a medida que la población crece y mejora,
+mejorando construcciones y sociedad en consecuencia. Investigado antes
+de proponer nada (mismo criterio de siempre): el riesgo real es que
+"mejora gradual" se convierta en un guion disfrazado de regla (un "nivel
+de aldea" autorado, tipo videojuego de estrategia) -- exactamente el
+tipo de error que el principio 5 (leyes neutras) prohíbe y que este
+proyecto ya corrigió una vez (categorizar cuevas por tamaño/bioma).
+
+**Alcance real, confirmado por Diego, mucho más grande que un círculo**:
+(1) tipos de construcción NUEVOS desbloqueables por materiales+
+habilidades reales; (2) upgrade de construcciones YA existentes
+(refugio → cabaña → casa); (3) driver combinado de población+materiales+
+vocación+**conocimiento** -- este último, explícitamente "hay que
+pensar", un mecanismo genuinamente nuevo (transmisible y mejorable, no
+solo un stat que muere con el individuo). Roadmap propuesto y aceptado:
+(1) diferenciación de calidad de materiales, (2) niveles de construcción,
+(3) conocimiento como componente propio -- su propia sesión de diseño
+dedicada, reutilizando el patrón de transferencia por contacto ya
+construido (memoria espacial compartida/rumor social, 2026-09-06), (4)
+tipos de construcción nuevos. Edificio de liderazgo confirmado aparcado
+(sin decisión mecánica real que habilitar todavía).
+
+**Corrección real de Diego sobre mi propia afirmación, antes de tocar
+nada**: dije "minería ya existe" -- Diego señaló que no, y verificado
+contra el código (`sistema_recursos.py:780`, antes de este círculo) tenía
+razón: la parte GEOLÓGICA (vetas finitas, `masa_mineral_restante`) existe
+desde el arco de profundidad, pero la ACCIÓN de extraerlas era
+literalmente la misma `RECOLECTAR` genérica que agarra una rama caída,
+sin ningún requisito de herramienta. Distinción real de Diego: "con una
+rama y una piedra podemos hacer un martillo, pero para hacer un edificio
+necesitamos tablas de madera, losas de piedra" -- recoger lo suelto no
+exige herramienta, producir de verdad sí. Tres sistemas de producción
+identificados, ninguno equivalente: minería (geología real, acción sin
+gate -- el más barato de arreglar, reutiliza el 100% de FABRICAR ya
+construido), tala real (no existe -- recoger ramas caídas nunca destruye
+la `Planta`, decisión deliberada del 30-08; talar un árbol de verdad
+exigiría destruir una entidad por primera vez en el motor, círculo
+propio, mayor alcance), agricultura/ganadería (arco completo, grande,
+aparcado, confirmado por Diego "todo un sistema nuevo que hay que
+desarrollar, igual que la ganadería").
+
+### Círculo 1 -- Minería real, cerrado (spec, implementado directamente
+### por Claude)
+
+Spec: `docs/superpowers/specs/2026-09-12-mineria-real-design.md`. Un
+`pico` fabricado gatea la extracción de veta -- reutiliza el 100% de
+"fabricación de herramientas" (2026-09-11): `Accion.FABRICAR`,
+`candidatos_fabricar`, `mejor_receta_completable`/`tiene_herramienta`,
+`_via_material_crudo`. Cero mecanismo nuevo, solo una TERCERA categoría
+FABRICAR ("mineria") y un gate nuevo en la extracción.
+
+**Catálogo separado** (`config/herramientas.yaml:recetas_mineria`,
+distinto de `recetas`): `pico` reutiliza los mismos materiales crudos
+que `hacha_primitiva` (madera+piedra) -- deliberado, evita que
+`mejor_receta_completable` tenga que elegir entre pico y hacha_primitiva
+con el mismo inventario (cada categoría FABRICAR resuelve solo contra su
+propio catálogo, sin ambigüedad posible aunque compartan materiales).
+Alternativa descartada: diferenciar materiales -- no funciona,
+`mejor_receta_completable` usa `set(objetos)` sin conteo, "2x piedra" no
+se puede exigir con el mecanismo actual.
+
+**Motivo causal, mismo patrón exacto que "herramienta"** (utilidad =
+`necesidad_trabajo`, sin descuento), con un disparador MÁS ESPECÍFICO:
+solo se activa si la celda actual tiene de verdad una veta sin explotar
+-- un individuo que nunca ha estado junto a una veta sin pico nunca
+desarrolla interés en fabricar uno (principio 5). RECOLECTAR hereda el
+motivo para juntar madera/piedra crudos -- cuarto flag
+`Intencion.recolectar_motivo_mineria`, extendiendo el resolutor de
+precedencia corregido ayer ("prioridad consciente") a CUATRO eslabones:
+fuego > arma > herramienta > mineria. Vía 4 en `_resolver_recolectar`,
+comparte `_via_material_crudo` con Vía 2/3.
+
+**Gate de extracción**: `celda.deposito_mineral` con masa restante ahora
+exige `tiene_herramienta(objetos_totales, recetas_mineria)`. Sin pico, la
+extracción se SALTA (no interrumpe la resolución) y cae al siguiente
+nivel de prioridad ya existente (flora, luego `tipo_sustrato`) -- un
+consciente sin pico junto a una veta sigue recolectando lo que sí puede.
+
+**Deliberadamente fuera de este círculo**: el pico NO se suma al bono
+genérico de velocidad (`factor_bono_tasa_recolectar_con_herramienta`)
+que ya da `hacha_primitiva` -- su único efecto es destrabar la
+extracción de veta, sin inventar un segundo efecto no pedido.
+`tipo_sustrato` (piedra/arcilla/tierra a granel) sigue sin gate.
+
+**Verificado**: 521/521 tests en verde (13 nuevos,
+`tests/test_mineria_real.py` -- gate de extracción con/sin pico, caída a
+sustrato sin pico, agotamiento real de veta, FABRICAR-mineria produce
+`pico` real sin confundirse con `hacha_primitiva` pese a compartir
+materiales, Vía 4 requiere motivo real, causalidad en
+`sistema_decision.py` -- mineria exige veta real, no basta necesidad de
+trabajo genérica --, precedencia herramienta>mineria en empate exacto).
+`BOSQUE_AUTO_TICKS=3000` con la semilla por defecto, sin ninguna
+excepción: el gate se ejerció de verdad (**1 bloqueo real de extracción
+sin pico**), aunque 0 picos fabricados en esa semilla concreta -- mismo
+patrón "correcto pero raro en una sola semilla" ya visto varias veces en
+este proyecto (fabricación de herramientas, salón común...).
+`BOSQUE_CONTINUAR=1` (200 ticks más tras recargar desde SQLite) sin
+excepciones -- roundtrip limpio (aunque `pico` no añade estado nuevo
+persistido, viaja en `Inventario.objetos`, campo JSON ya existente).
+
+**Pendiente real, explícito**: diagnóstico multi-semilla (varias semillas
+nuevas, mismo criterio que "una sola semilla no basta para concluir
+invisibilidad") lanzado en segundo plano al cerrar este círculo --
+resultado real pendiente de añadir aquí en cuanto termine. Reparto de
+Círculo 2 (tala real, destruye una `Planta` por primera vez en el motor)
+y Círculo 3+ (niveles de construcción, conocimiento transmisible, tipos
+nuevos) sin empezar -- agricultura/ganadería aparcada como arco propio.
