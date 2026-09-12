@@ -48,15 +48,13 @@ from main import (
     cargar_configuracion, instanciar_sistemas, sembrar_poblacion_inicial,
     sembrar_flora_inicial, ejecutar_tick,
 )
-from nucleo.asentamiento import (
-    STATS_DESEMPATE_REPUTACION_CAMBIO, STATS_REPUTACION_DESCALIFICADOS,
-)
+from nucleo import asentamiento as _nucleo_asentamiento
+from nucleo import sonido as _nucleo_sonido
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 from nucleo.relaciones import son_pareja
-from nucleo.sonido import SONIDOS_EMITIDOS_TOTALES
 from nucleo.vocacion import vocacion_dominante
 
 RUTA_CONFIG = Path(__file__).resolve().parent.parent / "config"
@@ -67,6 +65,20 @@ ESPECIES = [
 # catálogo de entonces vivas a la vez. Se mantiene para comparar contra
 # todas las mediciones históricas de CLAUDE.md.
 ESPECIES_CRITERIO_5 = ["gnomo", "lobo", "conejo", "ardilla", "caballo"]
+
+
+def _reset_contadores_modulo() -> None:
+    """Los contadores globales de modulo (sonidos, reputacion) se mutan
+    con `global += 1` DENTRO de su propio modulo: una importacion por
+    valor (`from nucleo.sonido import X`) congelaba el valor de la
+    importacion y el harness leia SIEMPRE 0 -- hallazgo real de la
+    corrida 15x8000 del 2026-09-12 (sonidos emitidos=0 junto a amenaza
+    por sonido >0, contradictorio). Leyendo via atributo de modulo se
+    ven los incrementos; el reset evita acumulacion si un worker
+    procesa dos semillas."""
+    _nucleo_asentamiento.STATS_REPUTACION_DESCALIFICADOS = 0
+    _nucleo_asentamiento.STATS_DESEMPATE_REPUTACION_CAMBIO = 0
+    _nucleo_sonido.SONIDOS_EMITIDOS_TOTALES = 0
 
 
 class _PersistenciaFalsa:
@@ -97,6 +109,7 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
     y devuelve un diccionario con el estado de todos los flujos del
     motor al cierre."""
     config = cargar_configuracion(RUTA_CONFIG)
+    _reset_contadores_modulo()
     rng_mapa = random.Random(semilla)
     rng_juego = random.Random(semilla)
     rng_reproduccion = random.Random(semilla)
@@ -217,9 +230,9 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
         "material_descartado_kg": sistemas["recursos"]._stats_material_descartado_por_prioridad_kg,
         "madriguera_excluidos_cupo": sistemas["manada"]._stats_madriguera_excluidos_por_cupo,
         "vinculos_purgados_decaimiento": sistemas["descomposicion"]._stats_vinculos_purgados_por_decaimiento,
-        "sonidos_emitidos": SONIDOS_EMITIDOS_TOTALES,
-        "reputacion_descalificados": STATS_REPUTACION_DESCALIFICADOS,
-        "reputacion_desempates": STATS_DESEMPATE_REPUTACION_CAMBIO,
+        "sonidos_emitidos": _nucleo_sonido.SONIDOS_EMITIDOS_TOTALES,
+        "reputacion_descalificados": _nucleo_asentamiento.STATS_REPUTACION_DESCALIFICADOS,
+        "reputacion_desempates": _nucleo_asentamiento.STATS_DESEMPATE_REPUTACION_CAMBIO,
         "manadas_por_especie": dict(sistemas["manada"]._stats_manadas_por_especie),
         "madrigueras_sincronizadas": sistemas["manada"]._stats_madrigueras_sincronizadas,
         "socializar_contactos": sistemas["movimiento"]._stats_socializar_contacto,
