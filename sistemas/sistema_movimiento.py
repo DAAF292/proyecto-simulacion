@@ -86,6 +86,10 @@ class SistemaMovimiento:
         # ningun camino de decision los lee.
         self._stats_roce_social_resueltos: int = 0
         self._stats_crisis_violenta_contacto: int = 0
+        # Catalogo por tick (2026-09-12): cuantos ticks construyeron el
+        # catalogo de especie/sexo/gestacion (solo observacion).
+        self._stats_catalogo_pareja_ticks: int = 0
+        self._catalogo_pareja: dict[int, tuple[Any, Any, bool]] | None = None
         # Robo y compartir por confianza (2026-09-07, circulos 3/4 del
         # arco "robo/intercambio de recursos"). Solo observacion.
         self._stats_robos_intentados: int = 0
@@ -407,6 +411,17 @@ class SistemaMovimiento:
         # _resolver_conflicto_entre necesita saber que pares ya se resolvieron
         # este mismo tick, sin importar por cual de sus tres disparadores.
         self._pares_conflicto_resueltos_este_tick = set()
+        # Catálogo por tick (2026-09-12): especie/sexo/gestación de cada
+        # criatura, leidos UNA vez por tick (se puebla con la primera
+        # llamada a _calcular_pareja del tick). Identidad/Reproduccion/
+        # Gestacion no mutan durante la fase de movimiento/decision (los
+        # nacimientos/muertes ocurren en fases posteriores del tick, ver
+        # main.py:ejecutar_tick) -- la foto por tick es exacta, y evita
+        # re-fetch de 3 componentes por candidato en cada escaneo de
+        # pareja (el 29% de todas las llamadas a obtener_componente
+        # medidas por perfilado). La POSICION sigue leyendose EN VIVO
+        # como antes (muta dentro del tick con el propio movimiento).
+        self._catalogo_pareja = None
 
         # Roce social, memoria compartida, rumor social, robo y compartir
         # por confianza (2026-09-06/07, ver docs/superpowers/specs/
@@ -1842,6 +1857,24 @@ class SistemaMovimiento:
         if rep_propia is None:
             return self._paso_aleatorio()
 
+        # Catálogo por tick (2026-09-12, ver comentario en ejecutar):
+        # especie/sexo/gestación leidos una vez por tick, no por
+        # candidato. Registro de observacion barato.
+        if self._catalogo_pareja is None:
+            catalogo: dict[int, tuple[Any, Any, bool]] = {}
+            for cid in gestor.entidades_con(Identidad, Reproduccion):
+                rep = gestor.obtener_componente(cid, Reproduccion)
+                ident = gestor.obtener_componente(cid, Identidad)
+                if rep is None or ident is None:
+                    continue
+                catalogo[cid] = (
+                    ident.especie,
+                    rep.sexo,
+                    gestor.obtener_componente(cid, Gestacion) is not None,
+                )
+            self._catalogo_pareja = catalogo
+            self._stats_catalogo_pareja_ticks += 1
+
         candidatos = []
         # 2026-09-08 (nucleo/indice_espacial.py): en_radio ya acota a la
         # zona/celda correctas -- el resto del filtrado (sexo, especie,
@@ -1854,6 +1887,11 @@ class SistemaMovimiento:
         for eid in fuente:
             if eid == entidad_id:
                 continue
+            datos = self._catalogo_pareja.get(eid)
+            if datos is None:
+                continue
+            especie_c, sexo_c, tiene_gestacion = datos
+
             pos_c = gestor.obtener_componente(eid, Posicion)
             if pos_c is None or pos_c.zona_idx != zona_idx:
                 continue
@@ -1862,16 +1900,10 @@ class SistemaMovimiento:
             if dist > radio:
                 continue
 
-            ident = gestor.obtener_componente(eid, Identidad)
-            rep = gestor.obtener_componente(eid, Reproduccion)
-            gest = gestor.obtener_componente(eid, Gestacion)
-
             if (
-                ident
-                and rep
-                and ident.especie == especie
-                and rep.sexo != rep_propia.sexo
-                and gest is None
+                especie_c == especie
+                and sexo_c != rep_propia.sexo
+                and not tiene_gestacion
             ):
                 candidatos.append((dist, pos_c.x, pos_c.y))
 

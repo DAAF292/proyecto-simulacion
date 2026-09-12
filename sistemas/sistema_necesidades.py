@@ -448,7 +448,7 @@ class SistemaNecesidades:
                 and cap_mental.consciencia >= self.umbral_consciencia_agencia
                 and pareja_presente(
                     gestor, eid, relaciones, pos.x, pos.y, pos.zona_idx,
-                    self.umbral_pareja,
+                    self.umbral_pareja, indice=self._indice_actual,
                 )
             ):
                 obj_termico += self.bono_confort_pareja
@@ -533,7 +533,7 @@ class SistemaNecesidades:
                 and cap_mental.consciencia >= self.umbral_consciencia_agencia
                 and pareja_presente(
                     gestor, eid, relaciones, pos.x, pos.y, pos.zona_idx,
-                    self.umbral_pareja,
+                    self.umbral_pareja, indice=self._indice_actual,
                 )
             ):
                 nec.seguridad = min(1.0, nec.seguridad + self.bono_seguridad_pareja)

@@ -403,21 +403,31 @@ def pendiente_local(zona, x: int, y: int) -> float:
     lo permeable que sea el material (ver
     fraccion_escurrida_por_pendiente).
 
-    Deliberadamente NO es un campo de Celda -- se calcula al vuelo cada
-    vez que hace falta a partir de Celda.elevacion, que ya es
-    determinista y ya está almacenada; cachearla en un campo nuevo sería
-    estado redundante sin necesidad real. Si el perfilado real mostrara
-    que recalcularla cada tick pesa, se cachea entonces -- no antes.
+    CACHE (2026-09-12): el docstring original decía "se cachea cuando el
+    perfilado lo pida, no antes" -- el perfilado lo pidió (708k
+    recálculos por 700 ticks, ~7% del tiempo total del tick). Celda
+    .elevacion es estática tras la generación: sus únicos escritores son
+    la generación (zona_bioma.py/cueva.py) y ningún otro código muta
+    elevacion verificado (grep de asignaciones). La cache vive en la
+    propia zona (pura en memoria, muere con ella; tras cargar partida la
+    zona se regenera desde la semilla -- mismas elevaciones
+    deterministas). NO se persiste.
     """
-    propia = zona.obtener_celda(x, y).elevacion
-    diferencias = []
-    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-        nx, ny = x + dx, y + dy
-        if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
-            diferencias.append(abs(zona.obtener_celda(nx, ny).elevacion - propia))
-    if not diferencias:
-        return 0.0
-    return sum(diferencias) / len(diferencias)
+    cache = getattr(zona, "_cache_pendiente_local", None)
+    if cache is None:
+        cache = {}
+        zona._cache_pendiente_local = cache
+    valor = cache.get((x, y))
+    if valor is None:
+        propia = zona.obtener_celda(x, y).elevacion
+        diferencias = []
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < zona.ancho and 0 <= ny < zona.alto:
+                diferencias.append(abs(zona.obtener_celda(nx, ny).elevacion - propia))
+        valor = sum(diferencias) / len(diferencias) if diferencias else 0.0
+        cache[(x, y)] = valor
+    return valor
 
 
 def fraccion_escurrida_por_pendiente(pendiente: float, config_charcos: dict) -> float:
