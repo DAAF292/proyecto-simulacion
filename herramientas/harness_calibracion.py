@@ -43,18 +43,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from componentes.construccion import Construccion
 from componentes.identidad import Identidad
 from componentes.relaciones import Relaciones
+from componentes.vocacion import Vocacion
 from main import (
     cargar_configuracion, instanciar_sistemas, sembrar_poblacion_inicial,
     sembrar_flora_inicial, ejecutar_tick,
+)
+from nucleo.asentamiento import (
+    STATS_DESEMPATE_REPUTACION_CAMBIO, STATS_REPUTACION_DESCALIFICADOS,
 )
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 from nucleo.relaciones import son_pareja
+from nucleo.sonido import SONIDOS_EMITIDOS_TOTALES
+from nucleo.vocacion import vocacion_dominante
 
 RUTA_CONFIG = Path(__file__).resolve().parent.parent / "config"
-ESPECIES = ["gnomo", "lobo", "conejo", "ardilla", "caballo"]
+ESPECIES = [
+    "gnomo", "lobo", "conejo", "ardilla", "caballo", "venado", "cabra_montesa",
+]
+# Criterio maestro original de Diego (2026-09-06): las 5 especies del
+# catálogo de entonces vivas a la vez. Se mantiene para comparar contra
+# todas las mediciones históricas de CLAUDE.md.
+ESPECIES_CRITERIO_5 = ["gnomo", "lobo", "conejo", "ardilla", "caballo"]
 
 
 class _PersistenciaFalsa:
@@ -101,6 +113,8 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
     muertes_por_especie: dict[str, Counter] = {}
     concepciones_por_especie: Counter = Counter()
     nacimientos_por_especie: Counter = Counter()
+    armas_fabricadas = 0
+    herramientas_fabricadas = 0
 
     t0 = time.time()
     t = 0
@@ -116,6 +130,10 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
                 concepciones_por_especie[ev.datos.get("especie", "?")] += 1
             elif ev.tipo == "Nacimiento":
                 nacimientos_por_especie[ev.datos.get("especie", "?")] += 1
+            elif ev.tipo == "ArmaFabricada":
+                armas_fabricadas += 1
+            elif ev.tipo == "HerramientaFabricada":
+                herramientas_fabricadas += 1
         bus.limpiar()
         if t % 1000 == 0:
             trayectoria[t] = dict(_contar_poblacion(gestor))
@@ -149,6 +167,22 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
                 parejas += 1
 
     especies_vivas = sum(1 for esp in ESPECIES if poblacion_final.get(esp, 0) > 0)
+    especies_vivas_criterio_5 = sum(
+        1 for esp in ESPECIES_CRITERIO_5 if poblacion_final.get(esp, 0) > 0
+    )
+
+    # Vocación dominante por especie (solo gnomo tiene Vocacion real hoy:
+    # el contador solo se incrementa para conscientes).
+    vocaciones_gnomo: Counter = Counter()
+    for eid in gestor.entidades_con(Identidad, Vocacion):
+        if gestor.obtener_componente(eid, Identidad).especie.value == "gnomo":
+            dom = vocacion_dominante(gestor.obtener_componente(eid, Vocacion))
+            if dom:
+                vocaciones_gnomo[dom] += 1
+
+    # Armas fabricadas reales (evento ArmaFabricada, emitido en
+    # _resolver_fabricar). Los eventos del último tick ya pasaron; se
+    # cuentan durante la corrida junto con el resto (ver bucle).
 
     return {
         "semilla": semilla,
@@ -165,6 +199,27 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
         "num_asentamientos": len(asentamientos),
         "tamanos_asentamientos": [len(a.miembros) for a in asentamientos],
         "parejas_estables_gnomo": parejas,
+        "especies_vivas_criterio_5": especies_vivas_criterio_5,
+        "vocaciones_gnomo": dict(vocaciones_gnomo),
+        "armas_fabricadas": armas_fabricadas,
+        "herramientas_fabricadas": herramientas_fabricadas,
+        "robos_material_intentados": sistemas["movimiento"]._stats_robos_material_intentados,
+        "robos_material_exitosos": sistemas["movimiento"]._stats_robos_material_exitosos,
+        "robos_arma_intentados": sistemas["movimiento"]._stats_robos_arma_intentados,
+        "robos_arma_exitosos": sistemas["movimiento"]._stats_robos_arma_exitosos,
+        "crisis_violenta_contacto": sistemas["movimiento"]._stats_crisis_violenta_contacto,
+        "memoria_compartida": sistemas["movimiento"]._stats_memoria_compartida_transferencias,
+        "rumores_propagados": sistemas["movimiento"]._stats_rumores_propagados,
+        "sonido_caza_fallback": sistemas["movimiento"]._stats_sonido_caza_fallback_usos,
+        "manada_cohesion_fallback_caza": sistemas["movimiento"]._stats_manada_cohesion_fallback_caza,
+        "gate_manos_libres": sistemas["decision"]._stats_gate_manos_libres_disparado,
+        "lealtad_aplicada": sistemas["asentamiento"]._stats_lealtad_aplicada,
+        "material_descartado_kg": sistemas["recursos"]._stats_material_descartado_por_prioridad_kg,
+        "madriguera_excluidos_cupo": sistemas["manada"]._stats_madriguera_excluidos_por_cupo,
+        "vinculos_purgados_decaimiento": sistemas["descomposicion"]._stats_vinculos_purgados_por_decaimiento,
+        "sonidos_emitidos": SONIDOS_EMITIDOS_TOTALES,
+        "reputacion_descalificados": STATS_REPUTACION_DESCALIFICADOS,
+        "reputacion_desempates": STATS_DESEMPATE_REPUTACION_CAMBIO,
         "manadas_por_especie": dict(sistemas["manada"]._stats_manadas_por_especie),
         "madrigueras_sincronizadas": sistemas["manada"]._stats_madrigueras_sincronizadas,
         "socializar_contactos": sistemas["movimiento"]._stats_socializar_contacto,
@@ -210,10 +265,14 @@ def _imprimir_resumen(resultados: list[dict]) -> None:
         pct = 100 * extinciones[esp] / len(validos) if validos else 0
         print(f"  {esp}: {extinciones[esp]}/{len(validos)} ({pct:.0f}%)")
 
-    cinco_vivas = sum(1 for r in validos if r["especies_vivas"] == 5)
+    cinco_vivas = sum(1 for r in validos if r["especies_vivas_criterio_5"] == 5)
     pct5 = 100 * cinco_vivas / len(validos) if validos else 0
-    print(f"\nCriterio maestro de Diego (5 especies vivas a la vez): "
+    siete_vivas = sum(1 for r in validos if r["especies_vivas"] == 7)
+    pct7 = 100 * siete_vivas / len(validos) if validos else 0
+    print(f"\nCriterio maestro de Diego (5 especies originales vivas): "
           f"{cinco_vivas}/{len(validos)} ({pct5:.0f}%)")
+    print(f"Criterio extendido (7 especies del catalogo vivas): "
+          f"{siete_vivas}/{len(validos)} ({pct7:.0f}%)")
 
     asentamientos_formados = sum(1 for r in validos if r["num_asentamientos"] > 0)
     almacen_completado = sum(1 for r in validos if r["construcciones_completadas"].get("almacen", 0) > 0)
@@ -241,6 +300,36 @@ def _imprimir_resumen(resultados: list[dict]) -> None:
 
     intoxicacion_total = sum(r["muertes_intoxicacion"] for r in validos)
     print(f"Muertes por intoxicacion (agregado): {intoxicacion_total}")
+
+    print("\nFabricacion (agregado):")
+    print(f"  Armas fabricadas: {sum(r['armas_fabricadas'] for r in validos)}")
+    print(f"  Herramientas fabricadas: {sum(r['herramientas_fabricadas'] for r in validos)}")
+
+    rob_mat = sum(r["robos_material_exitosos"] for r in validos)
+    rob_arma = sum(r["robos_arma_exitosos"] for r in validos)
+    print(f"Robo de material exitoso (agregado): {rob_mat}")
+    print(f"Robo de arma exitoso (agregado): {rob_arma}")
+
+    print("\nVocaciones dominantes de gnomo (agregado al cierre de cada semilla):")
+    voc_total: Counter = Counter()
+    for r in validos:
+        voc_total.update(r.get("vocaciones_gnomo", {}))
+    print(f"  {dict(voc_total) if voc_total else '{}'}")
+
+    print("\nFlujos sociales/agregados:")
+    print(f"  Memoria compartida: {sum(r.get('memoria_compartida', 0) for r in validos)}")
+    print(f"  Rumores propagados: {sum(r.get('rumores_propagados', 0) for r in validos)}")
+    print(f"  Crisis violenta con contacto: {sum(r.get('crisis_violenta_contacto', 0) for r in validos)}")
+    print(f"  Cohesion de manada fallback caza: {sum(r.get('manada_cohesion_fallback_caza', 0) for r in validos)}")
+    print(f"  Sonido como pista de caza (fallback): {sum(r.get('sonido_caza_fallback', 0) for r in validos)}")
+    print(f"  Sonidos emitidos: {sum(r.get('sonidos_emitidos', 0) for r in validos)}")
+    print(f"  Gate manos libres disparado: {sum(r.get('gate_manos_libres', 0) for r in validos)}")
+    print(f"  Lealtad a lider aplicada: {sum(r.get('lealtad_aplicada', 0) for r in validos)}")
+    print(f"  Madriguera excluidos por cupo: {sum(r.get('madriguera_excluidos_cupo', 0) for r in validos)}")
+    print(f"  Vinculos purgados por decaimiento: {sum(r.get('vinculos_purgados_decaimiento', 0) for r in validos)}")
+    print(f"  Material descartado por prioridad (kg): {sum(r.get('material_descartado_kg', 0.0) for r in validos):.1f}")
+    print(f"  Reputacion: descalificados={sum(r.get('reputacion_descalificados', 0) for r in validos)}, "
+          f"desempates cambiados={sum(r.get('reputacion_desempates', 0) for r in validos)}")
 
     print("\nPoblacion final por especie (promedio / min / max):")
     for esp in ESPECIES:
