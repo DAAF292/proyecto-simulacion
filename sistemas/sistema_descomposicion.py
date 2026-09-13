@@ -209,6 +209,18 @@ class SistemaDescomposicion:
                         self.techo_profundidad_charco,
                         celda.profundidad_charco + aporte_charco_m,
                     )
+                    # celdas_humedas (2026-09-12): esta lisis es un
+                    # ESCRITOR de profundidad_charco ajeno a
+                    # _actualizar_charcos -- si la celda aporta charco,
+                    # entra en el registro de humedas para que el
+                    # drenaje en clima seco la encuentre (mismo patron
+                    # que los otros escritores del campo; sin este
+                    # registro, una gota de lisis quedaria encharcada
+                    # para siempre: el registro no la ve y el drenaje
+                    # por registro no la toca).
+                    registro = getattr(zona, "celdas_humedas", None)
+                    if registro is not None:
+                        registro.add((pos.x, pos.y))
 
             # 4. Mineralización completa -- TODOS los materiales por
             # debajo del umbral, no solo uno: si no, el hueso se borraría

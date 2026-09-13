@@ -416,6 +416,12 @@ class SistemaRecursos:
         humedad_subsuelo, topada por la capacidad_retencion del material y
         con su propio drenaje mucho más lento que la evaporación de un
         charco.
+
+        En clima seco (tasa_gen == 0) con zona que trae registro
+        celdas_humedas, el drenaje pasa por _drenar_celdas_humedas --
+        solo las celdas con agua/humedad toca a drenar, mismo resultado
+        aritmetico que el barrido completo original (las celdas con 0.0
+        en ambos campos no cambian nunca).
         """
         clima_actual = getattr(zona, "clima_actual", None)
         nombre_clima = clima_actual.value if clima_actual is not None else "despejado"
@@ -427,6 +433,18 @@ class SistemaRecursos:
             .get("tasa_generacion_charco_por_tick", 0.0)
         )
         techo_charco = float(self.cfg_charco.get("techo_profundidad_charco", 0.03))
+        # Registro de celdas húmedas (2026-09-12, ver ZonaBioma
+        # .celdas_humedas): con lluvia el escaneo completo es necesario de
+        # verdad (cualquier celda puede empezar a guardar agua); en clima
+        # seco solo toca drenar las celdas que tienen algo -- el registro
+        # las localiza sin recorrer la cuadrícula entera (mismo patrón
+        # exacto que celdas_en_llamas, 2026-09-08). Determinista, no
+        # consume rng.
+        registro_humedas = getattr(zona, "celdas_humedas", None)
+
+        if tasa_gen <= 0.0 and registro_humedas is not None:
+            self._drenar_celdas_humedas(zona, registro_humedas)
+            return
 
         for y in range(zona.alto):
             for x in range(zona.ancho):
@@ -472,6 +490,38 @@ class SistemaRecursos:
                         celda.humedad_subsuelo = max(
                             0.0, celda.humedad_subsuelo - self.tasa_drenaje_subsuelo
                         )
+
+                if registro_humedas is not None:
+                    if celda.profundidad_charco > 0.0 or celda.humedad_subsuelo > 0.0:
+                        registro_humedas.add((x, y))
+                    else:
+                        registro_humedas.discard((x, y))
+
+    def _drenar_celdas_humedas(
+        self, zona: Any, registro: set
+    ) -> None:
+        """Drenaje/evaporacion en clima seco (2026-09-12): solo las
+        celdas del registro celdas_humedas tienen algo que drenar --
+        las demas quedaron en 0.0 y secas no cambian nunca. Misma
+        aritmetica exacta que la rama else del barrido completo; el
+        registro se auto-mantiene (celda que llega a 0 sale del
+        registro)."""
+        evaporacion = self.tasa_evaporacion_charco
+        drenaje = self.tasa_drenaje_subsuelo
+        for x, y in list(registro):
+            celda = zona.obtener_celda(x, y)
+            if celda.tiene_agua:
+                # Una celda sumergida nunca guarda charco/humedad en el
+                # barrido completo (continue arriba); si esta en el
+                # registro es huella residual -- sale.
+                registro.discard((x, y))
+                continue
+            if celda.profundidad_charco > 0.0:
+                celda.profundidad_charco = max(0.0, celda.profundidad_charco - evaporacion)
+            if celda.humedad_subsuelo > 0.0:
+                celda.humedad_subsuelo = max(0.0, celda.humedad_subsuelo - drenaje)
+            if celda.profundidad_charco <= 0.0 and celda.humedad_subsuelo <= 0.0:
+                registro.discard((x, y))
 
     def _registrar_recuerdo_si_procede(
         self,

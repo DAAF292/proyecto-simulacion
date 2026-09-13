@@ -834,6 +834,13 @@ class Persistencia:
                     # en procesar_fuego_tick -- hay que repoblarlo al
                     # cargar, en_llamas SI se persiste.
                     zona_celda.celdas_en_llamas.add((x, y))
+                if prof_ch > 0.0:
+                    # celdas_humedas (2026-09-12): registro del drenaje
+                    # en clima seco -- profundidad_charco SI se persiste
+                    # (fila cargada); humedad_subsuelo no (arranca 0.0
+                    # en tierra al regenerar la zona desde la semilla,
+                    # estado identico al de la generacion).
+                    zona_celda.celdas_humedas.add((x, y))
                 celda.recursos = json.loads(rec_json)
                 # deposito_mineral/masa_mineral_restante son estado
                 # mutable de la partida (una veta agotada por
