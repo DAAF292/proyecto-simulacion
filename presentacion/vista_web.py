@@ -2900,6 +2900,14 @@ PNG todavia, el cliente cae de vuelta al dibujo vectorial de
 dibujarVegetacion()/dibujarRelieve() -- ninguna categoria vacia rompe
 el visor ni queda en blanco."""
 
+RUTA_TERMINAL = Path(__file__).resolve().parent / "terminal_prototipo"
+"""Prototipo de estetica terminal (2026-09-13, ver su propio README) --
+servido por ESTE MISMO servidor (mismo puerto, mismo /estado.json en
+vivo) para que deje de ser un snapshot estatico. No sustituye a
+HTML_VISOR (el Codice Cartografico de arriba, que sigue sirviendose en
+"/") -- son dos frontends distintos consumiendo el mismo endpoint,
+decision deliberada de Diego para no tener que elegir todavia."""
+
 _PATRON_ARCHIVO_CON_PREFIJO = re.compile(r"^([a-z_]+)_\d+\.png$")
 
 
@@ -3031,6 +3039,28 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(construir_manifiesto_assets()).encode("utf-8"))
         elif self.path.startswith("/assets/"):
             self._servir_asset(self.path[len("/assets/") :])
+        elif self.path in ("/terminal.html", "/datos.js", "/datos.json"):
+            # Segundo frontend (2026-09-13, ver RUTA_TERMINAL) sobre el
+            # MISMO servidor -- mismo /estado.json en vivo que ya usa
+            # HTML_VISOR, sin duplicar el bucle de simulacion ni el
+            # puerto. datos.js/datos.json siguen sirviendose tal cual
+            # (respaldo estatico si /estado.json fallara por lo que sea)
+            # -- terminal.html los sondea en vivo, esto solo evita un 404
+            # inofensivo pero ruidoso en la consola del navegador.
+            # Se lee del disco en cada peticion (no se cachea en
+            # memoria): es un prototipo que Diego sigue editando a mano.
+            destino = RUTA_TERMINAL / self.path.lstrip("/")
+            if not destino.is_file():
+                self.send_response(404)
+                self.end_headers()
+                return
+            tipo, _ = mimetypes.guess_type(str(destino))
+            self.send_response(200)
+            self.send_header("Content-Type", tipo or "application/octet-stream")
+            self.end_headers()
+            self.wfile.write(destino.read_bytes())
+        elif self.path.startswith("/sprites/"):
+            self._servir_sprite_terminal(self.path[len("/sprites/") :])
         else:
             self.send_response(404)
             self.end_headers()
@@ -3063,6 +3093,28 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        tipo, _ = mimetypes.guess_type(str(destino))
+        self.send_response(200)
+        self.send_header("Content-Type", tipo or "application/octet-stream")
+        self.end_headers()
+        self.wfile.write(destino.read_bytes())
+
+    def _servir_sprite_terminal(self, ruta_relativa: str) -> None:
+        """Mismo guardia anti path-traversal que _servir_asset, aqui
+        acotado a terminal_prototipo/sprites -- el prototipo referencia
+        sus imagenes como "sprites/<...>", ruta relativa a si mismo."""
+        from urllib.parse import unquote
+
+        carpeta_sprites = (RUTA_TERMINAL / "sprites").resolve()
+        destino = (carpeta_sprites / unquote(ruta_relativa)).resolve()
+        if not destino.is_relative_to(carpeta_sprites):
+            self.send_response(403)
+            self.end_headers()
+            return
+        if not destino.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return
         tipo, _ = mimetypes.guess_type(str(destino))
         self.send_response(200)
         self.send_header("Content-Type", tipo or "application/octet-stream")

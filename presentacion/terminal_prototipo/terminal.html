@@ -86,6 +86,14 @@
     filter:
       drop-shadow(1px 0 0 #0a1a0a) drop-shadow(-1px 0 0 #0a1a0a)
       drop-shadow(0 1px 0 #0a1a0a) drop-shadow(0 -1px 0 #0a1a0a);
+    /* Movimiento suave (2026-09-13, Diego: "el movimiento... parece que
+       saltan"): solo tiene efecto sobre elementos que YA estaban en el
+       DOM y cambian left/top (la capa de criaturas, ver renderCriaturas
+       mas abajo) -- un elemento recien creado no anima nada, asi que la
+       capa estatica (flora/agua/etc, recreada entera cada render) no se
+       ve afectada. Duracion cercana al intervalo de sondeo (1s) para que
+       el desplazamiento termine justo antes de la siguiente instantanea. */
+    transition: left 0.9s linear, top 0.9s linear;
   }
   .celda-img-tile {
     /* Agua: textura de suelo que rellena la celda exacta, sin desbordar
@@ -149,7 +157,16 @@
 </div>
 <script src="datos.js"></script>
 <script>
-const DATA = window.__DATOS__;
+// CONECTADO AL MOTOR (2026-09-13, Diego: "conectalo al motor"): DATA ya
+// no es una foto fija -- si este HTML se sirve desde el mismo servidor
+// que corre la simulacion real (main.py BOSQUE_MODO_VISUAL=1, ver
+// vista_web.py:ManejadorWeb), se sondea /estado.json cada segundo y se
+// vuelve a renderizar con el estado real del motor en marcha. Si se
+// sirve suelto (python -m http.server sobre esta carpeta, sin
+// /estado.json disponible), el fetch falla en silencio y se queda con
+// la instantanea estatica de datos.js -- mismo comportamiento de
+// siempre, nada se rompe para quien lo use asi.
+let DATA = window.__DATOS__ || null;
 const CELDA = 28; // px base por celda, antes de aplicar zoom
 
 const SIMBOLO_BIOMA = {
@@ -306,18 +323,7 @@ function hashDet(x,y,sal) {
   return h / 4294967296;
 }
 
-let entidadPorCelda = {};
-for (const e of DATA.entidades) entidadPorCelda[e.x + ',' + e.y] = e;
-
-// Construcciones (DATA.construcciones, 2026-09-13 -- ver construir_instantanea):
-// una celda podria en teoria tener mas de una (refugio+almacen compartiendo
-// espacio, cupo real del motor) -- guardamos una LISTA por celda, mismo
-// criterio que ya corrigio el bug de plantas_por_celda (2026-08-31).
 let construccionesPorCelda = {};
-for (const con of (DATA.construcciones || [])) {
-  const clave = con.x + ',' + con.y;
-  (construccionesPorCelda[clave] = construccionesPorCelda[clave] || []).push(con);
-}
 // Tamano relativo de cada tipo de construccion -- una construccion real
 // domina mas su celda que un arbol individual.
 const FACTOR_TAMANO_CONSTRUCCION = { refugio: 1.6, almacen: 2.0 };
@@ -334,16 +340,17 @@ const FACTOR_TAMANO_CONSTRUCCION = { refugio: 1.6, almacen: 2.0 };
 // celda (un charco de 3 celdas con 3 siluetas distintas y bordes que no
 // encajan es aun peor que el problema de lago).
 //
-// LAGO_TILEABLE excluye a proposito: lago_2/lago_6 (tinte verde, "parece
-// un cauce"/rio mas que un lago -- Diego), lago_4 (textura oscura
-// ruidosa, tambien con verde, desentona), lago_7 (silueta de charco
-// aislada, no es una textura repetible). Los 8 que quedan son todos
-// variaciones de un mismo azul de oleaje/ladrillo de agua.
-const LAGO_TILEABLE = [
-  'sprites/agua/lago_1.png','sprites/agua/lago_3.png','sprites/agua/lago_5.png',
-  'sprites/agua/lago_8.png','sprites/agua/lago_9.png','sprites/agua/lago_10.png',
-  'sprites/agua/lago_11.png','sprites/agua/lago_12.png',
-];
+// CORREGIDO 2026-09-13 (segunda pasada, Diego: "quiero que uses solo la
+// textura de agua de la imagen"): la primera pasada dejaba 8 variantes
+// en rotacion sin comprobar el CANAL ALFA de cada una -- lago_1/3/5/10/
+// 11/12 tienen alfa real (0-255, huecos transparentes de verdad dentro
+// del propio tile de oleaje), asi que sobre el fondo negro del mapa se
+// veian como un enrejado/parcheado con hueco negro, no como agua solida
+// (la imagen que envio Diego era exactamente ese enrejado). Solo
+// lago_8/lago_9 son opacos de principio a fin (alfa=255 siempre, sin
+// huecos) -- verificado con PIL, no a ojo. Un solo tile, el mas oscuro
+// de los dos (lago_8), como pidio Diego ("solo la textura", singular).
+const LAGO_TILEABLE = ['sprites/agua/lago_8.png'];
 
 function componentesConexasAgua(tipoAgua) {
   // Flood-fill 4-vecinos sobre DATA.celdas -- mismo algoritmo que
@@ -384,47 +391,79 @@ function componentesConexasAgua(tipoAgua) {
 // entero (ver pozaOverlays, usado en renderMapa).
 let lagoVariantePorCelda = {};
 let pozaOverlays = [];
-for (const comp of componentesConexasAgua('lago')) {
-  const [ox, oy] = comp[0];
-  const src = LAGO_TILEABLE[Math.floor(hashDet(ox, oy, 29) * LAGO_TILEABLE.length)];
-  for (const [cx, cy] of comp) lagoVariantePorCelda[cx + ',' + cy] = src;
-}
-for (const comp of componentesConexasAgua('poza')) {
-  const [ox, oy] = comp[0];
-  const src = SPRITES_AGUA.poza[Math.floor(hashDet(ox, oy, 31) * SPRITES_AGUA.poza.length)];
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const [cx, cy] of comp) {
-    minX = Math.min(minX, cx); maxX = Math.max(maxX, cx);
-    minY = Math.min(minY, cy); maxY = Math.max(maxY, cy);
+
+// Todo lo de arriba (construccionesPorCelda, lago/poza) dependia de un
+// DATA fijo, calculado una sola vez al cargar el script -- con el modo
+// en vivo (ver cargarEstadoVivo/iniciar mas abajo) DATA cambia cada
+// segundo, asi que esto tiene que poder recalcularse tantas veces como
+// haga falta, no solo la primera. (entidadPorCelda se retiro el
+// 2026-09-13 al mover las criaturas a su propia capa persistente --
+// ver renderCriaturas -- nadie mas la leia.)
+function recalcularDerivados() {
+  // Construcciones (DATA.construcciones, 2026-09-13 -- ver
+  // construir_instantanea): una celda podria en teoria tener mas de una
+  // (refugio+almacen compartiendo espacio, cupo real del motor) --
+  // guardamos una LISTA por celda, mismo criterio que ya corrigio el bug
+  // de plantas_por_celda (2026-08-31).
+  construccionesPorCelda = {};
+  for (const con of (DATA.construcciones || [])) {
+    const clave = con.x + ',' + con.y;
+    (construccionesPorCelda[clave] = construccionesPorCelda[clave] || []).push(con);
   }
-  pozaOverlays.push({ minX, maxX, minY, maxY, src });
+
+  lagoVariantePorCelda = {};
+  pozaOverlays = [];
+  for (const comp of componentesConexasAgua('lago')) {
+    const [ox, oy] = comp[0];
+    const src = LAGO_TILEABLE[Math.floor(hashDet(ox, oy, 29) * LAGO_TILEABLE.length)];
+    for (const [cx, cy] of comp) lagoVariantePorCelda[cx + ',' + cy] = src;
+  }
+  for (const comp of componentesConexasAgua('poza')) {
+    const [ox, oy] = comp[0];
+    const src = SPRITES_AGUA.poza[Math.floor(hashDet(ox, oy, 31) * SPRITES_AGUA.poza.length)];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [cx, cy] of comp) {
+      minX = Math.min(minX, cx); maxX = Math.max(maxX, cx);
+      minY = Math.min(minY, cy); maxY = Math.max(maxY, cy);
+    }
+    pozaOverlays.push({ minX, maxX, minY, maxY, src });
+  }
+}
+
+// CORREGIDO 2026-09-13 (Diego: "el movimiento... parece que saltan"):
+// antes las criaturas se dibujaban dentro del mismo recorrido por celda
+// que la flora/agua, en la capa ESTATICA que se destruye y se recrea
+// entera en cada sondeo -- un elemento nuevo no tiene "posicion
+// anterior" de la que animar, asi que cada actualizacion se veia como
+// un salto instantaneo a la celda nueva. Las criaturas pasan a vivir en
+// su propia capa persistente (capaCriaturas, ver renderCriaturas) --
+// esta funcion ya NO las gestiona, solo el suelo (planta/agua/
+// construccion/bioma). Efecto colateral correcto, no un bug: una
+// criatura de pie sobre hierba ahora deja ver la hierba debajo, en vez
+// de taparla por completo como antes.
+function infoCriatura(ent) {
+  const pool = SPRITES_CRIATURA[ent.tipo];
+  // Escala por ALTURA real del individuo (dimensiones.altura_m, ya
+  // exportada por construir_instantanea) -- misma formula que flora
+  // (ALTURA_REAL_FLORA_M/escalaPorAltura mas arriba), corregido
+  // 2026-09-13 (antes usaba PESO, ver historial de esta seccion).
+  const alturaM = ent.dimensiones ? ent.dimensiones.altura_m : null;
+  const escala = escalaPorAltura(alturaM);
+  if (pool) {
+    // variante determinista por individuo (hoy solo gnomo tiene varias)
+    // -- no por celda, cada entidad conserva su propia variante siempre.
+    const idx = Math.floor(hashDet(ent.id, 0, 73) * pool.length);
+    return { tipo: 'sprite', src: pool[idx], escala };
+  }
+  // fallback ASCII -- especie sin sprite (hoy solo necromasa cae aqui).
+  const s = SIMBOLO_ENTIDAD[ent.tipo] || { s: '?', color: '#fff' };
+  return { tipo: 'txt', ch: s.s, color: s.color, glow: true, escala };
 }
 
 function contenidoCelda(c) {
-  // devuelve {tipo:'sprite'|'agua'|'txt', src/ch, color, escala}
-  const ent = entidadPorCelda[c.x + ',' + c.y];
-  if (ent) {
-    const pool = SPRITES_CRIATURA[ent.tipo];
-    // CORREGIDO 2026-09-13: escalaba por PESO (sqrt(peso/90)), no por
-    // altura -- un caballo (400-500kg) saturaba el tope (1.8) casi igual
-    // que un arbol maduro, y ni compartia formula ni unidad con la escala
-    // de flora (ver ALTURA_REAL_FLORA_M/escalaPorAltura mas arriba).
-    // Ahora usa la ALTURA real del individuo (dimensiones.altura_m, ya
-    // exportada por construir_instantanea) con la misma formula que
-    // flora -- un caballo (1.4-1.8m) queda por debajo de un arbol maduro
-    // (3.5-7m), como corresponde.
-    const alturaM = ent.dimensiones ? ent.dimensiones.altura_m : null;
-    const escala = escalaPorAltura(alturaM);
-    if (pool) {
-      // variante determinista por individuo (hoy solo gnomo tiene 2) --
-      // no por celda, cada entidad conserva su propia variante entre ticks.
-      const idx = Math.floor(hashDet(ent.id, 0, 73) * pool.length);
-      return { tipo: 'sprite', src: pool[idx], escala };
-    }
-    // fallback ASCII -- especie sin sprite (hoy solo necromasa cae aqui).
-    const s = SIMBOLO_ENTIDAD[ent.tipo] || { s: '?', color: '#fff' };
-    return { tipo: 'txt', ch: s.s, color: s.color, glow: true, escala };
-  }
+  // devuelve {tipo:'sprite'|'agua'|'txt', src/ch, color, escala} -- SOLO
+  // suelo (plantas/agua/construccion/bioma), las criaturas ya no pasan
+  // por aqui (ver infoCriatura/renderCriaturas).
   const construcciones = construccionesPorCelda[c.x + ',' + c.y];
   if (construcciones && construcciones.length > 0) {
     // varias construcciones en la misma celda (cupo compartido, dato
@@ -510,16 +549,17 @@ function contenidoCelda(c) {
   return { tipo: 'txt', ch, color, escala: 1.0 };
 }
 
-// CORREGIDO 2026-09-13 (Diego: "igual hay demasiada densidad?"):
-// verificado contra los datos reales antes de tocar nada -- solo 50% de
-// las celdas tienen alguna planta (39% vacias, 11% agua), no es un
-// problema de cuanta flora siembra el motor. La causa real es que el
-// fix de escala de mas arriba (altura real en vez de peso/factor
-// inventado) agrando mucho el desbordamiento de cada sprite sobre sus
-// celdas vecinas -- bajado de 1.4 a 1.05, mismo criterio relativo entre
-// especies (todas se reducen por igual), pero deja huecos de suelo
-// visibles que antes quedaban tapados por copas de arbol solapadas.
-const FACTOR_SPRITE_GRANDE = 1.05;
+// CORREGIDO 2026-09-13 (Diego: "igual hay demasiada densidad?", y de
+// nuevo despues: "sigue habiendo mucho solapamiento y no se distinguen
+// bien los sprites"). Verificado contra los datos reales antes de la
+// primera pasada -- solo 50% de las celdas tienen alguna planta (39%
+// vacias, 11% agua), no es un problema de cuanta flora siembra el
+// motor, es cuanto se desborda cada sprite sobre sus celdas vecinas.
+// 1.4 -> 1.05 no bastaba (un pino maduro seguia ocupando ~2.7 celdas de
+// lado) -- bajado otra vez a 0.85. Mismo criterio relativo entre
+// especies en ambas pasadas (todas se reducen por igual, el orden
+// arbol > caballo > arbusto ya corregido no cambia).
+const FACTOR_SPRITE_GRANDE = 0.85;
 
 // --- Cenital RECTO (sin desplazamiento diagonal por fila -- la Caballera
 // se probo y no convencio) + solape: cada celda en su cuadricula normal,
@@ -529,9 +569,34 @@ function celdaAPantalla(wx, wy, elevacion, tam) {
   return { cx: wx * tam, cy: wy * tam };
 }
 
-function renderMapa() {
+// Dos capas dentro de #mapa-contenido: la ESTATICA (suelo -- flora,
+// agua, construcciones, objetos ambientales) se destruye y se recrea
+// entera en cada render, igual que siempre; la de CRIATURAS es
+// persistente entre renders (ver renderCriaturas) para poder animar su
+// movimiento con una transicion CSS en vez de teletransportarlas.
+// Creadas una sola vez, la primera vez que hace falta cualquiera de
+// las dos -- ninguna asume que la otra ya exista.
+let capaEstatica = null, capaCriaturas = null;
+function asegurarCapas() {
   const cont = document.getElementById('mapa-contenido');
-  cont.innerHTML = '';
+  if (!capaEstatica) {
+    capaEstatica = document.createElement('div');
+    capaEstatica.style.position = 'absolute';
+    capaEstatica.style.top = '0'; capaEstatica.style.left = '0';
+    cont.appendChild(capaEstatica);
+  }
+  if (!capaCriaturas) {
+    capaCriaturas = document.createElement('div');
+    capaCriaturas.style.position = 'absolute';
+    capaCriaturas.style.top = '0'; capaCriaturas.style.left = '0';
+    cont.appendChild(capaCriaturas);
+  }
+  return cont;
+}
+
+function renderMapa() {
+  const cont = asegurarCapas();
+  capaEstatica.innerHTML = '';
   cont.style.width = (DATA.ancho * CELDA) + 'px';
   cont.style.height = (DATA.alto * CELDA) + 'px';
   for (let y = 0; y < DATA.alto; y++) {
@@ -541,7 +606,6 @@ function renderMapa() {
       const baseLeft = cx;
       const baseTop = cy;
       const info = contenidoCelda(c);
-      const ent = entidadPorCelda[x+','+y];
       const zi = String(1000 + y);
       // Jitter determinista: la planta no siempre esta en el centro exacto
       // de su celda -- un pequeno desplazamiento (mismo hash de siempre,
@@ -567,8 +631,7 @@ function renderMapa() {
         el.style.left = (baseLeft - (anchoImg-CELDA)/2 + offsetX + jitterX) + 'px';
         el.style.top = (baseTop - (altoImg-CELDA) + jitterY) + 'px';
         el.style.zIndex = zi;
-        if (ent) el.dataset.entId = ent.id;
-        cont.appendChild(el);
+        capaEstatica.appendChild(el);
       }
       if (info.tipo === 'agua') {
         // Textura de suelo: rellena la celda exacta, sin desbordar, sin
@@ -581,7 +644,7 @@ function renderMapa() {
         el.style.left = baseLeft + 'px';
         el.style.top = baseTop + 'px';
         el.style.zIndex = zi;
-        cont.appendChild(el);
+        capaEstatica.appendChild(el);
       } else if (info.tipo === 'sprite') {
         colocarSprite(info.src, 0);
       } else if (info.tipo === 'sprite-doble') {
@@ -605,8 +668,7 @@ function renderMapa() {
         el.style.left = baseLeft + 'px';
         el.style.top = baseTop + 'px';
         el.style.zIndex = zi;
-        if (ent) el.dataset.entId = ent.id;
-        cont.appendChild(el);
+        capaEstatica.appendChild(el);
       }
     }
   }
@@ -624,10 +686,86 @@ function renderMapa() {
     el.style.left = (ov.minX * CELDA) + 'px';
     el.style.top = (ov.minY * CELDA) + 'px';
     el.style.zIndex = String(1000 + ov.minY);
-    cont.appendChild(el);
+    capaEstatica.appendChild(el);
   }
   document.getElementById('titulo-mapa-info').textContent =
     `TICK ${DATA.tick} · DIA ${DATA.dia} · ${DATA.estacion.toUpperCase()} · ${DATA.clima.toUpperCase()}`;
+}
+
+// Criaturas: capa PERSISTENTE (2026-09-13, Diego: "el movimiento...
+// parece que saltan" + "que las criaturas miren hacia donde se van a
+// desplazar"). Un <img> por id de entidad, reutilizado entre renders --
+// solo se cambian left/top/src, nunca se recrea el elemento mientras la
+// entidad siga viva, asi que la transicion CSS de .celda-img anima el
+// desplazamiento real en vez de teletransportar. La direccion se infiere
+// comparando la x anterior conocida de ESE id con la x nueva; sin
+// movimiento horizontal (solo vertical, o primera aparicion) se
+// conserva la ultima orientacion conocida, por defecto mirando a la
+// izquierda (orientacion nativa observada en la mayoria de los sprites
+// de este lote -- PROVISIONAL, sin comprobar especie por especie).
+let elementosCriatura = {};
+function renderCriaturas() {
+  asegurarCapas();
+  const vistos = new Set();
+  for (const ent of DATA.entidades) {
+    const idStr = String(ent.id);
+    vistos.add(idStr);
+    const info = infoCriatura(ent);
+    const { cx, cy } = celdaAPantalla(ent.x, ent.y, 0, CELDA);
+    const previo = elementosCriatura[idStr];
+    let mirarIzquierda = previo ? previo.mirarIzquierda : true;
+    if (previo && ent.x !== previo.x) mirarIzquierda = ent.x < previo.x;
+
+    if (info.tipo === 'sprite') {
+      let el = previo && previo.esImg ? previo.el : null;
+      if (!el) {
+        if (previo) previo.el.remove(); // era un div de fallback ascii, sustituido por sprite real
+        el = document.createElement('img');
+        el.className = 'celda-img';
+        capaCriaturas.appendChild(el);
+      }
+      if (el.src.indexOf(info.src) === -1) el.src = info.src;
+      const lado = CELDA * FACTOR_SPRITE_GRANDE * info.escala;
+      const aspecto = ASPECTO_SPRITE[info.src] || 1;
+      const anchoImg = aspecto >= 1 ? lado : lado * aspecto;
+      const altoImg = aspecto >= 1 ? lado / aspecto : lado;
+      el.style.width = anchoImg + 'px';
+      el.style.height = altoImg + 'px';
+      el.style.left = (cx - (anchoImg-CELDA)/2) + 'px';
+      el.style.top = (cy - (altoImg-CELDA)) + 'px';
+      el.style.zIndex = String(1000 + ent.y);
+      el.style.transform = mirarIzquierda ? 'scaleX(1)' : 'scaleX(-1)';
+      el.dataset.entId = idStr;
+      elementosCriatura[idStr] = { el, x: ent.x, y: ent.y, mirarIzquierda, esImg: true };
+    } else {
+      // fallback ascii (necromasa, u otra especie sin sprite todavia) --
+      // sin animar posicion, no tiene sentido "deslizar" un cadaver.
+      let el = previo && !previo.esImg ? previo.el : null;
+      if (!el) {
+        if (previo) previo.el.remove();
+        el = document.createElement('div');
+        el.className = 'celda-txt';
+        capaCriaturas.appendChild(el);
+      }
+      el.textContent = info.ch;
+      el.style.width = CELDA + 'px'; el.style.height = CELDA + 'px';
+      el.style.fontSize = Math.round(CELDA*info.escala*0.7) + 'px';
+      el.style.color = info.color;
+      if (info.glow) el.style.textShadow = `0 0 6px ${info.color}`;
+      el.style.left = cx + 'px'; el.style.top = cy + 'px';
+      el.style.zIndex = String(1000 + ent.y);
+      el.dataset.entId = idStr;
+      elementosCriatura[idStr] = { el, x: ent.x, y: ent.y, mirarIzquierda, esImg: false };
+    }
+  }
+  // Entidades que ya no existen (murieron, o salieron de la zona
+  // exportada) -- se retira su elemento, no se deja huerfano en el DOM.
+  for (const id of Object.keys(elementosCriatura)) {
+    if (!vistos.has(id)) {
+      elementosCriatura[id].el.remove();
+      delete elementosCriatura[id];
+    }
+  }
 }
 
 // --- zoom (rueda) + pan (arrastre) ---
@@ -667,9 +805,15 @@ function mostrarFicha(ent) {
   html += '</div>';
   cont.innerHTML = html;
 }
+// Entidad seleccionada -- guardado por id (no por referencia al objeto,
+// que en modo vivo se sustituye entero cada segundo) para poder
+// refrescar la ficha sola cuando llega una instantanea nueva, sin que
+// el usuario tenga que volver a hacer clic.
+let entidadSeleccionadaId = null;
 contenido.addEventListener('click', (ev) => {
   const id = ev.target?.dataset?.entId;
   if (!id) return;
+  entidadSeleccionadaId = id;
   const ent = DATA.entidades.find(e => String(e.id) === id);
   mostrarFicha(ent);
 });
@@ -688,10 +832,51 @@ function renderNarrador() {
   cont.innerHTML = DATA.cronica.map(l => `<div class="cronica-linea">${l}</div>`).join('');
 }
 
-renderMapa();
-aplicarTransform();
-renderStats();
-renderNarrador();
+// Modo en vivo (2026-09-13): intenta /estado.json (relativo -- funciona
+// tanto si esto se sirve en la raiz de ManejadorWeb como en cualquier
+// prefijo). Si falla (servido suelto, sin ese endpoint), cae en
+// silencio a la instantanea estatica de datos.js -- no hay ninguna
+// bifurcacion explicita de "modo", solo un fetch que puede fallar o no.
+async function cargarEstadoVivo() {
+  try {
+    const r = await fetch('estado.json', { cache: 'no-store' });
+    if (!r.ok) return false;
+    const nuevo = await r.json();
+    if (!nuevo || !nuevo.celdas) return false;
+    DATA = nuevo;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function iniciar() {
+  await cargarEstadoVivo(); // si funciona, sustituye DATA antes del primer render
+  if (!DATA) return; // ni datos.js ni /estado.json disponibles -- nada que dibujar
+  recalcularDerivados();
+  renderMapa();
+  renderCriaturas();
+  aplicarTransform();
+  renderStats();
+  renderNarrador();
+  // Sondeo continuo. segundos_por_tick real del motor es 0.4 (config/
+  // visual.yaml) -- 1000ms de por si ya sondea mas lento que cada tick
+  // real, evita recalcular componentes conexas de agua en cada uno.
+  setInterval(async () => {
+    const ok = await cargarEstadoVivo();
+    if (!ok) return;
+    recalcularDerivados();
+    renderMapa();
+    renderCriaturas();
+    renderStats();
+    renderNarrador();
+    if (entidadSeleccionadaId != null) {
+      const ent = DATA.entidades.find(e => String(e.id) === entidadSeleccionadaId);
+      mostrarFicha(ent || null);
+    }
+  }, 1000);
+}
+iniciar();
 </script>
 </body>
 </html>
