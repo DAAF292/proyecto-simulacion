@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vallis Runica -- Terminal</title>
+<style>
+  :root {
+    --ambar: #ffb000;
+    --ambar-tenue: #8a5a10;
+    --ambar-fuerte: #ffd27a;
+    --fondo: #0a0500;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: #000;
+    font-family: "Courier New", ui-monospace, monospace;
+    color: var(--ambar);
+    height: 100%;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 3fr 1.1fr;
+    grid-template-rows: 1fr;
+    gap: 10px;
+    height: 100vh;
+    padding: 10px;
+  }
+  .col-derecha {
+    display: grid;
+    grid-template-rows: 1.3fr 1fr 0.8fr 0.9fr;
+    gap: 10px;
+    min-height: 0;
+  }
+  .terminal {
+    position: relative;
+    background: var(--fondo);
+    border: 2px solid var(--ambar-tenue);
+    border-radius: 4px;
+    box-shadow: 0 0 12px rgba(255,176,0,0.15) inset, 0 0 8px rgba(255,176,0,0.08);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .titulo {
+    flex: 0 0 auto;
+    font-size: 12px;
+    letter-spacing: 2px;
+    padding: 4px 10px;
+    background: linear-gradient(180deg, rgba(255,176,0,0.18), rgba(255,176,0,0.02));
+    border-bottom: 1px solid var(--ambar-tenue);
+    color: var(--ambar);
+    text-shadow: 0 0 6px rgba(255,176,0,0.8);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .cuerpo {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.15;
+  }
+  .crt-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0px, rgba(0,0,0,0.18) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.45) 100%);
+    mix-blend-mode: multiply;
+  }
+  #mapa-viewport {
+    flex: 1 1 auto; position: relative; overflow: hidden; cursor: grab;
+    background: #000;
+  }
+  #mapa-viewport.arrastrando { cursor: grabbing; }
+  #mapa-contenido { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  .celda-txt {
+    position: absolute; display: flex; align-items: center; justify-content: center;
+    font-weight: bold;
+  }
+  .celda-img {
+    position: absolute; image-rendering: pixelated;
+    /* Contorno artificial: los sprites del pack no traen borde propio --
+       sin esto, dos copas de arbol vecinas se funden en una sola mancha
+       de color al solaparse. drop-shadow sigue la silueta alfa real
+       (no un rectangulo), asi que el contorno respeta la forma. */
+    filter:
+      drop-shadow(1px 0 0 #0a1a0a) drop-shadow(-1px 0 0 #0a1a0a)
+      drop-shadow(0 1px 0 #0a1a0a) drop-shadow(0 -1px 0 #0a1a0a);
+  }
+  .celda-img-tile {
+    /* Agua: textura de suelo que rellena la celda exacta, sin desbordar
+       ni recibir el contorno de silueta (romperia la continuidad de un
+       tile pensado para repetirse borde con borde). */
+    position: absolute; image-rendering: pixelated;
+  }
+  .zoom-info { font-size: 11px; color: var(--ambar-tenue); }
+
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-bottom: 6px;}
+  .kv div.k { color: var(--ambar-tenue); }
+  .kv div.v { color: var(--ambar-fuerte); text-align: right; }
+  .cronica-linea { padding: 2px 0; border-bottom: 1px dashed rgba(255,176,0,0.15); }
+  .cronica-linea:last-child { border-bottom: none; }
+  .cmd-input {
+    background: #000; border: 1px solid var(--ambar-tenue); color: var(--ambar);
+    font-family: inherit; font-size: 13px; width: 100%; padding: 4px 6px;
+    outline: none;
+  }
+  .parpadeo { animation: parp 1s steps(1) infinite; }
+  @keyframes parp { 50% { opacity: 0; } }
+  .placeholder { color: var(--ambar-tenue); font-style: italic; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--ambar-tenue); }
+  ::-webkit-scrollbar-track { background: #000; }
+</style>
+</head>
+<body>
+<div class="crt-overlay"></div>
+<div class="layout">
+  <div class="terminal" id="term-mapa">
+    <div class="titulo">
+      <span>MAPA://SUPERFICIE &mdash; <span id="titulo-mapa-info"></span></span>
+      <span class="zoom-info" id="zoom-info"></span>
+    </div>
+    <div id="mapa-viewport">
+      <div id="mapa-contenido"></div>
+    </div>
+  </div>
+  <div class="col-derecha">
+    <div class="terminal">
+      <div class="titulo">FICHA://ENTIDAD</div>
+      <div class="cuerpo" id="ficha"><div class="placeholder">-- selecciona una entidad en el mapa --</div></div>
+    </div>
+    <div class="terminal">
+      <div class="titulo">NARRADOR://CRONICA <span class="parpadeo">_</span></div>
+      <div class="cuerpo" id="narrador"></div>
+    </div>
+    <div class="terminal">
+      <div class="titulo">STATS://MUNDO</div>
+      <div class="cuerpo" id="stats"></div>
+    </div>
+    <div class="terminal">
+      <div class="titulo">EVENTOS://LOG (filtro)</div>
+      <div class="cuerpo" id="eventos">
+        <input class="cmd-input" placeholder="filtrar por especie/causa..." style="margin-bottom:6px;">
+        <div class="placeholder">-- catalogo de eventos, pendiente de circulo siguiente --</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="datos.js"></script>
+<script>
+const DATA = window.__DATOS__;
+const CELDA = 28; // px base por celda, antes de aplicar zoom
+
+const SIMBOLO_BIOMA = {
+  pradera:  { s: '.', color: '#c99a3a' },
+  bosque:   { s: '"', color: '#6b4a1a' },
+  desierto: { s: ':', color: '#d9a340' },
+  tundra:   { s: '.', color: '#9a7a4a' },
+  montana:  { s: '^', color: '#8a6a3a' },
+};
+const COLOR_AGUA = '#3a7a9a';
+// Fallback ASCII, solo si por lo que sea la especie no tiene sprite en
+// SPRITES_CRIATURA (hoy las 7 especies + necromasa lo tienen, esto ya no
+// deberia dispararse en juego normal -- se conserva como red de seguridad).
+const SIMBOLO_ENTIDAD = {
+  gnomo:         { s: '@', color: '#ffe9c2' },
+  lobo:          { s: 'w', color: '#ff5533' },
+  conejo:        { s: 'r', color: '#d9c9a0' },
+  ardilla:       { s: 's', color: '#e8952e' },
+  caballo:       { s: 'H', color: '#c9a06a' },
+  venado:        { s: 'd', color: '#a3703f' },
+  cabra_montesa: { s: 'c', color: '#b59a6a' },
+  necromasa:     { s: '%', color: '#5a4a3a' },
+};
+// Sprites reales del pack recortado/clasificado por Diego (2026-09-13),
+// una especie por celda de flora, mismo pool que ya vive en
+// presentacion/assets/flora/ del motor real -- ninguna especie del
+// catalogo de config/flora.yaml queda ya sin sprite propio.
+const SPRITES_FLORA = {
+  manzano: ['sprites/manzano_1.png','sprites/manzano_2.png'],
+  roble: ['sprites/roble_1.png','sprites/roble_2.png'],
+  helecho: ['sprites/helecho_1.png','sprites/helecho_2.png','sprites/helecho_3.png','sprites/helecho_4.png','sprites/helecho_5.png','sprites/helecho_6.png'],
+  hierba_silvestre: ['sprites/hierba_silvestre_1.png','sprites/hierba_silvestre_2.png','sprites/hierba_silvestre_3.png'],
+  pino: ['sprites/pino_1.png','sprites/pino_2.png','sprites/pino_3.png','sprites/pino_4.png','sprites/pino_5.png','sprites/pino_6.png'],
+  arbusto_montano: ['sprites/arbusto_montano_1.png','sprites/arbusto_montano_2.png','sprites/arbusto_montano_3.png','sprites/arbusto_montano_4.png'],
+  arbusto_artico: ['sprites/arbusto_artico_1.png','sprites/arbusto_artico_2.png','sprites/arbusto_artico_3.png','sprites/arbusto_artico_4.png','sprites/arbusto_artico_5.png'],
+  arbusto_desertico: ['sprites/arbusto_desertico_1.png','sprites/arbusto_desertico_2.png','sprites/arbusto_desertico_3.png','sprites/arbusto_desertico_4.png','sprites/arbusto_desertico_5.png'],
+  arbusto_espinoso: ['sprites/arbusto_espinoso_1.png','sprites/arbusto_espinoso_2.png','sprites/arbusto_espinoso_3.png','sprites/arbusto_espinoso_4.png','sprites/arbusto_espinoso_5.png'],
+  cactus: ['sprites/cactus_1.png','sprites/cactus_2.png','sprites/cactus_3.png','sprites/cactus_4.png'],
+  flor_silvestre: ['sprites/flor_silvestre_1.png','sprites/flor_silvestre_2.png','sprites/flor_silvestre_3.png','sprites/flor_silvestre_4.png','sprites/flor_silvestre_5.png'],
+  hierba_desertica: ['sprites/hierba_desertica_1.png','sprites/hierba_desertica_2.png','sprites/hierba_desertica_3.png','sprites/hierba_desertica_4.png'],
+  hierba_artica: ['sprites/hierba_artica_1.png','sprites/hierba_artica_2.png','sprites/hierba_artica_3.png'],
+  liquen: ['sprites/liquen_1.png','sprites/liquen_2.png'],
+  musgo: ['sprites/musgo_1.png','sprites/musgo_2.png'],
+};
+// Sprites de GRUPO (2+ arboles ya agrupados en el propio sprite) -- se usan
+// cuando la celda tiene mas de una planta (cupo de espacio compartido, dato
+// real del motor: cobertura + competidora coexistiendo), no un adorno
+// inventado. Especies sin variante de grupo dedicada caen al individual.
+const SPRITES_FLORA_GRUPO = {
+  manzano: ['sprites/manzano_grupo_1.png'],
+};
+// Especies que compiten por espacio fisico real (config/flora.yaml,
+// compite_espacio_fisico: true) -- son las que preferimos representar
+// cuando una celda tiene mas de una planta a la vez (cupo compartido).
+const ESPECIES_COMPETIDORAS_SET = new Set([
+  'manzano','roble','cactus','arbusto_espinoso','arbusto_desertico',
+  'pino','arbusto_montano','arbusto_artico',
+]);
+// Tamano relativo real entre tipos de planta -- un arbol debe dominar
+// sobre la hierba, no medir lo mismo en pantalla solo porque ambos son
+// "una planta". Multiplicador aparte de la escala por etapa de crecimiento.
+const FACTOR_TAMANO_ESPECIE = {
+  manzano: 1.5, roble: 1.5, pino: 1.7,
+  helecho: 0.85, hierba_silvestre: 0.5,
+  arbusto_montano: 1.0, arbusto_artico: 1.0, arbusto_desertico: 1.0, arbusto_espinoso: 1.0,
+  cactus: 1.3,
+  flor_silvestre: 0.5, hierba_desertica: 0.5, hierba_artica: 0.5,
+  liquen: 0.4, musgo: 0.4,
+};
+// Sprites reales de criatura (2026-09-13, mismo pool que
+// presentacion/assets/criaturas/ del motor real) -- una imagen de perfil
+// por especie (mas una variante extra de gnomo), sin ciclo de poses
+// todavia (eso exigiria mas de un frame por especie, que el pack no trae).
+const SPRITES_CRIATURA = {
+  gnomo: ['sprites/criaturas/gnomo_1.png','sprites/criaturas/gnomo_2.png'],
+  lobo: ['sprites/criaturas/lobo_1.png'],
+  conejo: ['sprites/criaturas/conejo_1.png'],
+  ardilla: ['sprites/criaturas/ardilla_1.png'],
+  caballo: ['sprites/criaturas/caballo_1.png'],
+  venado: ['sprites/criaturas/venado_1.png'],
+  cabra_montesa: ['sprites/criaturas/cabra_montesa_1.png'],
+};
+// Agua: mismo pool pixel que presentacion/assets/agua/ (lago = cuerpos de
+// agua permanentes, poza = charcos efimeros/pozas pequenas).
+const SPRITES_AGUA = {
+  lago: ['sprites/agua/lago_1.png','sprites/agua/lago_2.png','sprites/agua/lago_3.png','sprites/agua/lago_4.png','sprites/agua/lago_5.png','sprites/agua/lago_6.png','sprites/agua/lago_7.png','sprites/agua/lago_8.png','sprites/agua/lago_9.png','sprites/agua/lago_10.png','sprites/agua/lago_11.png','sprites/agua/lago_12.png'],
+  poza: ['sprites/agua/poza_1.png','sprites/agua/poza_2.png','sprites/agua/poza_3.png','sprites/agua/poza_4.png','sprites/agua/poza_5.png','sprites/agua/poza_6.png'],
+};
+// Aspecto real (ancho/alto) de cada fichero de sprite -- necesario para no
+// deformar criaturas/pinos/cactus (nada de esto es cuadrado de verdad) al
+// dibujarlos. Generado una vez desde los ficheros reales (2026-09-13), no
+// a mano.
+const ASPECTO_SPRITE = {"sprites/arbusto_artico_1.png":1.0769,"sprites/arbusto_artico_2.png":1.0769,"sprites/arbusto_artico_3.png":1.0769,"sprites/arbusto_artico_4.png":1.0833,"sprites/arbusto_artico_5.png":1.0769,"sprites/arbusto_desertico_1.png":1.0769,"sprites/arbusto_desertico_2.png":1.0769,"sprites/arbusto_desertico_3.png":1.0769,"sprites/arbusto_desertico_4.png":1.0833,"sprites/arbusto_desertico_5.png":1.0769,"sprites/arbusto_espinoso_1.png":1.1,"sprites/arbusto_espinoso_2.png":1.0769,"sprites/arbusto_espinoso_3.png":1.0833,"sprites/arbusto_espinoso_4.png":1.0769,"sprites/arbusto_espinoso_5.png":1.0769,"sprites/arbusto_montano_1.png":1.0769,"sprites/arbusto_montano_2.png":1.0769,"sprites/arbusto_montano_3.png":1.0769,"sprites/arbusto_montano_4.png":1.0769,"sprites/cactus_1.png":0.6,"sprites/cactus_2.png":1.1429,"sprites/cactus_3.png":1.0909,"sprites/cactus_4.png":0.625,"sprites/flor_silvestre_1.png":1.0,"sprites/flor_silvestre_2.png":0.9286,"sprites/flor_silvestre_3.png":0.8667,"sprites/flor_silvestre_4.png":1.0,"sprites/flor_silvestre_5.png":1.0,"sprites/helecho_1.png":1.1429,"sprites/helecho_2.png":1.1429,"sprites/helecho_3.png":1.4,"sprites/helecho_4.png":1.4,"sprites/helecho_5.png":1.4,"sprites/helecho_6.png":1.4,"sprites/hierba_artica_1.png":0.8571,"sprites/hierba_artica_2.png":1.0,"sprites/hierba_artica_3.png":1.0,"sprites/hierba_desertica_1.png":1.0,"sprites/hierba_desertica_2.png":1.0,"sprites/hierba_desertica_3.png":0.8571,"sprites/hierba_desertica_4.png":0.9286,"sprites/hierba_silvestre_1.png":1.0,"sprites/hierba_silvestre_2.png":1.0714,"sprites/hierba_silvestre_3.png":1.1429,"sprites/liquen_1.png":1.0769,"sprites/liquen_2.png":1.0769,"sprites/manzano_1.png":0.9286,"sprites/manzano_2.png":0.7857,"sprites/manzano_grupo_1.png":1.0,"sprites/musgo_1.png":1.0769,"sprites/musgo_2.png":1.0769,"sprites/pino_1.png":0.4,"sprites/pino_2.png":0.4,"sprites/pino_3.png":0.4,"sprites/pino_4.png":0.5714,"sprites/pino_5.png":0.5714,"sprites/pino_6.png":0.5714,"sprites/roble_1.png":0.7857,"sprites/roble_2.png":0.9286,"sprites/criaturas/ardilla_1.png":1.1077,"sprites/criaturas/caballo_1.png":1.2423,"sprites/criaturas/cabra_montesa_1.png":0.8308,"sprites/criaturas/conejo_1.png":0.9769,"sprites/criaturas/gnomo_1.png":0.6923,"sprites/criaturas/gnomo_2.png":0.6654,"sprites/criaturas/lobo_1.png":1.4077,"sprites/criaturas/venado_1.png":0.8308,"sprites/agua/lago_1.png":1.2308,"sprites/agua/lago_10.png":1.0667,"sprites/agua/lago_11.png":1.0667,"sprites/agua/lago_12.png":1.2308,"sprites/agua/lago_2.png":1.2308,"sprites/agua/lago_3.png":1.2308,"sprites/agua/lago_4.png":1.0,"sprites/agua/lago_5.png":1.2308,"sprites/agua/lago_6.png":1.2308,"sprites/agua/lago_7.png":1.3333,"sprites/agua/lago_8.png":1.0,"sprites/agua/lago_9.png":1.0,"sprites/agua/poza_1.png":0.9375,"sprites/agua/poza_2.png":0.9375,"sprites/agua/poza_3.png":1.3333,"sprites/agua/poza_4.png":1.3333,"sprites/agua/poza_5.png":1.1429,"sprites/agua/poza_6.png":0.875};
+
+function hashDet(x,y,sal) {
+  let h = (x*374761393 + y*668265263 + sal*2654435761) >>> 0;
+  h = (h ^ (h>>>13)) >>> 0; h = Math.imul(h, 1274126177) >>> 0; h = (h ^ (h>>>16)) >>> 0;
+  return h / 4294967296;
+}
+
+let entidadPorCelda = {};
+for (const e of DATA.entidades) entidadPorCelda[e.x + ',' + e.y] = e;
+
+function contenidoCelda(c) {
+  // devuelve {tipo:'sprite'|'agua'|'txt', src/ch, color, escala}
+  const ent = entidadPorCelda[c.x + ',' + c.y];
+  if (ent) {
+    const pool = SPRITES_CRIATURA[ent.tipo];
+    // Escala por PESO REAL contra una referencia -- mismo criterio que
+    // ya usaba el Codice Cartografico (escalaPorPeso) para que un caballo
+    // no mida lo mismo en pantalla que un raton. Raiz cuadrada para que
+    // el rango no se dispare (masa ~ volumen, area de pantalla ~ raiz).
+    const peso = ent.dimensiones ? ent.dimensiones.peso : null;
+    const escala = peso ? Math.max(0.55, Math.min(1.8, Math.sqrt(peso / 90))) : 1.0;
+    if (pool) {
+      // variante determinista por individuo (hoy solo gnomo tiene 2) --
+      // no por celda, cada entidad conserva su propia variante entre ticks.
+      const idx = Math.floor(hashDet(ent.id, 0, 73) * pool.length);
+      return { tipo: 'sprite', src: pool[idx], escala: escala * 1.1 };
+    }
+    // fallback ASCII -- especie sin sprite (hoy solo necromasa cae aqui).
+    const s = SIMBOLO_ENTIDAD[ent.tipo] || { s: '?', color: '#fff' };
+    return { tipo: 'txt', ch: s.s, color: s.color, glow: true, escala };
+  }
+  if (c.tiene_agua) {
+    const pool = SPRITES_AGUA[c.tipo_agua] || SPRITES_AGUA.lago;
+    const idx = Math.floor(hashDet(c.x, c.y, 29) * pool.length);
+    return { tipo: 'agua', src: pool[idx] };
+  }
+  if (c.plantas && c.plantas.length > 0) {
+    // dato real del motor (cupo de espacio compartido, 2026-09-03): mas de
+    // una planta en la celda -- preferimos representar eso con un sprite
+    // de grupo ya denso en vez de repetir el mismo arbol individual.
+    const competidora = c.plantas.find(p => ESPECIES_COMPETIDORAS_SET.has(p.especie)) || c.plantas[0];
+    const especie = competidora.especie;
+    // Escala por ETAPA DE CRECIMIENTO real (Planta.etapa, 0=brote..1=madura)
+    // -- un brote se ve pequeno, una planta madura llena mas su celda.
+    const escalaEtapa = (0.55 + Math.min(1, competidora.etapa || 1) * 0.75) * (FACTOR_TAMANO_ESPECIE[especie] || 1.0);
+    const pool = SPRITES_FLORA[especie];
+    if (pool) {
+      const idx = Math.floor(hashDet(c.x, c.y, 17) * pool.length);
+      if (c.plantas.length > 1) {
+        // celda con mas de una planta (dato real, cupo compartido) --
+        // en vez de un sprite de grupo aparte (que traia su propia
+        // paleta, no siempre coherente con la elegida aqui), dibujamos
+        // el MISMO pool dos veces con un segundo indice distinto y un
+        // pequeno offset, heredando automaticamente el color correcto.
+        const idx2 = Math.floor(hashDet(c.x, c.y, 41) * pool.length);
+        return { tipo: 'sprite-doble', srcs: [pool[idx], pool[idx2]], escala: escalaEtapa };
+      }
+      return { tipo: 'sprite', src: pool[idx], escala: escalaEtapa };
+    }
+    // especie sin sprite todavia -> fallback ascii generico
+    return { tipo: 'txt', ch: "'", color: '#7a5a2a', escala: 1.0 };
+  }
+  let simb = SIMBOLO_BIOMA[c.bioma] || { s: '?', color: '#666' };
+  let color = simb.color, ch = simb.s;
+  if (c.bioma === 'montana') {
+    const t = Math.min(1, c.elevacion);
+    color = `rgb(${Math.round(90+t*130)},${Math.round(70+t*110)},${Math.round(40+t*70)})`;
+    ch = c.elevacion > 0.5 ? '^' : '.';
+  }
+  return { tipo: 'txt', ch, color, escala: 1.0 };
+}
+
+const FACTOR_SPRITE_GRANDE = 1.4; // cuanto se desborda un sprite de flora sobre su celda
+
+// --- Cenital RECTO (sin desplazamiento diagonal por fila -- la Caballera
+// se probo y no convencio) + solape: cada celda en su cuadricula normal,
+// pero los sprites se dibujan mas grandes que su celda y anclados por la
+// base, con Y-sort, para la sensacion de "viveza" que si funcionaba.
+function celdaAPantalla(wx, wy, elevacion, tam) {
+  return { cx: wx * tam, cy: wy * tam };
+}
+
+function renderMapa() {
+  const cont = document.getElementById('mapa-contenido');
+  cont.innerHTML = '';
+  cont.style.width = (DATA.ancho * CELDA) + 'px';
+  cont.style.height = (DATA.alto * CELDA) + 'px';
+  for (let y = 0; y < DATA.alto; y++) {
+    for (let x = 0; x < DATA.ancho; x++) {
+      const c = DATA.celdas[y][x];
+      const { cx, cy } = celdaAPantalla(x, y, c.elevacion, CELDA);
+      const baseLeft = cx;
+      const baseTop = cy;
+      const info = contenidoCelda(c);
+      const ent = entidadPorCelda[x+','+y];
+      const zi = String(1000 + y);
+      // Jitter determinista: la planta no siempre esta en el centro exacto
+      // de su celda -- un pequeno desplazamiento (mismo hash de siempre,
+      // reproducible, no aleatorio en cada carga) rompe la sensacion de
+      // "todo alineado a rejilla" sin perder la correspondencia real con
+      // los datos (sigue siendo ESA celda, solo no pixel-perfect centrada).
+      const jitterX = (hashDet(x, y, 53) - 0.5) * CELDA * 0.7;
+      const jitterY = (hashDet(x, y, 61) - 0.5) * CELDA * 0.35;
+      function colocarSprite(src, offsetX) {
+        const el = document.createElement('img');
+        el.className = 'celda-img';
+        el.src = src;
+        // Lado de referencia (el mayor de los dos ejes) segun escala real;
+        // el aspecto real del fichero decide como se reparte entre ancho y
+        // alto -- sin esto, una criatura o un pino (nada cuadrado de
+        // verdad) se deforma al forzarlo a una caja cuadrada.
+        const lado = CELDA * FACTOR_SPRITE_GRANDE * info.escala;
+        const aspecto = ASPECTO_SPRITE[src] || 1;
+        const anchoImg = aspecto >= 1 ? lado : lado * aspecto;
+        const altoImg = aspecto >= 1 ? lado / aspecto : lado;
+        el.style.width = anchoImg + 'px';
+        el.style.height = altoImg + 'px';
+        el.style.left = (baseLeft - (anchoImg-CELDA)/2 + offsetX + jitterX) + 'px';
+        el.style.top = (baseTop - (altoImg-CELDA) + jitterY) + 'px';
+        el.style.zIndex = zi;
+        if (ent) el.dataset.entId = ent.id;
+        cont.appendChild(el);
+      }
+      if (info.tipo === 'agua') {
+        // Textura de suelo: rellena la celda exacta, sin desbordar, sin
+        // jitter ni contorno -- es agua continua, no un objeto aislado.
+        const el = document.createElement('img');
+        el.className = 'celda-img-tile';
+        el.src = info.src;
+        el.style.width = CELDA + 'px';
+        el.style.height = CELDA + 'px';
+        el.style.left = baseLeft + 'px';
+        el.style.top = baseTop + 'px';
+        el.style.zIndex = zi;
+        cont.appendChild(el);
+      } else if (info.tipo === 'sprite') {
+        colocarSprite(info.src, 0);
+      } else if (info.tipo === 'sprite-doble') {
+        // dos sprites del mismo pool, ligeramente separados -- da sensacion
+        // de mas de un individuo sin depender de un sprite de grupo aparte.
+        colocarSprite(info.srcs[0], -CELDA*0.28);
+        colocarSprite(info.srcs[1], CELDA*0.28);
+      } else {
+        const el = document.createElement('div');
+        el.className = 'celda-txt';
+        el.textContent = info.ch;
+        const tam = CELDA * info.escala;
+        el.style.width = CELDA + 'px';
+        el.style.height = CELDA + 'px';
+        el.style.fontSize = Math.round(tam*0.7) + 'px';
+        el.style.color = info.color;
+        if (info.glow) el.style.textShadow = `0 0 6px ${info.color}`;
+        el.style.left = baseLeft + 'px';
+        el.style.top = baseTop + 'px';
+        el.style.zIndex = zi;
+        if (ent) el.dataset.entId = ent.id;
+        cont.appendChild(el);
+      }
+    }
+  }
+  document.getElementById('titulo-mapa-info').textContent =
+    `TICK ${DATA.tick} · DIA ${DATA.dia} · ${DATA.estacion.toUpperCase()} · ${DATA.clima.toUpperCase()}`;
+}
+
+// --- zoom (rueda) + pan (arrastre) ---
+let zoom = 1, panX = -CELDA*7, panY = -CELDA*3;
+const viewport = document.getElementById('mapa-viewport');
+const contenido = document.getElementById('mapa-contenido');
+function aplicarTransform() {
+  contenido.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  document.getElementById('zoom-info').textContent = `ZOOM ${zoom.toFixed(2)}x`;
+}
+viewport.addEventListener('wheel', (ev) => {
+  ev.preventDefault();
+  const factor = ev.deltaY < 0 ? 1.12 : 1/1.12;
+  zoom = Math.min(6, Math.max(0.4, zoom * factor));
+  aplicarTransform();
+}, { passive: false });
+let arrastrando = false, ax=0, ay=0;
+viewport.addEventListener('mousedown', (ev) => { arrastrando = true; ax=ev.clientX; ay=ev.clientY; viewport.classList.add('arrastrando'); });
+window.addEventListener('mouseup', () => { arrastrando = false; viewport.classList.remove('arrastrando'); });
+window.addEventListener('mousemove', (ev) => {
+  if (!arrastrando) return;
+  panX += (ev.clientX - ax); panY += (ev.clientY - ay);
+  ax = ev.clientX; ay = ev.clientY;
+  aplicarTransform();
+});
+
+function mostrarFicha(ent) {
+  const cont = document.getElementById('ficha');
+  if (!ent) { cont.innerHTML = '<div class="placeholder">-- selecciona una entidad en el mapa --</div>'; return; }
+  let html = `<div style="color:#ffe9c2;font-size:14px;margin-bottom:6px;">${ent.nombre || ent.tipo} <span style="color:#8a5a10">[${ent.tipo}]</span></div>`;
+  html += '<div class="kv">';
+  html += `<div class="k">POS</div><div class="v">${ent.x},${ent.y}</div>`;
+  html += `<div class="k">EDAD</div><div class="v">${ent.edad_anios}a</div>`;
+  if (ent.sexo) html += `<div class="k">SEXO</div><div class="v">${ent.sexo}</div>`;
+  if (ent.accion) html += `<div class="k">ACCION</div><div class="v">${ent.accion}</div>`;
+  if (ent.necesidades) for (const [k,v] of Object.entries(ent.necesidades)) html += `<div class="k">${k}</div><div class="v">${(v*100).toFixed(0)}%</div>`;
+  html += '</div>';
+  cont.innerHTML = html;
+}
+contenido.addEventListener('click', (ev) => {
+  const id = ev.target?.dataset?.entId;
+  if (!id) return;
+  const ent = DATA.entidades.find(e => String(e.id) === id);
+  mostrarFicha(ent);
+});
+
+function renderStats() {
+  const cont = document.getElementById('stats');
+  let html = '<div class="kv">';
+  for (const [esp, n] of Object.entries(DATA.censo)) html += `<div class="k">${esp.toUpperCase()}</div><div class="v">${n}</div>`;
+  html += `<div class="k">SEMILLA</div><div class="v">${DATA.semilla}</div>`;
+  html += '</div>';
+  cont.innerHTML = html;
+}
+function renderNarrador() {
+  const cont = document.getElementById('narrador');
+  if (!DATA.cronica || DATA.cronica.length === 0) { cont.innerHTML = '<div class="placeholder">-- sin eventos recientes --</div>'; return; }
+  cont.innerHTML = DATA.cronica.map(l => `<div class="cronica-linea">${l}</div>`).join('');
+}
+
+renderMapa();
+aplicarTransform();
+renderStats();
+renderNarrador();
+</script>
+</body>
+</html>
