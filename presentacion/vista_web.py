@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from componentes.capacidad_mental import CapacidadMental
+from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
 from componentes.intencion import Intencion
@@ -3268,6 +3269,32 @@ def construir_instantanea(
                 }
             )
 
+    # 2.5 Construcciones (refugio/almacen/salon_comun/cocina) -- entidad
+    # física real desde 2026-08-30 (componentes/construccion.py), nunca
+    # expuesta hasta ahora en este DTO: el visor antiguo (Códice
+    # Cartográfico) no llegó a dibujar ninguna construcción en ningún
+    # momento de su historia (verificado, cero referencias a "refugio"/
+    # "almacen" en este fichero antes de esta línea). "completado_alguna_vez"
+    # es lo que decide si ya existe una estructura reconocible que dibujar
+    # (mismo criterio que SistemaAsentamiento usa para pertenencia, ver
+    # CLAUDE.md "Corrección de diseño... completado_alguna_vez") -- una
+    # construcción a medio empezar (progreso<1.0, nunca completada) no
+    # tiene nada que mostrar todavía.
+    construcciones_data: list[dict[str, Any]] = []
+    for cid in sorted(gestor.entidades_con(Construccion, Posicion)):
+        constr = gestor.obtener_componente(cid, Construccion)
+        pos_c = gestor.obtener_componente(cid, Posicion)
+        if constr and pos_c and pos_c.zona_idx == 0 and constr.completado_alguna_vez:
+            construcciones_data.append(
+                {
+                    "id": cid,
+                    "tipo": constr.tipo,
+                    "x": pos_c.x,
+                    "y": pos_c.y,
+                    "progreso": round(constr.progreso, 3),
+                }
+            )
+
     # 3. Grid de celdas -- solo campos que ya existen en nucleo/celda.py.
     celdas_data: list[list[dict[str, Any]]] = []
     for y in range(zona.alto):
@@ -3322,6 +3349,7 @@ def construir_instantanea(
         "alto": zona.alto,
         "censo": censo,
         "entidades": lista_entidades,
+        "construcciones": construcciones_data,
         "celdas": celdas_data,
         "cronica": cronica,
     }

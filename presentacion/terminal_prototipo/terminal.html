@@ -173,26 +173,40 @@ const SIMBOLO_ENTIDAD = {
   cabra_montesa: { s: 'c', color: '#b59a6a' },
   necromasa:     { s: '%', color: '#5a4a3a' },
 };
-// Sprites reales del pack recortado/clasificado por Diego (2026-09-13),
-// una especie por celda de flora, mismo pool que ya vive en
-// presentacion/assets/flora/ del motor real -- ninguna especie del
-// catalogo de config/flora.yaml queda ya sin sprite propio.
+// (CORREGIDO 2026-09-13, mismo dia -- Diego: "quiero que solo uses los
+// nuevos") Primera version de este lote dejaba conviviendo el pack viejo
+// (pixel art retro, "recortado/clasificado por Diego" el mismo dia) con
+// el nuevo de inspiracion/ dentro del mismo pool -- mezcla de estilo no
+// deseada. Cada especie con material real en inspiracion/ usa AHORA SOLO
+// sus sprites nuevos (los viejos de esa especie se borraron del disco,
+// ver git log). Las 5 especies sin material propio en inspiracion/
+// (arbusto_montano, arbusto_artico, hierba_artica, liquen, musgo) se
+// resolvieron aparte, ver el comentario junto a esas 5 entradas mas
+// abajo -- ninguna especie del catalogo usa ya el pack retro viejo.
 const SPRITES_FLORA = {
-  manzano: ['sprites/manzano_1.png','sprites/manzano_2.png'],
-  roble: ['sprites/roble_1.png','sprites/roble_2.png'],
-  helecho: ['sprites/helecho_1.png','sprites/helecho_2.png','sprites/helecho_3.png','sprites/helecho_4.png','sprites/helecho_5.png','sprites/helecho_6.png'],
-  hierba_silvestre: ['sprites/hierba_silvestre_1.png','sprites/hierba_silvestre_2.png','sprites/hierba_silvestre_3.png'],
-  pino: ['sprites/pino_1.png','sprites/pino_2.png','sprites/pino_3.png','sprites/pino_4.png','sprites/pino_5.png','sprites/pino_6.png'],
-  arbusto_montano: ['sprites/arbusto_montano_1.png','sprites/arbusto_montano_2.png','sprites/arbusto_montano_3.png','sprites/arbusto_montano_4.png'],
-  arbusto_artico: ['sprites/arbusto_artico_1.png','sprites/arbusto_artico_2.png','sprites/arbusto_artico_3.png','sprites/arbusto_artico_4.png','sprites/arbusto_artico_5.png'],
-  arbusto_desertico: ['sprites/arbusto_desertico_1.png','sprites/arbusto_desertico_2.png','sprites/arbusto_desertico_3.png','sprites/arbusto_desertico_4.png','sprites/arbusto_desertico_5.png'],
-  arbusto_espinoso: ['sprites/arbusto_espinoso_1.png','sprites/arbusto_espinoso_2.png','sprites/arbusto_espinoso_3.png','sprites/arbusto_espinoso_4.png','sprites/arbusto_espinoso_5.png'],
-  cactus: ['sprites/cactus_1.png','sprites/cactus_2.png','sprites/cactus_3.png','sprites/cactus_4.png'],
-  flor_silvestre: ['sprites/flor_silvestre_1.png','sprites/flor_silvestre_2.png','sprites/flor_silvestre_3.png','sprites/flor_silvestre_4.png','sprites/flor_silvestre_5.png'],
-  hierba_desertica: ['sprites/hierba_desertica_1.png','sprites/hierba_desertica_2.png','sprites/hierba_desertica_3.png','sprites/hierba_desertica_4.png'],
-  hierba_artica: ['sprites/hierba_artica_1.png','sprites/hierba_artica_2.png','sprites/hierba_artica_3.png'],
-  liquen: ['sprites/liquen_1.png','sprites/liquen_2.png'],
-  musgo: ['sprites/musgo_1.png','sprites/musgo_2.png'],
+  manzano: ['sprites/manzano_3.png','sprites/manzano_4.png'],
+  roble: ['sprites/roble_3.png'],
+  helecho: ['sprites/helecho_7.png','sprites/helecho_8.png'],
+  hierba_silvestre: ['sprites/hierba_silvestre_4.png','sprites/hierba_silvestre_5.png','sprites/hierba_silvestre_6.png','sprites/hierba_silvestre_7.png','sprites/hierba_silvestre_8.png'],
+  pino: ['sprites/pino_7.png'],
+  // arbusto_montano/arbusto_artico/hierba_artica/liquen/musgo (2026-09-13,
+  // segunda pasada -- Diego: "usa las hierbas que existen, adaptala a los
+  // colores... para cada tipo"): inspiracion/ no traia material propio
+  // para estas 5, asi que se derivaron RETINENDO una forma ya nueva
+  // (mascara solo sobre el verde, ramas/bayas/contorno intactos -- ver
+  // presentacion/arnes/adaptar_especies_faltantes.py) en vez de dejarlas
+  // con el pack retro viejo. arbusto_montano parte de un arbusto de bayas
+  // real a proposito: la especie produce "bayas_montanas" en el catalogo.
+  arbusto_montano: ['sprites/arbusto_montano_5.png'],
+  arbusto_artico: ['sprites/arbusto_artico_6.png'],
+  arbusto_desertico: ['sprites/arbusto_desertico_6.png'],
+  arbusto_espinoso: ['sprites/arbusto_espinoso_6.png','sprites/arbusto_espinoso_7.png','sprites/arbusto_espinoso_8.png'],
+  cactus: ['sprites/cactus_5.png','sprites/cactus_6.png','sprites/cactus_7.png'],
+  flor_silvestre: ['sprites/flor_silvestre_6.png','sprites/flor_silvestre_7.png','sprites/flor_silvestre_8.png','sprites/flor_silvestre_9.png','sprites/flor_silvestre_10.png'],
+  hierba_desertica: ['sprites/hierba_desertica_5.png'],
+  hierba_artica: ['sprites/hierba_artica_4.png'],
+  liquen: ['sprites/liquen_3.png'],
+  musgo: ['sprites/musgo_3.png'],
 };
 // Sprites de GRUPO (2+ arboles ya agrupados en el propio sprite) -- se usan
 // cuando la celda tiene mas de una planta (cupo de espacio compartido, dato
@@ -208,29 +222,71 @@ const ESPECIES_COMPETIDORAS_SET = new Set([
   'manzano','roble','cactus','arbusto_espinoso','arbusto_desertico',
   'pino','arbusto_montano','arbusto_artico',
 ]);
-// Tamano relativo real entre tipos de planta -- un arbol debe dominar
-// sobre la hierba, no medir lo mismo en pantalla solo porque ambos son
-// "una planta". Multiplicador aparte de la escala por etapa de crecimiento.
-const FACTOR_TAMANO_ESPECIE = {
-  manzano: 1.5, roble: 1.5, pino: 1.7,
-  helecho: 0.85, hierba_silvestre: 0.5,
-  arbusto_montano: 1.0, arbusto_artico: 1.0, arbusto_desertico: 1.0, arbusto_espinoso: 1.0,
-  cactus: 1.3,
-  flor_silvestre: 0.5, hierba_desertica: 0.5, hierba_artica: 0.5,
-  liquen: 0.4, musgo: 0.4,
+// CORREGIDO 2026-09-13 (Diego: "un arbol mas pequeno que un caballo?
+// arbustos del tamano de un arbol"): el bug real era usar DOS formulas
+// de escala sin relacion entre si -- fauna por raiz cuadrada del PESO
+// (peso/90, un caballo de 450kg ya saturaba el tope) y flora por un
+// factor inventado a mano (1.0-1.7) sin ninguna unidad en comun, asi
+// que ambas colisionaban en el mismo rango de pixeles por pura
+// coincidencia. Sustituido por UNA sola formula (escalaPorAltura, mas
+// abajo) aplicada por igual a fauna (altura real del individuo, ya
+// real en dimensiones.altura_m) y flora (altura aproximada real de una
+// planta madura, PROVISIONAL, sin fuente en config/flora.yaml -- son
+// metros de referencia solo para el render, nunca datos de simulacion).
+// Con esto un roble/pino (6-7m) queda con claridad por encima de un
+// caballo (1.4-1.8m), y un arbusto (0.9-1.3m) por debajo de ambos.
+const ALTURA_REAL_FLORA_M = {
+  manzano: 3.5, roble: 6.0, pino: 7.0,
+  helecho: 0.7, hierba_silvestre: 0.3,
+  // arbustos bajados de 0.9-1.3m a 0.65-0.9m (revision tras verificar la
+  // comparacion a escala real: con 0.9-1.3 quedaban casi tan grandes
+  // como un caballo -- un matorral real es mas bajo que el lomo de un
+  // caballo, no del mismo porte).
+  arbusto_montano: 0.9, arbusto_artico: 0.65, arbusto_desertico: 0.85, arbusto_espinoso: 0.8,
+  cactus: 2.5,
+  flor_silvestre: 0.3, hierba_desertica: 0.3, hierba_artica: 0.25,
+  liquen: 0.03, musgo: 0.04,
 };
+// Pivote de escala 1.0 en 1m (aprox. la altura de un gnomo, la "unidad
+// humana" de este mundo) -- raiz cuadrada para que el rango no se
+// dispare (un pino de 7m no debe medir 7x un gnomo en pantalla).
+const ALTURA_REFERENCIA_M = 1.0;
+function escalaPorAltura(alturaM) {
+  return Math.max(0.35, Math.min(3.2, Math.sqrt((alturaM || ALTURA_REFERENCIA_M) / ALTURA_REFERENCIA_M)));
+}
 // Sprites reales de criatura (2026-09-13, mismo pool que
-// presentacion/assets/criaturas/ del motor real) -- una imagen de perfil
-// por especie (mas una variante extra de gnomo), sin ciclo de poses
-// todavia (eso exigiria mas de un frame por especie, que el pack no trae).
+// presentacion/assets/criaturas/ del motor real, YA BORRADO -- ver
+// comentario de SPRITES_FLORA). CORREGIDO 2026-09-13: las 7 especies
+// usan ya SOLO su sprite nuevo de inspiracion/ (los viejos se borraron
+// del disco) -- caballo fue la ultima en incorporarse, Diego lo genero
+// aparte el mismo dia tras detectar el hueco.
 const SPRITES_CRIATURA = {
-  gnomo: ['sprites/criaturas/gnomo_1.png','sprites/criaturas/gnomo_2.png'],
-  lobo: ['sprites/criaturas/lobo_1.png'],
-  conejo: ['sprites/criaturas/conejo_1.png'],
-  ardilla: ['sprites/criaturas/ardilla_1.png'],
+  gnomo: ['sprites/criaturas/gnomo_3.png','sprites/criaturas/gnomo_4.png','sprites/criaturas/gnomo_5.png','sprites/criaturas/gnomo_6.png','sprites/criaturas/gnomo_7.png','sprites/criaturas/gnomo_8.png'],
+  lobo: ['sprites/criaturas/lobo_2.png'],
+  conejo: ['sprites/criaturas/conejo_2.png'],
+  ardilla: ['sprites/criaturas/ardilla_2.png'],
   caballo: ['sprites/criaturas/caballo_1.png'],
-  venado: ['sprites/criaturas/venado_1.png'],
-  cabra_montesa: ['sprites/criaturas/cabra_montesa_1.png'],
+  venado: ['sprites/criaturas/venado_2.png'],
+  cabra_montesa: ['sprites/criaturas/cabra_montesa_2.png'],
+};
+// Construcciones (refugio/almacen) -- categoria nueva (2026-09-13): antes
+// de este lote el visor no dibujaba NINGUNA construccion, en ningun
+// momento de su historia (ver construir_instantanea, ahora exporta
+// DATA.construcciones). salon_comun/cocina existen como tipo real en el
+// motor pero sin sprite propio todavia -- sin entrada aqui, caen al
+// fallback ascii generico como cualquier tipo desconocido.
+const SPRITES_CONSTRUCCION = {
+  refugio: ['sprites/construcciones/refugio_1.png'],
+  almacen: ['sprites/construcciones/almacen_1.png'],
+};
+// Objetos ambientales -- decoracion de suelo ligada a un recurso REAL ya
+// presente en c.recursos (nunca inventada): roca cuando hay piedra_suelta
+// (la misma piedra de percusion del fuego), rama cuando hay madera (las
+// ramas caidas que un gnomo recolecta, ver sistema_recursos.py). Sin
+// consumidor de deposito_mineral/tipo_sustrato -- ese DTO no los expone.
+const SPRITES_OBJETOS = {
+  roca: ['sprites/objetos/roca_1.png','sprites/objetos/roca_2.png'],
+  rama: ['sprites/objetos/rama_1.png','sprites/objetos/rama_2.png'],
 };
 // Agua: mismo pool pixel que presentacion/assets/agua/ (lago = cuerpos de
 // agua permanentes, poza = charcos efimeros/pozas pequenas).
@@ -242,7 +298,7 @@ const SPRITES_AGUA = {
 // deformar criaturas/pinos/cactus (nada de esto es cuadrado de verdad) al
 // dibujarlos. Generado una vez desde los ficheros reales (2026-09-13), no
 // a mano.
-const ASPECTO_SPRITE = {"sprites/arbusto_artico_1.png":1.0769,"sprites/arbusto_artico_2.png":1.0769,"sprites/arbusto_artico_3.png":1.0769,"sprites/arbusto_artico_4.png":1.0833,"sprites/arbusto_artico_5.png":1.0769,"sprites/arbusto_desertico_1.png":1.0769,"sprites/arbusto_desertico_2.png":1.0769,"sprites/arbusto_desertico_3.png":1.0769,"sprites/arbusto_desertico_4.png":1.0833,"sprites/arbusto_desertico_5.png":1.0769,"sprites/arbusto_espinoso_1.png":1.1,"sprites/arbusto_espinoso_2.png":1.0769,"sprites/arbusto_espinoso_3.png":1.0833,"sprites/arbusto_espinoso_4.png":1.0769,"sprites/arbusto_espinoso_5.png":1.0769,"sprites/arbusto_montano_1.png":1.0769,"sprites/arbusto_montano_2.png":1.0769,"sprites/arbusto_montano_3.png":1.0769,"sprites/arbusto_montano_4.png":1.0769,"sprites/cactus_1.png":0.6,"sprites/cactus_2.png":1.1429,"sprites/cactus_3.png":1.0909,"sprites/cactus_4.png":0.625,"sprites/flor_silvestre_1.png":1.0,"sprites/flor_silvestre_2.png":0.9286,"sprites/flor_silvestre_3.png":0.8667,"sprites/flor_silvestre_4.png":1.0,"sprites/flor_silvestre_5.png":1.0,"sprites/helecho_1.png":1.1429,"sprites/helecho_2.png":1.1429,"sprites/helecho_3.png":1.4,"sprites/helecho_4.png":1.4,"sprites/helecho_5.png":1.4,"sprites/helecho_6.png":1.4,"sprites/hierba_artica_1.png":0.8571,"sprites/hierba_artica_2.png":1.0,"sprites/hierba_artica_3.png":1.0,"sprites/hierba_desertica_1.png":1.0,"sprites/hierba_desertica_2.png":1.0,"sprites/hierba_desertica_3.png":0.8571,"sprites/hierba_desertica_4.png":0.9286,"sprites/hierba_silvestre_1.png":1.0,"sprites/hierba_silvestre_2.png":1.0714,"sprites/hierba_silvestre_3.png":1.1429,"sprites/liquen_1.png":1.0769,"sprites/liquen_2.png":1.0769,"sprites/manzano_1.png":0.9286,"sprites/manzano_2.png":0.7857,"sprites/manzano_grupo_1.png":1.0,"sprites/musgo_1.png":1.0769,"sprites/musgo_2.png":1.0769,"sprites/pino_1.png":0.4,"sprites/pino_2.png":0.4,"sprites/pino_3.png":0.4,"sprites/pino_4.png":0.5714,"sprites/pino_5.png":0.5714,"sprites/pino_6.png":0.5714,"sprites/roble_1.png":0.7857,"sprites/roble_2.png":0.9286,"sprites/criaturas/ardilla_1.png":1.1077,"sprites/criaturas/caballo_1.png":1.2423,"sprites/criaturas/cabra_montesa_1.png":0.8308,"sprites/criaturas/conejo_1.png":0.9769,"sprites/criaturas/gnomo_1.png":0.6923,"sprites/criaturas/gnomo_2.png":0.6654,"sprites/criaturas/lobo_1.png":1.4077,"sprites/criaturas/venado_1.png":0.8308,"sprites/agua/lago_1.png":1.2308,"sprites/agua/lago_10.png":1.0667,"sprites/agua/lago_11.png":1.0667,"sprites/agua/lago_12.png":1.2308,"sprites/agua/lago_2.png":1.2308,"sprites/agua/lago_3.png":1.2308,"sprites/agua/lago_4.png":1.0,"sprites/agua/lago_5.png":1.2308,"sprites/agua/lago_6.png":1.2308,"sprites/agua/lago_7.png":1.3333,"sprites/agua/lago_8.png":1.0,"sprites/agua/lago_9.png":1.0,"sprites/agua/poza_1.png":0.9375,"sprites/agua/poza_2.png":0.9375,"sprites/agua/poza_3.png":1.3333,"sprites/agua/poza_4.png":1.3333,"sprites/agua/poza_5.png":1.1429,"sprites/agua/poza_6.png":0.875};
+const ASPECTO_SPRITE = {"sprites/agua/lago_1.png":1.2308,"sprites/agua/lago_10.png":1.0667,"sprites/agua/lago_11.png":1.0667,"sprites/agua/lago_12.png":1.2308,"sprites/agua/lago_2.png":1.2308,"sprites/agua/lago_3.png":1.2308,"sprites/agua/lago_4.png":1.0,"sprites/agua/lago_5.png":1.2308,"sprites/agua/lago_6.png":1.2308,"sprites/agua/lago_7.png":1.3333,"sprites/agua/lago_8.png":1.0,"sprites/agua/lago_9.png":1.0,"sprites/agua/poza_1.png":0.9375,"sprites/agua/poza_2.png":0.9375,"sprites/agua/poza_3.png":1.3333,"sprites/agua/poza_4.png":1.3333,"sprites/agua/poza_5.png":1.1429,"sprites/agua/poza_6.png":0.875,"sprites/arbusto_artico_6.png":1.0,"sprites/arbusto_desertico_6.png":1.0826,"sprites/arbusto_espinoso_6.png":1.0,"sprites/arbusto_espinoso_7.png":1.1479,"sprites/arbusto_espinoso_8.png":0.9518,"sprites/arbusto_montano_5.png":1.1479,"sprites/cactus_5.png":0.7862,"sprites/cactus_6.png":0.7449,"sprites/cactus_7.png":0.9114,"sprites/construcciones/almacen_1.png":1.1201,"sprites/construcciones/refugio_1.png":1.1809,"sprites/criaturas/ardilla_2.png":0.9564,"sprites/criaturas/caballo_1.png":1.0064,"sprites/criaturas/cabra_montesa_2.png":0.9728,"sprites/criaturas/conejo_2.png":0.4839,"sprites/criaturas/gnomo_3.png":0.445,"sprites/criaturas/gnomo_4.png":0.445,"sprites/criaturas/gnomo_5.png":0.4448,"sprites/criaturas/gnomo_6.png":0.4969,"sprites/criaturas/gnomo_7.png":0.4976,"sprites/criaturas/gnomo_8.png":0.4971,"sprites/criaturas/lobo_2.png":1.1563,"sprites/criaturas/venado_2.png":0.8157,"sprites/flor_silvestre_10.png":1.2294,"sprites/flor_silvestre_6.png":0.7064,"sprites/flor_silvestre_7.png":0.7064,"sprites/flor_silvestre_8.png":0.7064,"sprites/flor_silvestre_9.png":1.1825,"sprites/helecho_7.png":0.9529,"sprites/helecho_8.png":0.5188,"sprites/hierba_artica_4.png":0.2142,"sprites/hierba_desertica_5.png":0.7039,"sprites/hierba_silvestre_4.png":1.2294,"sprites/hierba_silvestre_5.png":1.3782,"sprites/hierba_silvestre_6.png":0.2142,"sprites/hierba_silvestre_7.png":0.688,"sprites/hierba_silvestre_8.png":1.102,"sprites/liquen_3.png":1.102,"sprites/manzano_3.png":0.9762,"sprites/manzano_4.png":0.9767,"sprites/manzano_grupo_1.png":1.0,"sprites/musgo_3.png":0.9529,"sprites/objetos/rama_1.png":1.1663,"sprites/objetos/rama_2.png":0.834,"sprites/objetos/roca_1.png":1.1807,"sprites/objetos/roca_2.png":1.5054,"sprites/pino_7.png":0.7959,"sprites/roble_3.png":1.0073};
 
 function hashDet(x,y,sal) {
   let h = (x*374761393 + y*668265263 + sal*2654435761) >>> 0;
@@ -253,31 +309,150 @@ function hashDet(x,y,sal) {
 let entidadPorCelda = {};
 for (const e of DATA.entidades) entidadPorCelda[e.x + ',' + e.y] = e;
 
+// Construcciones (DATA.construcciones, 2026-09-13 -- ver construir_instantanea):
+// una celda podria en teoria tener mas de una (refugio+almacen compartiendo
+// espacio, cupo real del motor) -- guardamos una LISTA por celda, mismo
+// criterio que ya corrigio el bug de plantas_por_celda (2026-08-31).
+let construccionesPorCelda = {};
+for (const con of (DATA.construcciones || [])) {
+  const clave = con.x + ',' + con.y;
+  (construccionesPorCelda[clave] = construccionesPorCelda[clave] || []).push(con);
+}
+// Tamano relativo de cada tipo de construccion -- una construccion real
+// domina mas su celda que un arbol individual.
+const FACTOR_TAMANO_CONSTRUCCION = { refugio: 1.6, almacen: 2.0 };
+
+// AGUA (2026-09-13, corregido -- Diego: "el agua esta fatal" / "ese
+// verde que es como un cauce no lo uses, solo usa la textura y el
+// charco... con transparencia"). Dos problemas reales en el diseno
+// original, no solo de gusto: (1) cada CELDA elegia su propio sprite al
+// azar de los 12 de "lago" -- un lago de 20 celdas podia mostrar hasta
+// 12 texturas/tonos distintos sin ninguna relacion entre celdas vecinas,
+// pura colcha de retazos; (2) "poza" nunca fueron texturas repetibles --
+// son siluetas de un charco COMPLETO (forma redondeada + borde propio),
+// pensadas para dibujarse UNA vez por charco entero, no una vez por
+// celda (un charco de 3 celdas con 3 siluetas distintas y bordes que no
+// encajan es aun peor que el problema de lago).
+//
+// LAGO_TILEABLE excluye a proposito: lago_2/lago_6 (tinte verde, "parece
+// un cauce"/rio mas que un lago -- Diego), lago_4 (textura oscura
+// ruidosa, tambien con verde, desentona), lago_7 (silueta de charco
+// aislada, no es una textura repetible). Los 8 que quedan son todos
+// variaciones de un mismo azul de oleaje/ladrillo de agua.
+const LAGO_TILEABLE = [
+  'sprites/agua/lago_1.png','sprites/agua/lago_3.png','sprites/agua/lago_5.png',
+  'sprites/agua/lago_8.png','sprites/agua/lago_9.png','sprites/agua/lago_10.png',
+  'sprites/agua/lago_11.png','sprites/agua/lago_12.png',
+];
+
+function componentesConexasAgua(tipoAgua) {
+  // Flood-fill 4-vecinos sobre DATA.celdas -- mismo algoritmo que
+  // nucleo/materiales.py:componentes_conexas del motor real, aqui en JS
+  // porque el DTO no agrupa celdas de agua, solo las marca individualmente.
+  const visitado = new Set();
+  const comps = [];
+  for (let y = 0; y < DATA.alto; y++) {
+    for (let x = 0; x < DATA.ancho; x++) {
+      const clave = x + ',' + y;
+      const celda = DATA.celdas[y][x];
+      if (visitado.has(clave) || !celda.tiene_agua || celda.tipo_agua !== tipoAgua) continue;
+      const pila = [[x, y]];
+      visitado.add(clave);
+      const celdas = [];
+      while (pila.length) {
+        const [cx, cy] = pila.pop();
+        celdas.push([cx, cy]);
+        for (const [nx, ny] of [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]]) {
+          if (nx < 0 || ny < 0 || nx >= DATA.ancho || ny >= DATA.alto) continue;
+          const nk = nx + ',' + ny;
+          if (visitado.has(nk)) continue;
+          const nCelda = DATA.celdas[ny][nx];
+          if (!nCelda.tiene_agua || nCelda.tipo_agua !== tipoAgua) continue;
+          visitado.add(nk);
+          pila.push([nx, ny]);
+        }
+      }
+      comps.push(celdas);
+    }
+  }
+  return comps;
+}
+
+// UN solo sprite por CUERPO de agua conexo (no por celda) -- lago se
+// dibuja per-celda pero con la misma textura en todas las celdas del
+// mismo lago; poza se dibuja UNA vez, escalada a la caja del charco
+// entero (ver pozaOverlays, usado en renderMapa).
+let lagoVariantePorCelda = {};
+let pozaOverlays = [];
+for (const comp of componentesConexasAgua('lago')) {
+  const [ox, oy] = comp[0];
+  const src = LAGO_TILEABLE[Math.floor(hashDet(ox, oy, 29) * LAGO_TILEABLE.length)];
+  for (const [cx, cy] of comp) lagoVariantePorCelda[cx + ',' + cy] = src;
+}
+for (const comp of componentesConexasAgua('poza')) {
+  const [ox, oy] = comp[0];
+  const src = SPRITES_AGUA.poza[Math.floor(hashDet(ox, oy, 31) * SPRITES_AGUA.poza.length)];
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [cx, cy] of comp) {
+    minX = Math.min(minX, cx); maxX = Math.max(maxX, cx);
+    minY = Math.min(minY, cy); maxY = Math.max(maxY, cy);
+  }
+  pozaOverlays.push({ minX, maxX, minY, maxY, src });
+}
+
 function contenidoCelda(c) {
   // devuelve {tipo:'sprite'|'agua'|'txt', src/ch, color, escala}
   const ent = entidadPorCelda[c.x + ',' + c.y];
   if (ent) {
     const pool = SPRITES_CRIATURA[ent.tipo];
-    // Escala por PESO REAL contra una referencia -- mismo criterio que
-    // ya usaba el Codice Cartografico (escalaPorPeso) para que un caballo
-    // no mida lo mismo en pantalla que un raton. Raiz cuadrada para que
-    // el rango no se dispare (masa ~ volumen, area de pantalla ~ raiz).
-    const peso = ent.dimensiones ? ent.dimensiones.peso : null;
-    const escala = peso ? Math.max(0.55, Math.min(1.8, Math.sqrt(peso / 90))) : 1.0;
+    // CORREGIDO 2026-09-13: escalaba por PESO (sqrt(peso/90)), no por
+    // altura -- un caballo (400-500kg) saturaba el tope (1.8) casi igual
+    // que un arbol maduro, y ni compartia formula ni unidad con la escala
+    // de flora (ver ALTURA_REAL_FLORA_M/escalaPorAltura mas arriba).
+    // Ahora usa la ALTURA real del individuo (dimensiones.altura_m, ya
+    // exportada por construir_instantanea) con la misma formula que
+    // flora -- un caballo (1.4-1.8m) queda por debajo de un arbol maduro
+    // (3.5-7m), como corresponde.
+    const alturaM = ent.dimensiones ? ent.dimensiones.altura_m : null;
+    const escala = escalaPorAltura(alturaM);
     if (pool) {
       // variante determinista por individuo (hoy solo gnomo tiene 2) --
       // no por celda, cada entidad conserva su propia variante entre ticks.
       const idx = Math.floor(hashDet(ent.id, 0, 73) * pool.length);
-      return { tipo: 'sprite', src: pool[idx], escala: escala * 1.1 };
+      return { tipo: 'sprite', src: pool[idx], escala };
     }
     // fallback ASCII -- especie sin sprite (hoy solo necromasa cae aqui).
     const s = SIMBOLO_ENTIDAD[ent.tipo] || { s: '?', color: '#fff' };
     return { tipo: 'txt', ch: s.s, color: s.color, glow: true, escala };
   }
+  const construcciones = construccionesPorCelda[c.x + ',' + c.y];
+  if (construcciones && construcciones.length > 0) {
+    // varias construcciones en la misma celda (cupo compartido, dato
+    // real): se dibuja la de mayor huella real primero (almacen > refugio,
+    // mismo orden que huella_m2_almacen > huella_m2_refugio en
+    // config/materiales.yaml) -- el resto queda oculto, mismo criterio de
+    // "una sola representacion por celda" que ya usa plantas.
+    const con = [...construcciones].sort((a, b) =>
+      (FACTOR_TAMANO_CONSTRUCCION[b.tipo] || 1) - (FACTOR_TAMANO_CONSTRUCCION[a.tipo] || 1))[0];
+    const pool = SPRITES_CONSTRUCCION[con.tipo];
+    if (pool) {
+      const idx = Math.floor(hashDet(c.x, c.y, 83) * pool.length);
+      return { tipo: 'sprite', src: pool[idx], escala: FACTOR_TAMANO_CONSTRUCCION[con.tipo] || 1.5 };
+    }
+    // tipo real sin sprite todavia (salon_comun/cocina) -- fallback ascii.
+    return { tipo: 'txt', ch: '#', color: '#8a6a3a', escala: 1.2 };
+  }
   if (c.tiene_agua) {
-    const pool = SPRITES_AGUA[c.tipo_agua] || SPRITES_AGUA.lago;
-    const idx = Math.floor(hashDet(c.x, c.y, 29) * pool.length);
-    return { tipo: 'agua', src: pool[idx] };
+    // CORREGIDO 2026-09-13 (Diego: "el agua esta fatal" / "ese verde...
+    // no lo uses, solo usa la textura y el charco... con transparencia"):
+    // ver el bloque AGUA_* mas abajo (antes de contenidoCelda en el
+    // orden de ejecucion, ver comentario alli) -- lago ya no elige un
+    // sprite al azar POR CELDA (mezclaba hasta 12 texturas y tonos
+    // distintos en un mismo lago, parche visual). poza se dibuja aparte,
+    // una sola vez por cuerpo conexo -- aqui no se dibuja nada.
+    if (c.tipo_agua === 'poza') return { tipo: 'omitir' };
+    const src = lagoVariantePorCelda[c.x + ',' + c.y] || LAGO_TILEABLE[0];
+    return { tipo: 'agua', src };
   }
   if (c.plantas && c.plantas.length > 0) {
     // dato real del motor (cupo de espacio compartido, 2026-09-03): mas de
@@ -286,8 +461,10 @@ function contenidoCelda(c) {
     const competidora = c.plantas.find(p => ESPECIES_COMPETIDORAS_SET.has(p.especie)) || c.plantas[0];
     const especie = competidora.especie;
     // Escala por ETAPA DE CRECIMIENTO real (Planta.etapa, 0=brote..1=madura)
-    // -- un brote se ve pequeno, una planta madura llena mas su celda.
-    const escalaEtapa = (0.55 + Math.min(1, competidora.etapa || 1) * 0.75) * (FACTOR_TAMANO_ESPECIE[especie] || 1.0);
+    // -- un brote se ve pequeno, una planta madura llena mas su celda --
+    // combinada con la altura real aproximada de la especie madura
+    // (ALTURA_REAL_FLORA_M, misma formula que fauna -- ver mas arriba).
+    const escalaEtapa = (0.55 + Math.min(1, competidora.etapa || 1) * 0.75) * escalaPorAltura(ALTURA_REAL_FLORA_M[especie]);
     const pool = SPRITES_FLORA[especie];
     if (pool) {
       const idx = Math.floor(hashDet(c.x, c.y, 17) * pool.length);
@@ -305,6 +482,24 @@ function contenidoCelda(c) {
     // especie sin sprite todavia -> fallback ascii generico
     return { tipo: 'txt', ch: "'", color: '#7a5a2a', escala: 1.0 };
   }
+  // Objetos ambientales: decoracion de suelo ligada a un recurso REAL ya
+  // presente en c.recursos (2026-09-13) -- nunca inventado. Solo se llega
+  // aqui si la celda no tiene ya entidad/construccion/agua/planta, para no
+  // amontonar sprites encima de algo mas relevante. piedra_suelta (la
+  // misma piedra de percusion del fuego) antes que madera (las ramas
+  // caidas que RECOLECTAR ya consume) -- orden arbitrario entre las dos,
+  // ambas son igual de frecuentes en el catalogo.
+  const recursos = c.recursos || {};
+  if ((recursos.piedra_suelta || 0) > 0) {
+    const pool = SPRITES_OBJETOS.roca;
+    const idx = Math.floor(hashDet(c.x, c.y, 97) * pool.length);
+    return { tipo: 'sprite', src: pool[idx], escala: 0.5 };
+  }
+  if ((recursos.madera || 0) > 0) {
+    const pool = SPRITES_OBJETOS.rama;
+    const idx = Math.floor(hashDet(c.x, c.y, 101) * pool.length);
+    return { tipo: 'sprite', src: pool[idx], escala: 0.45 };
+  }
   let simb = SIMBOLO_BIOMA[c.bioma] || { s: '?', color: '#666' };
   let color = simb.color, ch = simb.s;
   if (c.bioma === 'montana') {
@@ -315,7 +510,16 @@ function contenidoCelda(c) {
   return { tipo: 'txt', ch, color, escala: 1.0 };
 }
 
-const FACTOR_SPRITE_GRANDE = 1.4; // cuanto se desborda un sprite de flora sobre su celda
+// CORREGIDO 2026-09-13 (Diego: "igual hay demasiada densidad?"):
+// verificado contra los datos reales antes de tocar nada -- solo 50% de
+// las celdas tienen alguna planta (39% vacias, 11% agua), no es un
+// problema de cuanta flora siembra el motor. La causa real es que el
+// fix de escala de mas arriba (altura real en vez de peso/factor
+// inventado) agrando mucho el desbordamiento de cada sprite sobre sus
+// celdas vecinas -- bajado de 1.4 a 1.05, mismo criterio relativo entre
+// especies (todas se reducen por igual), pero deja huecos de suelo
+// visibles que antes quedaban tapados por copas de arbol solapadas.
+const FACTOR_SPRITE_GRANDE = 1.05;
 
 // --- Cenital RECTO (sin desplazamiento diagonal por fila -- la Caballera
 // se probo y no convencio) + solape: cada celda en su cuadricula normal,
@@ -385,6 +589,9 @@ function renderMapa() {
         // de mas de un individuo sin depender de un sprite de grupo aparte.
         colocarSprite(info.srcs[0], -CELDA*0.28);
         colocarSprite(info.srcs[1], CELDA*0.28);
+      } else if (info.tipo === 'omitir') {
+        // poza: no se dibuja por celda, ver el bucle de pozaOverlays
+        // mas abajo -- una sola pieza por charco entero.
       } else {
         const el = document.createElement('div');
         el.className = 'celda-txt';
@@ -402,6 +609,22 @@ function renderMapa() {
         cont.appendChild(el);
       }
     }
+  }
+  // Charcos: una sola pieza por cuerpo conexo, escalada a su caja
+  // real (no una silueta rota por celda) y con transparencia (Diego:
+  // "el charco usalo con un grado de transparencia") para que lea como
+  // agua superficial sobre el terreno, no como una pegatina opaca.
+  for (const ov of pozaOverlays) {
+    const el = document.createElement('img');
+    el.className = 'celda-img-tile';
+    el.src = ov.src;
+    el.style.opacity = '0.7';
+    el.style.width = ((ov.maxX - ov.minX + 1) * CELDA) + 'px';
+    el.style.height = ((ov.maxY - ov.minY + 1) * CELDA) + 'px';
+    el.style.left = (ov.minX * CELDA) + 'px';
+    el.style.top = (ov.minY * CELDA) + 'px';
+    el.style.zIndex = String(1000 + ov.minY);
+    cont.appendChild(el);
   }
   document.getElementById('titulo-mapa-info').textContent =
     `TICK ${DATA.tick} · DIA ${DATA.dia} · ${DATA.estacion.toUpperCase()} · ${DATA.clima.toUpperCase()}`;

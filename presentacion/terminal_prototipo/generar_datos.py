@@ -1,6 +1,9 @@
 import sys, os, json, random
-sys.path.insert(0, "/home/user/proyecto-simulacion")
-os.chdir("/home/user/proyecto-simulacion")
+from pathlib import Path
+
+RAIZ_PROYECTO = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(RAIZ_PROYECTO))
+os.chdir(RAIZ_PROYECTO)
 
 from main import (
     cargar_configuracion, sembrar_poblacion_inicial, sembrar_flora_inicial,
@@ -18,7 +21,7 @@ class PersistenciaNoOp:
     def marcar_entidad_muerta(self, *a, **k): pass
     def persistir_eventos(self, *a, **k): pass
 
-config = cargar_configuracion(Path := __import__("pathlib").Path("config"))
+config = cargar_configuracion(RAIZ_PROYECTO / "config")
 semilla = config.get("semilla_por_defecto", 42)
 rng_mapa = random.Random(semilla)
 rng_juego = random.Random(semilla)
@@ -37,13 +40,24 @@ sistemas = instanciar_sistemas(config, rng_juego, rng_reproduccion)
 
 import collections
 cola_cronica = collections.deque(maxlen=200)
-N_TICKS = 600
+# 600 nunca daba tiempo a que ninguna construccion se completara (refugio
+# real mas temprano visto en el proyecto: tick ~192-384 para asentamiento,
+# antes para un refugio individual, pero 600 seguia siendo insuficiente en
+# la practica) -- subido a 2500 para que la instantanea de referencia
+# incluya construcciones reales, no solo flora/fauna/agua.
+N_TICKS = int(sys.argv[1]) if len(sys.argv) > 1 else 2500
 for i in range(N_TICKS):
     ejecutar_tick(gestor, mundo, reloj, bus, sistemas)
     for linea in narrar(bus.eventos_del_tick, gestor):
         cola_cronica.append(linea)
 
 instantanea = construir_instantanea(mundo, gestor, reloj, list(cola_cronica))
-with open("/tmp/claude-0/-home-user-proyecto-simulacion/66275a3d-0ce3-5998-a341-56def884bcfc/scratchpad/terminal_proto/datos.json", "w") as f:
+DESTINO = Path(__file__).resolve().parent
+with open(DESTINO / "datos.json", "w", encoding="utf-8") as f:
     json.dump(instantanea, f)
-print("OK, ticks:", N_TICKS, "entidades:", len(instantanea["entidades"]))
+with open(DESTINO / "datos.js", "w", encoding="utf-8") as f:
+    f.write("window.__DATOS__ = ")
+    json.dump(instantanea, f)
+    f.write(";")
+print("OK, ticks:", N_TICKS, "entidades:", len(instantanea["entidades"]),
+      "construcciones:", len(instantanea["construcciones"]))
