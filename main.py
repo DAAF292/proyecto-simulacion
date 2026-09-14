@@ -198,6 +198,16 @@ def sembrar_poblacion_inicial(
             poblacion_cfg.get("cabras_montesas_iniciales", 8),
             celdas_montana,
         ),
+        # ZORRO (2026-09-14, ver docs/superpowers/specs/
+        # 2026-09-14-especie-zorro-design.md): generalista real, nace en
+        # bosque Y pradera a la vez -- pool combinado, sin forzar reparto
+        # 50/50 entre biomas, el sorteo decide (mismo criterio que el
+        # resto de esta lista).
+        (
+            Especie.ZORRO,
+            poblacion_cfg.get("zorros_iniciales", 8),
+            candidatas_bosque + celdas_pradera,
+        ),
     ]
 
     # Edad inicial variable de la población fundadora (ver

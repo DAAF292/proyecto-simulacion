@@ -351,6 +351,29 @@ necesidades:
     tasa_perdida_hidratacion_por_tick: 0.0008
     probabilidad_muerte_deshidratacion: 0.0004
 
+  zorro:
+    # AÑADIDO 2026-09-14 (ver docs/superpowers/specs/
+    # 2026-09-14-especie-zorro-design.md). La spec original dejaba zorro
+    # SIN entrada propia (mismo criterio con el que arrancó caballo en
+    # su día) -- corregido tras medir fragilidad real, no a ciegas: la
+    # primera corrida real (BOSQUE_AUTO_TICKS=3000, semilla por defecto)
+    # ya mostró 8/8 zorros muertos, todos por inanición, y un diagnóstico
+    # multi-semilla dedicado (4 semillas nuevas 550001-550004 x 5000
+    # ticks) confirmó 4/4 EXTINCIÓN, 100% de las muertes por inanición,
+    # 0 concepciones -- ni una sola hembra llegó a acumular saciedad
+    # suficiente para intentar concebir. Mismo patrón exacto ya visto en
+    # lobo/ardilla/gnomo/conejo/caballo antes de sus propios fixes.
+    # Aplicado directamente el mismo par ya validado repetidas veces en
+    # el catálogo (hambre + sed juntos, mismo criterio que venado/
+    # cabra_montesa: "arrancar ya con el par" en vez de repetir el ciclo
+    # de caballo). PROVISIONAL, sin calibrar contra el harness completo
+    # -- ver CLAUDE.md para la reverificación con las mismas 4 semillas
+    # tras este cambio.
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
+
 consumo:
   # tasa_consumo_al_comer (2026-09-10, ver docs/superpowers/specs/
   # 2026-09-10-tasa-consumo-por-especie-design.md): valor UNIVERSAL de

@@ -9768,3 +9768,122 @@ integridad).
 - `sonidos_emitidos` del harness reporta 0 pese a sonidos reales (hay
   amenaza por sonido con volumen positivo): sospecha de instrumentacion,
   verificar global, no concluido.
+
+## Especie zorro -- mesodepredador de conejo/ardilla, cerrado con un
+## hallazgo real de fragilidad ya corregido (2026-09-14)
+
+Diego pidió una criatura nueva que actúe como depredador intermedio de
+presas pequeñas y controle el crecimiento de conejo/ardilla --
+directamente conectado con la recomendación #1 del informe ecológico de
+la sesión anterior ("especie depredadora pequeña nueva, diseñar con
+Diego en brainstorming"). Motivación real, no solo narrativa: lobo
+(60-90kg) está mal ajustado a presas tan pequeñas -- `aporte_maximo =
+(peso_presa/peso_cazador) * eficiencia_biomasa_saciedad` hace que una
+captura de conejo o ardilla apenas alimente a un animal de ese tamaño
+(hallazgo ya documentado, "Por qué lobo se muere de hambre pese a cazar
+más que nadie", 2026-09-04/05).
+
+Spec: `docs/superpowers/specs/2026-09-14-especie-zorro-design.md`.
+Reutiliza el 100% del mecanismo genérico ya existente -- fábricas ECS
+(`crear_criatura`/`nacer_criatura`) parametrizadas por `especie.value`
+sobre `rangos_raciales`, `_es_presa_valida`/`_resolver_ataque` ya
+agnósticos a especie -- ninguna línea de código nueva en depredación,
+solo catálogo + siembra.
+
+**Dos decisiones cerradas con Diego antes de escribir un solo número**:
+1. **Peso [5,9]kg por FIDELIDAD REAL, no por control garantizado.** La
+   disposición de caza es logarítmica y exige ratio de peso `>= e≈2.72`
+   (`combate.umbral_disposicion_caza=0.5`). Con este peso: contra
+   ardilla (0.3-0.6kg) el ratio siempre supera el umbral -- **caza
+   garantizada en el 100% de los individuos**; contra conejo
+   (1.5-3.0kg) el ratio va de 1.67 (no cazable) a 6.0 (cazable) --
+   **control real pero PARCIAL**, depende del individuo. Diego lo
+   eligió explícitamente frente a subir el peso mínimo a ~8.2kg (que
+   habría garantizado caza de cualquier conejo al precio de alejarse
+   del zorro real, rozando tamaño de coyote) -- mismo patrón ya
+   aceptado en el proyecto con lobo/cabra_montesa.
+2. **Bioma: bosque y pradera a la vez (generalista real).** Ambos
+   biomas ya son contiguos en el motor (frontera confirmada, la
+   persecución de caza no filtra por bioma -- ver "Lobo caza en
+   montaña" más arriba), así que sembrar sobre un pool COMBINADO
+   (`candidatas_bosque + celdas_pradera`, sin forzar reparto 50/50) le
+   da territorio propio en ambos desde el arranque, no solo acceso por
+   persecución incidental.
+
+Resto del catálogo calibrado por analogía razonada con el resto del
+catálogo (gestación corta [45,60]d + camada [2,4] + concepción 0.015,
+mismo perfil "sostenible" ya validado en lobo/venado; sociabilidad baja
+[0.2,0.45] -- territorial/solitario, caza en SOLITARIO por diseño, sin
+depender de aliados; agudeza_sensorial alta [0.6,0.9] -- rasgo real
+distintivo del zorro; longevidad corta [4,8] años -- evita el error ya
+cometido con gnomo, gestación/vida desproporcionada). `zorros_iniciales:
+8`, comparable a `lobos_iniciales`. Deliberadamente SIN entrada propia
+en `fisiologia.yaml:necesidades` en la spec original -- mismo criterio
+que caballo en su día, "no calibrar a ciegas".
+
+**Hallazgo real, corregido el mismo día, no dejado como "correcto pero
+frágil" sin más**: `BOSQUE_AUTO_TICKS=3000` con la semilla por defecto
+mostró **8/8 zorros muertos, el 100% por inanición**. Un diagnóstico
+multi-semilla dedicado (`herramientas/harness_calibracion.py`, 4
+semillas nuevas 550001-550004 × 5000 ticks) confirmó el patrón: **4/4
+extinción, 100% de las muertes por inanición, 0 concepciones** -- ni una
+sola hembra llegó a acumular saciedad suficiente para intentar concebir.
+Mismo patrón exacto ya visto en lobo/ardilla/gnomo/conejo/caballo antes
+de sus propios fixes de fisiología. Corregido aplicando directamente el
+mismo par ya validado repetidas veces en el catálogo
+(`tasa_perdida_saciedad_por_tick`/`probabilidad_muerte_saciedad_critica`
+= 0.0008/0.0004, más el mismo par de hidratación) -- mismo criterio que
+venado/cabra_montesa ("arrancar ya con el par" en vez de repetir el
+ciclo completo de caballo, que nació con el valor universal y se corrigió
+días después).
+
+**Reverificado con las MISMAS 4 semillas** (mismo criterio metodológico
+del proyecto: nunca comparar semilla-a-semilla entre config distinta sin
+repetir la semilla exacta, dado que cualquier cambio desplaza la
+secuencia de `rng`): extinción de zorro baja de 4/4 (100%) a **2/4
+(50%)**, con embudo reproductivo activo (11 concepciones → 18
+nacimientos, 164%) y una causa de muerte nueva real: **depredación (5
+casos)**. Mejora real, medida, **NO una solución completa** -- mismo
+patrón honesto que casi todas las demás especies de este catálogo.
+
+**Hallazgo colateral, no bug, cadena trófica de tres niveles emergiendo
+sola**: con zorro (5-9kg) muy por debajo del peso mínimo de lobo
+(60kg), el ratio de peso supera el umbral de caza con margen amplio
+(magnitud muy por encima de 0.5) -- lobo YA puede cazar zorro, sin
+ningún código nuevo, pura consecuencia de la ley de pesos ya existente.
+No estaba en la spec original ni se había anticipado, pero es
+exactamente el tipo de emergencia que el proyecto busca (leyes
+neutras, principio 5) -- un depredador intermedio real, presa de uno
+más grande y presa a la vez de conejo/ardilla, sin una sola línea de
+código dedicada a esa relación.
+
+**Verificado**: 580/580 tests en verde (11 nuevos,
+`tests/test_especie_zorro.py` -- existencia/distinción de la especie,
+fábricas ECS completas, siembra real con el pool COMO unión de ambos
+biomas (verificado con una población de prueba ampliada para que el
+azar de una sola semilla no pueda ocultar que el pool es solo uno de
+los dos), las dos leyes de peso frente a ardilla/conejo con los
+extremos exactos del rango (no solo el promedio), caza en solitario, y
+el ratio de saciedad por captura de ardilla frente a lobo).
+`BOSQUE_AUTO_TICKS=3000` y `BOSQUE_CONTINUAR=200` sin ninguna excepción
+en ninguna de las dos verificaciones (antes y después del fix de
+fisiología).
+
+**Pendiente real, explícito**: 2/4 semillas nuevas siguen extinguiendo
+zorro tras el fix -- no se persiguió más calibración con esta muestra
+tan pequeña (mismo criterio de prudencia ya aplicado repetidas veces en
+el proyecto, "rendimientos decrecientes" frente a seguir ajustando a
+ciegas con n=4); si se retoma, candidato más probable es revisar
+`factor_base_concepcion`/`camada` de zorro con el mismo criterio de dos
+ingredientes ya usado en lobo/ardilla/gnomo, pero solo con evidencia de
+un lote mayor, no a ciegas. El efecto real de zorro sobre el
+crecimiento de conejo/ardilla (el objetivo de fondo que motivó la
+pieza) NO se ha medido todavía de forma aislada -- el diagnóstico de
+arriba confirma que zorro caza y sobrevive, no cuánto reduce la
+población de sus presas frente a un mundo sin zorro; candidato directo
+para un A/B futuro (mismas semillas, con y sin zorro en el catálogo)
+si Diego quiere confirmar el control poblacional de verdad, no solo el
+mecanismo. `zorros_iniciales=8` y todo el catálogo de temperamento
+siguen PROVISIONALES, sin calibrar contra el harness completo. Sin
+representación visual -- motor primero. Sin ninguna ventaja de
+terreno específica de bosque/pradera.
