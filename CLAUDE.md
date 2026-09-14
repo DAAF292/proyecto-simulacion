@@ -9271,13 +9271,40 @@ que la columna `masa_tronco_kg` nueva no rompe nada del resto del
 snapshot.
 
 **Pendiente real, explícito**: `masa_tronco_kg` por especie
-PROVISIONAL, sin calibrar contra el harness completo; diagnóstico
-multi-semilla (mismo arnés que minería, 6 semillas nuevas × hasta 8000
-ticks) lanzado pero sin resultado documentado todavía a la hora de este
-commit -- seguimiento en un commit aparte en cuanto termine, mismo
-patrón de dos commits ya usado con minería; el hallazgo de minería
-("motivo puramente oportunista") queda igual de sin resolver para tala
--- ambos deferidos explícitamente por Diego a "necesidades y flujos
-futuros que precisen de materiales"; sin ningún consumidor de
-`ArbolTalado` en narrador/vista_web todavía -- presentación,
-deliberadamente sin tocar (motor primero).
+PROVISIONAL, sin calibrar contra el harness completo; sin ningún
+consumidor de `ArbolTalado` en narrador/vista_web todavía --
+presentación, deliberadamente sin tocar (motor primero).
+
+### Diagnóstico multi-semilla real -- mismo hallazgo que minería, 0
+### árboles talados pese a hachas ya fabricadas (2026-09-14, mismo día)
+
+Mismo arnés que minería (`main.py:ejecutar_tick` con
+`Persistencia` no-op, sin SQLite), 6 semillas NUEVAS (201-206) × hasta
+8000 ticks, tope real de 60s/semilla (las 6 se cortaron por tiempo
+entre 1979 y 2481 ticks -- ninguna llegó al término completo, mismo
+criterio de honestidad ya aplicado a diagnósticos anteriores de esta
+sesión sobre qué cuenta como dato válido).
+
+| Semilla | Ticks | Talados | Bloqueados sin hacha | Herramientas fabricadas |
+|---|---|---|---|---|
+| 201 | 2127 | 0 | 226 | 2 |
+| 202 | 2203 | 0 | 101 | 3 |
+| 203 | 2159 | 0 | 95 | 1 |
+| 204 | 2341 | 0 | 163 | 1 |
+| 205 | 2481 | 0 | 117 | 1 |
+| 206 | 1979 | 0 | 100 | 1 |
+
+**0 árboles talados en las 6 semillas** -- mismo resultado que minería
+(0 picos-con-extracción en 6/6 también). El gate se ejerce con fuerza
+real (95-226 bloqueos por falta de hacha por semilla) y **sí se
+fabrican hachas de verdad** (1-3 `hacha_primitiva` por semilla,
+confirmando que el ciclo RECOLECTAR-material→FABRICAR-herramienta
+funciona) -- pero ninguna de esas hachas llegó a coincidir con "estar
+de pie junto a un árbol maduro talable" en el mismo tick con RECOLECTAR
+como acción ganadora, dentro de la ventana medida. Mismo diagnóstico
+que minería: el disparador es puramente oportunista (sin ningún sesgo
+de movimiento hacia un árbol conocido), y **deferido explícitamente por
+Diego** a las mismas "necesidades y flujos futuros que precisen de
+materiales" que resolverán ambos casos a la vez -- no se investiga ni
+se corrige más aquí, documentado con la misma honestidad que el resto
+del proyecto.
