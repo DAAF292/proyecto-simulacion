@@ -100,6 +100,95 @@ def masa_apta_construccion(materiales: dict[str, float], catalogo: dict[str, Any
     return total
 
 
+def calidad_media_construccion(materiales: dict[str, float], catalogo: dict[str, Any]) -> float:
+    """Media de calidad_construccion (config/materiales.yaml) de
+    `materiales`, ponderada por la masa de cada uno -- 0.0 si no hay
+    ninguna masa apta (dict vacío, o solo materiales sin
+    calidad_construccion declarada). Único consumidor real hoy:
+    Necesidades.comodidad (2026-09-14, Pieza C del arco "comodidad" --
+    ver CLAUDE.md), que deriva su objetivo de esta media aplicada al
+    refugio PROPIO ya completado de cada individuo. Materiales sin
+    calidad_construccion en el catálogo (no apto_construccion, o
+    ausentes) se ignoran igual que masa_apta_construccion ignora los
+    no aptos -- mismo criterio permisivo por .get()."""
+    masa_total = 0.0
+    suma_ponderada = 0.0
+    for clave, cantidad in materiales.items():
+        if cantidad <= 0.0:
+            continue
+        info = catalogo.get(clave, {})
+        calidad = info.get("calidad_construccion")
+        if calidad is None:
+            continue
+        masa_total += cantidad
+        suma_ponderada += cantidad * float(calidad)
+    if masa_total <= 0.0:
+        return 0.0
+    return suma_ponderada / masa_total
+
+
+def material_mejora_disponible_en(
+    gestor: Any,
+    celda: Any,
+    pos_x: int,
+    pos_y: int,
+    zona_idx: int,
+    objetos_para_bono: list[str],
+    catalogo: dict[str, Any],
+    recetas_mineria: list[Any],
+    especies_flora: dict[str, Any],
+) -> str | None:
+    """Material que RECOLECTAR conseguiría en esta celda AHORA MISMO, en
+    solo lectura -- mismo orden de prioridad que la resolución real
+    (mineral > tala > material de flora a granel > sustrato,
+    sistemas/sistema_recursos.py:_resolver_recolectar), sin mutar nada.
+    Único consumidor real: la utilidad de "mejora de vivienda" (Pieza D
+    del arco "comodidad", 2026-09-14 -- ver CLAUDE.md), que compara la
+    calidad_construccion de lo que devuelve esta función contra la ya
+    invertida en el refugio propio -- el mecanismo de autolimitación que
+    evita que la utilidad de mejora empuje sin sentido hacia una celda
+    sin nada mejor que ofrecer.
+
+    Simplificación deliberada frente a la resolución real: no aplica el
+    filtro de "recurso competidor disponible"
+    (`_hay_recurso_competidor_disponible`, que exige una Planta viva de
+    la especie productora en esta celda+zona) -- una imprecisión aquí
+    (sugerir un material que la resolución real acabaría rechazando) es
+    inofensiva, el gate real de la extracción sigue viviendo en
+    `_resolver_recolectar`; esto solo genera un atractor de interés, no
+    una promesa de éxito garantizado, mismo criterio de tolerancia que
+    ya aceptan los demás eslabones heredados de este módulo (fuego,
+    arma, herramienta, mineria)."""
+    from nucleo.espacio import plantas_competidoras_en
+    from nucleo.herramientas import tiene_herramienta
+
+    if celda.deposito_mineral and celda.masa_mineral_restante > 0.0:
+        if tiene_herramienta(objetos_para_bono, recetas_mineria):
+            return celda.deposito_mineral
+
+    if "hacha_primitiva" in objetos_para_bono:
+        from componentes.planta import Planta
+
+        for pid in plantas_competidoras_en(gestor, pos_x, pos_y, zona_idx, especies_flora):
+            planta = gestor.obtener_componente(pid, Planta)
+            if planta is not None and planta.etapa >= 1.0 and planta.masa_tronco_kg > 0.0:
+                return "madera"
+
+    for nombre, cantidad in celda.recursos.items():
+        if cantidad <= 0.0:
+            continue
+        if catalogo.get(nombre, {}).get("apto_construccion", False):
+            return nombre
+
+    material = celda.tipo_sustrato
+    if material and catalogo.get(material, {}).get("apto_construccion", False):
+        if material == "piedra" and not tiene_herramienta(objetos_para_bono, recetas_mineria):
+            return None
+        return material
+
+    return None
+
+
 def masa_minima_para(tipo: str, config_construccion: dict[str, Any]) -> float:
     """Umbral de masa apta que exige el tipo de construcción para llegar
     a progreso=1.0 -- config/materiales.yaml sección construccion.

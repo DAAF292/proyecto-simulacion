@@ -233,6 +233,12 @@ flora:
       # de constantes del proyecto).
       compite_espacio_fisico: true
       huella_m2: 4.0
+      # masa_tronco_kg (2026-09-12, "tala real"): madera extraíble al
+      # talar el árbol en pie con hacha_primitiva -- ver
+      # nucleo/flora.py:masa_tronco_inicial_kg. PROVISIONAL, escalado a
+      # ojo por huella_m2 (~20kg/m²), sin calibrar contra el harness
+      # completo.
+      masa_tronco_kg: 80.0
       tasa_crecimiento_por_dia: 0.08
       prob_propagacion_por_dia: 0.02
       preferencia_lluvia: [0.55, 1.0]
@@ -394,6 +400,8 @@ flora:
       # manzano -- tronco más grueso.
       compite_espacio_fisico: true
       huella_m2: 5.0
+      # masa_tronco_kg (2026-09-12, "tala real"): ver manzano arriba.
+      masa_tronco_kg: 100.0
       tasa_crecimiento_por_dia: 0.04
       prob_propagacion_por_dia: 0.012
       preferencia_lluvia: [0.4, 0.85]
@@ -483,6 +491,8 @@ flora:
       # tronco grueso -- huella similar al roble.
       compite_espacio_fisico: true
       huella_m2: 4.5
+      # masa_tronco_kg (2026-09-12, "tala real"): ver manzano arriba.
+      masa_tronco_kg: 90.0
       tasa_crecimiento_por_dia: 0.03
       prob_propagacion_por_dia: 0.01
       preferencia_lluvia: [0.2, 0.6]

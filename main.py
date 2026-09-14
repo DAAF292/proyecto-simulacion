@@ -32,6 +32,7 @@ from componentes.relaciones import Relaciones
 from componentes.vocacion import Vocacion
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
+from nucleo.flora import masa_tronco_inicial_kg
 from nucleo.eventos import BusEventos
 from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.mundo import Mundo
@@ -361,7 +362,10 @@ def sembrar_flora_inicial(
         n_semillas = max(1, round(len(celdas) * fraccion))
         elegidas = rng_juego.sample(celdas, min(n_semillas, len(celdas)))
         for pos_x, pos_y in elegidas:
-            crear_planta(gestor, especie_key, pos_x, pos_y, etapa=1.0)
+            crear_planta(
+                gestor, especie_key, pos_x, pos_y, etapa=1.0,
+                masa_tronco_kg=masa_tronco_inicial_kg(especie_cfg),
+            )
 
     # Pista COMPETIDORA (pieza 3, 2026-09-03 -- cupo de espacio compartido
     # por celda): a diferencia de la pista no-competidora, la fuente de
@@ -405,7 +409,10 @@ def sembrar_flora_inicial(
         n_semillas = max(1, round(len(celdas) * fraccion))
         elegidas = rng_juego.sample(celdas, min(n_semillas, len(celdas)))
         for pos_x, pos_y in elegidas:
-            crear_planta(gestor, especie_key, pos_x, pos_y, etapa=1.0)
+            crear_planta(
+                gestor, especie_key, pos_x, pos_y, etapa=1.0,
+                masa_tronco_kg=masa_tronco_inicial_kg(especie_cfg),
+            )
 
 
 def ejecutar_tick(
@@ -863,6 +870,39 @@ def main() -> None:
             print(
                 "[BOSQUE_AUTO_TICKS] material descartado por prioridad: "
                 f"{sistemas['recursos']._stats_material_descartado_por_prioridad_kg:.2f} kg"
+            )
+            # Verificacion obligatoria de "mineria real" (2026-09-12, ver
+            # docs/superpowers/specs/2026-09-12-mineria-real-design.md).
+            # Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] picos fabricados: "
+                f"{sistemas['recursos']._stats_picos_fabricados}, "
+                "vetas bloqueadas sin pico: "
+                f"{sistemas['recursos']._stats_veta_bloqueada_sin_pico}"
+            )
+            # Verificacion obligatoria de "tala real" (2026-09-14, ver
+            # docs/superpowers/specs/2026-09-14-tala-real-design.md). Solo
+            # observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] arboles talados: "
+                f"{sistemas['recursos']._stats_arboles_talados}, "
+                "arboles bloqueados sin hacha: "
+                f"{sistemas['recursos']._stats_arbol_bloqueado_sin_hacha}"
+            )
+            # Verificacion obligatoria de "piedra exige pico" (2026-09-14,
+            # ver CLAUDE.md). Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] piedra (sustrato) bloqueada sin pico: "
+                f"{sistemas['recursos']._stats_piedra_sustrato_bloqueada_sin_pico}"
+            )
+            # Verificacion obligatoria de "mejora de vivienda" (2026-09-14,
+            # Pieza D del arco "comodidad" -- ver CLAUDE.md). Solo
+            # observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] mejora de vivienda: CONSTRUIR elegido por "
+                f"mejora {sistemas['decision']._stats_construir_mejora_elegido} veces, "
+                f"{sistemas['recursos']._stats_mejora_refugio_sustituciones} "
+                "sustituciones reales"
             )
 
     except KeyboardInterrupt:

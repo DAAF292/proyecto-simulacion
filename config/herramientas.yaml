@@ -32,3 +32,17 @@ herramientas:
   # completo.
   factor_bono_tasa_recolectar_con_herramienta: 1.5
   factor_bono_tasa_aporte_construccion_con_herramienta: 1.3
+  # Minería real (2026-09-12, ver docs/superpowers/specs/
+  # 2026-09-12-mineria-real-design.md): catálogo SEPARADO de `recetas`
+  # arriba, deliberadamente -- reutiliza los mismos materiales crudos
+  # (madera+piedra) que hacha_primitiva, pero al vivir en su propia lista
+  # nunca compite con ella en mejor_receta_completable (cada categoría
+  # FABRICAR, "herramienta" vs "mineria", resuelve solo contra su propio
+  # catálogo). El pico NO da el bono genérico de velocidad de arriba --
+  # su único efecto es gatear la extracción de vetas de mineral
+  # (sistema_recursos.py:_resolver_recolectar), sin inventar un segundo
+  # efecto no pedido.
+  recetas_mineria:
+    - materiales: [madera, piedra]
+      nombre: pico
+      nivel: 1

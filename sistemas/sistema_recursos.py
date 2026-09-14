@@ -39,6 +39,7 @@ from nucleo.herramientas import tiene_herramienta
 from nucleo.celda import Celda
 from nucleo.construccion import (
     construccion_de_tipo_en,
+    construccion_propia,
     masa_minima_para,
     objetivo_construccion_actual,
     progreso_construccion,
@@ -141,6 +142,18 @@ class SistemaRecursos:
         self.tasa_aporte_construccion: float = float(
             self.config_construccion.get("tasa_aporte_construccion_kg_tick", 1.0)
         )
+        # Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" --
+        # ver CLAUDE.md): tasa de SUSTITUCIÓN (kg de material peor
+        # cambiados por kg de material mejor por tick), no de
+        # acumulación -- ver _resolver_mejora_refugio. PROVISIONAL,
+        # mismo orden de magnitud que tasa_aporte_construccion.
+        self.tasa_mejora_refugio: float = float(
+            self.config_construccion.get("tasa_mejora_refugio_kg_tick", 1.0)
+        )
+        # Observacion (2026-09-14, Pieza D del arco "comodidad"): cuantas
+        # veces _resolver_mejora_refugio sustituyo de verdad algo (no
+        # solo se llamo) -- ver print de BOSQUE_AUTO_TICKS en main.py.
+        self._stats_mejora_refugio_sustituciones: int = 0
         # RECOLECTAR -- ver nucleo/construccion.py.
         self.tasa_recoleccion: float = float(
             self.config_construccion.get("tasa_recoleccion_kg_tick", 1.0)
@@ -279,14 +292,36 @@ class SistemaRecursos:
                 "factor_bono_tasa_aporte_construccion_con_herramienta", 1.3
             )
         )
+        # Minería real (2026-09-12, ver docs/superpowers/specs/
+        # 2026-09-12-mineria-real-design.md): catálogo SEPARADO de
+        # recetas_herramientas -- ver config/herramientas.yaml para el
+        # porqué.
+        self.recetas_mineria: list[dict[str, Any]] = self.config_herramientas.get(
+            "recetas_mineria", []
+        )
         # Observacion (2026-09-11), solo _stats -- confirma que la pieza
         # se ejerce de verdad en juego libre.
         self._stats_herramientas_fabricadas: int = 0
+        # Observacion (2026-09-12, minería real): picos fabricados, y
+        # cuántas veces el gate bloqueó de verdad una extracción de veta
+        # por falta de pico (confirma que el mecanismo se ejerce, no solo
+        # que existe).
+        self._stats_picos_fabricados: int = 0
+        self._stats_veta_bloqueada_sin_pico: int = 0
         # Observacion (2026-09-11, "cargar con prioridad" -- ver
         # nucleo/inventario.py:descartar_contenidos_para_liberar): kg
         # totales descartados por un consciente para liberar sitio a
         # material de arma/herramienta que su intencion activa necesita.
         self._stats_material_descartado_por_prioridad_kg: float = 0.0
+        # Observacion (2026-09-14, "tala real"): árboles talados por
+        # completo, y cuántas veces el gate bloqueó de verdad la
+        # extracción de un árbol en pie por falta de hacha_primitiva.
+        self._stats_arboles_talados: int = 0
+        self._stats_arbol_bloqueado_sin_hacha: int = 0
+        # Observacion (2026-09-14, "piedra exige pico"): cuántas veces el
+        # gate bloqueó de verdad la extracción de piedra como tipo_sustrato
+        # por falta de pico -- confirma que se ejerce, no solo que existe.
+        self._stats_piedra_sustrato_bloqueada_sin_pico: int = 0
 
     def ejecutar(
         self,
@@ -348,7 +383,8 @@ class SistemaRecursos:
             elif intencion.accion == Accion.CONSTRUIR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 self._resolver_construir(
-                    gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual, bus_eventos
+                    gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual,
+                    bus_eventos, construir_motivo_mejora=intencion.construir_motivo_mejora,
                 )
                 self._incrementar_vocacion(gestor, eid, consciente, "conteo_constructor")
             elif intencion.accion == Accion.RECOLECTAR:
@@ -360,7 +396,9 @@ class SistemaRecursos:
                     recolectar_arma=intencion.recolectar_motivo_arma,
                     recolectar_herramienta=intencion.recolectar_motivo_herramienta,
                     recolectar_fuego=intencion.recolectar_motivo_fuego,
+                    recolectar_mineria=intencion.recolectar_motivo_mineria,
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
+                    entidad_id=eid, bus_eventos=bus_eventos, tick_actual=reloj.tick_actual,
                 )
                 self._incrementar_vocacion(gestor, eid, consciente, "conteo_forrajero")
             elif intencion.accion == Accion.ENCENDER_FUEGO:
@@ -554,6 +592,7 @@ class SistemaRecursos:
         pos_y: int,
         tick_actual: int,
         bus_eventos: BusEventos,
+        construir_motivo_mejora: bool = False,
     ) -> None:
         """
         REFUGIO/ALMACÉN CONSTRUIDO (ver componentes/construccion.py,
@@ -575,8 +614,30 @@ class SistemaRecursos:
         Evento en la transición (mismo criterio que CrisisMental, no en
         cada tick que sigue terminado): NOTABLE para refugio (logro
         individual), HISTÓRICO para almacén (hito de la comunidad entera).
+
+        construir_motivo_mejora (2026-09-14, Pieza D del arco "comodidad"
+        -- ver CLAUDE.md): cuando sistema_decision.py marcó CONSTRUIR
+        como motivado por mejora de vivienda (refugio propio ya
+        completado_alguna_vez, se porta algo mejor que lo peor ya
+        invertido), se ignora por completo objetivo_construccion_actual
+        -- ese objetivo YA es None o apunta a la cadena comunal, ninguno
+        de los dos es el refugio propio en modo sustitución -- y se
+        resuelve directamente contra el refugio propio vía
+        _resolver_mejora_refugio.
         """
         if inv is None:
+            return
+        if construir_motivo_mejora:
+            cid_refugio_propio = construccion_propia(gestor, entidad_id, "refugio")
+            if cid_refugio_propio is None:
+                return
+            con_pos_mejora = gestor.obtener_componente(cid_refugio_propio, Posicion)
+            if con_pos_mejora is None or con_pos_mejora.x != pos_x or con_pos_mejora.y != pos_y:
+                return
+            refugio_mejora = gestor.obtener_componente(cid_refugio_propio, Construccion)
+            if refugio_mejora is None:
+                return
+            self._resolver_mejora_refugio(inv, refugio_mejora)
             return
         objetivo = objetivo_construccion_actual(
             gestor, mundo, entidad_id, self.radio_cluster_asentamiento
@@ -627,6 +688,60 @@ class SistemaRecursos:
                 )
             )
 
+    def _resolver_mejora_refugio(self, inv: Inventario, construccion: Construccion) -> None:
+        """Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" --
+        ver CLAUDE.md): SUSTITUYE hasta tasa_mejora_refugio kg del
+        material de PEOR calidad_construccion ya invertido en el refugio
+        por material de MEJOR calidad ya portado en Inventario.contenidos
+        -- masa total constante, huella_m2 no crece. A diferencia de
+        _resolver_construir (acumulación hacia masa_minima), aquí no hay
+        ningún progreso que avanzar -- el refugio ya está
+        completado_alguna_vez, esto solo cambia DE QUÉ está hecho.
+
+        Autolimitado por el propio gate de utilidad
+        (sistema_decision.py): solo se llega aquí cuando ya se confirmó
+        que el Inventario porta algo con calidad_construccion mayor que
+        el peor material ya invertido -- sin ese gate, esta función
+        sería un no-op silencioso la mayoría de las veces, no un bug."""
+        if not inv.contenidos or not construccion.materiales:
+            return
+        peor_clave = min(
+            (
+                clave for clave, cant in construccion.materiales.items() if cant > 0.0
+            ),
+            key=lambda k: self.catalogo_materiales.get(k, {}).get("calidad_construccion", 0.0),
+            default=None,
+        )
+        if peor_clave is None:
+            return
+        calidad_peor = self.catalogo_materiales.get(peor_clave, {}).get("calidad_construccion", 0.0)
+        candidatos = [
+            (clave, cant) for clave, cant in inv.contenidos.items()
+            if cant > 0.0
+            and self.catalogo_materiales.get(clave, {}).get("calidad_construccion", 0.0) > calidad_peor
+        ]
+        if not candidatos:
+            return
+        mejor_clave, _ = max(
+            candidatos,
+            key=lambda item: self.catalogo_materiales.get(item[0], {}).get("calidad_construccion", 0.0),
+        )
+        cantidad = min(
+            self.tasa_mejora_refugio,
+            construccion.materiales[peor_clave],
+            inv.contenidos[mejor_clave],
+        )
+        if cantidad <= 0.0:
+            return
+        construccion.materiales[peor_clave] -= cantidad
+        if construccion.materiales[peor_clave] <= 0.0:
+            del construccion.materiales[peor_clave]
+        construccion.materiales[mejor_clave] = construccion.materiales.get(mejor_clave, 0.0) + cantidad
+        inv.contenidos[mejor_clave] -= cantidad
+        if inv.contenidos[mejor_clave] <= 0.0:
+            del inv.contenidos[mejor_clave]
+        self._stats_mejora_refugio_sustituciones += 1
+
     def _resolver_recolectar(
         self,
         inv: Inventario | None,
@@ -638,10 +753,14 @@ class SistemaRecursos:
         recolectar_arma: bool = False,
         recolectar_herramienta: bool = False,
         recolectar_fuego: bool = False,
+        recolectar_mineria: bool = False,
         gestor: GestorEntidades | None = None,
         pos_x: int = 0,
         pos_y: int = 0,
         zona_idx: int = 0,
+        entidad_id: int = 0,
+        bus_eventos: BusEventos | None = None,
+        tick_actual: int = 0,
     ) -> None:
         """
         RECOLECTAR (ver componentes/intencion.py y nucleo/construccion.py).
@@ -715,19 +834,23 @@ class SistemaRecursos:
         Si la celda actual tiene una veta de mineral con masa restante
         (ver nucleo/cueva.py y componentes/celda.py:masa_mineral_restante),
         se extrae ESO en vez de tipo_sustrato -- a diferencia del
-        sustrato, la veta es finita y se agota de verdad. Ningún cambio
-        hace falta en sistema_decision.py: RECOLECTAR ya gatea
-        genéricamente por "masa apta de construcción pendiente"
-        (nucleo/construccion.py:material_suficiente_para), hierro/cobre
-        ya son apto_construccion=true en el catálogo -- para la Utility
-        AI, extraer mineral, madera o sustrato es indistinguible, solo
-        cambia qué clave del Inventario crece.
+        sustrato, la veta es finita y se agota de verdad, y (2026-09-12,
+        "minería real") EXIGE tener un `pico` fabricado -- ver más abajo.
+        Ningún cambio hace falta en sistema_decision.py para el gate
+        genérico de utilidad: RECOLECTAR ya gatea por "masa apta de
+        construcción pendiente" (nucleo/construccion.py:
+        material_suficiente_para), hierro/cobre ya son
+        apto_construccion=true en el catálogo -- para la Utility AI,
+        extraer mineral, madera o sustrato sigue siendo indistinguible a
+        nivel de utilidad, solo cambia qué clave del Inventario crece
+        (el gate real vive en la RESOLUCIÓN, aquí, no en la decisión).
 
         Orden de prioridad dentro de esta única celda -- mineral (más
-        escaso y finito) > material de flora (finito por día, regenera) >
-        sustrato (siempre disponible, nunca se agota): ninguna Utility AI
-        lo decide, es simplemente qué hay de más a menos especial en el
-        sitio donde ya se está.
+        escaso y finito) > tala (destruye la Planta, exige hacha) >
+        material de flora (finito por día, regenera) > sustrato (siempre
+        disponible, nunca se agota -- salvo piedra, que exige pico desde
+        2026-09-14): ninguna Utility AI lo decide, es simplemente qué hay
+        de más a menos especial en el sitio donde ya se está.
 
         3. MATERIAL HERRAMIENTA CON CAUSA (2026-09-11, circulo 2 del arco
            "fabricacion y uso de herramientas"): mismo eslabon heredado
@@ -744,6 +867,24 @@ class SistemaRecursos:
         multiplicativo a la tasa de recoleccion a granel de este mismo
         metodo (mineral/flora/sustrato, mas abajo) -- ver
         factor_bono_tasa_recolectar_con_herramienta.
+
+        4. MATERIAL MINERIA CON CAUSA (2026-09-12, "minería real" -- ver
+           docs/superpowers/specs/2026-09-12-mineria-real-design.md):
+           mismo eslabón heredado que Vía 2/3, mismos materiales
+           (madera/piedra reutilizados), gateado por "ya posee un pico
+           fabricado" en vez de arma/herramienta -- disparado por
+           Intencion.recolectar_motivo_mineria (recolectar_mineria).
+           Comparte `_via_material_crudo` con Vía 2/3.
+
+        MINERÍA REAL (2026-09-12): la extracción de veta de abajo (mineral/
+        flora/sustrato) EXIGE ahora tener un `pico` fabricado
+        (recetas_mineria, catálogo separado de recetas_herramientas) --
+        antes de este círculo, extraer una veta era indistinguible de
+        recoger una rama caída, sin ningún requisito de herramienta. Sin
+        pico, la extracción de veta se SALTA (no se interrumpe la
+        resolución) y cae al siguiente nivel de prioridad ya existente
+        (material de flora, luego tipo_sustrato) -- un consciente sin
+        pico junto a una veta sigue recolectando lo que sí puede.
         """
         if inv is None or dims is None:
             return
@@ -810,6 +951,19 @@ class SistemaRecursos:
             ):
                 return
 
+        # Vía 4: material apto_arma CON CAUSA (mineria, 2026-09-12) -- ver
+        # docstring arriba. Mismos materiales/helper que Vía 2/3, gateada
+        # por "ya posee un pico fabricado" en vez de arma/herramienta.
+        if recolectar_mineria:
+            objetos_totales_m = list(inv.objetos)
+            if agarre is not None:
+                objetos_totales_m.extend(agarre.objetos)
+            ya_tiene_pico = tiene_herramienta(objetos_totales_m, self.recetas_mineria)
+            if self._via_material_crudo(
+                inv, dims, celda, gestor, pos_x, pos_y, zona_idx, ya_tiene_pico
+            ):
+                return
+
         # Herramienta fabricada (2026-09-11): bono multiplicativo a la
         # tasa de recoleccion a granel (mineral/flora/sustrato, abajo) --
         # portarla basta, no exige tenerla empuñada (ver
@@ -828,14 +982,57 @@ class SistemaRecursos:
             return
 
         if celda.deposito_mineral and celda.masa_mineral_restante > 0.0:
-            material = celda.deposito_mineral
-            cantidad = min(tasa_recoleccion_efectiva, espacio, celda.masa_mineral_restante)
-            inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
-            celda.masa_mineral_restante -= cantidad
-            if celda.masa_mineral_restante <= 0.0:
-                celda.masa_mineral_restante = 0.0
-                celda.deposito_mineral = ""
-            return
+            if tiene_herramienta(objetos_para_bono, self.recetas_mineria):
+                material = celda.deposito_mineral
+                cantidad = min(tasa_recoleccion_efectiva, espacio, celda.masa_mineral_restante)
+                inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
+                celda.masa_mineral_restante -= cantidad
+                if celda.masa_mineral_restante <= 0.0:
+                    celda.masa_mineral_restante = 0.0
+                    celda.deposito_mineral = ""
+                return
+            self._stats_veta_bloqueada_sin_pico += 1
+
+        # Tala (2026-09-14, "tala real" -- ver docs/superpowers/specs/
+        # 2026-09-14-tala-real-design.md): mismo criterio que mineral --
+        # más especial que el goteo pasivo de ramas caídas (celda.recursos
+        # de más abajo, sistema_flora.py), pero sin motivo causal propio
+        # (RECOLECTAR ya activo por cualquier razón basta, mismo criterio
+        # deferido por Diego que rige minería: "más adelante... será el
+        # motivo de que un ser consciente vaya a minar/talar"). Gate por
+        # hacha_primitiva ESPECÍFICA, no tiene_herramienta() genérico --
+        # un hacha tala, no cualquier herramienta futura. Sin bloquear la
+        # resolución si falta hacha: cae al goteo pasivo/sustrato.
+        if gestor is not None:
+            planta_id = self._planta_talable_en(gestor, pos_x, pos_y, zona_idx)
+            if planta_id is not None:
+                objetos_para_hacha = list(inv.objetos)
+                if agarre is not None:
+                    objetos_para_hacha.extend(agarre.objetos)
+                if "hacha_primitiva" in objetos_para_hacha:
+                    planta = gestor.obtener_componente(planta_id, Planta)
+                    cantidad = min(tasa_recoleccion_efectiva, espacio, planta.masa_tronco_kg)
+                    inv.contenidos["madera"] = inv.contenidos.get("madera", 0.0) + cantidad
+                    planta.masa_tronco_kg -= cantidad
+                    if planta.masa_tronco_kg <= 0.0:
+                        especie_talada = planta.especie
+                        gestor.eliminar_entidad(planta_id)
+                        self._stats_arboles_talados += 1
+                        if bus_eventos is not None:
+                            bus_eventos.emitir(
+                                Evento(
+                                    tipo="ArbolTalado",
+                                    severidad=Severidad.NOTABLE,
+                                    tick=tick_actual,
+                                    entidad_id=entidad_id,
+                                    datos={
+                                        "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
+                                        "especie": especie_talada,
+                                    },
+                                )
+                            )
+                    return
+                self._stats_arbol_bloqueado_sin_hacha += 1
 
         for nombre, cantidad_disponible in celda.recursos.items():
             if cantidad_disponible <= 0.0:
@@ -861,6 +1058,18 @@ class SistemaRecursos:
             return
         info = self.catalogo_materiales.get(material, {})
         if not info.get("apto_construccion", False):
+            return
+        # Piedra (tipo_sustrato) exige pico (2026-09-14, ver CLAUDE.md --
+        # "para coger piedra lo lógico es que tengas que picar también").
+        # Distinto de piedra_suelta (Vía 1, percusión de fuego) -- esa
+        # sigue gratuita, es una piedra suelta encontrada, no una cantera.
+        # Arcilla/tierra (y sus variantes tierra_negra/marga/grava) siguen
+        # sin gate -- se cavan a mano, no se pican. Sin bloquear la
+        # resolución si falta pico: el tick simplemente no produce nada,
+        # mismo criterio "no interrumpe, solo no da" que ya usa el
+        # fallback de veta/tala cuando el nivel superior falla.
+        if material == "piedra" and not tiene_herramienta(objetos_para_bono, self.recetas_mineria):
+            self._stats_piedra_sustrato_bloqueada_sin_pico += 1
             return
         cantidad = min(tasa_recoleccion_efectiva, espacio)
         inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad
@@ -960,6 +1169,22 @@ class SistemaRecursos:
             if planta is not None and planta.especie == especie_origen:
                 return True
         return False
+
+    def _planta_talable_en(
+        self, gestor: GestorEntidades, pos_x: int, pos_y: int, zona_idx: int
+    ) -> int | None:
+        """Id de la primera Planta MADURA (etapa>=1.0) con madera real en
+        el tronco (masa_tronco_kg>0.0) en esta celda+zona -- 2026-09-14,
+        "tala real". Solo manzano/roble/pino la declaran (ver
+        config/flora.yaml:masa_tronco_kg); una plántula recién propagada
+        (etapa<1.0) nunca es talable, mismo criterio que "solo una planta
+        madura produce recurso" ya rige el resto de flora. None si no hay
+        ninguna."""
+        for pid in plantas_competidoras_en(gestor, pos_x, pos_y, zona_idx, self.especies_flora):
+            planta = gestor.obtener_componente(pid, Planta)
+            if planta is not None and planta.etapa >= 1.0 and planta.masa_tronco_kg > 0.0:
+                return pid
+        return None
 
     def _resolver_encender_fuego(
         self,
@@ -1094,12 +1319,12 @@ class SistemaRecursos:
         FABRICAR (2026-09-11, renombrada desde FABRICAR_ARMA -- ver
         componentes/intencion.py y config/armas.yaml). Ramifica por
         `categoria` (Intencion.fabricar_categoria, ya decidida por el
-        resolutor interno de sistema_decision.py) -- "arma" y
-        "herramienta" (2026-09-11, circulo 2 del arco "fabricacion y uso
-        de herramientas") son las dos implementadas hoy; cualquier otra
-        cae al no-op de abajo (no deberia poder llegar aqui salvo que se
-        anada una categoria nueva a sistema_decision.py sin su propia
-        resolucion todavia).
+        resolutor interno de sistema_decision.py) -- "arma", "herramienta"
+        (2026-09-11) y "mineria" (2026-09-12, ver docs/superpowers/specs/
+        2026-09-12-mineria-real-design.md) son las tres implementadas hoy;
+        cualquier otra cae al no-op de abajo (no deberia poder llegar aqui
+        salvo que se anada una categoria nueva a sistema_decision.py sin
+        su propia resolucion todavia).
 
         Ambas categorias comparten el mismo patron determinista (tallar
         no es un suceso de azar, a diferencia de encender fuego): busca
@@ -1131,6 +1356,8 @@ class SistemaRecursos:
             recetas = self.recetas_armas
         elif categoria == "herramienta":
             recetas = self.recetas_herramientas
+        elif categoria == "mineria":
+            recetas = self.recetas_mineria
         else:
             return
         receta = mejor_receta_completable(objetos_portados, recetas)
@@ -1157,7 +1384,7 @@ class SistemaRecursos:
                     },
                 )
             )
-        else:
+        elif categoria == "herramienta":
             self._stats_herramientas_fabricadas += 1
             bus_eventos.emitir(
                 Evento(
@@ -1168,6 +1395,20 @@ class SistemaRecursos:
                     datos={
                         "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
                         "herramienta": nombre_objeto,
+                    },
+                )
+            )
+        else:
+            self._stats_picos_fabricados += 1
+            bus_eventos.emitir(
+                Evento(
+                    tipo="PicoFabricado",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=entidad_id,
+                    datos={
+                        "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
+                        "pico": nombre_objeto,
                     },
                 )
             )

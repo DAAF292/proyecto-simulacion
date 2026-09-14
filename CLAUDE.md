@@ -9032,6 +9032,613 @@ círculo -- decisión de diseño pura, documentada para que ninguna sesión
 futura la trate como un bug latente ni añada una receta nueva sin
 cruzar ambos catálogos primero.
 
+## Cómo desarrollar asentamientos/profesiones -- brainstorming de arco,
+## corrección real de Diego sobre "minería ya existe", Círculo 1
+## (minería real) cerrado (2026-09-12, misma sesión)
+
+Diego pidió plantear cómo desarrollar el arco recién cerrado de
+profesiones (aptitud vocacional + fabricación de herramientas) hacia
+"asentamientos primitivos" -- intención explícita: que el desarrollo de
+un asentamiento sea GRADUAL, a medida que la población crece y mejora,
+mejorando construcciones y sociedad en consecuencia. Investigado antes
+de proponer nada (mismo criterio de siempre): el riesgo real es que
+"mejora gradual" se convierta en un guion disfrazado de regla (un "nivel
+de aldea" autorado, tipo videojuego de estrategia) -- exactamente el
+tipo de error que el principio 5 (leyes neutras) prohíbe y que este
+proyecto ya corrigió una vez (categorizar cuevas por tamaño/bioma).
+
+**Alcance real, confirmado por Diego, mucho más grande que un círculo**:
+(1) tipos de construcción NUEVOS desbloqueables por materiales+
+habilidades reales; (2) upgrade de construcciones YA existentes
+(refugio → cabaña → casa); (3) driver combinado de población+materiales+
+vocación+**conocimiento** -- este último, explícitamente "hay que
+pensar", un mecanismo genuinamente nuevo (transmisible y mejorable, no
+solo un stat que muere con el individuo). Roadmap propuesto y aceptado:
+(1) diferenciación de calidad de materiales, (2) niveles de construcción,
+(3) conocimiento como componente propio -- su propia sesión de diseño
+dedicada, reutilizando el patrón de transferencia por contacto ya
+construido (memoria espacial compartida/rumor social, 2026-09-06), (4)
+tipos de construcción nuevos. Edificio de liderazgo confirmado aparcado
+(sin decisión mecánica real que habilitar todavía).
+
+**Corrección real de Diego sobre mi propia afirmación, antes de tocar
+nada**: dije "minería ya existe" -- Diego señaló que no, y verificado
+contra el código (`sistema_recursos.py:780`, antes de este círculo) tenía
+razón: la parte GEOLÓGICA (vetas finitas, `masa_mineral_restante`) existe
+desde el arco de profundidad, pero la ACCIÓN de extraerlas era
+literalmente la misma `RECOLECTAR` genérica que agarra una rama caída,
+sin ningún requisito de herramienta. Distinción real de Diego: "con una
+rama y una piedra podemos hacer un martillo, pero para hacer un edificio
+necesitamos tablas de madera, losas de piedra" -- recoger lo suelto no
+exige herramienta, producir de verdad sí. Tres sistemas de producción
+identificados, ninguno equivalente: minería (geología real, acción sin
+gate -- el más barato de arreglar, reutiliza el 100% de FABRICAR ya
+construido), tala real (no existe -- recoger ramas caídas nunca destruye
+la `Planta`, decisión deliberada del 30-08; talar un árbol de verdad
+exigiría destruir una entidad por primera vez en el motor, círculo
+propio, mayor alcance), agricultura/ganadería (arco completo, grande,
+aparcado, confirmado por Diego "todo un sistema nuevo que hay que
+desarrollar, igual que la ganadería").
+
+### Círculo 1 -- Minería real, cerrado (spec, implementado directamente
+### por Claude)
+
+Spec: `docs/superpowers/specs/2026-09-12-mineria-real-design.md`. Un
+`pico` fabricado gatea la extracción de veta -- reutiliza el 100% de
+"fabricación de herramientas" (2026-09-11): `Accion.FABRICAR`,
+`candidatos_fabricar`, `mejor_receta_completable`/`tiene_herramienta`,
+`_via_material_crudo`. Cero mecanismo nuevo, solo una TERCERA categoría
+FABRICAR ("mineria") y un gate nuevo en la extracción.
+
+**Catálogo separado** (`config/herramientas.yaml:recetas_mineria`,
+distinto de `recetas`): `pico` reutiliza los mismos materiales crudos
+que `hacha_primitiva` (madera+piedra) -- deliberado, evita que
+`mejor_receta_completable` tenga que elegir entre pico y hacha_primitiva
+con el mismo inventario (cada categoría FABRICAR resuelve solo contra su
+propio catálogo, sin ambigüedad posible aunque compartan materiales).
+Alternativa descartada: diferenciar materiales -- no funciona,
+`mejor_receta_completable` usa `set(objetos)` sin conteo, "2x piedra" no
+se puede exigir con el mecanismo actual.
+
+**Motivo causal, mismo patrón exacto que "herramienta"** (utilidad =
+`necesidad_trabajo`, sin descuento), con un disparador MÁS ESPECÍFICO:
+solo se activa si la celda actual tiene de verdad una veta sin explotar
+-- un individuo que nunca ha estado junto a una veta sin pico nunca
+desarrolla interés en fabricar uno (principio 5). RECOLECTAR hereda el
+motivo para juntar madera/piedra crudos -- cuarto flag
+`Intencion.recolectar_motivo_mineria`, extendiendo el resolutor de
+precedencia corregido ayer ("prioridad consciente") a CUATRO eslabones:
+fuego > arma > herramienta > mineria. Vía 4 en `_resolver_recolectar`,
+comparte `_via_material_crudo` con Vía 2/3.
+
+**Gate de extracción**: `celda.deposito_mineral` con masa restante ahora
+exige `tiene_herramienta(objetos_totales, recetas_mineria)`. Sin pico, la
+extracción se SALTA (no interrumpe la resolución) y cae al siguiente
+nivel de prioridad ya existente (flora, luego `tipo_sustrato`) -- un
+consciente sin pico junto a una veta sigue recolectando lo que sí puede.
+
+**Deliberadamente fuera de este círculo**: el pico NO se suma al bono
+genérico de velocidad (`factor_bono_tasa_recolectar_con_herramienta`)
+que ya da `hacha_primitiva` -- su único efecto es destrabar la
+extracción de veta, sin inventar un segundo efecto no pedido.
+`tipo_sustrato` (piedra/arcilla/tierra a granel) sigue sin gate.
+
+**Verificado**: 521/521 tests en verde (13 nuevos,
+`tests/test_mineria_real.py` -- gate de extracción con/sin pico, caída a
+sustrato sin pico, agotamiento real de veta, FABRICAR-mineria produce
+`pico` real sin confundirse con `hacha_primitiva` pese a compartir
+materiales, Vía 4 requiere motivo real, causalidad en
+`sistema_decision.py` -- mineria exige veta real, no basta necesidad de
+trabajo genérica --, precedencia herramienta>mineria en empate exacto).
+`BOSQUE_AUTO_TICKS=3000` con la semilla por defecto, sin ninguna
+excepción: el gate se ejerció de verdad (**1 bloqueo real de extracción
+sin pico**), aunque 0 picos fabricados en esa semilla concreta -- mismo
+patrón "correcto pero raro en una sola semilla" ya visto varias veces en
+este proyecto (fabricación de herramientas, salón común...).
+`BOSQUE_CONTINUAR=1` (200 ticks más tras recargar desde SQLite) sin
+excepciones -- roundtrip limpio (aunque `pico` no añade estado nuevo
+persistido, viaja en `Inventario.objetos`, campo JSON ya existente).
+
+**Diagnóstico multi-semilla, resultado real (2026-09-12, mismo día,
+completado tras cerrar el círculo)**: 6 semillas NUEVAS (101-106) × hasta
+8000 ticks (cortadas entre 2691-3164 por el límite de tiempo real del
+arnés, 60s/semilla) -- **0 picos fabricados en las 6**, mismo resultado
+que la semilla por defecto. El gate SÍ se ejerció de verdad en 2 de las 6
+(`vetas_bloqueadas_sin_pico=1` en semillas 105/106) -- confirma que el
+mecanismo se dispara en juego libre (3/7 semillas totales con al menos un
+bloqueo real), pero el ciclo completo (fabricar pico → extraer veta)
+nunca llegó a cerrarse en ninguna de las 7 semillas probadas hasta ahora.
+
+**Hipótesis real sobre la causa, verificada parcialmente, no confirmada
+del todo**: se descartó una hipótesis inicial antes de escribirla aquí
+como si fuera cierta -- "madera nunca está disponible en una celda de
+veta (terreno de montaña)" resultó FALSA, verificado contra
+`config/flora.yaml`: `pino` (bioma montaña) sí produce `madera` real. La
+hipótesis que queda en pie, sin confirmar con instrumentación dedicada
+todavía: el motivo de mineria es puramente OPORTUNISTA (solo se activa
+estando YA de pie sobre la veta, sin ningún sesgo de movimiento que
+lleve a un gnomo hacia una veta conocida) -- mismo patrón causal exacto
+que ya volvió casi inalcanzable `ENCENDER_FUEGO`/piedra_suelta en su
+momento (30-08), antes de la corrección de "piedra suelta". Con
+`_stats_veta_bloqueada_sin_pico` disparándose solo 2 veces en ~18000
+ticks combinados de las 6 semillas nuevas, simplemente PISAR una celda
+de veta sin pico ya parece ser el cuello de botella dominante, antes
+incluso de si esa misma celda ofrece o no material crudo para tallar.
+
+**Pendiente real, explícito, decisión de Diego, ninguna implementada
+todavía**: si se quiere que el ciclo se cierre de verdad en juego libre,
+candidatos sin decidir (mismo menú de opciones que ya se planteó una vez
+para piedra_suelta, ninguna implementada sin que Diego elija): (a) sesgo
+de movimiento hacia una veta ya conocida en memoria (mismo patrón que ya
+tira hacia refugio/manada); (b) ampliar el disparador del motivo más
+allá de "de pie exactamente sobre la veta"; (c) aceptar que minar es,
+narrativamente, un suceso poco frecuente y no perseguir más esto ahora,
+centrando el esfuerzo en el resto del roadmap (tala real, niveles de
+construcción, conocimiento). Reparto de Círculo 2 (tala real, destruye
+una `Planta` por primera vez en el motor) y Círculo 3+ (niveles de
+construcción, conocimiento transmisible, tipos nuevos) sin empezar --
+agricultura/ganadería aparcada como arco propio.
+
+## Tala real -- Círculo 2 del arco "asentamientos/profesiones", cerrado
+## (spec, implementado directamente por Claude, 2026-09-14)
+
+Diego, al cerrar minería (Círculo 1), dio el siguiente paso explícito:
+"vayamos con la tala, más adelante desarrollaremos necesidades y flujos
+que precisen de materiales y será el motivo de que un ser consciente
+vaya a minar" -- confirma que el hallazgo de minería ("motivo puramente
+oportunista, casi inalcanzable en juego libre", sección anterior)
+**queda deliberadamente DEFERIDO, no corregido en este círculo** --
+mismo criterio aplicado también a tala: sin sesgo de movimiento hacia
+un árbol conocido, sin motivo causal propio nuevo.
+
+Spec: `docs/superpowers/specs/2026-09-14-tala-real-design.md`. Mismo
+patrón exacto que minería -- ninguna Accion nueva, ningún
+`Intencion.recolectar_motivo_X` nuevo: la extracción de madera de un
+árbol EN PIE es una prioridad más dentro del bloque genérico ya
+existente de `_resolver_recolectar` (mineral > **tala** > material de
+flora a granel > sustrato). Diferencia real frente a minería: **por
+primera vez en el motor, una acción del jugador destruye deliberadamente
+una entidad `Planta`** -- hasta hoy, ninguna flora moría nunca (ni de
+vieja, ni por ninguna acción).
+
+**`Planta` gana `masa_tronco_kg: float = 0.0`** -- análogo exacto a
+`Celda.masa_mineral_restante`, fijado UNA VEZ al crear la planta
+(`nucleo/entidad.py:crear_planta`, nuevo parámetro opcional, sin
+acoplar la fábrica a `config`) vía `nucleo/flora.py:
+masa_tronco_inicial_kg(especie_cfg)` (nuevo, pura). Solo las 3 especies
+que ya declaraban un recurso `madera` real (`categoria: material`) y
+`compite_espacio_fisico: true` -- `manzano`, `roble`, `pino` -- reciben
+un valor > 0 en `config/flora.yaml` (PROVISIONAL, escalado a ojo por
+`huella_m2` ya existente: manzano=80kg, pino=90kg, roble=100kg).
+**Deliberadamente determinista, sin sorteo individual** -- a diferencia
+del patrón rango+sorteo que rige atributos de criatura, introducir una
+tirada de `rng` nueva por cada `crear_planta()` desplazaría la secuencia
+de aleatoriedad de TODO lo demás para cualquier semilla ya en marcha
+(mismo riesgo documentado repetidas veces en este proyecto) -- el valor
+ya varía por especie, suficiente sin necesidad real de variar también
+por individuo.
+
+**Gate: `"hacha_primitiva" in objetos_totales`, comprobación específica**
+-- no `tiene_herramienta()` genérico contra ningún catálogo (un hacha
+tala, no cualquier herramienta futura). Sin hacha, la tala no bloquea la
+resolución -- cae a material de flora a granel / sustrato, mismo
+criterio "no bloqueante" que minería. Solo talable una `Planta` MADURA
+(`etapa>=1.0`, mismo criterio que "solo una planta madura produce
+recurso" ya rige el resto de flora) con tronco real
+(`nucleo/flora.py:_planta_talable_en`, nuevo helper en
+`SistemaRecursos`, reutiliza `plantas_competidoras_en` de
+`nucleo/espacio.py`).
+
+**Extracción**: mismo patrón `min(tasa, espacio, masa_restante)` que
+veta, decrementa `Planta.masa_tronco_kg`; al llegar a 0,
+`GestorEntidades.eliminar_entidad(planta_id)`. **El cupo de espacio
+compartido de la celda se libera solo, sin código adicional** --
+confirmado por diseño y por test: `nucleo/espacio.py:
+plantas_competidoras_en`/`espacio_disponible` consultan la ECS en vivo
+cada vez, nunca cachean nada, así que destruir la entidad libera su
+`huella_m2` en la siguiente consulta. Evento `ArbolTalado` (NOTABLE,
+mismo criterio que `HerramientaFabricada`/`PicoFabricado`) al agotar el
+tronco -- `{x, y, zona_idx, especie}`.
+
+**Deliberadamente fuera de este círculo**: sin "tabla" procesada (sigue
+siendo el mismo material `madera` ya existente en el catálogo, solo una
+fuente mucho mayor y de una vez); sin regeneración de la `Planta`
+talada -- la propagación diaria ya causal (arco "tipos de propagación de
+flora", cerrado 2026-09-02) es el único mecanismo de reposición.
+
+**Persistencia**: `Planta.masa_tronco_kg` viaja en `plantas_estado`
+(nueva columna), `VERSION_ESQUEMA` sube a `0.38-fase0`
+(DROP-and-recreate, sin migración, mismo criterio ya establecido).
+
+**Verificado**: 533/533 tests en verde (12 nuevos,
+`tests/test_tala_real.py` -- catálogo de masa inicial, gate con/sin
+hacha (Inventario y Agarre), caída a sustrato sin hacha, sin motivo
+causal nuevo (RECOLECTAR activo por cualquier razón basta), extracción
+real con destrucción de la entidad al agotar / sin destruir en
+extracción parcial, liberación real de espacio de celda tras destruir
+-- medida con `nucleo/espacio.py:espacio_disponible` antes/después, no
+solo razonada --, prioridad mineral>tala en la misma celda, roundtrip
+de persistencia con masa parcial y agotada). `BOSQUE_AUTO_TICKS=3000`
+sin ninguna excepción: **152 bloqueos reales por falta de hacha, 0
+árboles talados** en esa semilla concreta -- el gate se ejerce con
+fuerza real desde el primer día (mismo patrón que minería: "correcto y
+verificado, pero el ciclo completo hacha→tala puede resultar raro en
+una sola semilla", confirmar con diagnóstico multi-semilla antes de
+concluir nada sobre frecuencia real). `BOSQUE_CONTINUAR=1` (200 ticks
+más tras recargar desde SQLite) sin excepciones -- roundtrip real con
+17 madrigueras físicas y el resto del estado social intactos, confirma
+que la columna `masa_tronco_kg` nueva no rompe nada del resto del
+snapshot.
+
+**Pendiente real, explícito**: `masa_tronco_kg` por especie
+PROVISIONAL, sin calibrar contra el harness completo; sin ningún
+consumidor de `ArbolTalado` en narrador/vista_web todavía --
+presentación, deliberadamente sin tocar (motor primero).
+
+### Diagnóstico multi-semilla real -- mismo hallazgo que minería, 0
+### árboles talados pese a hachas ya fabricadas (2026-09-14, mismo día)
+
+Mismo arnés que minería (`main.py:ejecutar_tick` con
+`Persistencia` no-op, sin SQLite), 6 semillas NUEVAS (201-206) × hasta
+8000 ticks, tope real de 60s/semilla (las 6 se cortaron por tiempo
+entre 1979 y 2481 ticks -- ninguna llegó al término completo, mismo
+criterio de honestidad ya aplicado a diagnósticos anteriores de esta
+sesión sobre qué cuenta como dato válido).
+
+| Semilla | Ticks | Talados | Bloqueados sin hacha | Herramientas fabricadas |
+|---|---|---|---|---|
+| 201 | 2127 | 0 | 226 | 2 |
+| 202 | 2203 | 0 | 101 | 3 |
+| 203 | 2159 | 0 | 95 | 1 |
+| 204 | 2341 | 0 | 163 | 1 |
+| 205 | 2481 | 0 | 117 | 1 |
+| 206 | 1979 | 0 | 100 | 1 |
+
+**0 árboles talados en las 6 semillas** -- mismo resultado que minería
+(0 picos-con-extracción en 6/6 también). El gate se ejerce con fuerza
+real (95-226 bloqueos por falta de hacha por semilla) y **sí se
+fabrican hachas de verdad** (1-3 `hacha_primitiva` por semilla,
+confirmando que el ciclo RECOLECTAR-material→FABRICAR-herramienta
+funciona) -- pero ninguna de esas hachas llegó a coincidir con "estar
+de pie junto a un árbol maduro talable" en el mismo tick con RECOLECTAR
+como acción ganadora, dentro de la ventana medida. Mismo diagnóstico
+que minería: el disparador es puramente oportunista (sin ningún sesgo
+de movimiento hacia un árbol conocido), y **deferido explícitamente por
+Diego** a las mismas "necesidades y flujos futuros que precisen de
+materiales" que resolverán ambos casos a la vez -- no se investiga ni
+se corrige más aquí, documentado con la misma honestidad que el resto
+del proyecto.
+
+## Comodidad -- diseño del arco completo, Piezas A+B cerradas (piedra
+## exige pico + catálogo de calidad_construccion), Piezas C/D pendientes
+## (2026-09-14, mismo día)
+
+Diego, tras cerrar tala real, cuestionó el propio diseño de "reutiliza
+antes de inventar" desde otro ángulo, sin esperar a que se le preguntara:
+*"hay que darle una vuelta a esto, porque no todo sirve, para empezar, lo
+lógico es que los minerales no se puedan recoger sin intrumentos de
+mineria, como un pico. y por otro lado, no todos los materiales deben
+poder servir para construir, o quizas si pero no de igual manera, hay que
+encontrar la forma de fomentar el desarrollo y la evolucion, quizas un
+consciente en un punto inicial prioriza un refugio de arcilla, pero
+cuando sus necesidades están medianamente cubiertas lo normal es que
+busquen mejorar. quizas deberiamos empezar a plantear una nueva necesidad
+de confort o comodidad, y que esa necesidad empuje al individuo y
+sociedad a mejorar?"* -- tres hilos entrelazados: (1) gatear minerales
+tras herramienta (la veta YA lo tenía desde Círculo 1, faltaba
+extenderlo a piedra-como-sustrato), (2) diferenciar calidad de material
+para construcción en vez de tratar todo `apto_construccion` como
+fungible, (3) una necesidad nueva de comodidad que empuje a mejorar una
+vez cubierta la supervivencia.
+
+**Diagnóstico real que motivó la pregunta, encontrado ANTES de diseñar
+nada** (pregunta directa de Diego: *"si las construciones básicas
+precisan de madera por que no se da la tala de forma natural?"*):
+`nucleo/construccion.py:masa_apta_construccion(materiales, catalogo)`
+suma CUALQUIER material `apto_construccion` sin distinguir cuál -- la
+demanda de construcción es puramente de masa agregada, nunca específica
+de material. Como arcilla siempre está disponible y sin gate, satisface
+la demanda de refugio/almacén antes de que madera (tala, exige hacha) o
+piedra-vía-pico lleguen nunca a ser necesarios. Esto explica con
+precisión por qué tala/minería, aunque mecánicamente correctas, resultan
+casi invisibles en juego libre -- no falta motivo ni herramienta, falta
+DEMANDA real de un material mejor que arcilla.
+
+**Decisiones cerradas con Diego, `AskUserQuestion`, antes de escribir
+código**: piedra como `tipo_sustrato` (cantera a granel) TAMBIÉN exige
+pico -- *"hombre para coger piedra lo lógico es que tengas que picar
+tambn, no? otra cosa son las piedras sueltas del suelo"* (piedra_suelta,
+la de percusión de fuego, sigue libre a propósito -- una piedra
+encontrada no es una cantera); calidad de material intrínseca y FIJA por
+material (no por nivel de procesado -- más simple, y "roca tallada" ya
+es intrínsecamente mejor que "tierra suelta" sin necesidad de ningún
+paso de elaboración intermedio); la nueva necesidad va en un campo
+GENUINAMENTE NUEVO de `Necesidades` (no reutilizar
+`CapacidadMental.voluntad`, que ya tiene su propio consumidor real desde
+aptitud vocacional -- mezclar ambos habría sido acoplar dos leyes
+distintas sin necesidad).
+
+**Reencuadre de alcance, pedido por Diego**: *"el problema es que la
+comodidad de la que hablamos tiene que ser un motor general, desarrollo
+de 'tecnologias', mejoras para vivir, etc. y luego quizas enlazarlo con
+el ocio para que nazca el 'arte'. entiendes por donde voy?"* -- comodidad
+como necesidad de nivel superior genuinamente genérica (no solo
+vivienda), con una conexión futura a ocio (`Accion.SOCIALIZAR`, ya
+existe) para dar pie a "arte" en un horizonte lejano. Acordado
+explícitamente reducir el ALCANCE del círculo actual a solo vivienda
+(el consumidor más simple y ya cableado) sin cerrar la puerta al resto
+-- Diego lo aceptó ("me parece bien") pero pidió que la integración con
+los flujos ya existentes quedara planteada de forma concreta, no solo
+abstracta.
+
+**Corrección semántica real, encontrada al diseñar la integración**:
+`decision.umbral_atencion_pareja` (el gate Maslow genérico -- "ninguna
+necesidad de nivel superior compite mientras alguna de las 4
+necesidades físicas esté baja") YA tenía tres consumidores reales antes
+de comodidad (`BUSCAR_PAREJA`, su origen; `SOCIALIZAR`, desde
+2026-09-06; el gate de concepción de `sistema_reproduccion.py`, desde
+2026-08-31) -- su nombre ya estaba desfasado, no por comodidad sino por
+uso previo nunca corregido. Diego: *"usemos el mismo, pero habrá que
+hacer que semanticamente deje de estar relacionado con pareja, porque
+ahora lo consumiran otros flujos, no?"* -- renombrado a
+`decision.umbral_necesidades_superiores` (commit `4faf293`, puro rename,
+comportamiento byte-idéntico verificado con `BOSQUE_AUTO_TICKS=3000`
+contra el run de tala real inmediatamente anterior -- mismos contadores
+exactos).
+
+**Roadmap de 4 piezas acordado, D es la pieza grande, ninguna de las dos
+últimas empezada todavía**:
+- **Pieza A** (este círculo): piedra-sustrato exige pico.
+- **Pieza B** (este círculo): catálogo `calidad_construccion` [0,1] por
+  material, sin consumidor mecánico todavía -- mismo patrón "catálogo
+  antes que mecanismo" ya usado con `toxico_crudo` antes de "cómo
+  cocinar".
+- **Pieza C** (siguiente, sin empezar): `Necesidades.comodidad` como
+  campo nuevo, con mecanismo de deriva hacia un objetivo derivado de la
+  calidad media ponderada de los materiales del refugio propio ya
+  completado (`Construccion.materiales`, sin campo nuevo en
+  `Construccion` -- se deriva, no se persiste aparte).
+- **Pieza D** (la grande, sin empezar): `necesidad_trabajo` en
+  `sistema_decision.py` (hoy `max(utilidad_recolectar,
+  utilidad_construir)`) gana un tercer input -- el déficit de comodidad,
+  SOLO activo tras `completado_alguna_vez=True` y gateado por
+  `umbral_necesidades_superiores` sobre las 4 necesidades físicas (mismo
+  patrón exacto que `BUSCAR_PAREJA`). `CONSTRUIR` necesita un modo
+  "mejora" nuevo para seguir vivo más allá de `completado_alguna_vez`
+  (añadir material de mejor calidad al MISMO refugio sin crecer
+  `huella_m2`), autolimitado sin techo autorado -- se satura solo cuando
+  `calidad_media` alcanza el mejor material realmente disponible en la
+  zona.
+- Parked, contingente: una pieza 5 de sesgo de movimiento hacia veta/
+  árbol conocido (mismo patrón que refugio/manada/agua en
+  `MemoriaEspacial`), solo si tras la Pieza D minería/tala siguen
+  invisibles en juego libre.
+- Explícitamente FUERA de alcance de este arco por ahora (decisión de
+  Diego, "me parece bien" a la reducción de alcance propuesta):
+  generalizar comodidad a dominios no habitacionales (calidad de
+  herramienta, calidad de comida), y la conexión ocio→arte -- ambas
+  quedan como visión declarada, sin una sola línea de diseño todavía.
+
+### Piezas A+B -- implementadas y verificadas (2026-09-14, mismo día)
+
+**Pieza A**: `sistemas/sistema_recursos.py:_resolver_recolectar`, el
+fallback terminal de `tipo_sustrato` gana un gate específico -- si
+`material == "piedra"`, exige `tiene_herramienta(objetos_para_bono,
+self.recetas_mineria)` (mismo catálogo de pico ya usado por la
+extracción de veta, Círculo 1) antes de producir nada; sin pico, el tick
+simplemente no produce (no hay ningún nivel más abajo al que caer, a
+diferencia de veta/tala que sí caen a algo más). arcilla/tierra/
+tierra_negra/marga/grava siguen sin gate ("se cavan a mano, no se
+pican"). Contador de observación
+`_stats_piedra_sustrato_bloqueada_sin_pico` nuevo. Verificado sin
+dependencia circular: el material crudo "piedra" que alimenta la receta
+de `pico` viene de `piedra_suelta` (`nucleo/armas.py`, solo mira
+`celda.recursos`, nunca `tipo_sustrato`) -- un gnomo siempre puede
+fabricar su primer pico sin haber cavado cantera nunca.
+
+**Pieza B**: `config/materiales.yaml` gana `calidad_construccion` [0,1]
+en los 11 materiales `apto_construccion: true` (PROVISIONAL, razonado a
+mano contra `dureza`/naturaleza real del material, sin calibrar contra
+el motor): tierra=0.15, hierba_seca=0.15, tierra_negra=0.15, fibra=0.2,
+marga=0.22, arcilla=0.3, grava=0.35, madera=0.55, cobre=0.75,
+piedra=0.85, hierro=0.95 -- eje DISTINTO de `dureza` (cuánto cuesta
+trabajarlo, no el resultado), correlacionado a grandes rasgos pero no
+idéntico. Sin ningún consumidor mecánico todavía -- solo catálogo, la
+Pieza C es quien lo leerá.
+
+**Verificado**: 541/541 tests en verde (8 nuevos,
+`tests/test_piedra_sustrato_pico.py` -- gate con/sin pico, fallback
+terminal no cae a nada más sin pico, hacha_primitiva no gatea (cada
+herramienta abre solo su propio catálogo), arcilla/tierra siguen sin
+gate, piedra_suelta sigue gratuita, catálogo de calidad_construccion
+completo/ausente donde corresponde, orden cualitativo metal/piedra >
+tierra/barro). Un test preexistente de minería (`test_mineria_real.py:
+test_ley_sin_pico_cae_a_sustrato_en_vez_de_bloquearse`) usaba una celda
+con `tipo_sustrato="piedra"` como fallback -- ahora también gateada,
+corregido a `tipo_sustrato="arcilla"` para aislar el comportamiento que
+ese test valida (fallback de veta) del gate nuevo de piedra.
+`BOSQUE_AUTO_TICKS=3000` con la semilla por defecto, sin ninguna
+excepción: **398 bloqueos reales de piedra-sustrato sin pico** -- se
+ejerce con fuerza real desde el primer día, muy por encima de veta (2) y
+tala (149) en la misma corrida (piedra es, con diferencia, el
+`tipo_sustrato` más común del catálogo de montaña). `BOSQUE_CONTINUAR=1`
+(200 ticks más) sin excepciones -- roundtrip limpio, sin campos nuevos
+persistidos por esta pieza.
+
+**Pendiente real, explícito**: `calidad_construccion` sigue sin ningún
+efecto sobre el motor -- catálogo puro hasta la Pieza C; los 11 valores
+y el propio gate de piedra son PROVISIONALES, sin calibrar contra el
+harness completo; Piezas C y D (comodidad de verdad, el driver de
+mejora) son el siguiente trabajo real de este arco, sin empezar
+todavía.
+
+### Pieza C -- `Necesidades.comodidad`, cerrada (2026-09-14, mismo día)
+
+`componentes/necesidades.py` gana `comodidad: float = 0.0`, mismo
+molde de deriva-hacia-objetivo que `confort_termico` (a diferencia de
+ese campo, sigue la convención estándar del resto del fichero --
+1.0=satisfecho, 0.0=nada, no 0.5 como ideal). `nucleo/construccion.py:
+calidad_media_construccion(materiales, catalogo)` (nueva, pura): media
+de `calidad_construccion` (Pieza B) ponderada por masa, 0.0 si no hay
+ninguna masa con calidad declarada -- reutiliza el mismo patrón
+permisivo por `.get()` que `masa_apta_construccion`.
+`sistema_necesidades.py` calcula el objetivo cada tick (bloque 4b, justo
+tras confort térmico): 0.0 sin refugio propio, 0.0 mientras el refugio
+propio no esté `completado_alguna_vez`, si no
+`calidad_media_construccion` del `Construccion.materiales` del refugio
+propio -- SOLO para CONSCIENTE (mismo umbral que ya gatea CONSTRUIR/
+RECOLECTAR; fauna nunca construye refugio propio, así que gatear
+explícitamente evita un escaneo O(N) de construcciones por individuo
+sin necesidad real, no solo un atajo semántico).
+`tasa_deriva_comodidad=0.02` nueva (PROVISIONAL, algo más lenta que la
+térmica 0.03 a propósito -- la comodidad de un hogar no debería
+sentirse de golpe en un tick). Persistido: `comodidad` añadida como
+ÚLTIMA columna de `componentes_estado` (deliberadamente al final, no
+intercalada -- evita renumerar las docenas de índices posicionales
+`fila[N]` ya usados por el resto de `nucleo/persistencia.py` al
+cargar), `VERSION_ESQUEMA` sube a `0.39-fase0`. Sin ningún consumidor
+todavía -- ni utilidad en la Utility AI, ni mortalidad, ni drenaje de
+otro pool depende de su valor; la Pieza D es quien lo leerá.
+
+**Verificado**: 551/551 tests en verde (10 nuevos,
+`tests/test_comodidad.py` -- `calidad_media_construccion` en sus cuatro
+casos (ponderada por masa, no por conteo; vacía; ignora material no
+apto), objetivo 0.0 sin refugio, objetivo 0.0 mientras no está
+completado, deriva hacia la calidad real con refugio completado, baja
+si el objetivo cae por debajo del valor actual (refugio que se degrada
+por decomposición), gate de consciencia, tope exacto sin pasarse del
+objetivo). `BOSQUE_AUTO_TICKS=3000` con la semilla por defecto: mismos
+contadores exactos que antes de esta pieza (398 bloqueos de piedra, 149
+de tala, etc.) -- confirma que Pieza C es puramente aditiva, sin ningún
+efecto en decisión todavía, ninguna excepción. `BOSQUE_CONTINUAR=1`
+(200 ticks más) sin excepciones -- roundtrip limpio, y consultada la
+base de datos real (no solo "no lanzó excepción"): **9 gnomos con
+`comodidad > 0` tras la corrida**, valores reales entre 0.15 y 0.285 --
+coherente con refugios de arcilla (calidad_construccion=0.3, techo real
+que la deriva todavía no había alcanzado) -- el mecanismo se ejerce de
+verdad en juego libre desde el primer día, no "correcto pero
+invisible".
+
+**Pendiente real, explícito**: `tasa_deriva_comodidad=0.02` sigue
+PROVISIONAL, sin calibrar; `Necesidades.comodidad` sigue sin ningún
+consumidor -- Pieza D (`necesidad_trabajo` gana el déficit de comodidad
+como tercer input, gateado tras `completado_alguna_vez` por
+`umbral_necesidades_superiores`, más un modo "mejora" nuevo de
+CONSTRUIR para poder seguir aportando material de mejor calidad al
+refugio ya completado sin crecer `huella_m2`) es el siguiente trabajo
+real de este arco, sin empezar todavía -- es la pieza que de verdad da
+propósito a `calidad_construccion` y `comodidad` juntos.
+
+### Pieza D -- mejora de vivienda, cierra el arco de comodidad (2026-09-14,
+### mismo día)
+
+La pieza "grande" del arco -- diseñada en conversación con Diego
+(`AskUserQuestion`) antes de tocar código, dado su impacto de
+comportamiento real (reactiva RECOLECTAR/CONSTRUIR tras completar el
+refugio, algo que ningún círculo anterior hacía). Dos decisiones
+cerradas: **autolimitación por comparación local real** (no un déficit
+puro como fuego/arma -- Diego rechazó explícitamente esa vía por no
+autolimitarse); **prioridad comunal-vs-personal por temperamento**, idea
+de Diego: *"un individuo más empático y sociable aportaría antes a los
+edificios comunes... el que busque su comodidad primero"*.
+
+**Hallazgo real al diseñar, antes de escribir código**: `_resolver_construir`
+corta en cuanto `construccion.progreso >= 1.0`, y
+`objetivo_construccion_actual` ya no vuelve a señalar el refugio una vez
+completo -- "mejorar sin crecer `huella_m2`" no puede reutilizar el
+mecanismo de acumulación tal cual. Se necesita un mecanismo de
+**sustitución**: cambiar material de peor calidad por uno mejor,
+manteniendo la masa total constante.
+
+**Arquitectura, mismo patrón `recolectar_motivo_X` ya usado 4 veces en
+este arco (fuego/arma/herramienta/mineria)**, ahora retrofitado a
+CONSTRUIR: `Intencion.construir_motivo_mejora: bool` (transitorio, no
+persistido) -- cuando `sistema_decision.py` marca CONSTRUIR como
+motivado por mejora, `sistema_movimiento.py`/`sistema_recursos.py`
+ignoran por completo `objetivo_construccion_actual` y resuelven contra
+el refugio propio directamente.
+
+- `nucleo/construccion.py:material_mejora_disponible_en` (nueva, pura):
+  peek de solo lectura -- qué material recolectaría RECOLECTAR aquí
+  mismo ahora (mineral>tala>flora a granel>sustrato, mismo orden que la
+  resolución real), sin mutar nada. Simplificación deliberada y
+  documentada: no aplica el filtro de "recurso competidor disponible"
+  (una imprecisión aquí es inofensiva, el gate real sigue viviendo en
+  `_resolver_recolectar` -- esto solo genera un atractor de interés).
+- `sistema_decision.py`, nuevo bloque tras "FABRICAR categoria mineria":
+  gateado a consciente + `not fisica_bajo_umbral` (mismo gate Maslow que
+  BUSCAR_PAREJA/SOCIALIZAR) + refugio propio `completado_alguna_vez`.
+  `sesgo_prosocial = (empatía+sociabilidad)/2` decide, cuando la cadena
+  comunal (almacén/salón/cocina) sigue pendiente, si se prioriza lo
+  comunal (sin tocar nada, la utilidad ya calculada arriba se queda) o
+  la comodidad propia (por debajo de `umbral_prosocial_comunal=0.5`,
+  PROVISIONAL). RECOLECTAR-mejora eleva `utilidad_recolectar` a
+  `1.0-comodidad` SOLO si `material_mejora_disponible_en` devuelve algo
+  con más calidad que la ya invertida; CONSTRUIR-mejora eleva
+  `utilidad_construir` SOLO si el Inventario YA porta algo mejor que el
+  peor material ya invertido en el refugio -- sin techo autorado en
+  ningún sitio, ambas se saturan solas.
+- **RECOLECTAR-mejora no necesita ningún código nuevo en
+  `sistema_recursos.py`**: ninguno de los cuatro flags
+  `recolectar_motivo_X` se activa (mejora no es ninguno de los cuatro
+  eslabones existentes), así que la resolución cae directamente al
+  bulk cascade YA incondicional (mineral/tala/flora/sustrato) --
+  exactamente lo que hace falta, reutilización perfecta sin tocar nada.
+- `sistema_recursos.py:_resolver_mejora_refugio` (nueva): retira hasta
+  `tasa_mejora_refugio_kg_tick` (PROVISIONAL, `config/materiales.yaml`)
+  del material de PEOR `calidad_construccion` ya invertido y lo
+  sustituye por el de MEJOR calidad ya portado -- masa total constante.
+- `sistema_movimiento.py:_calcular_construir` gana la rama
+  `construir_motivo_mejora`: camina directamente hacia el refugio propio
+  ya existente (mismo `_acercarse_a` de siempre, sin ningún sesgo de
+  agrupamiento nuevo -- el refugio ya tiene posición fija).
+
+**Verificado**: 569/569 tests en verde (18 nuevos,
+`tests/test_mejora_vivienda.py` -- las 6 leyes del peek de solo
+lectura, las 4 leyes de `_resolver_mejora_refugio` (sustitución, no-op
+sin nada mejor portado, tope por masa disponible, no-op sin materiales
+en el refugio), 3 de navegación en `_calcular_construir`, y 5 de
+integración completa en `sistema_decision.py` incluidas las dos leyes
+de prioridad de carácter -- prosocial sigue con lo comunal, egoísta
+antepone su comodidad). Una corrección real encontrada al escribir el
+test de prioridad prosocial: el primer intento comparaba `cid_objetivo
+is not None` para decidir si la cadena comunal seguía pendiente, pero
+`cid_objetivo` es `None` tanto si no hay nada pendiente COMO si el
+almacén está pendiente pero su `Construccion` todavía no se ha creado
+-- corregido a comparar la tupla `objetivo` completa (`is not None`),
+la señal correcta. Tres tests preexistentes de `test_ocio_consciente_socializar.py`
+rompieron al introducir esta pieza -- su fixture `_refugio_terminado`
+creaba un refugio con `materiales={}` (calidad 0.0, un refugio "vacío"
+sin sentido físico para este nuevo sistema) y `Necesidades.comodidad`
+quedaba en su default 0.0, dando un déficit artificial de 1.0 que
+disparaba RECOLECTAR-mejora sin motivo real -- corregido dándole al
+refugio de prueba materiales reales (arcilla, `masa_minima_refugio`) y
+sincronizando `comodidad` con esa calidad real, mismo estado que
+tendría un gnomo genuinamente asentado.
+
+`BOSQUE_AUTO_TICKS=3000` con la semilla por defecto, sin ninguna
+excepción: **CONSTRUIR elegido por mejora 3 veces, 2 sustituciones
+reales** -- el mecanismo se ejerce de verdad en juego libre desde el
+primer día, no "correcto pero invisible" como varias piezas anteriores
+de este proyecto. `BOSQUE_CONTINUAR=1` (200 ticks más) sin
+excepciones -- roundtrip limpio (ningún campo nuevo persistido por
+esta pieza, `construir_motivo_mejora` es transitorio).
+
+**Con esto, las 4 piezas del arco de comodidad quedan cerradas**
+(A: piedra exige pico: B: catálogo de calidad; C: `Necesidades.comodidad`;
+D: mejora de vivienda) -- el arco completo que arrancó de la pregunta
+de Diego *"¿cómo fomentar el desarrollo y la evolución... quizás una
+necesidad de confort?"*.
+
+**Pendiente real, explícito**: `umbral_prosocial_comunal=0.5` y
+`tasa_mejora_refugio_kg_tick=1.0` PROVISIONALES, sin calibrar contra el
+harness completo; ningún criterio maestro de Diego (5 especies vivas a
+la vez) remedido con esta pieza ya aplicada -- el cambio afecta solo a
+gnomo consciente, riesgo de desplazamiento de secuencia de `rng` bajo
+pero no nulo, no medido; visión más amplia de Diego (comodidad como
+motor GENERAL de "tecnologías" más allá de vivienda, conexión con ocio
+para dar pie a "arte") deliberadamente fuera de alcance de este arco,
+sin ningún diseño todavía -- horizonte futuro, no descartado.
 ## Informe de calibracion -- primer harness completo de 7 especies, y
 ## arco de rendimiento -- tres paquetes verificados byte a byte (2026-09-12,
 ## misma tarde, con 20 nucleos reales por primera vez desde el 09-09)

@@ -516,6 +516,7 @@ class SistemaMovimiento:
                 dx, dy = self._calcular_construir(
                     gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
                     temperamento, pos.zona_idx,
+                    construir_motivo_mejora=intencion.construir_motivo_mejora,
                 )
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
@@ -2453,6 +2454,7 @@ class SistemaMovimiento:
         cap_mental: CapacidadMental | None,
         temperamento: Temperamento | None,
         zona_idx: int = 0,
+        construir_motivo_mejora: bool = False,
     ) -> tuple[int, int]:
         """
         REFUGIO/ALMACÉN CONSTRUIDO (ver componentes/construccion.py,
@@ -2506,7 +2508,26 @@ class SistemaMovimiento:
         resuelve una vez la entidad está en la misma celda, mismo reparto
         de responsabilidades que COMER/BEBER (este sistema decide hacia
         dónde ir, sistema_recursos.py decide qué pasa al llegar).
+
+        construir_motivo_mejora (2026-09-14, Pieza D del arco "comodidad"
+        -- ver CLAUDE.md): cuando sistema_decision.py marcó CONSTRUIR
+        como motivado por mejora de vivienda, se ignora por completo
+        objetivo_construccion_actual (el refugio ya está
+        completado_alguna_vez, ese objetivo YA es None o apunta a la
+        cadena comunal) y se camina directamente hacia el refugio propio
+        ya existente -- mismo _acercarse_a que el resto de esta función,
+        sin ningún sesgo de agrupamiento nuevo (el refugio ya tiene
+        posición fija desde que se creó).
         """
+        if construir_motivo_mejora:
+            cid_refugio_propio = construccion_propia(gestor, entidad_id, "refugio")
+            if cid_refugio_propio is None:
+                return (0, 0)
+            con_pos_mejora = gestor.obtener_componente(cid_refugio_propio, Posicion)
+            if con_pos_mejora is None or (con_pos_mejora.x == pos_x and con_pos_mejora.y == pos_y):
+                return (0, 0)
+            return self._acercarse_a(pos_x, pos_y, con_pos_mejora.x, con_pos_mejora.y)
+
         # indice=None deliberado (bug real encontrado en auditoria de
         # codigo, 2026-09-11): el indice congelado al principio del tick
         # dejaba a almacen_cercano/construccion_completada_de_asentamiento

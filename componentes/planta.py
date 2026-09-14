@@ -39,3 +39,13 @@ class Planta:
     flora.etapa_tras_sobreforrajeo y el contador se reinicia.
     Transitorio, NO se persiste -- tras cargar una partida se recalcula
     desde cero contra el estado vivo, un día de margen es inofensivo."""
+    masa_tronco_kg: float = 0.0
+    """Madera extraíble del tronco en pie (2026-09-12, "tala real") --
+    análogo exacto a Celda.masa_mineral_restante: solo > 0.0 en especies
+    con un recurso 'madera' real (manzano/roble/pino, ver
+    config/flora.yaml), fijado UNA VEZ al crear la planta
+    (nucleo/entidad.py:crear_planta), decrementado por
+    sistema_recursos.py:_resolver_recolectar al talar (gate: portar
+    'hacha_primitiva'). Al llegar a 0.0 la entidad se destruye
+    (GestorEntidades.eliminar_entidad) -- primera destrucción deliberada
+    de una Planta en el motor. Se persiste (plantas_estado)."""

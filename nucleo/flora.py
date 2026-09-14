@@ -72,6 +72,17 @@ def recursos_alimento(especie_cfg: dict[str, Any]) -> list:
     return [r for r in especie_cfg["recursos"] if r["categoria"] == "alimento"]
 
 
+def masa_tronco_inicial_kg(especie_cfg: dict[str, Any]) -> float:
+    """Madera extraíble del tronco de una Planta recién creada de esta
+    especie (2026-09-12, "tala real") -- config/flora.yaml:masa_tronco_kg
+    por especie, PROVISIONAL, 0.0 (no talable) si la especie no declara
+    la clave. Solo manzano/roble/pino la declaran hoy -- las mismas 3
+    especies con un recurso 'madera' real, sin necesidad de comprobarlo
+    aparte: la presencia de la clave YA scoping la elegibilidad, mismo
+    patrón que apto_construccion/compite_espacio_fisico."""
+    return float(especie_cfg.get("masa_tronco_kg", 0.0))
+
+
 def factor_humedad_subsuelo(
     celda: Celda, capacidad_retencion: float, bono_maximo: float = 0.2
 ) -> float:
@@ -183,7 +194,10 @@ def intentar_colonizar_celda(
 
     from nucleo.entidad import crear_planta
 
-    crear_planta(gestor, especie, nx, ny, etapa=0.1, zona_idx=zona_idx)
+    crear_planta(
+        gestor, especie, nx, ny, etapa=0.1, zona_idx=zona_idx,
+        masa_tronco_kg=masa_tronco_inicial_kg(especie_cfg),
+    )
 
     if not compite:
         celda_dest.tiene_recurso = True
