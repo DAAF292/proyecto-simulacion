@@ -249,8 +249,9 @@ def test_utilidad_socializar_cero_si_no_es_consciente() -> None:
 
 def test_utilidad_socializar_cero_con_necesidad_fisica_baja() -> None:
     """Ley: CUALQUIER necesidad fisica por debajo de
-    umbral_atencion_pareja fuerza SOCIALIZAR a 0.0 aunque sociabilidad/
-    curiosidad sean altas -- el hambre antecede al ocio consciente."""
+    umbral_necesidades_superiores fuerza SOCIALIZAR a 0.0 aunque
+    sociabilidad/curiosidad sean altas -- el hambre antecede al ocio
+    consciente."""
     config = _config()
     rng = random.Random(2)
     gestor = GestorEntidades()

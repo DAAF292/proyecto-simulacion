@@ -82,7 +82,7 @@ class Accion(Enum):
     # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
     # accion nueva e INDEPENDIENTE del sesgo gregario de DEAMBULAR (que se
     # queda exactamente igual). Compite por el tiempo de ocio cuando ninguna
-    # necesidad fisica esta bajo decision.umbral_atencion_pareja; utilidad
+    # necesidad fisica esta bajo decision.umbral_necesidades_superiores; utilidad
     # modulada por Temperamento.sociabilidad/curiosidad (primer consumidor
     # real de curiosidad). Exclusiva de conscientes
     # (consciencia >= decision.umbral_consciencia_agencia). Busca a

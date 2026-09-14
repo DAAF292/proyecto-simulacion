@@ -172,8 +172,10 @@ intentar codificar la elegibilidad dentro de la formula de utilidad:
      Gestacion solo se anade a la hembra (ver sistema_reproduccion.py).
   3. cualquier necesidad fisica con accion de satisfaccion (saciedad,
      energia, hidratacion, aliviado -- el mismo universo del compromiso)
-     por debajo de decision.umbral_atencion_pareja (PROVISIONAL 0.5): sin
-     este gate, la formula 1.0 - impulso_reproductivo deja ganar a
+     por debajo de decision.umbral_necesidades_superiores (PROVISIONAL
+     0.5, renombrado 2026-09-14 -- gate Maslow generico, ya no
+     especifico de pareja, ver config/fisiologia.yaml): sin este gate,
+     la formula 1.0 - impulso_reproductivo deja ganar a
      buscar pareja con impulso decaido a 0.0 (utilidad maxima) SOBRE
      cualquier necesidad fisica no en crisis exacta, incluso con
      saciedad/energia muy bajas (ver docs/historial_sistemas.md para el
@@ -458,9 +460,11 @@ def actualizar(
     # Umbral de crisis interrumpible del compromiso (ver docstring del
     # modulo), PROVISIONAL.
     umbral_crisis_interrupcion = float(config["decision"]["umbral_crisis_interrupcion"])
-    # Tercer gate de BUSCAR_PAREJA: ninguna busqueda de pareja con una
-    # necesidad fisica por debajo de este valor, PROVISIONAL.
-    umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
+    # Gate Maslow generico (renombrado 2026-09-14, ya no especifico de
+    # pareja -- BUSCAR_PAREJA/SOCIALIZAR lo consumen hoy): ninguna
+    # necesidad de nivel superior compite con una necesidad fisica por
+    # debajo de este valor, PROVISIONAL.
+    umbral_necesidades_superiores = float(config["decision"]["umbral_necesidades_superiores"])
     # CONSTRUIR (ver docstring del modulo y nucleo/construccion.py): mismo
     # umbral de agencia que ya exime del sesgo de territorio -- construir
     # es agencia consciente, no instinto.
@@ -643,13 +647,14 @@ def actualizar(
         # es adulto o si ya gestando (solo la hembra puede gestar) --
         # fraccion_madurez es por especie (rangos_raciales). Tercer gate:
         # ninguna busqueda de pareja con una necesidad fisica por debajo
-        # de decision.umbral_atencion_pareja.
+        # de decision.umbral_necesidades_superiores (gate Maslow generico,
+        # renombrado 2026-09-14, no especifico de pareja).
         edad = edad_ticks(identidad.tick_nacimiento, tick_actual)
         fraccion_madurez = rangos_raciales[identidad.especie.value]["fraccion_madurez"]
         adulto = es_adulto(edad, identidad.especie.value, rangos_raciales, fraccion_madurez)
         gestando = gestor.obtener_componente(id_entidad, Gestacion) is not None
         fisica_bajo_umbral = any(
-            getattr(necesidades, n) < umbral_atencion_pareja
+            getattr(necesidades, n) < umbral_necesidades_superiores
             for n in _NECESIDADES_FISICAS
         )
         utilidad_buscar_pareja = (
@@ -662,11 +667,11 @@ def actualizar(
         # las necesidades estan cubiertas. Utilidad =
         # utilidad_socializar_base * (sociabilidad + curiosidad) / 2, gateada
         # a 0.0 si no es consciente o si CUALQUIER necesidad fisica esta bajo
-        # umbral_atencion_pareja (mismo gate que BUSCAR_PAREJA, reutilizando
-        # la variable fisica_bajo_umbral ya calculada). Primer consumidor real
-        # de Temperamento.curiosidad, modulando en pie de igualdad con
-        # sociabilidad. Sin drive dinamico nuevo: usa directamente los rasgos
-        # fijos de Temperamento.
+        # umbral_necesidades_superiores (mismo gate Maslow generico que
+        # BUSCAR_PAREJA, reutilizando la variable fisica_bajo_umbral ya
+        # calculada). Primer consumidor real de Temperamento.curiosidad,
+        # modulando en pie de igualdad con sociabilidad. Sin drive dinamico
+        # nuevo: usa directamente los rasgos fijos de Temperamento.
         utilidad_socializar = (
             0.0
             if (cap_mental.consciencia < umbral_consciencia_agencia or fisica_bajo_umbral)

@@ -21,8 +21,9 @@ factor_base_concepcion es un valor POR ESPECIE en rangos_raciales (ya
 expresado como probabilidad por tick, config/constantes.yaml).
 
 Gate de nutricion: si hembra O macho tienen saciedad por debajo de
-decision.umbral_atencion_pareja (mismo umbral que ya usa BUSCAR_PAREJA),
-la concepcion ni se intenta. energia/hidratacion/aliviado siguen
+decision.umbral_necesidades_superiores (mismo umbral generico que ya usa
+BUSCAR_PAREJA, renombrado 2026-09-14), la concepcion ni se intenta.
+energia/hidratacion/aliviado siguen
 gateando BUSCAR_PAREJA sin cambios, pero no bloquean la concepcion en
 si. El freno de densidad emerge sin disenarse: mas poblacion -> mas
 presion sobre el mismo alimento -> saciedad media cae -> menos
@@ -32,8 +33,8 @@ autolimita.
 Tamano de camada por nutricion: tamano_camada no se sortea uniforme en
 [camada_min, camada_max] -- el limite superior efectivo se escala por la
 saciedad de la MADRE en el instante de la concepcion (unico rasgo
-usado). Interpolacion lineal entre umbral_atencion_pareja (la camada
-efectiva cae a camada_min) y 1.0 (saciedad plena, rango completo hasta
+usado). Interpolacion lineal entre umbral_necesidades_superiores (la
+camada efectiva cae a camada_min) y 1.0 (saciedad plena, rango completo hasta
 camada_max). Sigue habiendo sorteo real (rng.randint) dentro de ese
 rango reducido.
 
@@ -310,14 +311,14 @@ def actualizar(
         # saciedad. energia/hidratacion/aliviado siguen gateando
         # BUSCAR_PAREJA (sin cambios ahi), simplemente no bloquean la
         # concepcion en si.
-        umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
+        umbral_necesidades_superiores = float(config["decision"]["umbral_necesidades_superiores"])
         necesidades_hembra = gestor.obtener_componente(id_hembra, Necesidades)
         necesidades_macho = gestor.obtener_componente(id_macho, Necesidades)
         hembra_desnutrida = (
-            necesidades_hembra is not None and necesidades_hembra.saciedad < umbral_atencion_pareja
+            necesidades_hembra is not None and necesidades_hembra.saciedad < umbral_necesidades_superiores
         )
         macho_desnutrido = (
-            necesidades_macho is not None and necesidades_macho.saciedad < umbral_atencion_pareja
+            necesidades_macho is not None and necesidades_macho.saciedad < umbral_necesidades_superiores
         )
         if hembra_desnutrida or macho_desnutrido:
             continue
@@ -358,13 +359,13 @@ def actualizar(
         # padre, un hecho que se fija en este instante, no en el parto.
         # Escalado por nutricion (ver docstring del modulo): el techo
         # efectivo de la tirada se interpola entre camada_min (en
-        # umbral_atencion_pareja) y camada_max (en saciedad plena) --
-        # solo la saciedad de la MADRE, sigue habiendo sorteo real dentro
-        # de ese rango reducido, no un numero fijo.
+        # umbral_necesidades_superiores) y camada_max (en saciedad plena)
+        # -- solo la saciedad de la MADRE, sigue habiendo sorteo real
+        # dentro de ese rango reducido, no un numero fijo.
         camada_min, camada_max = rangos_raciales[especie_hembra]["camada"]
-        rango_saciedad = 1.0 - umbral_atencion_pareja
+        rango_saciedad = 1.0 - umbral_necesidades_superiores
         if necesidades_hembra is not None and rango_saciedad > 0:
-            fraccion_nutricion = (necesidades_hembra.saciedad - umbral_atencion_pareja) / rango_saciedad
+            fraccion_nutricion = (necesidades_hembra.saciedad - umbral_necesidades_superiores) / rango_saciedad
             fraccion_nutricion = max(0.0, min(1.0, fraccion_nutricion))
         else:
             fraccion_nutricion = 1.0
