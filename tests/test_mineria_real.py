@@ -95,15 +95,23 @@ def test_ley_sin_pico_cae_a_sustrato_en_vez_de_bloquearse():
     """Sin pico, la extracción de veta se SALTA (no interrumpe la
     resolución) y cae al siguiente nivel de prioridad ya existente --
     un consciente sin pico junto a una veta sigue recolectando lo que sí
-    puede, no se queda parado."""
+    puede, no se queda parado. tipo_sustrato="arcilla" a propósito (no
+    "piedra") -- desde 2026-09-14 piedra-sustrato TAMBIÉN exige pico (ver
+    tests/test_piedra_sustrato_pico.py), así que esta celda usa un
+    sustrato que sigue sin gate para aislar el comportamiento de
+    fallback de veta que este test valida, sin mezclarlo con el gate de
+    piedra."""
     config = _config()
     sistema = SistemaRecursos(config, random.Random(1))
-    celda = _celda_con_veta()
+    celda = Celda(
+        tipo_terreno=TipoTerreno.MONTANA, tipo_sustrato="arcilla",
+        deposito_mineral="hierro", masa_mineral_restante=40.0,
+    )
 
     inv = Inventario()
     sistema._resolver_recolectar(inv, _dims(), celda, None, "gnomo", False)
 
-    assert inv.contenidos.get("piedra", 0.0) > 0.0  # tipo_sustrato de la celda
+    assert inv.contenidos.get("arcilla", 0.0) > 0.0  # tipo_sustrato de la celda
 
 
 def test_ley_extraccion_con_pico_agota_la_veta_de_verdad():

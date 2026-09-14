@@ -9308,3 +9308,166 @@ Diego** a las mismas "necesidades y flujos futuros que precisen de
 materiales" que resolverán ambos casos a la vez -- no se investiga ni
 se corrige más aquí, documentado con la misma honestidad que el resto
 del proyecto.
+
+## Comodidad -- diseño del arco completo, Piezas A+B cerradas (piedra
+## exige pico + catálogo de calidad_construccion), Piezas C/D pendientes
+## (2026-09-14, mismo día)
+
+Diego, tras cerrar tala real, cuestionó el propio diseño de "reutiliza
+antes de inventar" desde otro ángulo, sin esperar a que se le preguntara:
+*"hay que darle una vuelta a esto, porque no todo sirve, para empezar, lo
+lógico es que los minerales no se puedan recoger sin intrumentos de
+mineria, como un pico. y por otro lado, no todos los materiales deben
+poder servir para construir, o quizas si pero no de igual manera, hay que
+encontrar la forma de fomentar el desarrollo y la evolucion, quizas un
+consciente en un punto inicial prioriza un refugio de arcilla, pero
+cuando sus necesidades están medianamente cubiertas lo normal es que
+busquen mejorar. quizas deberiamos empezar a plantear una nueva necesidad
+de confort o comodidad, y que esa necesidad empuje al individuo y
+sociedad a mejorar?"* -- tres hilos entrelazados: (1) gatear minerales
+tras herramienta (la veta YA lo tenía desde Círculo 1, faltaba
+extenderlo a piedra-como-sustrato), (2) diferenciar calidad de material
+para construcción en vez de tratar todo `apto_construccion` como
+fungible, (3) una necesidad nueva de comodidad que empuje a mejorar una
+vez cubierta la supervivencia.
+
+**Diagnóstico real que motivó la pregunta, encontrado ANTES de diseñar
+nada** (pregunta directa de Diego: *"si las construciones básicas
+precisan de madera por que no se da la tala de forma natural?"*):
+`nucleo/construccion.py:masa_apta_construccion(materiales, catalogo)`
+suma CUALQUIER material `apto_construccion` sin distinguir cuál -- la
+demanda de construcción es puramente de masa agregada, nunca específica
+de material. Como arcilla siempre está disponible y sin gate, satisface
+la demanda de refugio/almacén antes de que madera (tala, exige hacha) o
+piedra-vía-pico lleguen nunca a ser necesarios. Esto explica con
+precisión por qué tala/minería, aunque mecánicamente correctas, resultan
+casi invisibles en juego libre -- no falta motivo ni herramienta, falta
+DEMANDA real de un material mejor que arcilla.
+
+**Decisiones cerradas con Diego, `AskUserQuestion`, antes de escribir
+código**: piedra como `tipo_sustrato` (cantera a granel) TAMBIÉN exige
+pico -- *"hombre para coger piedra lo lógico es que tengas que picar
+tambn, no? otra cosa son las piedras sueltas del suelo"* (piedra_suelta,
+la de percusión de fuego, sigue libre a propósito -- una piedra
+encontrada no es una cantera); calidad de material intrínseca y FIJA por
+material (no por nivel de procesado -- más simple, y "roca tallada" ya
+es intrínsecamente mejor que "tierra suelta" sin necesidad de ningún
+paso de elaboración intermedio); la nueva necesidad va en un campo
+GENUINAMENTE NUEVO de `Necesidades` (no reutilizar
+`CapacidadMental.voluntad`, que ya tiene su propio consumidor real desde
+aptitud vocacional -- mezclar ambos habría sido acoplar dos leyes
+distintas sin necesidad).
+
+**Reencuadre de alcance, pedido por Diego**: *"el problema es que la
+comodidad de la que hablamos tiene que ser un motor general, desarrollo
+de 'tecnologias', mejoras para vivir, etc. y luego quizas enlazarlo con
+el ocio para que nazca el 'arte'. entiendes por donde voy?"* -- comodidad
+como necesidad de nivel superior genuinamente genérica (no solo
+vivienda), con una conexión futura a ocio (`Accion.SOCIALIZAR`, ya
+existe) para dar pie a "arte" en un horizonte lejano. Acordado
+explícitamente reducir el ALCANCE del círculo actual a solo vivienda
+(el consumidor más simple y ya cableado) sin cerrar la puerta al resto
+-- Diego lo aceptó ("me parece bien") pero pidió que la integración con
+los flujos ya existentes quedara planteada de forma concreta, no solo
+abstracta.
+
+**Corrección semántica real, encontrada al diseñar la integración**:
+`decision.umbral_atencion_pareja` (el gate Maslow genérico -- "ninguna
+necesidad de nivel superior compite mientras alguna de las 4
+necesidades físicas esté baja") YA tenía tres consumidores reales antes
+de comodidad (`BUSCAR_PAREJA`, su origen; `SOCIALIZAR`, desde
+2026-09-06; el gate de concepción de `sistema_reproduccion.py`, desde
+2026-08-31) -- su nombre ya estaba desfasado, no por comodidad sino por
+uso previo nunca corregido. Diego: *"usemos el mismo, pero habrá que
+hacer que semanticamente deje de estar relacionado con pareja, porque
+ahora lo consumiran otros flujos, no?"* -- renombrado a
+`decision.umbral_necesidades_superiores` (commit `4faf293`, puro rename,
+comportamiento byte-idéntico verificado con `BOSQUE_AUTO_TICKS=3000`
+contra el run de tala real inmediatamente anterior -- mismos contadores
+exactos).
+
+**Roadmap de 4 piezas acordado, D es la pieza grande, ninguna de las dos
+últimas empezada todavía**:
+- **Pieza A** (este círculo): piedra-sustrato exige pico.
+- **Pieza B** (este círculo): catálogo `calidad_construccion` [0,1] por
+  material, sin consumidor mecánico todavía -- mismo patrón "catálogo
+  antes que mecanismo" ya usado con `toxico_crudo` antes de "cómo
+  cocinar".
+- **Pieza C** (siguiente, sin empezar): `Necesidades.comodidad` como
+  campo nuevo, con mecanismo de deriva hacia un objetivo derivado de la
+  calidad media ponderada de los materiales del refugio propio ya
+  completado (`Construccion.materiales`, sin campo nuevo en
+  `Construccion` -- se deriva, no se persiste aparte).
+- **Pieza D** (la grande, sin empezar): `necesidad_trabajo` en
+  `sistema_decision.py` (hoy `max(utilidad_recolectar,
+  utilidad_construir)`) gana un tercer input -- el déficit de comodidad,
+  SOLO activo tras `completado_alguna_vez=True` y gateado por
+  `umbral_necesidades_superiores` sobre las 4 necesidades físicas (mismo
+  patrón exacto que `BUSCAR_PAREJA`). `CONSTRUIR` necesita un modo
+  "mejora" nuevo para seguir vivo más allá de `completado_alguna_vez`
+  (añadir material de mejor calidad al MISMO refugio sin crecer
+  `huella_m2`), autolimitado sin techo autorado -- se satura solo cuando
+  `calidad_media` alcanza el mejor material realmente disponible en la
+  zona.
+- Parked, contingente: una pieza 5 de sesgo de movimiento hacia veta/
+  árbol conocido (mismo patrón que refugio/manada/agua en
+  `MemoriaEspacial`), solo si tras la Pieza D minería/tala siguen
+  invisibles en juego libre.
+- Explícitamente FUERA de alcance de este arco por ahora (decisión de
+  Diego, "me parece bien" a la reducción de alcance propuesta):
+  generalizar comodidad a dominios no habitacionales (calidad de
+  herramienta, calidad de comida), y la conexión ocio→arte -- ambas
+  quedan como visión declarada, sin una sola línea de diseño todavía.
+
+### Piezas A+B -- implementadas y verificadas (2026-09-14, mismo día)
+
+**Pieza A**: `sistemas/sistema_recursos.py:_resolver_recolectar`, el
+fallback terminal de `tipo_sustrato` gana un gate específico -- si
+`material == "piedra"`, exige `tiene_herramienta(objetos_para_bono,
+self.recetas_mineria)` (mismo catálogo de pico ya usado por la
+extracción de veta, Círculo 1) antes de producir nada; sin pico, el tick
+simplemente no produce (no hay ningún nivel más abajo al que caer, a
+diferencia de veta/tala que sí caen a algo más). arcilla/tierra/
+tierra_negra/marga/grava siguen sin gate ("se cavan a mano, no se
+pican"). Contador de observación
+`_stats_piedra_sustrato_bloqueada_sin_pico` nuevo. Verificado sin
+dependencia circular: el material crudo "piedra" que alimenta la receta
+de `pico` viene de `piedra_suelta` (`nucleo/armas.py`, solo mira
+`celda.recursos`, nunca `tipo_sustrato`) -- un gnomo siempre puede
+fabricar su primer pico sin haber cavado cantera nunca.
+
+**Pieza B**: `config/materiales.yaml` gana `calidad_construccion` [0,1]
+en los 11 materiales `apto_construccion: true` (PROVISIONAL, razonado a
+mano contra `dureza`/naturaleza real del material, sin calibrar contra
+el motor): tierra=0.15, hierba_seca=0.15, tierra_negra=0.15, fibra=0.2,
+marga=0.22, arcilla=0.3, grava=0.35, madera=0.55, cobre=0.75,
+piedra=0.85, hierro=0.95 -- eje DISTINTO de `dureza` (cuánto cuesta
+trabajarlo, no el resultado), correlacionado a grandes rasgos pero no
+idéntico. Sin ningún consumidor mecánico todavía -- solo catálogo, la
+Pieza C es quien lo leerá.
+
+**Verificado**: 541/541 tests en verde (8 nuevos,
+`tests/test_piedra_sustrato_pico.py` -- gate con/sin pico, fallback
+terminal no cae a nada más sin pico, hacha_primitiva no gatea (cada
+herramienta abre solo su propio catálogo), arcilla/tierra siguen sin
+gate, piedra_suelta sigue gratuita, catálogo de calidad_construccion
+completo/ausente donde corresponde, orden cualitativo metal/piedra >
+tierra/barro). Un test preexistente de minería (`test_mineria_real.py:
+test_ley_sin_pico_cae_a_sustrato_en_vez_de_bloquearse`) usaba una celda
+con `tipo_sustrato="piedra"` como fallback -- ahora también gateada,
+corregido a `tipo_sustrato="arcilla"` para aislar el comportamiento que
+ese test valida (fallback de veta) del gate nuevo de piedra.
+`BOSQUE_AUTO_TICKS=3000` con la semilla por defecto, sin ninguna
+excepción: **398 bloqueos reales de piedra-sustrato sin pico** -- se
+ejerce con fuerza real desde el primer día, muy por encima de veta (2) y
+tala (149) en la misma corrida (piedra es, con diferencia, el
+`tipo_sustrato` más común del catálogo de montaña). `BOSQUE_CONTINUAR=1`
+(200 ticks más) sin excepciones -- roundtrip limpio, sin campos nuevos
+persistidos por esta pieza.
+
+**Pendiente real, explícito**: `calidad_construccion` sigue sin ningún
+efecto sobre el motor -- catálogo puro hasta la Pieza C; los 11 valores
+y el propio gate de piedra son PROVISIONALES, sin calibrar contra el
+harness completo; Piezas C y D (comodidad de verdad, el driver de
+mejora) son el siguiente trabajo real de este arco, sin empezar
+todavía.

@@ -305,6 +305,10 @@ class SistemaRecursos:
         # extracción de un árbol en pie por falta de hacha_primitiva.
         self._stats_arboles_talados: int = 0
         self._stats_arbol_bloqueado_sin_hacha: int = 0
+        # Observacion (2026-09-14, "piedra exige pico"): cuántas veces el
+        # gate bloqueó de verdad la extracción de piedra como tipo_sustrato
+        # por falta de pico -- confirma que se ejerce, no solo que existe.
+        self._stats_piedra_sustrato_bloqueada_sin_pico: int = 0
 
     def ejecutar(
         self,
@@ -701,10 +705,11 @@ class SistemaRecursos:
         (el gate real vive en la RESOLUCIÓN, aquí, no en la decisión).
 
         Orden de prioridad dentro de esta única celda -- mineral (más
-        escaso y finito) > material de flora (finito por día, regenera) >
-        sustrato (siempre disponible, nunca se agota): ninguna Utility AI
-        lo decide, es simplemente qué hay de más a menos especial en el
-        sitio donde ya se está.
+        escaso y finito) > tala (destruye la Planta, exige hacha) >
+        material de flora (finito por día, regenera) > sustrato (siempre
+        disponible, nunca se agota -- salvo piedra, que exige pico desde
+        2026-09-14): ninguna Utility AI lo decide, es simplemente qué hay
+        de más a menos especial en el sitio donde ya se está.
 
         3. MATERIAL HERRAMIENTA CON CAUSA (2026-09-11, circulo 2 del arco
            "fabricacion y uso de herramientas"): mismo eslabon heredado
@@ -912,6 +917,18 @@ class SistemaRecursos:
             return
         info = self.catalogo_materiales.get(material, {})
         if not info.get("apto_construccion", False):
+            return
+        # Piedra (tipo_sustrato) exige pico (2026-09-14, ver CLAUDE.md --
+        # "para coger piedra lo lógico es que tengas que picar también").
+        # Distinto de piedra_suelta (Vía 1, percusión de fuego) -- esa
+        # sigue gratuita, es una piedra suelta encontrada, no una cantera.
+        # Arcilla/tierra (y sus variantes tierra_negra/marga/grava) siguen
+        # sin gate -- se cavan a mano, no se pican. Sin bloquear la
+        # resolución si falta pico: el tick simplemente no produce nada,
+        # mismo criterio "no interrumpe, solo no da" que ya usa el
+        # fallback de veta/tala cuando el nivel superior falla.
+        if material == "piedra" and not tiene_herramienta(objetos_para_bono, self.recetas_mineria):
+            self._stats_piedra_sustrato_bloqueada_sin_pico += 1
             return
         cantidad = min(tasa_recoleccion_efectiva, espacio)
         inv.contenidos[material] = inv.contenidos.get(material, 0.0) + cantidad

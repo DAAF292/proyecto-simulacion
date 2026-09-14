@@ -889,6 +889,12 @@ def main() -> None:
                 "arboles bloqueados sin hacha: "
                 f"{sistemas['recursos']._stats_arbol_bloqueado_sin_hacha}"
             )
+            # Verificacion obligatoria de "piedra exige pico" (2026-09-14,
+            # ver CLAUDE.md). Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] piedra (sustrato) bloqueada sin pico: "
+                f"{sistemas['recursos']._stats_piedra_sustrato_bloqueada_sin_pico}"
+            )
 
     except KeyboardInterrupt:
         pass
