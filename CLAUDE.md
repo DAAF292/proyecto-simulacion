@@ -9876,14 +9876,69 @@ el proyecto, "rendimientos decrecientes" frente a seguir ajustando a
 ciegas con n=4); si se retoma, candidato más probable es revisar
 `factor_base_concepcion`/`camada` de zorro con el mismo criterio de dos
 ingredientes ya usado en lobo/ardilla/gnomo, pero solo con evidencia de
-un lote mayor, no a ciegas. El efecto real de zorro sobre el
-crecimiento de conejo/ardilla (el objetivo de fondo que motivó la
-pieza) NO se ha medido todavía de forma aislada -- el diagnóstico de
-arriba confirma que zorro caza y sobrevive, no cuánto reduce la
-población de sus presas frente a un mundo sin zorro; candidato directo
-para un A/B futuro (mismas semillas, con y sin zorro en el catálogo)
-si Diego quiere confirmar el control poblacional de verdad, no solo el
-mecanismo. `zorros_iniciales=8` y todo el catálogo de temperamento
-siguen PROVISIONALES, sin calibrar contra el harness completo. Sin
-representación visual -- motor primero. Sin ninguna ventaja de
-terreno específica de bosque/pradera.
+un lote mayor, no a ciegas. `zorros_iniciales=8` y todo el catálogo de
+temperamento siguen PROVISIONALES, sin calibrar contra el harness
+completo. Sin representación visual -- motor primero. Sin ninguna
+ventaja de terreno específica de bosque/pradera.
+
+### A/B real: ¿zorro controla de verdad a conejo/ardilla? -- mecanismo
+### confirmado, efecto poblacional NO concluyente, mismo artefacto de
+### rng ya documentado repetidas veces en el proyecto (2026-09-14, mismo
+### día)
+
+Diego pidió confirmar el objetivo de fondo que motivó toda la pieza, no
+solo que zorro cace y sobreviva. Arnés dedicado (`ab_zorro.py`,
+scratchpad, no en el repo): 8 semillas nuevas (630001-630008) × hasta
+5000 ticks, cada una corrida DOS veces -- una con `zorros_iniciales`
+parcheado a 0 (control, sin zorro) y otra tal cual está en `master`
+(con zorro) -- mismo criterio metodológico ya usado en el proyecto para
+A/B en memoria sin tocar disco. Las 16 corridas se cortaron por tiempo
+(3222-4555 ticks, ninguna llegó a 5000).
+
+**Resultado, normalizado por cada 1000 ticks reales (necesario porque
+cada corrida se cortó en un punto distinto)**:
+
+| | conejo (media) | ardilla (media) | depredación total sobre ardilla (suma 8 semillas) |
+|---|---|---|---|
+| Sin zorro | 8.82 | 2.36 | 90 |
+| Con zorro | 20.39 | 2.51 | 107 |
+
+**Zorro sí caza de verdad, confirmado con el propio desglose de
+muertes**: la depredación total sobre ardilla sube ~19% con zorro
+presente (90→107), y zorro mismo murió por depredación (presa de lobo)
+en 5 de 8 semillas -- el mecanismo se ejerce, no es "correcto pero
+invisible".
+
+**Pero el efecto neto sobre la población de conejo va en la dirección
+CONTRARIA a la que motivó la pieza**: con zorro presente, la densidad
+de conejo normalizada es más del doble (20.4 vs 8.8) que sin él.
+Ardilla se mantiene prácticamente igual (2.51 vs 2.36). **Diagnóstico
+honesto, no una conclusión causal**: esto es casi con certeza el mismo
+artefacto de "desplazamiento de secuencia de `rng`" ya documentado
+media docena de veces en este proyecto (Sobrepoblación..., radio de
+caza de lobo, el propio ajuste de conejo del 2026-09-06) -- sembrar 8
+zorros más consume tiradas de `rng` extra en tick 0, desplazando toda
+la secuencia de aleatoriedad posterior para el resto del motor: "la
+misma semilla" con y sin zorro son, en la práctica, dos partidas
+distintas desde el principio. Con n=8 y trayectorias tan divergentes
+entre semillas individuales (conejo sube x1.4 con zorro en unas,
+cae a 1/7 en otras), la varianza de ese ruido metodológico es mayor
+que cualquier señal causal real que pudiera existir en la muestra.
+
+**Conclusión, sin inflar el resultado**: este experimento NO permite
+afirmar ni descartar que zorro controle la población de conejo/ardilla
+-- confirma el mecanismo (caza real, depredación real sobre ambas
+presas), pero la pregunta de fondo de Diego ("¿reduce de verdad su
+crecimiento?") sigue sin respuesta fiable. Para una respuesta limpia
+hace falta lo que el propio proyecto ya sabe que hace falta desde hace
+semanas: muchas más semillas nuevas por condición (no comparación
+pareada semilla-a-semilla, que hereda el ruido de rng) para comparar
+DISTRIBUCIONES agregadas, no trayectorias individuales -- el harness
+completo (15×12000) sigue siendo la referencia de rigor pendiente,
+ahora también para esta pregunta concreta.
+
+**Pendiente real, explícito**: el objetivo de control poblacional de
+zorro sigue sin confirmar ni refutar; si se retoma, un lote mucho mayor
+(15-20 semillas nuevas por condición, no pareadas) sería el candidato
+metodológicamente correcto, mismo criterio que el resto del proyecto ya
+aprendió a aplicar tras la investigación de "Sobrepoblación...".
