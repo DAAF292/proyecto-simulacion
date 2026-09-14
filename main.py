@@ -895,6 +895,15 @@ def main() -> None:
                 "[BOSQUE_AUTO_TICKS] piedra (sustrato) bloqueada sin pico: "
                 f"{sistemas['recursos']._stats_piedra_sustrato_bloqueada_sin_pico}"
             )
+            # Verificacion obligatoria de "mejora de vivienda" (2026-09-14,
+            # Pieza D del arco "comodidad" -- ver CLAUDE.md). Solo
+            # observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] mejora de vivienda: CONSTRUIR elegido por "
+                f"mejora {sistemas['decision']._stats_construir_mejora_elegido} veces, "
+                f"{sistemas['recursos']._stats_mejora_refugio_sustituciones} "
+                "sustituciones reales"
+            )
 
     except KeyboardInterrupt:
         pass

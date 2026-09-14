@@ -26,6 +26,7 @@ from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
 from componentes.temperamento import Temperamento
 from main import cargar_configuracion
+from nucleo.construccion import calidad_media_construccion
 from nucleo.entidad import GestorEntidades, crear_construccion, crear_criatura
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
@@ -72,27 +73,42 @@ def _intencion(gestor, eid) -> Intencion:
     return gestor.obtener_componente(eid, Intencion)
 
 
-def _refugio_terminado(gestor, mundo, propietario_id: int, x: int, y: int) -> None:
-    """Da al gnomito un refugio propio YA terminado (progreso=1.0) para que
+def _refugio_terminado(gestor, config, propietario_id: int, x: int, y: int) -> float:
+    """Da al gnomito un refugio propio YA terminado (progreso=1.0), con
+    materiales reales (arcilla, hasta masa_minima_refugio -- mismo
+    material que un gnomo real construiría primero) para que
     objetivo_construccion_actual devuelva None y CONSTRUIR/RECOLECTAR no
     compitan en los tests de decision -- mismo montaje que usan los tests
-    de relaciones/conflicto para aislar el camino bajo prueba."""
+    de relaciones/conflicto para aislar el camino bajo prueba. Devuelve
+    la calidad_construccion resultante (2026-09-14, Pieza D del arco
+    "comodidad" -- ver CLAUDE.md) para que el llamador pueda sincronizar
+    Necesidades.comodidad y aislar también ESE camino: un refugio con
+    materiales={} (vacío) tendría calidad 0.0, disparando la utilidad de
+    "mejora de vivienda" sin motivo real, ajeno a lo que este fichero
+    prueba."""
     cid = crear_construccion(gestor, x, y, "refugio", propietario_id=propietario_id)
     construccion = gestor.obtener_componente(cid, Construccion)
+    masa_minima = float(config["construccion"]["masa_minima_refugio"])
+    construccion.materiales = {"arcilla": masa_minima}
     construccion.progreso = 1.0
     construccion.completado_alguna_vez = True
+    return calidad_media_construccion(construccion.materiales, config["materiales"])
 
 
 def _gnomo_ocio_pleno(gestor, config, rng, mundo, temp, cap, x=0, y=0,
                       confort_termico=1.0) -> int:
     """Gnomo consciente con TODAS las necesidades fisicas plenas (incluida
     confort_termico, que por defecto arranca en 0.5 y dispararia el eslabon
-    heredado de RECOLECTAR/ENCENDER_FUEGO) y refugio terminado -- el minimo
+    heredado de RECOLECTAR/ENCENDER_FUEGO), refugio terminado, Y comodidad
+    ya asentada en la calidad real de ese refugio (2026-09-14, Pieza D --
+    sin esto, comodidad=0.0 por defecto dispararía la utilidad de "mejora
+    de vivienda", ajena a lo que este fichero prueba) -- el minimo
     necesario para que el argmax pueda elegir SOCIALIZAR sobre DEAMBULAR."""
     eid = _criatura(gestor, config, rng, Especie.GNOMO, x, y, temp, cap)
-    _refugio_terminado(gestor, mundo, eid, x, y)
+    calidad = _refugio_terminado(gestor, config, eid, x, y)
     nec = gestor.obtener_componente(eid, Necesidades)
     nec.confort_termico = confort_termico
+    nec.comodidad = calidad
     return eid
 
 

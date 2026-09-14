@@ -530,6 +530,14 @@ construccion:
   # completar su propio refugio, más si tiene que volver a recolectar
   # entre medias -- orden de magnitud razonado, no medido.
   tasa_aporte_construccion_kg_tick: 1.0
+  # Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" -- ver
+  # CLAUDE.md, "Comodidad -- diseño del arco completo"): kg de material
+  # de PEOR calidad ya invertido en el refugio propio que se sustituyen
+  # por kg de material de MEJOR calidad ya portado, por tick -- masa
+  # total constante (huella_m2 no crece), a diferencia de
+  # tasa_aporte_construccion_kg_tick (acumulación). PROVISIONAL, mismo
+  # orden de magnitud por partida de la tasa de aporte normal.
+  tasa_mejora_refugio_kg_tick: 1.0
   # Círculo C (2026-08-30, Accion.RECOLECTAR -- ver nucleo/construccion.py
   # y sistema_recursos.py:_resolver_recolectar): cuánto tipo_sustrato de
   # la celda actual (piedra/arcilla/tierra, siempre presente, no

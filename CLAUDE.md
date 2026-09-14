@@ -9528,3 +9528,114 @@ CONSTRUIR para poder seguir aportando material de mejor calidad al
 refugio ya completado sin crecer `huella_m2`) es el siguiente trabajo
 real de este arco, sin empezar todavía -- es la pieza que de verdad da
 propósito a `calidad_construccion` y `comodidad` juntos.
+
+### Pieza D -- mejora de vivienda, cierra el arco de comodidad (2026-09-14,
+### mismo día)
+
+La pieza "grande" del arco -- diseñada en conversación con Diego
+(`AskUserQuestion`) antes de tocar código, dado su impacto de
+comportamiento real (reactiva RECOLECTAR/CONSTRUIR tras completar el
+refugio, algo que ningún círculo anterior hacía). Dos decisiones
+cerradas: **autolimitación por comparación local real** (no un déficit
+puro como fuego/arma -- Diego rechazó explícitamente esa vía por no
+autolimitarse); **prioridad comunal-vs-personal por temperamento**, idea
+de Diego: *"un individuo más empático y sociable aportaría antes a los
+edificios comunes... el que busque su comodidad primero"*.
+
+**Hallazgo real al diseñar, antes de escribir código**: `_resolver_construir`
+corta en cuanto `construccion.progreso >= 1.0`, y
+`objetivo_construccion_actual` ya no vuelve a señalar el refugio una vez
+completo -- "mejorar sin crecer `huella_m2`" no puede reutilizar el
+mecanismo de acumulación tal cual. Se necesita un mecanismo de
+**sustitución**: cambiar material de peor calidad por uno mejor,
+manteniendo la masa total constante.
+
+**Arquitectura, mismo patrón `recolectar_motivo_X` ya usado 4 veces en
+este arco (fuego/arma/herramienta/mineria)**, ahora retrofitado a
+CONSTRUIR: `Intencion.construir_motivo_mejora: bool` (transitorio, no
+persistido) -- cuando `sistema_decision.py` marca CONSTRUIR como
+motivado por mejora, `sistema_movimiento.py`/`sistema_recursos.py`
+ignoran por completo `objetivo_construccion_actual` y resuelven contra
+el refugio propio directamente.
+
+- `nucleo/construccion.py:material_mejora_disponible_en` (nueva, pura):
+  peek de solo lectura -- qué material recolectaría RECOLECTAR aquí
+  mismo ahora (mineral>tala>flora a granel>sustrato, mismo orden que la
+  resolución real), sin mutar nada. Simplificación deliberada y
+  documentada: no aplica el filtro de "recurso competidor disponible"
+  (una imprecisión aquí es inofensiva, el gate real sigue viviendo en
+  `_resolver_recolectar` -- esto solo genera un atractor de interés).
+- `sistema_decision.py`, nuevo bloque tras "FABRICAR categoria mineria":
+  gateado a consciente + `not fisica_bajo_umbral` (mismo gate Maslow que
+  BUSCAR_PAREJA/SOCIALIZAR) + refugio propio `completado_alguna_vez`.
+  `sesgo_prosocial = (empatía+sociabilidad)/2` decide, cuando la cadena
+  comunal (almacén/salón/cocina) sigue pendiente, si se prioriza lo
+  comunal (sin tocar nada, la utilidad ya calculada arriba se queda) o
+  la comodidad propia (por debajo de `umbral_prosocial_comunal=0.5`,
+  PROVISIONAL). RECOLECTAR-mejora eleva `utilidad_recolectar` a
+  `1.0-comodidad` SOLO si `material_mejora_disponible_en` devuelve algo
+  con más calidad que la ya invertida; CONSTRUIR-mejora eleva
+  `utilidad_construir` SOLO si el Inventario YA porta algo mejor que el
+  peor material ya invertido en el refugio -- sin techo autorado en
+  ningún sitio, ambas se saturan solas.
+- **RECOLECTAR-mejora no necesita ningún código nuevo en
+  `sistema_recursos.py`**: ninguno de los cuatro flags
+  `recolectar_motivo_X` se activa (mejora no es ninguno de los cuatro
+  eslabones existentes), así que la resolución cae directamente al
+  bulk cascade YA incondicional (mineral/tala/flora/sustrato) --
+  exactamente lo que hace falta, reutilización perfecta sin tocar nada.
+- `sistema_recursos.py:_resolver_mejora_refugio` (nueva): retira hasta
+  `tasa_mejora_refugio_kg_tick` (PROVISIONAL, `config/materiales.yaml`)
+  del material de PEOR `calidad_construccion` ya invertido y lo
+  sustituye por el de MEJOR calidad ya portado -- masa total constante.
+- `sistema_movimiento.py:_calcular_construir` gana la rama
+  `construir_motivo_mejora`: camina directamente hacia el refugio propio
+  ya existente (mismo `_acercarse_a` de siempre, sin ningún sesgo de
+  agrupamiento nuevo -- el refugio ya tiene posición fija).
+
+**Verificado**: 569/569 tests en verde (18 nuevos,
+`tests/test_mejora_vivienda.py` -- las 6 leyes del peek de solo
+lectura, las 4 leyes de `_resolver_mejora_refugio` (sustitución, no-op
+sin nada mejor portado, tope por masa disponible, no-op sin materiales
+en el refugio), 3 de navegación en `_calcular_construir`, y 5 de
+integración completa en `sistema_decision.py` incluidas las dos leyes
+de prioridad de carácter -- prosocial sigue con lo comunal, egoísta
+antepone su comodidad). Una corrección real encontrada al escribir el
+test de prioridad prosocial: el primer intento comparaba `cid_objetivo
+is not None` para decidir si la cadena comunal seguía pendiente, pero
+`cid_objetivo` es `None` tanto si no hay nada pendiente COMO si el
+almacén está pendiente pero su `Construccion` todavía no se ha creado
+-- corregido a comparar la tupla `objetivo` completa (`is not None`),
+la señal correcta. Tres tests preexistentes de `test_ocio_consciente_socializar.py`
+rompieron al introducir esta pieza -- su fixture `_refugio_terminado`
+creaba un refugio con `materiales={}` (calidad 0.0, un refugio "vacío"
+sin sentido físico para este nuevo sistema) y `Necesidades.comodidad`
+quedaba en su default 0.0, dando un déficit artificial de 1.0 que
+disparaba RECOLECTAR-mejora sin motivo real -- corregido dándole al
+refugio de prueba materiales reales (arcilla, `masa_minima_refugio`) y
+sincronizando `comodidad` con esa calidad real, mismo estado que
+tendría un gnomo genuinamente asentado.
+
+`BOSQUE_AUTO_TICKS=3000` con la semilla por defecto, sin ninguna
+excepción: **CONSTRUIR elegido por mejora 3 veces, 2 sustituciones
+reales** -- el mecanismo se ejerce de verdad en juego libre desde el
+primer día, no "correcto pero invisible" como varias piezas anteriores
+de este proyecto. `BOSQUE_CONTINUAR=1` (200 ticks más) sin
+excepciones -- roundtrip limpio (ningún campo nuevo persistido por
+esta pieza, `construir_motivo_mejora` es transitorio).
+
+**Con esto, las 4 piezas del arco de comodidad quedan cerradas**
+(A: piedra exige pico: B: catálogo de calidad; C: `Necesidades.comodidad`;
+D: mejora de vivienda) -- el arco completo que arrancó de la pregunta
+de Diego *"¿cómo fomentar el desarrollo y la evolución... quizás una
+necesidad de confort?"*.
+
+**Pendiente real, explícito**: `umbral_prosocial_comunal=0.5` y
+`tasa_mejora_refugio_kg_tick=1.0` PROVISIONALES, sin calibrar contra el
+harness completo; ningún criterio maestro de Diego (5 especies vivas a
+la vez) remedido con esta pieza ya aplicada -- el cambio afecta solo a
+gnomo consciente, riesgo de desplazamiento de secuencia de `rng` bajo
+pero no nulo, no medido; visión más amplia de Diego (comodidad como
+motor GENERAL de "tecnologías" más allá de vivienda, conexión con ocio
+para dar pie a "arte") deliberadamente fuera de alcance de este arco,
+sin ningún diseño todavía -- horizonte futuro, no descartado.

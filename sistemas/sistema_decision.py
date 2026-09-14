@@ -216,8 +216,11 @@ from nucleo.armas import (
 )
 from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.construccion import (
+    calidad_media_construccion,
+    construccion_propia,
     hay_construccion_de_tipo_en,
     masa_apta_construccion,
+    material_mejora_disponible_en,
     material_suficiente_para,
     objetivo_construccion_actual,
 )
@@ -428,6 +431,11 @@ class SistemaDecision:
         # bloqueo una utilidad que de otro modo habria sido positiva (no
         # cuenta los casos triviales donde ya era 0 por otro motivo).
         self._stats_gate_manos_libres_disparado: int = 0
+        # Contador de observacion (2026-09-14, Pieza D del arco
+        # "comodidad" -- ver CLAUDE.md): cuantas veces CONSTRUIR se
+        # eligio de verdad por mejora de vivienda (no acumulacion normal)
+        # en la accion FINAL, mismo criterio que _stats_socializar_elegidas.
+        self._stats_construir_mejora_elegido: int = 0
         # Sonido fisico (2026-09-06, circulo 4a -- ver
         # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
         # techo de escaneo (no el alcance real) para la tercera fuente de
@@ -562,6 +570,23 @@ def actualizar(
     # efecto (comportamiento identico a antes de esta pieza). PROVISIONAL.
     peso_aptitud_vocacional = float(
         config.get("vocacion", {}).get("peso_aptitud_vocacional", 0.3)
+    )
+    # Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" -- ver
+    # CLAUDE.md y nucleo/construccion.py:material_mejora_disponible_en).
+    # especies_flora_cfg: mismo dict que sistema_recursos.py:
+    # self.especies_flora, necesario para el peek de "qué recolectaría
+    # RECOLECTAR aquí mismo" (tala real exige saber qué Planta cuenta
+    # como competidora).
+    especies_flora_cfg = config.get("flora", {}).get("especies", {})
+    # umbral_prosocial_comunal: sesgo mínimo (empatía+sociabilidad)/2
+    # para que un individuo siga priorizando la cadena comunal pendiente
+    # (almacén/salón/cocina) en vez de su propia comodidad cuando ambas
+    # compiten el mismo tick -- mismo eje de fondo que ya usa
+    # disposicion_a_aportar (nucleo/asentamiento.py) para la disposición
+    # a aportar al almacén, aplicado aquí a una decisión distinta ("qué
+    # construyo primero", no "cuánto excedente aportar"). PROVISIONAL.
+    umbral_prosocial_comunal = float(
+        config.get("decision", {}).get("umbral_prosocial_comunal", 0.5)
     )
 
     # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
@@ -950,6 +975,102 @@ def actualizar(
                         valor_heredado_mineria = necesidad_trabajo_mineria
                         utilidad_recolectar = max(utilidad_recolectar, valor_heredado_mineria)
 
+        # MEJORA DE VIVIENDA (2026-09-14, Pieza D del arco "comodidad" --
+        # ver CLAUDE.md, "Comodidad -- diseño del arco completo"). Una vez
+        # el refugio propio está completado_alguna_vez (huella_m2 fija,
+        # ya no admite más masa por el camino normal de CONSTRUIR/
+        # objetivo_construccion_actual), la comodidad puede seguir
+        # empujando a RECOLECTAR/CONSTRUIR -- pero en modo SUSTITUCIÓN
+        # (cambiar material de peor calidad por uno mejor, masa total
+        # constante), no acumulación.
+        #
+        # PRIORIDAD DE CARÁCTER: si la cadena comunal del asentamiento
+        # (almacén/salón/cocina, ya calculada arriba en cid_objetivo)
+        # sigue pendiente, (empatía+sociabilidad)/2 decide si el
+        # individuo antepone lo comunal (sigue con la utilidad ya
+        # calculada arriba, sin tocar nada aquí) o su propia comodidad
+        # -- un individuo poco prosocial puede anteponerse a sí mismo
+        # incluso con el pueblo a medio construir.
+        #
+        # AUTOLIMITADA por COMPARACIÓN LOCAL REAL, no un déficit puro
+        # como fuego/arma/herramienta/mineria: RECOLECTAR-mejora solo
+        # gana si el material que ESTA celda ofrecería ahora mismo
+        # (material_mejora_disponible_en) es de mejor calidad que la ya
+        # invertida en el refugio; CONSTRUIR-mejora solo si el Inventario
+        # YA porta algo mejor que lo peor invertido. Sin techo autorado
+        # en ningún sitio -- se satura sola en cuanto ya no hay nada
+        # mejor cerca / que portar.
+        construir_con_motivo_mejora = False
+        if cap_mental.consciencia >= umbral_consciencia_agencia and not fisica_bajo_umbral:
+            cid_refugio_propio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
+            if cid_refugio_propio is not None:
+                refugio_propio = gestor.obtener_componente(cid_refugio_propio, Construccion)
+                if refugio_propio is not None and refugio_propio.completado_alguna_vez:
+                    sesgo_prosocial = (temperamento.empatia + temperamento.sociabilidad) / 2.0
+                    # objetivo (no cid_objetivo): el objetivo comunal
+                    # puede existir aun sin Construccion creada todavia
+                    # (cid_objetivo=None, ver objetivo_construccion_actual
+                    # -- "almacen"/paralelo pendiente de fundarse). Al
+                    # llegar aqui ya se confirmo refugio_propio.
+                    # completado_alguna_vez, asi que CUALQUIER objetivo
+                    # no-None devuelto arriba es necesariamente comunal
+                    # (objetivo_construccion_actual solo devuelve
+                    # "refugio" mientras no esta terminado).
+                    cadena_comunal_pendiente = objetivo is not None
+                    prioriza_comunal = (
+                        cadena_comunal_pendiente and sesgo_prosocial >= umbral_prosocial_comunal
+                    )
+                    if not prioriza_comunal:
+                        calidad_actual_refugio = calidad_media_construccion(
+                            refugio_propio.materiales, catalogo_materiales
+                        )
+                        deficit_comodidad = 1.0 - necesidades.comodidad
+
+                        objetos_para_mejora = list(inventario.objetos)
+                        if agarre is not None:
+                            objetos_para_mejora.extend(agarre.objetos)
+                        zona_mejora = mundo.territorio.zonas[pos.zona_idx]
+                        celda_mejora = zona_mejora.obtener_celda(pos.x, pos.y)
+                        material_local = material_mejora_disponible_en(
+                            gestor, celda_mejora, pos.x, pos.y, pos.zona_idx,
+                            objetos_para_mejora, catalogo_materiales, recetas_mineria,
+                            especies_flora_cfg,
+                        )
+                        mejora_recolectar_posible = (
+                            material_local is not None
+                            and float(
+                                catalogo_materiales.get(material_local, {}).get(
+                                    "calidad_construccion", 0.0
+                                )
+                            ) > calidad_actual_refugio
+                        )
+
+                        peor_calidad_refugio = min(
+                            (
+                                catalogo_materiales.get(clave, {}).get("calidad_construccion", 0.0)
+                                for clave, cant in refugio_propio.materiales.items()
+                                if cant > 0.0
+                            ),
+                            default=1.0,
+                        )
+                        mejora_construir_posible = any(
+                            cant > 0.0
+                            and catalogo_materiales.get(clave, {}).get("calidad_construccion", 0.0)
+                            > peor_calidad_refugio
+                            for clave, cant in inventario.contenidos.items()
+                        )
+
+                        if mejora_recolectar_posible and deficit_comodidad > utilidad_recolectar:
+                            utilidad_recolectar = deficit_comodidad
+                            if cadena_comunal_pendiente:
+                                # este tick prioriza comodidad -- el
+                                # objetivo comunal no gana el argmax
+                                # aunque siga pendiente
+                                utilidad_construir = 0.0
+                        if mejora_construir_posible and deficit_comodidad > utilidad_construir:
+                            utilidad_construir = deficit_comodidad
+                            construir_con_motivo_mejora = True
+
         # Resuelve CUÁL de los cuatro eslabones heredados de arriba (fuego,
         # arma, herramienta, mineria) es el motivo REAL que explica el
         # valor FINAL de utilidad_recolectar -- comparación contra el
@@ -1174,6 +1295,18 @@ def actualizar(
         intencion.fabricar_categoria = (
             categoria_fabricar_ganadora if intencion.accion == Accion.FABRICAR else ""
         )
+        # Vuelca a Intencion la causalidad de CONSTRUIR-mejora (2026-09-14,
+        # Pieza D del arco "comodidad"): solo si CONSTRUIR es de verdad la
+        # acción FINAL tras el compromiso de satisfacción -- mismo criterio
+        # que recolectar_motivo_arma/fabricar_categoria arriba.
+        # sistema_movimiento.py/sistema_recursos.py ramifican por este
+        # valor para apuntar al refugio propio en modo sustitución en vez
+        # del objetivo normal de objetivo_construccion_actual.
+        intencion.construir_motivo_mejora = (
+            intencion.accion == Accion.CONSTRUIR and construir_con_motivo_mejora
+        )
+        if sistema_decision is not None and intencion.construir_motivo_mejora:
+            sistema_decision._stats_construir_mejora_elegido += 1
 
         # Empunyar/guardar (armas primitivas v2, ver config/armas.yaml):
         # ajuste automatico recalculado cada tick junto a la Accion

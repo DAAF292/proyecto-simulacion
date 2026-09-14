@@ -449,6 +449,14 @@ decision:
   # PROVISIONAL: 0.5 es la hipotesis de partida razonada del diseno con
   # Diego, sin calibrar contra el harness completo.
   umbral_necesidades_superiores: 0.5
+  # umbral_prosocial_comunal (2026-09-14, Pieza D del arco "comodidad" --
+  # ver CLAUDE.md): sesgo minimo (Temperamento.empatia+sociabilidad)/2
+  # para que un individuo siga priorizando la cadena comunal pendiente
+  # (almacen/salon_comun/cocina) en vez de la mejora de su propia
+  # vivienda cuando ambas compiten el mismo tick -- por debajo, antepone
+  # su propia comodidad aunque el pueblo siga a medio construir. PROVISIONAL,
+  # mismo criterio de hipotesis razonada que el resto de esta seccion.
+  umbral_prosocial_comunal: 0.5
   # Umbral de CapacidadMental.consciencia por debajo del cual una criatura
   # queda sujeta al sesgo de territorio (sistemas/sistema_movimiento.py):
   # tiende a permanecer cerca de comida/agua recordadas en vez de

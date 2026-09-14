@@ -39,6 +39,7 @@ from nucleo.herramientas import tiene_herramienta
 from nucleo.celda import Celda
 from nucleo.construccion import (
     construccion_de_tipo_en,
+    construccion_propia,
     masa_minima_para,
     objetivo_construccion_actual,
     progreso_construccion,
@@ -141,6 +142,18 @@ class SistemaRecursos:
         self.tasa_aporte_construccion: float = float(
             self.config_construccion.get("tasa_aporte_construccion_kg_tick", 1.0)
         )
+        # Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" --
+        # ver CLAUDE.md): tasa de SUSTITUCIÓN (kg de material peor
+        # cambiados por kg de material mejor por tick), no de
+        # acumulación -- ver _resolver_mejora_refugio. PROVISIONAL,
+        # mismo orden de magnitud que tasa_aporte_construccion.
+        self.tasa_mejora_refugio: float = float(
+            self.config_construccion.get("tasa_mejora_refugio_kg_tick", 1.0)
+        )
+        # Observacion (2026-09-14, Pieza D del arco "comodidad"): cuantas
+        # veces _resolver_mejora_refugio sustituyo de verdad algo (no
+        # solo se llamo) -- ver print de BOSQUE_AUTO_TICKS en main.py.
+        self._stats_mejora_refugio_sustituciones: int = 0
         # RECOLECTAR -- ver nucleo/construccion.py.
         self.tasa_recoleccion: float = float(
             self.config_construccion.get("tasa_recoleccion_kg_tick", 1.0)
@@ -370,7 +383,8 @@ class SistemaRecursos:
             elif intencion.accion == Accion.CONSTRUIR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 self._resolver_construir(
-                    gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual, bus_eventos
+                    gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual,
+                    bus_eventos, construir_motivo_mejora=intencion.construir_motivo_mejora,
                 )
                 self._incrementar_vocacion(gestor, eid, consciente, "conteo_constructor")
             elif intencion.accion == Accion.RECOLECTAR:
@@ -528,6 +542,7 @@ class SistemaRecursos:
         pos_y: int,
         tick_actual: int,
         bus_eventos: BusEventos,
+        construir_motivo_mejora: bool = False,
     ) -> None:
         """
         REFUGIO/ALMACÉN CONSTRUIDO (ver componentes/construccion.py,
@@ -549,8 +564,30 @@ class SistemaRecursos:
         Evento en la transición (mismo criterio que CrisisMental, no en
         cada tick que sigue terminado): NOTABLE para refugio (logro
         individual), HISTÓRICO para almacén (hito de la comunidad entera).
+
+        construir_motivo_mejora (2026-09-14, Pieza D del arco "comodidad"
+        -- ver CLAUDE.md): cuando sistema_decision.py marcó CONSTRUIR
+        como motivado por mejora de vivienda (refugio propio ya
+        completado_alguna_vez, se porta algo mejor que lo peor ya
+        invertido), se ignora por completo objetivo_construccion_actual
+        -- ese objetivo YA es None o apunta a la cadena comunal, ninguno
+        de los dos es el refugio propio en modo sustitución -- y se
+        resuelve directamente contra el refugio propio vía
+        _resolver_mejora_refugio.
         """
         if inv is None:
+            return
+        if construir_motivo_mejora:
+            cid_refugio_propio = construccion_propia(gestor, entidad_id, "refugio")
+            if cid_refugio_propio is None:
+                return
+            con_pos_mejora = gestor.obtener_componente(cid_refugio_propio, Posicion)
+            if con_pos_mejora is None or con_pos_mejora.x != pos_x or con_pos_mejora.y != pos_y:
+                return
+            refugio_mejora = gestor.obtener_componente(cid_refugio_propio, Construccion)
+            if refugio_mejora is None:
+                return
+            self._resolver_mejora_refugio(inv, refugio_mejora)
             return
         objetivo = objetivo_construccion_actual(
             gestor, mundo, entidad_id, self.radio_cluster_asentamiento
@@ -600,6 +637,60 @@ class SistemaRecursos:
                     datos={"x": pos_x, "y": pos_y, "tipo": construccion.tipo},
                 )
             )
+
+    def _resolver_mejora_refugio(self, inv: Inventario, construccion: Construccion) -> None:
+        """Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" --
+        ver CLAUDE.md): SUSTITUYE hasta tasa_mejora_refugio kg del
+        material de PEOR calidad_construccion ya invertido en el refugio
+        por material de MEJOR calidad ya portado en Inventario.contenidos
+        -- masa total constante, huella_m2 no crece. A diferencia de
+        _resolver_construir (acumulación hacia masa_minima), aquí no hay
+        ningún progreso que avanzar -- el refugio ya está
+        completado_alguna_vez, esto solo cambia DE QUÉ está hecho.
+
+        Autolimitado por el propio gate de utilidad
+        (sistema_decision.py): solo se llega aquí cuando ya se confirmó
+        que el Inventario porta algo con calidad_construccion mayor que
+        el peor material ya invertido -- sin ese gate, esta función
+        sería un no-op silencioso la mayoría de las veces, no un bug."""
+        if not inv.contenidos or not construccion.materiales:
+            return
+        peor_clave = min(
+            (
+                clave for clave, cant in construccion.materiales.items() if cant > 0.0
+            ),
+            key=lambda k: self.catalogo_materiales.get(k, {}).get("calidad_construccion", 0.0),
+            default=None,
+        )
+        if peor_clave is None:
+            return
+        calidad_peor = self.catalogo_materiales.get(peor_clave, {}).get("calidad_construccion", 0.0)
+        candidatos = [
+            (clave, cant) for clave, cant in inv.contenidos.items()
+            if cant > 0.0
+            and self.catalogo_materiales.get(clave, {}).get("calidad_construccion", 0.0) > calidad_peor
+        ]
+        if not candidatos:
+            return
+        mejor_clave, _ = max(
+            candidatos,
+            key=lambda item: self.catalogo_materiales.get(item[0], {}).get("calidad_construccion", 0.0),
+        )
+        cantidad = min(
+            self.tasa_mejora_refugio,
+            construccion.materiales[peor_clave],
+            inv.contenidos[mejor_clave],
+        )
+        if cantidad <= 0.0:
+            return
+        construccion.materiales[peor_clave] -= cantidad
+        if construccion.materiales[peor_clave] <= 0.0:
+            del construccion.materiales[peor_clave]
+        construccion.materiales[mejor_clave] = construccion.materiales.get(mejor_clave, 0.0) + cantidad
+        inv.contenidos[mejor_clave] -= cantidad
+        if inv.contenidos[mejor_clave] <= 0.0:
+            del inv.contenidos[mejor_clave]
+        self._stats_mejora_refugio_sustituciones += 1
 
     def _resolver_recolectar(
         self,
