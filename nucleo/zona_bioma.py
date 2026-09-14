@@ -82,6 +82,20 @@ class ZonaBioma:
         # (en_llamas sobrevive a guardar/cargar, ver
         # nucleo/persistencia.py) -- se repuebla al cargar una partida.
         self.celdas_en_llamas: set[tuple[int, int]] = set()
+        # Celdas de tierra firme con agua efimera o humedad de subsuelo
+        # (> 0), registro del drenaje en clima seco (2026-09-12):
+        # sistema_recursos.py:_actualizar_charcos evaporaba/drenaba
+        # recorriendo la cuadricula ENTERA cada tick seco; con el
+        # registro solo toca las celdas que tienen algo que drenar
+        # (mismo patron exacto que celdas_en_llamas). El LLENADO ocurre
+        # con lluvia (ahi el escaneo completo es necesario de verdad --
+        # cualquier celda puede empezar a guardar agua); el registro solo
+        # ahorra los ticks secos. A LA GENERACION nace vacia (tierra
+        # arranca con humedad_subsuelo 0.0 y sin charco). El charco SI se
+        # persiste (celdas_estado.profundidad_charco) y se repuebla al
+        # cargar; humedad_subsuelo NO se persiste (regenerada desde la
+        # semilla, arranca 0.0 en tierra), igual que al generar.
+        self.celdas_humedas: set[tuple[int, int]] = set()
         """Viento dominante fijo de la zona, sorteado una vez en la
         generación del mundo (nucleo/orografia.py:
         sortear_viento_dominante) y conservado como atributo de la zona --

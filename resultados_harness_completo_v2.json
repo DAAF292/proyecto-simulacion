@@ -1,0 +1,3198 @@
+[
+  {
+    "semilla": 1100001,
+    "ticks_reales": 9456,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4818.87283039093,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 14,
+        "lobo": 6,
+        "ardilla": 46,
+        "conejo": 33,
+        "venado": 10,
+        "caballo": 9,
+        "cabra_montesa": 6
+      },
+      "2000": {
+        "gnomo": 14,
+        "lobo": 11,
+        "conejo": 41,
+        "ardilla": 54,
+        "cabra_montesa": 7,
+        "venado": 13,
+        "caballo": 9
+      },
+      "3000": {
+        "gnomo": 25,
+        "ardilla": 90,
+        "conejo": 35,
+        "lobo": 14,
+        "cabra_montesa": 7,
+        "venado": 15,
+        "caballo": 10
+      },
+      "4000": {
+        "ardilla": 121,
+        "gnomo": 20,
+        "conejo": 25,
+        "lobo": 14,
+        "cabra_montesa": 6,
+        "venado": 14,
+        "caballo": 10
+      },
+      "5000": {
+        "ardilla": 115,
+        "gnomo": 19,
+        "cabra_montesa": 5,
+        "conejo": 12,
+        "lobo": 9,
+        "venado": 17,
+        "caballo": 12
+      },
+      "6000": {
+        "ardilla": 107,
+        "venado": 16,
+        "gnomo": 22,
+        "cabra_montesa": 4,
+        "lobo": 3,
+        "caballo": 14,
+        "conejo": 1
+      },
+      "7000": {
+        "ardilla": 61,
+        "venado": 17,
+        "gnomo": 20,
+        "cabra_montesa": 3,
+        "lobo": 1,
+        "caballo": 16
+      },
+      "8000": {
+        "venado": 15,
+        "gnomo": 22,
+        "ardilla": 35,
+        "cabra_montesa": 2,
+        "caballo": 22,
+        "lobo": 1
+      },
+      "9000": {
+        "venado": 20,
+        "gnomo": 20,
+        "caballo": 21,
+        "ardilla": 36,
+        "cabra_montesa": 1
+      },
+      "9455": {
+        "venado": 20,
+        "gnomo": 20,
+        "caballo": 22,
+        "ardilla": 36,
+        "cabra_montesa": 1
+      }
+    },
+    "poblacion_final": {
+      "venado": 20,
+      "gnomo": 20,
+      "caballo": 22,
+      "ardilla": 36,
+      "cabra_montesa": 1
+    },
+    "especies_vivas": 5,
+    "muertes_por_especie": {
+      "gnomo": {
+        "vejez": 6,
+        "depredacion": 4,
+        "intoxicacion": 1,
+        "inanicion": 8,
+        "deshidratacion": 1
+      },
+      "conejo": {
+        "vejez": 108,
+        "depredacion": 30,
+        "deshidratacion": 1
+      },
+      "ardilla": {
+        "depredacion": 6,
+        "vejez": 240,
+        "inanicion": 47,
+        "deshidratacion": 7
+      },
+      "cabra_montesa": {
+        "vejez": 9,
+        "depredacion": 1,
+        "inanicion": 3
+      },
+      "venado": {
+        "vejez": 14,
+        "depredacion": 3,
+        "inanicion": 4
+      },
+      "caballo": {
+        "vejez": 10,
+        "inanicion": 1,
+        "deshidratacion": 3
+      },
+      "lobo": {
+        "vejez": 6,
+        "inanicion": 11
+      }
+    },
+    "concepciones_por_especie": {
+      "venado": 33,
+      "conejo": 54,
+      "gnomo": 24,
+      "ardilla": 152,
+      "cabra_montesa": 8,
+      "lobo": 3,
+      "caballo": 32
+    },
+    "nacimientos_por_especie": {
+      "conejo": 109,
+      "ardilla": 306,
+      "venado": 31,
+      "cabra_montesa": 6,
+      "caballo": 27,
+      "lobo": 11,
+      "gnomo": 22
+    },
+    "construcciones_completadas": {
+      "refugio": 15
+    },
+    "num_asentamientos": 2,
+    "tamanos_asentamientos": [
+      8,
+      3
+    ],
+    "parejas_estables_gnomo": 20,
+    "especies_vivas_criterio_5": 3,
+    "vocaciones_gnomo": {
+      "forrajero": 20
+    },
+    "armas_fabricadas": 28,
+    "herramientas_fabricadas": 4,
+    "robos_material_intentados": 7052,
+    "robos_material_exitosos": 30,
+    "robos_arma_intentados": 974,
+    "robos_arma_exitosos": 2,
+    "crisis_violenta_contacto": 13060,
+    "memoria_compartida": 383380,
+    "rumores_propagados": 111191,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 23,
+    "gate_manos_libres": 56726,
+    "lealtad_aplicada": 981,
+    "material_descartado_kg": 842.6682169794316,
+    "madriguera_excluidos_cupo": 2221,
+    "vinculos_purgados_decaimiento": 1162,
+    "sonidos_emitidos": 38017,
+    "reputacion_descalificados": 0,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 947,
+      "lobo": 433,
+      "ardilla": 1135,
+      "venado": 953,
+      "conejo": 547,
+      "caballo": 817,
+      "cabra_montesa": 291
+    },
+    "madrigueras_sincronizadas": 4295,
+    "socializar_contactos": 6595,
+    "roce_social": 6030,
+    "robos_intentados": 178,
+    "robos_exitosos": 63,
+    "compartir_confianza": 4,
+    "cocinar_resuelto": 8,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 231,
+    "provisiones_consumidas": 2,
+    "muertes_intoxicacion": 1
+  },
+  {
+    "semilla": 1100002,
+    "ticks_reales": 9168,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4819.437379837036,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 47,
+        "conejo": 25,
+        "venado": 10,
+        "caballo": 9,
+        "cabra_montesa": 7
+      },
+      "2000": {
+        "ardilla": 61,
+        "gnomo": 13,
+        "lobo": 9,
+        "venado": 9,
+        "conejo": 14,
+        "caballo": 15,
+        "cabra_montesa": 8
+      },
+      "3000": {
+        "ardilla": 65,
+        "gnomo": 16,
+        "conejo": 12,
+        "venado": 12,
+        "lobo": 12,
+        "caballo": 15,
+        "cabra_montesa": 6
+      },
+      "4000": {
+        "ardilla": 63,
+        "gnomo": 11,
+        "conejo": 7,
+        "venado": 10,
+        "lobo": 8,
+        "caballo": 16,
+        "cabra_montesa": 3
+      },
+      "5000": {
+        "gnomo": 9,
+        "venado": 14,
+        "ardilla": 81,
+        "conejo": 16,
+        "lobo": 8,
+        "caballo": 14,
+        "cabra_montesa": 1
+      },
+      "6000": {
+        "gnomo": 9,
+        "venado": 15,
+        "ardilla": 102,
+        "conejo": 4,
+        "lobo": 3,
+        "caballo": 15,
+        "cabra_montesa": 1
+      },
+      "7000": {
+        "ardilla": 110,
+        "gnomo": 9,
+        "venado": 15,
+        "lobo": 1,
+        "caballo": 12,
+        "conejo": 1
+      },
+      "8000": {
+        "ardilla": 113,
+        "gnomo": 11,
+        "venado": 15,
+        "lobo": 1,
+        "caballo": 14
+      },
+      "9000": {
+        "gnomo": 7,
+        "ardilla": 109,
+        "venado": 21,
+        "lobo": 1,
+        "caballo": 14
+      },
+      "9167": {
+        "gnomo": 7,
+        "ardilla": 105,
+        "venado": 22,
+        "lobo": 1,
+        "caballo": 14
+      }
+    },
+    "poblacion_final": {
+      "gnomo": 7,
+      "ardilla": 105,
+      "venado": 22,
+      "lobo": 1,
+      "caballo": 14
+    },
+    "especies_vivas": 5,
+    "muertes_por_especie": {
+      "conejo": {
+        "vejez": 81,
+        "depredacion": 5
+      },
+      "ardilla": {
+        "depredacion": 1,
+        "vejez": 301,
+        "inanicion": 25
+      },
+      "cabra_montesa": {
+        "vejez": 4,
+        "inanicion": 6
+      },
+      "gnomo": {
+        "depredacion": 6,
+        "inanicion": 13,
+        "vejez": 2,
+        "intoxicacion": 1
+      },
+      "venado": {
+        "depredacion": 2,
+        "vejez": 9
+      },
+      "lobo": {
+        "vejez": 5,
+        "inanicion": 9
+      },
+      "caballo": {
+        "vejez": 9,
+        "deshidratacion": 5,
+        "inanicion": 3
+      }
+    },
+    "concepciones_por_especie": {
+      "ardilla": 204,
+      "venado": 29,
+      "cabra_montesa": 5,
+      "conejo": 33,
+      "caballo": 22,
+      "gnomo": 15,
+      "lobo": 4
+    },
+    "nacimientos_por_especie": {
+      "conejo": 56,
+      "ardilla": 402,
+      "caballo": 22,
+      "cabra_montesa": 2,
+      "lobo": 9,
+      "venado": 23,
+      "gnomo": 11
+    },
+    "construcciones_completadas": {
+      "refugio": 12
+    },
+    "num_asentamientos": 2,
+    "tamanos_asentamientos": [
+      3,
+      3
+    ],
+    "parejas_estables_gnomo": 1,
+    "especies_vivas_criterio_5": 4,
+    "vocaciones_gnomo": {
+      "forrajero": 7
+    },
+    "armas_fabricadas": 15,
+    "herramientas_fabricadas": 0,
+    "robos_material_intentados": 2478,
+    "robos_material_exitosos": 41,
+    "robos_arma_intentados": 139,
+    "robos_arma_exitosos": 2,
+    "crisis_violenta_contacto": 3885,
+    "memoria_compartida": 144867,
+    "rumores_propagados": 47676,
+    "sonido_caza_fallback": 6,
+    "manada_cohesion_fallback_caza": 55,
+    "gate_manos_libres": 13604,
+    "lealtad_aplicada": 324,
+    "material_descartado_kg": 206.04151465445324,
+    "madriguera_excluidos_cupo": 60,
+    "vinculos_purgados_decaimiento": 218,
+    "sonidos_emitidos": 29345,
+    "reputacion_descalificados": 6,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1262,
+      "lobo": 327,
+      "ardilla": 987,
+      "venado": 761,
+      "conejo": 602,
+      "caballo": 837,
+      "cabra_montesa": 197
+    },
+    "madrigueras_sincronizadas": 3514,
+    "socializar_contactos": 2404,
+    "roce_social": 2304,
+    "robos_intentados": 8,
+    "robos_exitosos": 2,
+    "compartir_confianza": 3,
+    "cocinar_resuelto": 3,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 109,
+    "provisiones_consumidas": 1,
+    "muertes_intoxicacion": 1
+  },
+  {
+    "semilla": 1100003,
+    "ticks_reales": 9192,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4816.282021045685,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 15,
+        "lobo": 5,
+        "ardilla": 43,
+        "venado": 10,
+        "conejo": 28,
+        "caballo": 9,
+        "cabra_montesa": 6
+      },
+      "2000": {
+        "gnomo": 12,
+        "conejo": 44,
+        "lobo": 4,
+        "ardilla": 33,
+        "venado": 13,
+        "caballo": 9,
+        "cabra_montesa": 7
+      },
+      "3000": {
+        "gnomo": 19,
+        "caballo": 12,
+        "ardilla": 24,
+        "lobo": 1,
+        "venado": 14,
+        "conejo": 18,
+        "cabra_montesa": 5
+      },
+      "4000": {
+        "gnomo": 17,
+        "caballo": 12,
+        "ardilla": 26,
+        "lobo": 1,
+        "venado": 16,
+        "conejo": 3,
+        "cabra_montesa": 3
+      },
+      "5000": {
+        "gnomo": 14,
+        "ardilla": 36,
+        "caballo": 10,
+        "lobo": 1,
+        "venado": 17,
+        "conejo": 1,
+        "cabra_montesa": 3
+      },
+      "6000": {
+        "gnomo": 12,
+        "ardilla": 46,
+        "caballo": 11,
+        "venado": 13,
+        "cabra_montesa": 4
+      },
+      "7000": {
+        "gnomo": 10,
+        "ardilla": 47,
+        "caballo": 11,
+        "venado": 10,
+        "cabra_montesa": 4
+      },
+      "8000": {
+        "gnomo": 8,
+        "ardilla": 58,
+        "caballo": 10,
+        "venado": 7,
+        "cabra_montesa": 3
+      },
+      "9000": {
+        "caballo": 13,
+        "ardilla": 64,
+        "gnomo": 5,
+        "venado": 4
+      },
+      "9191": {
+        "caballo": 13,
+        "ardilla": 64,
+        "gnomo": 5,
+        "venado": 3
+      }
+    },
+    "poblacion_final": {
+      "caballo": 13,
+      "ardilla": 64,
+      "gnomo": 5,
+      "venado": 3
+    },
+    "especies_vivas": 4,
+    "muertes_por_especie": {
+      "conejo": {
+        "vejez": 83,
+        "depredacion": 2,
+        "inanicion": 1,
+        "deshidratacion": 1
+      },
+      "ardilla": {
+        "vejez": 171,
+        "depredacion": 12,
+        "inanicion": 6
+      },
+      "cabra_montesa": {
+        "vejez": 10,
+        "inanicion": 2
+      },
+      "gnomo": {
+        "vejez": 6,
+        "depredacion": 3,
+        "inanicion": 11,
+        "deshidratacion": 1
+      },
+      "lobo": {
+        "vejez": 3,
+        "inanicion": 3
+      },
+      "caballo": {
+        "deshidratacion": 3,
+        "vejez": 6,
+        "inanicion": 2
+      },
+      "venado": {
+        "depredacion": 1,
+        "vejez": 12,
+        "inanicion": 15
+      }
+    },
+    "concepciones_por_especie": {
+      "conejo": 34,
+      "cabra_montesa": 5,
+      "venado": 15,
+      "gnomo": 15,
+      "caballo": 19,
+      "ardilla": 119,
+      "lobo": 2
+    },
+    "nacimientos_por_especie": {
+      "ardilla": 223,
+      "conejo": 57,
+      "venado": 21,
+      "cabra_montesa": 4,
+      "caballo": 15,
+      "gnomo": 8
+    },
+    "construcciones_completadas": {
+      "almacen": 1,
+      "refugio": 11
+    },
+    "num_asentamientos": 2,
+    "tamanos_asentamientos": [
+      6,
+      3
+    ],
+    "parejas_estables_gnomo": 0,
+    "especies_vivas_criterio_5": 3,
+    "vocaciones_gnomo": {
+      "forrajero": 5
+    },
+    "armas_fabricadas": 14,
+    "herramientas_fabricadas": 0,
+    "robos_material_intentados": 5755,
+    "robos_material_exitosos": 78,
+    "robos_arma_intentados": 829,
+    "robos_arma_exitosos": 1,
+    "crisis_violenta_contacto": 2343,
+    "memoria_compartida": 449238,
+    "rumores_propagados": 112346,
+    "sonido_caza_fallback": 4,
+    "manada_cohesion_fallback_caza": 138,
+    "gate_manos_libres": 75941,
+    "lealtad_aplicada": 611,
+    "material_descartado_kg": 46.743626673669006,
+    "madriguera_excluidos_cupo": 1317,
+    "vinculos_purgados_decaimiento": 385,
+    "sonidos_emitidos": 10815,
+    "reputacion_descalificados": 55,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1157,
+      "lobo": 181,
+      "ardilla": 1068,
+      "venado": 404,
+      "conejo": 360,
+      "caballo": 741,
+      "cabra_montesa": 415
+    },
+    "madrigueras_sincronizadas": 2715,
+    "socializar_contactos": 2182,
+    "roce_social": 6123,
+    "robos_intentados": 230,
+    "robos_exitosos": 86,
+    "compartir_confianza": 1,
+    "cocinar_resuelto": 6,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 69,
+    "provisiones_consumidas": 1,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100004,
+    "ticks_reales": 8403,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4800.066356897354,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 16,
+        "lobo": 4,
+        "ardilla": 37,
+        "conejo": 25,
+        "venado": 8,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 14,
+        "ardilla": 42,
+        "lobo": 6,
+        "conejo": 33,
+        "venado": 5,
+        "caballo": 6,
+        "cabra_montesa": 8
+      },
+      "3000": {
+        "gnomo": 15,
+        "ardilla": 48,
+        "lobo": 5,
+        "conejo": 64,
+        "venado": 8,
+        "caballo": 5,
+        "cabra_montesa": 9
+      },
+      "4000": {
+        "gnomo": 17,
+        "caballo": 6,
+        "ardilla": 95,
+        "conejo": 70,
+        "lobo": 2,
+        "cabra_montesa": 8,
+        "venado": 7
+      },
+      "5000": {
+        "ardilla": 130,
+        "gnomo": 16,
+        "caballo": 6,
+        "conejo": 77,
+        "cabra_montesa": 9,
+        "venado": 5
+      },
+      "6000": {
+        "gnomo": 17,
+        "ardilla": 171,
+        "conejo": 48,
+        "venado": 7,
+        "caballo": 3,
+        "cabra_montesa": 11
+      },
+      "7000": {
+        "ardilla": 187,
+        "gnomo": 13,
+        "conejo": 13,
+        "caballo": 1,
+        "venado": 7,
+        "cabra_montesa": 14
+      },
+      "8000": {
+        "ardilla": 199,
+        "gnomo": 19,
+        "venado": 5,
+        "caballo": 3,
+        "cabra_montesa": 15,
+        "conejo": 6
+      },
+      "8402": {
+        "ardilla": 172,
+        "gnomo": 19,
+        "venado": 5,
+        "caballo": 3,
+        "cabra_montesa": 16,
+        "conejo": 4
+      }
+    },
+    "poblacion_final": {
+      "ardilla": 172,
+      "gnomo": 19,
+      "venado": 5,
+      "caballo": 3,
+      "cabra_montesa": 16,
+      "conejo": 4
+    },
+    "especies_vivas": 6,
+    "muertes_por_especie": {
+      "conejo": {
+        "vejez": 242,
+        "inanicion": 12
+      },
+      "lobo": {
+        "vejez": 4,
+        "inanicion": 6
+      },
+      "venado": {
+        "vejez": 11,
+        "depredacion": 2,
+        "inanicion": 1
+      },
+      "gnomo": {
+        "depredacion": 2,
+        "inanicion": 9,
+        "vejez": 4
+      },
+      "ardilla": {
+        "vejez": 359,
+        "depredacion": 3,
+        "inanicion": 22,
+        "deshidratacion": 2
+      },
+      "cabra_montesa": {
+        "vejez": 12
+      },
+      "caballo": {
+        "deshidratacion": 9,
+        "vejez": 4
+      }
+    },
+    "concepciones_por_especie": {
+      "cabra_montesa": 29,
+      "conejo": 113,
+      "ardilla": 266,
+      "lobo": 3,
+      "gnomo": 18,
+      "venado": 15,
+      "caballo": 10
+    },
+    "nacimientos_por_especie": {
+      "conejo": 228,
+      "ardilla": 528,
+      "cabra_montesa": 20,
+      "lobo": 4,
+      "caballo": 7,
+      "venado": 9,
+      "gnomo": 16
+    },
+    "construcciones_completadas": {
+      "refugio": 13
+    },
+    "num_asentamientos": 1,
+    "tamanos_asentamientos": [
+      7
+    ],
+    "parejas_estables_gnomo": 0,
+    "especies_vivas_criterio_5": 4,
+    "vocaciones_gnomo": {
+      "forrajero": 18,
+      "constructor": 1
+    },
+    "armas_fabricadas": 16,
+    "herramientas_fabricadas": 2,
+    "robos_material_intentados": 8628,
+    "robos_material_exitosos": 65,
+    "robos_arma_intentados": 879,
+    "robos_arma_exitosos": 2,
+    "crisis_violenta_contacto": 1396,
+    "memoria_compartida": 540910,
+    "rumores_propagados": 179005,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 4,
+    "gate_manos_libres": 18102,
+    "lealtad_aplicada": 12,
+    "material_descartado_kg": 248.35134950359694,
+    "madriguera_excluidos_cupo": 6204,
+    "vinculos_purgados_decaimiento": 1110,
+    "sonidos_emitidos": 43212,
+    "reputacion_descalificados": 6,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 749,
+      "lobo": 182,
+      "ardilla": 421,
+      "venado": 617,
+      "conejo": 784,
+      "caballo": 444,
+      "cabra_montesa": 640
+    },
+    "madrigueras_sincronizadas": 8430,
+    "socializar_contactos": 5737,
+    "roce_social": 8656,
+    "robos_intentados": 142,
+    "robos_exitosos": 56,
+    "compartir_confianza": 0,
+    "cocinar_resuelto": 19,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 159,
+    "provisiones_consumidas": 0,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100005,
+    "ticks_reales": 9648,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4803.9839243888855,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 16,
+        "conejo": 28,
+        "lobo": 6,
+        "ardilla": 42,
+        "venado": 10,
+        "caballo": 8,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "ardilla": 41,
+        "gnomo": 12,
+        "conejo": 27,
+        "venado": 6,
+        "lobo": 14,
+        "caballo": 13,
+        "cabra_montesa": 7
+      },
+      "3000": {
+        "ardilla": 36,
+        "gnomo": 15,
+        "conejo": 38,
+        "venado": 5,
+        "caballo": 12,
+        "lobo": 13,
+        "cabra_montesa": 9
+      },
+      "4000": {
+        "cabra_montesa": 9,
+        "gnomo": 16,
+        "conejo": 34,
+        "ardilla": 31,
+        "venado": 5,
+        "caballo": 10,
+        "lobo": 10
+      },
+      "5000": {
+        "cabra_montesa": 8,
+        "gnomo": 17,
+        "conejo": 21,
+        "venado": 6,
+        "ardilla": 25,
+        "caballo": 12,
+        "lobo": 7
+      },
+      "6000": {
+        "cabra_montesa": 10,
+        "gnomo": 11,
+        "venado": 6,
+        "caballo": 11,
+        "conejo": 22,
+        "ardilla": 7,
+        "lobo": 3
+      },
+      "7000": {
+        "cabra_montesa": 8,
+        "gnomo": 10,
+        "venado": 7,
+        "caballo": 10,
+        "conejo": 28,
+        "ardilla": 5,
+        "lobo": 2
+      },
+      "8000": {
+        "gnomo": 11,
+        "conejo": 22,
+        "cabra_montesa": 6,
+        "venado": 10,
+        "caballo": 13,
+        "ardilla": 2
+      },
+      "9000": {
+        "gnomo": 10,
+        "conejo": 15,
+        "venado": 13,
+        "caballo": 11,
+        "cabra_montesa": 3,
+        "ardilla": 2
+      },
+      "9647": {
+        "gnomo": 11,
+        "conejo": 7,
+        "ardilla": 4,
+        "venado": 14,
+        "caballo": 13,
+        "cabra_montesa": 3
+      }
+    },
+    "poblacion_final": {
+      "gnomo": 11,
+      "conejo": 7,
+      "ardilla": 4,
+      "venado": 14,
+      "caballo": 13,
+      "cabra_montesa": 3
+    },
+    "especies_vivas": 6,
+    "muertes_por_especie": {
+      "conejo": {
+        "vejez": 172,
+        "depredacion": 1,
+        "inanicion": 4
+      },
+      "ardilla": {
+        "depredacion": 31,
+        "vejez": 90,
+        "inanicion": 9
+      },
+      "gnomo": {
+        "depredacion": 6,
+        "inanicion": 6,
+        "vejez": 7
+      },
+      "caballo": {
+        "vejez": 8,
+        "deshidratacion": 3,
+        "inanicion": 3
+      },
+      "venado": {
+        "vejez": 7,
+        "depredacion": 4,
+        "inanicion": 2
+      },
+      "cabra_montesa": {
+        "vejez": 10,
+        "inanicion": 6
+      },
+      "lobo": {
+        "vejez": 7,
+        "inanicion": 9
+      }
+    },
+    "concepciones_por_especie": {
+      "conejo": 79,
+      "ardilla": 60,
+      "venado": 16,
+      "caballo": 18,
+      "gnomo": 17,
+      "cabra_montesa": 11,
+      "lobo": 2
+    },
+    "nacimientos_por_especie": {
+      "conejo": 154,
+      "ardilla": 104,
+      "caballo": 18,
+      "lobo": 10,
+      "cabra_montesa": 11,
+      "venado": 17,
+      "gnomo": 12
+    },
+    "construcciones_completadas": {
+      "refugio": 15
+    },
+    "num_asentamientos": 1,
+    "tamanos_asentamientos": [
+      6
+    ],
+    "parejas_estables_gnomo": 7,
+    "especies_vivas_criterio_5": 4,
+    "vocaciones_gnomo": {
+      "forrajero": 11
+    },
+    "armas_fabricadas": 18,
+    "herramientas_fabricadas": 0,
+    "robos_material_intentados": 1851,
+    "robos_material_exitosos": 20,
+    "robos_arma_intentados": 104,
+    "robos_arma_exitosos": 0,
+    "crisis_violenta_contacto": 17021,
+    "memoria_compartida": 131213,
+    "rumores_propagados": 35542,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 15,
+    "gate_manos_libres": 33831,
+    "lealtad_aplicada": 727,
+    "material_descartado_kg": 189.64748397540785,
+    "madriguera_excluidos_cupo": 2724,
+    "vinculos_purgados_decaimiento": 334,
+    "sonidos_emitidos": 20178,
+    "reputacion_descalificados": 2,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1504,
+      "lobo": 442,
+      "ardilla": 976,
+      "venado": 635,
+      "conejo": 809,
+      "caballo": 874,
+      "cabra_montesa": 722
+    },
+    "madrigueras_sincronizadas": 7704,
+    "socializar_contactos": 2314,
+    "roce_social": 1566,
+    "robos_intentados": 17,
+    "robos_exitosos": 5,
+    "compartir_confianza": 4,
+    "cocinar_resuelto": 4,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 143,
+    "provisiones_consumidas": 4,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100006,
+    "ticks_reales": 9144,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4803.866350889206,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 17,
+        "lobo": 5,
+        "ardilla": 38,
+        "venado": 8,
+        "conejo": 29,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 17,
+        "conejo": 25,
+        "lobo": 7,
+        "ardilla": 26,
+        "venado": 11,
+        "caballo": 10,
+        "cabra_montesa": 7
+      },
+      "3000": {
+        "gnomo": 26,
+        "conejo": 31,
+        "lobo": 12,
+        "ardilla": 16,
+        "venado": 10,
+        "caballo": 5,
+        "cabra_montesa": 7
+      },
+      "4000": {
+        "gnomo": 22,
+        "conejo": 25,
+        "lobo": 9,
+        "ardilla": 11,
+        "caballo": 2,
+        "venado": 7,
+        "cabra_montesa": 5
+      },
+      "5000": {
+        "gnomo": 19,
+        "cabra_montesa": 5,
+        "conejo": 19,
+        "venado": 7,
+        "lobo": 4,
+        "ardilla": 2,
+        "caballo": 2
+      },
+      "6000": {
+        "gnomo": 19,
+        "cabra_montesa": 4,
+        "conejo": 18,
+        "venado": 6,
+        "caballo": 2,
+        "lobo": 1
+      },
+      "7000": {
+        "gnomo": 19,
+        "cabra_montesa": 3,
+        "conejo": 15,
+        "venado": 6,
+        "caballo": 1
+      },
+      "8000": {
+        "gnomo": 27,
+        "cabra_montesa": 3,
+        "conejo": 31,
+        "venado": 3,
+        "caballo": 1
+      },
+      "9000": {
+        "conejo": 25,
+        "gnomo": 28,
+        "cabra_montesa": 2,
+        "venado": 2,
+        "caballo": 1
+      },
+      "9143": {
+        "conejo": 16,
+        "gnomo": 27,
+        "cabra_montesa": 1,
+        "venado": 2,
+        "caballo": 1
+      }
+    },
+    "poblacion_final": {
+      "conejo": 16,
+      "gnomo": 27,
+      "cabra_montesa": 1,
+      "venado": 2,
+      "caballo": 1
+    },
+    "especies_vivas": 5,
+    "muertes_por_especie": {
+      "conejo": {
+        "depredacion": 15,
+        "vejez": 162,
+        "deshidratacion": 2,
+        "inanicion": 2
+      },
+      "ardilla": {
+        "vejez": 54,
+        "depredacion": 17,
+        "deshidratacion": 1,
+        "inanicion": 3
+      },
+      "venado": {
+        "depredacion": 4,
+        "vejez": 11,
+        "inanicion": 3
+      },
+      "gnomo": {
+        "depredacion": 8,
+        "deshidratacion": 1,
+        "vejez": 4,
+        "inanicion": 4
+      },
+      "lobo": {
+        "vejez": 10,
+        "inanicion": 5
+      },
+      "caballo": {
+        "deshidratacion": 7,
+        "vejez": 2,
+        "inanicion": 2
+      },
+      "cabra_montesa": {
+        "vejez": 7,
+        "depredacion": 1,
+        "inanicion": 4
+      }
+    },
+    "concepciones_por_especie": {
+      "gnomo": 27,
+      "caballo": 3,
+      "conejo": 96,
+      "ardilla": 27,
+      "lobo": 3,
+      "venado": 10,
+      "cabra_montesa": 8
+    },
+    "nacimientos_por_especie": {
+      "conejo": 167,
+      "ardilla": 45,
+      "lobo": 9,
+      "venado": 10,
+      "caballo": 3,
+      "cabra_montesa": 5,
+      "gnomo": 26
+    },
+    "construcciones_completadas": {
+      "refugio": 21,
+      "almacen": 1,
+      "salon_comun": 1
+    },
+    "num_asentamientos": 3,
+    "tamanos_asentamientos": [
+      5,
+      3,
+      3
+    ],
+    "parejas_estables_gnomo": 10,
+    "especies_vivas_criterio_5": 3,
+    "vocaciones_gnomo": {
+      "forrajero": 27
+    },
+    "armas_fabricadas": 26,
+    "herramientas_fabricadas": 2,
+    "robos_material_intentados": 4147,
+    "robos_material_exitosos": 75,
+    "robos_arma_intentados": 88,
+    "robos_arma_exitosos": 3,
+    "crisis_violenta_contacto": 14313,
+    "memoria_compartida": 326275,
+    "rumores_propagados": 88898,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 7,
+    "gate_manos_libres": 50240,
+    "lealtad_aplicada": 596,
+    "material_descartado_kg": 482.7292093765586,
+    "madriguera_excluidos_cupo": 686,
+    "vinculos_purgados_decaimiento": 670,
+    "sonidos_emitidos": 17284,
+    "reputacion_descalificados": 0,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1589,
+      "lobo": 356,
+      "ardilla": 625,
+      "venado": 649,
+      "conejo": 881,
+      "caballo": 269,
+      "cabra_montesa": 353
+    },
+    "madrigueras_sincronizadas": 8306,
+    "socializar_contactos": 8358,
+    "roce_social": 3759,
+    "robos_intentados": 4,
+    "robos_exitosos": 2,
+    "compartir_confianza": 3,
+    "cocinar_resuelto": 25,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 283,
+    "provisiones_consumidas": 3,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100007,
+    "ticks_reales": 10624,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4800.242594957352,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 18,
+        "venado": 10,
+        "conejo": 41,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 17,
+        "lobo": 18,
+        "ardilla": 18,
+        "caballo": 9,
+        "conejo": 18,
+        "venado": 7,
+        "cabra_montesa": 10
+      },
+      "3000": {
+        "gnomo": 15,
+        "lobo": 15,
+        "conejo": 5,
+        "caballo": 11,
+        "venado": 7,
+        "ardilla": 10,
+        "cabra_montesa": 9
+      },
+      "4000": {
+        "caballo": 8,
+        "gnomo": 13,
+        "lobo": 13,
+        "venado": 6,
+        "conejo": 3,
+        "cabra_montesa": 5,
+        "ardilla": 1
+      },
+      "5000": {
+        "caballo": 9,
+        "venado": 7,
+        "gnomo": 10,
+        "lobo": 14,
+        "cabra_montesa": 4
+      },
+      "6000": {
+        "caballo": 8,
+        "venado": 6,
+        "gnomo": 10,
+        "cabra_montesa": 3,
+        "lobo": 14
+      },
+      "7000": {
+        "caballo": 8,
+        "venado": 7,
+        "gnomo": 9,
+        "cabra_montesa": 1,
+        "lobo": 6
+      },
+      "8000": {
+        "caballo": 11,
+        "venado": 8,
+        "gnomo": 12,
+        "lobo": 4
+      },
+      "9000": {
+        "caballo": 9,
+        "venado": 7,
+        "gnomo": 10,
+        "lobo": 2
+      },
+      "10000": {
+        "gnomo": 10,
+        "venado": 6,
+        "caballo": 9,
+        "lobo": 1
+      },
+      "10623": {
+        "gnomo": 10,
+        "venado": 6,
+        "caballo": 8
+      }
+    },
+    "poblacion_final": {
+      "gnomo": 10,
+      "venado": 6,
+      "caballo": 8
+    },
+    "especies_vivas": 3,
+    "muertes_por_especie": {
+      "conejo": {
+        "depredacion": 19,
+        "vejez": 61,
+        "inanicion": 2
+      },
+      "ardilla": {
+        "vejez": 30,
+        "depredacion": 18,
+        "inanicion": 3
+      },
+      "venado": {
+        "vejez": 7,
+        "inanicion": 7,
+        "depredacion": 2
+      },
+      "gnomo": {
+        "inanicion": 7,
+        "depredacion": 11,
+        "vejez": 5
+      },
+      "cabra_montesa": {
+        "deshidratacion": 1,
+        "inanicion": 7,
+        "vejez": 5,
+        "depredacion": 1
+      },
+      "lobo": {
+        "vejez": 15,
+        "inanicion": 13
+      },
+      "caballo": {
+        "deshidratacion": 4,
+        "inanicion": 3,
+        "vejez": 7
+      }
+    },
+    "concepciones_por_especie": {
+      "gnomo": 22,
+      "conejo": 25,
+      "ardilla": 18,
+      "venado": 14,
+      "caballo": 18,
+      "cabra_montesa": 6,
+      "lobo": 6
+    },
+    "nacimientos_por_especie": {
+      "conejo": 52,
+      "ardilla": 21,
+      "cabra_montesa": 6,
+      "lobo": 22,
+      "venado": 12,
+      "caballo": 13,
+      "gnomo": 15
+    },
+    "construcciones_completadas": {
+      "refugio": 9
+    },
+    "num_asentamientos": 1,
+    "tamanos_asentamientos": [
+      4
+    ],
+    "parejas_estables_gnomo": 6,
+    "especies_vivas_criterio_5": 2,
+    "vocaciones_gnomo": {
+      "forrajero": 10
+    },
+    "armas_fabricadas": 18,
+    "herramientas_fabricadas": 3,
+    "robos_material_intentados": 4578,
+    "robos_material_exitosos": 54,
+    "robos_arma_intentados": 233,
+    "robos_arma_exitosos": 0,
+    "crisis_violenta_contacto": 21418,
+    "memoria_compartida": 263684,
+    "rumores_propagados": 80001,
+    "sonido_caza_fallback": 3,
+    "manada_cohesion_fallback_caza": 233,
+    "gate_manos_libres": 23829,
+    "lealtad_aplicada": 40,
+    "material_descartado_kg": 286.1004621892107,
+    "madriguera_excluidos_cupo": 23,
+    "vinculos_purgados_decaimiento": 350,
+    "sonidos_emitidos": 18272,
+    "reputacion_descalificados": 19,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1090,
+      "lobo": 755,
+      "ardilla": 434,
+      "venado": 583,
+      "conejo": 363,
+      "caballo": 753,
+      "cabra_montesa": 403
+    },
+    "madrigueras_sincronizadas": 3029,
+    "socializar_contactos": 2613,
+    "roce_social": 4236,
+    "robos_intentados": 43,
+    "robos_exitosos": 7,
+    "compartir_confianza": 1,
+    "cocinar_resuelto": 19,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 148,
+    "provisiones_consumidas": 5,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100008,
+    "ticks_reales": 9192,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4800.540775060654,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 13,
+        "lobo": 4,
+        "ardilla": 40,
+        "conejo": 43,
+        "venado": 10,
+        "caballo": 8,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 13,
+        "ardilla": 43,
+        "lobo": 9,
+        "conejo": 58,
+        "venado": 11,
+        "caballo": 14,
+        "cabra_montesa": 6
+      },
+      "3000": {
+        "gnomo": 15,
+        "ardilla": 22,
+        "conejo": 42,
+        "lobo": 7,
+        "cabra_montesa": 6,
+        "venado": 8,
+        "caballo": 9
+      },
+      "4000": {
+        "gnomo": 15,
+        "conejo": 41,
+        "caballo": 8,
+        "ardilla": 15,
+        "cabra_montesa": 5,
+        "venado": 5,
+        "lobo": 11
+      },
+      "5000": {
+        "gnomo": 12,
+        "conejo": 35,
+        "caballo": 6,
+        "ardilla": 12,
+        "cabra_montesa": 6,
+        "venado": 7,
+        "lobo": 8
+      },
+      "6000": {
+        "gnomo": 10,
+        "conejo": 22,
+        "caballo": 8,
+        "ardilla": 9,
+        "cabra_montesa": 8,
+        "lobo": 5,
+        "venado": 7
+      },
+      "7000": {
+        "gnomo": 9,
+        "caballo": 7,
+        "conejo": 14,
+        "ardilla": 12,
+        "cabra_montesa": 5,
+        "lobo": 4,
+        "venado": 4
+      },
+      "8000": {
+        "gnomo": 10,
+        "caballo": 6,
+        "ardilla": 10,
+        "cabra_montesa": 3,
+        "conejo": 6,
+        "lobo": 1,
+        "venado": 4
+      },
+      "9000": {
+        "gnomo": 13,
+        "caballo": 8,
+        "ardilla": 24,
+        "cabra_montesa": 1,
+        "lobo": 1,
+        "venado": 2
+      },
+      "9191": {
+        "gnomo": 13,
+        "caballo": 8,
+        "ardilla": 28,
+        "cabra_montesa": 1,
+        "lobo": 1,
+        "venado": 2
+      }
+    },
+    "poblacion_final": {
+      "gnomo": 13,
+      "caballo": 8,
+      "ardilla": 28,
+      "cabra_montesa": 1,
+      "lobo": 1,
+      "venado": 2
+    },
+    "especies_vivas": 6,
+    "muertes_por_especie": {
+      "ardilla": {
+        "depredacion": 22,
+        "vejez": 74,
+        "inanicion": 7
+      },
+      "conejo": {
+        "vejez": 210,
+        "depredacion": 15,
+        "inanicion": 2
+      },
+      "gnomo": {
+        "depredacion": 11,
+        "incendio": 1,
+        "inanicion": 5,
+        "vejez": 3
+      },
+      "caballo": {
+        "vejez": 4,
+        "deshidratacion": 11,
+        "inanicion": 1
+      },
+      "lobo": {
+        "vejez": 8,
+        "inanicion": 8
+      },
+      "cabra_montesa": {
+        "vejez": 6,
+        "inanicion": 9
+      },
+      "venado": {
+        "depredacion": 3,
+        "vejez": 6,
+        "inanicion": 8
+      }
+    },
+    "concepciones_por_especie": {
+      "caballo": 18,
+      "ardilla": 62,
+      "venado": 11,
+      "conejo": 96,
+      "gnomo": 20,
+      "cabra_montesa": 7,
+      "lobo": 4
+    },
+    "nacimientos_por_especie": {
+      "conejo": 197,
+      "ardilla": 101,
+      "venado": 9,
+      "lobo": 11,
+      "caballo": 15,
+      "gnomo": 15,
+      "cabra_montesa": 8
+    },
+    "construcciones_completadas": {
+      "refugio": 16
+    },
+    "num_asentamientos": 1,
+    "tamanos_asentamientos": [
+      9
+    ],
+    "parejas_estables_gnomo": 11,
+    "especies_vivas_criterio_5": 4,
+    "vocaciones_gnomo": {
+      "forrajero": 13
+    },
+    "armas_fabricadas": 23,
+    "herramientas_fabricadas": 2,
+    "robos_material_intentados": 4370,
+    "robos_material_exitosos": 30,
+    "robos_arma_intentados": 128,
+    "robos_arma_exitosos": 0,
+    "crisis_violenta_contacto": 7425,
+    "memoria_compartida": 352106,
+    "rumores_propagados": 91849,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 44,
+    "gate_manos_libres": 29251,
+    "lealtad_aplicada": 1335,
+    "material_descartado_kg": 412.32250619511814,
+    "madriguera_excluidos_cupo": 3388,
+    "vinculos_purgados_decaimiento": 668,
+    "sonidos_emitidos": 12841,
+    "reputacion_descalificados": 0,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 856,
+      "lobo": 387,
+      "ardilla": 1087,
+      "venado": 529,
+      "conejo": 746,
+      "caballo": 706,
+      "cabra_montesa": 405
+    },
+    "madrigueras_sincronizadas": 7415,
+    "socializar_contactos": 6128,
+    "roce_social": 3674,
+    "robos_intentados": 72,
+    "robos_exitosos": 28,
+    "compartir_confianza": 5,
+    "cocinar_resuelto": 18,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 141,
+    "provisiones_consumidas": 9,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100009,
+    "ticks_reales": 9816,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4806.731761217117,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 17,
+        "lobo": 6,
+        "ardilla": 42,
+        "venado": 10,
+        "conejo": 29,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 16,
+        "venado": 9,
+        "conejo": 20,
+        "lobo": 14,
+        "ardilla": 31,
+        "caballo": 8,
+        "cabra_montesa": 7
+      },
+      "3000": {
+        "gnomo": 19,
+        "venado": 9,
+        "lobo": 11,
+        "ardilla": 10,
+        "cabra_montesa": 4,
+        "caballo": 13,
+        "conejo": 6
+      },
+      "4000": {
+        "gnomo": 19,
+        "lobo": 5,
+        "ardilla": 11,
+        "venado": 2,
+        "cabra_montesa": 4,
+        "conejo": 14,
+        "caballo": 12
+      },
+      "5000": {
+        "gnomo": 16,
+        "conejo": 18,
+        "lobo": 8,
+        "ardilla": 13,
+        "venado": 2,
+        "caballo": 11,
+        "cabra_montesa": 1
+      },
+      "6000": {
+        "gnomo": 16,
+        "ardilla": 13,
+        "conejo": 13,
+        "lobo": 8,
+        "caballo": 10,
+        "cabra_montesa": 1
+      },
+      "7000": {
+        "gnomo": 14,
+        "ardilla": 13,
+        "conejo": 10,
+        "caballo": 8,
+        "lobo": 5
+      },
+      "8000": {
+        "ardilla": 9,
+        "gnomo": 15,
+        "caballo": 11,
+        "conejo": 3,
+        "lobo": 8
+      },
+      "9000": {
+        "ardilla": 1,
+        "gnomo": 13,
+        "caballo": 11,
+        "lobo": 6
+      },
+      "9815": {
+        "gnomo": 13,
+        "caballo": 10,
+        "lobo": 2
+      }
+    },
+    "poblacion_final": {
+      "gnomo": 13,
+      "caballo": 10,
+      "lobo": 2
+    },
+    "especies_vivas": 3,
+    "muertes_por_especie": {
+      "gnomo": {
+        "vejez": 2,
+        "depredacion": 17,
+        "inanicion": 6
+      },
+      "conejo": {
+        "vejez": 98,
+        "depredacion": 5,
+        "inanicion": 2
+      },
+      "ardilla": {
+        "vejez": 62,
+        "depredacion": 33,
+        "inanicion": 7,
+        "deshidratacion": 1,
+        "incendio": 1
+      },
+      "caballo": {
+        "deshidratacion": 5,
+        "vejez": 8,
+        "inanicion": 1
+      },
+      "lobo": {
+        "inanicion": 13,
+        "vejez": 5,
+        "incendio": 4
+      },
+      "cabra_montesa": {
+        "vejez": 7,
+        "inanicion": 4
+      },
+      "venado": {
+        "vejez": 5,
+        "depredacion": 6,
+        "inanicion": 2,
+        "incendio": 3
+      }
+    },
+    "concepciones_por_especie": {
+      "cabra_montesa": 4,
+      "venado": 7,
+      "caballo": 15,
+      "conejo": 40,
+      "ardilla": 39,
+      "gnomo": 24,
+      "lobo": 7
+    },
+    "nacimientos_por_especie": {
+      "conejo": 75,
+      "ardilla": 74,
+      "caballo": 15,
+      "lobo": 18,
+      "cabra_montesa": 3,
+      "venado": 6,
+      "gnomo": 20
+    },
+    "construcciones_completadas": {
+      "refugio": 13
+    },
+    "num_asentamientos": 2,
+    "tamanos_asentamientos": [
+      6,
+      3
+    ],
+    "parejas_estables_gnomo": 6,
+    "especies_vivas_criterio_5": 3,
+    "vocaciones_gnomo": {
+      "forrajero": 13
+    },
+    "armas_fabricadas": 29,
+    "herramientas_fabricadas": 2,
+    "robos_material_intentados": 3848,
+    "robos_material_exitosos": 31,
+    "robos_arma_intentados": 255,
+    "robos_arma_exitosos": 2,
+    "crisis_violenta_contacto": 9847,
+    "memoria_compartida": 219574,
+    "rumores_propagados": 63423,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 29,
+    "gate_manos_libres": 34565,
+    "lealtad_aplicada": 522,
+    "material_descartado_kg": 909.8878937448762,
+    "madriguera_excluidos_cupo": 21,
+    "vinculos_purgados_decaimiento": 595,
+    "sonidos_emitidos": 14748,
+    "reputacion_descalificados": 3,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1308,
+      "lobo": 675,
+      "ardilla": 912,
+      "venado": 250,
+      "conejo": 899,
+      "caballo": 884,
+      "cabra_montesa": 271
+    },
+    "madrigueras_sincronizadas": 4774,
+    "socializar_contactos": 5884,
+    "roce_social": 2880,
+    "robos_intentados": 3,
+    "robos_exitosos": 1,
+    "compartir_confianza": 4,
+    "cocinar_resuelto": 13,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 205,
+    "provisiones_consumidas": 2,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100010,
+    "ticks_reales": 9384,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4812.6942229270935,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 13,
+        "lobo": 6,
+        "ardilla": 36,
+        "venado": 10,
+        "conejo": 34,
+        "caballo": 9,
+        "cabra_montesa": 5
+      },
+      "2000": {
+        "ardilla": 33,
+        "lobo": 21,
+        "gnomo": 10,
+        "caballo": 10,
+        "conejo": 54,
+        "venado": 11,
+        "cabra_montesa": 5
+      },
+      "3000": {
+        "ardilla": 27,
+        "lobo": 20,
+        "gnomo": 10,
+        "caballo": 9,
+        "conejo": 56,
+        "venado": 15,
+        "cabra_montesa": 6
+      },
+      "4000": {
+        "lobo": 15,
+        "gnomo": 9,
+        "conejo": 58,
+        "venado": 10,
+        "caballo": 8,
+        "ardilla": 18,
+        "cabra_montesa": 3
+      },
+      "5000": {
+        "lobo": 13,
+        "gnomo": 11,
+        "conejo": 49,
+        "venado": 7,
+        "caballo": 6,
+        "ardilla": 11,
+        "cabra_montesa": 1
+      },
+      "6000": {
+        "gnomo": 9,
+        "caballo": 8,
+        "venado": 8,
+        "conejo": 18,
+        "cabra_montesa": 1,
+        "lobo": 6,
+        "ardilla": 3
+      },
+      "7000": {
+        "caballo": 8,
+        "gnomo": 9,
+        "venado": 6,
+        "cabra_montesa": 1,
+        "lobo": 4,
+        "conejo": 8
+      },
+      "8000": {
+        "gnomo": 6,
+        "caballo": 8,
+        "venado": 4,
+        "cabra_montesa": 1
+      },
+      "9000": {
+        "gnomo": 6,
+        "caballo": 10,
+        "venado": 4
+      },
+      "9383": {
+        "gnomo": 6,
+        "caballo": 13,
+        "venado": 3
+      }
+    },
+    "poblacion_final": {
+      "gnomo": 6,
+      "caballo": 13,
+      "venado": 3
+    },
+    "especies_vivas": 3,
+    "muertes_por_especie": {
+      "ardilla": {
+        "depredacion": 18,
+        "vejez": 67,
+        "inanicion": 7
+      },
+      "gnomo": {
+        "depredacion": 11,
+        "vejez": 2,
+        "inanicion": 8
+      },
+      "conejo": {
+        "vejez": 214,
+        "depredacion": 14,
+        "inanicion": 2
+      },
+      "cabra_montesa": {
+        "vejez": 5,
+        "depredacion": 1,
+        "inanicion": 4
+      },
+      "lobo": {
+        "vejez": 15,
+        "deshidratacion": 1,
+        "inanicion": 9,
+        "incendio": 1
+      },
+      "venado": {
+        "vejez": 9,
+        "depredacion": 4,
+        "inanicion": 6
+      },
+      "caballo": {
+        "vejez": 7,
+        "deshidratacion": 3,
+        "inanicion": 1
+      }
+    },
+    "concepciones_por_especie": {
+      "gnomo": 10,
+      "caballo": 16,
+      "lobo": 5,
+      "conejo": 104,
+      "ardilla": 36,
+      "cabra_montesa": 3,
+      "venado": 11
+    },
+    "nacimientos_por_especie": {
+      "conejo": 200,
+      "ardilla": 62,
+      "lobo": 20,
+      "cabra_montesa": 2,
+      "caballo": 15,
+      "venado": 12,
+      "gnomo": 9
+    },
+    "construcciones_completadas": {
+      "refugio": 9,
+      "almacen": 1
+    },
+    "num_asentamientos": 2,
+    "tamanos_asentamientos": [
+      3,
+      3
+    ],
+    "parejas_estables_gnomo": 3,
+    "especies_vivas_criterio_5": 2,
+    "vocaciones_gnomo": {
+      "forrajero": 6
+    },
+    "armas_fabricadas": 13,
+    "herramientas_fabricadas": 3,
+    "robos_material_intentados": 1212,
+    "robos_material_exitosos": 25,
+    "robos_arma_intentados": 148,
+    "robos_arma_exitosos": 1,
+    "crisis_violenta_contacto": 25792,
+    "memoria_compartida": 54106,
+    "rumores_propagados": 15680,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 46,
+    "gate_manos_libres": 19265,
+    "lealtad_aplicada": 0,
+    "material_descartado_kg": 67.96032812488582,
+    "madriguera_excluidos_cupo": 4586,
+    "vinculos_purgados_decaimiento": 180,
+    "sonidos_emitidos": 23274,
+    "reputacion_descalificados": 0,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 818,
+      "lobo": 637,
+      "ardilla": 499,
+      "venado": 719,
+      "conejo": 767,
+      "caballo": 858,
+      "cabra_montesa": 254
+    },
+    "madrigueras_sincronizadas": 7484,
+    "socializar_contactos": 603,
+    "roce_social": 799,
+    "robos_intentados": 11,
+    "robos_exitosos": 0,
+    "compartir_confianza": 3,
+    "cocinar_resuelto": 6,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 97,
+    "provisiones_consumidas": 4,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100011,
+    "ticks_reales": 9240,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4810.505296707153,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 17,
+        "lobo": 6,
+        "ardilla": 40,
+        "conejo": 40,
+        "venado": 10,
+        "caballo": 7,
+        "cabra_montesa": 7
+      },
+      "2000": {
+        "gnomo": 13,
+        "ardilla": 49,
+        "lobo": 13,
+        "cabra_montesa": 9,
+        "conejo": 42,
+        "venado": 10,
+        "caballo": 7
+      },
+      "3000": {
+        "gnomo": 23,
+        "ardilla": 68,
+        "conejo": 46,
+        "lobo": 11,
+        "cabra_montesa": 6,
+        "venado": 10,
+        "caballo": 8
+      },
+      "4000": {
+        "ardilla": 93,
+        "conejo": 51,
+        "gnomo": 20,
+        "lobo": 8,
+        "cabra_montesa": 8,
+        "venado": 9,
+        "caballo": 8
+      },
+      "5000": {
+        "ardilla": 128,
+        "conejo": 47,
+        "gnomo": 19,
+        "lobo": 8,
+        "cabra_montesa": 6,
+        "venado": 8,
+        "caballo": 7
+      },
+      "6000": {
+        "gnomo": 21,
+        "ardilla": 149,
+        "conejo": 52,
+        "lobo": 4,
+        "cabra_montesa": 8,
+        "venado": 8,
+        "caballo": 6
+      },
+      "7000": {
+        "ardilla": 122,
+        "gnomo": 21,
+        "cabra_montesa": 10,
+        "conejo": 37,
+        "lobo": 1,
+        "venado": 6,
+        "caballo": 8
+      },
+      "8000": {
+        "ardilla": 74,
+        "gnomo": 26,
+        "cabra_montesa": 9,
+        "conejo": 20,
+        "venado": 9,
+        "caballo": 11
+      },
+      "9000": {
+        "gnomo": 25,
+        "cabra_montesa": 13,
+        "ardilla": 69,
+        "conejo": 38,
+        "venado": 9,
+        "caballo": 11
+      },
+      "9239": {
+        "gnomo": 24,
+        "cabra_montesa": 13,
+        "ardilla": 73,
+        "conejo": 53,
+        "caballo": 13,
+        "venado": 8
+      }
+    },
+    "poblacion_final": {
+      "gnomo": 24,
+      "cabra_montesa": 13,
+      "ardilla": 73,
+      "conejo": 53,
+      "caballo": 13,
+      "venado": 8
+    },
+    "especies_vivas": 6,
+    "muertes_por_especie": {
+      "conejo": {
+        "vejez": 225,
+        "depredacion": 3,
+        "inanicion": 9,
+        "deshidratacion": 1
+      },
+      "ardilla": {
+        "vejez": 326,
+        "depredacion": 16,
+        "inanicion": 30,
+        "deshidratacion": 2
+      },
+      "gnomo": {
+        "depredacion": 5,
+        "vejez": 5,
+        "inanicion": 6
+      },
+      "caballo": {
+        "deshidratacion": 7,
+        "vejez": 4
+      },
+      "cabra_montesa": {
+        "vejez": 10,
+        "inanicion": 2
+      },
+      "venado": {
+        "depredacion": 3,
+        "vejez": 12
+      },
+      "lobo": {
+        "inanicion": 11,
+        "vejez": 4
+      }
+    },
+    "concepciones_por_especie": {
+      "cabra_montesa": 27,
+      "ardilla": 213,
+      "gnomo": 22,
+      "venado": 21,
+      "conejo": 135,
+      "caballo": 20,
+      "lobo": 3
+    },
+    "nacimientos_por_especie": {
+      "conejo": 261,
+      "ardilla": 417,
+      "cabra_montesa": 17,
+      "caballo": 15,
+      "venado": 13,
+      "lobo": 9,
+      "gnomo": 22
+    },
+    "construcciones_completadas": {
+      "refugio": 17
+    },
+    "num_asentamientos": 1,
+    "tamanos_asentamientos": [
+      6
+    ],
+    "parejas_estables_gnomo": 11,
+    "especies_vivas_criterio_5": 4,
+    "vocaciones_gnomo": {
+      "forrajero": 24
+    },
+    "armas_fabricadas": 24,
+    "herramientas_fabricadas": 1,
+    "robos_material_intentados": 4562,
+    "robos_material_exitosos": 25,
+    "robos_arma_intentados": 172,
+    "robos_arma_exitosos": 3,
+    "crisis_violenta_contacto": 2807,
+    "memoria_compartida": 302040,
+    "rumores_propagados": 86644,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 57,
+    "gate_manos_libres": 45333,
+    "lealtad_aplicada": 0,
+    "material_descartado_kg": 250.11801177791452,
+    "madriguera_excluidos_cupo": 2688,
+    "vinculos_purgados_decaimiento": 317,
+    "sonidos_emitidos": 37758,
+    "reputacion_descalificados": 0,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1849,
+      "lobo": 456,
+      "ardilla": 1394,
+      "venado": 440,
+      "conejo": 902,
+      "caballo": 559,
+      "cabra_montesa": 486
+    },
+    "madrigueras_sincronizadas": 12885,
+    "socializar_contactos": 7409,
+    "roce_social": 3807,
+    "robos_intentados": 0,
+    "robos_exitosos": 0,
+    "compartir_confianza": 2,
+    "cocinar_resuelto": 30,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 262,
+    "provisiones_consumidas": 3,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100012,
+    "ticks_reales": 9480,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4804.707813978195,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 16,
+        "lobo": 6,
+        "ardilla": 37,
+        "conejo": 35,
+        "venado": 4,
+        "caballo": 7,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 12,
+        "ardilla": 31,
+        "conejo": 37,
+        "cabra_montesa": 8,
+        "lobo": 19,
+        "venado": 5,
+        "caballo": 11
+      },
+      "3000": {
+        "gnomo": 21,
+        "ardilla": 12,
+        "lobo": 17,
+        "conejo": 60,
+        "venado": 2,
+        "caballo": 11,
+        "cabra_montesa": 6
+      },
+      "4000": {
+        "gnomo": 16,
+        "conejo": 71,
+        "caballo": 12,
+        "lobo": 11,
+        "ardilla": 5,
+        "venado": 2,
+        "cabra_montesa": 7
+      },
+      "5000": {
+        "gnomo": 12,
+        "caballo": 11,
+        "conejo": 29,
+        "ardilla": 9,
+        "cabra_montesa": 6,
+        "venado": 1,
+        "lobo": 9
+      },
+      "6000": {
+        "gnomo": 12,
+        "conejo": 33,
+        "caballo": 9,
+        "ardilla": 11,
+        "cabra_montesa": 5,
+        "venado": 1,
+        "lobo": 6
+      },
+      "7000": {
+        "gnomo": 12,
+        "conejo": 45,
+        "cabra_montesa": 6,
+        "caballo": 10,
+        "ardilla": 5,
+        "venado": 1,
+        "lobo": 4
+      },
+      "8000": {
+        "gnomo": 14,
+        "conejo": 33,
+        "caballo": 8,
+        "cabra_montesa": 5,
+        "venado": 1,
+        "lobo": 1,
+        "ardilla": 3
+      },
+      "9000": {
+        "gnomo": 12,
+        "caballo": 11,
+        "conejo": 28,
+        "cabra_montesa": 6,
+        "venado": 1,
+        "ardilla": 3
+      },
+      "9479": {
+        "caballo": 11,
+        "cabra_montesa": 7,
+        "gnomo": 8,
+        "conejo": 31,
+        "venado": 1,
+        "ardilla": 2
+      }
+    },
+    "poblacion_final": {
+      "caballo": 11,
+      "cabra_montesa": 7,
+      "gnomo": 8,
+      "conejo": 31,
+      "venado": 1,
+      "ardilla": 2
+    },
+    "especies_vivas": 6,
+    "muertes_por_especie": {
+      "gnomo": {
+        "vejez": 2,
+        "depredacion": 11,
+        "inanicion": 12
+      },
+      "ardilla": {
+        "vejez": 63,
+        "depredacion": 26,
+        "inanicion": 5
+      },
+      "conejo": {
+        "vejez": 237,
+        "depredacion": 16,
+        "inanicion": 4,
+        "deshidratacion": 1
+      },
+      "venado": {
+        "vejez": 5,
+        "depredacion": 7
+      },
+      "caballo": {
+        "deshidratacion": 8,
+        "vejez": 6,
+        "inanicion": 1
+      },
+      "lobo": {
+        "vejez": 11,
+        "inanicion": 9
+      },
+      "cabra_montesa": {
+        "vejez": 8,
+        "inanicion": 4
+      }
+    },
+    "concepciones_por_especie": {
+      "ardilla": 34,
+      "conejo": 139,
+      "gnomo": 14,
+      "venado": 5,
+      "lobo": 4,
+      "caballo": 21,
+      "cabra_montesa": 9
+    },
+    "nacimientos_por_especie": {
+      "conejo": 259,
+      "ardilla": 66,
+      "venado": 3,
+      "caballo": 17,
+      "lobo": 14,
+      "cabra_montesa": 11,
+      "gnomo": 15
+    },
+    "construcciones_completadas": {
+      "refugio": 16
+    },
+    "num_asentamientos": 1,
+    "tamanos_asentamientos": [
+      3
+    ],
+    "parejas_estables_gnomo": 3,
+    "especies_vivas_criterio_5": 4,
+    "vocaciones_gnomo": {
+      "forrajero": 8
+    },
+    "armas_fabricadas": 20,
+    "herramientas_fabricadas": 1,
+    "robos_material_intentados": 2452,
+    "robos_material_exitosos": 43,
+    "robos_arma_intentados": 317,
+    "robos_arma_exitosos": 1,
+    "crisis_violenta_contacto": 22396,
+    "memoria_compartida": 200371,
+    "rumores_propagados": 67111,
+    "sonido_caza_fallback": 4,
+    "manada_cohesion_fallback_caza": 17,
+    "gate_manos_libres": 15050,
+    "lealtad_aplicada": 0,
+    "material_descartado_kg": 221.51454862975964,
+    "madriguera_excluidos_cupo": 6683,
+    "vinculos_purgados_decaimiento": 195,
+    "sonidos_emitidos": 25146,
+    "reputacion_descalificados": 0,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1196,
+      "lobo": 518,
+      "ardilla": 787,
+      "venado": 175,
+      "conejo": 681,
+      "caballo": 848,
+      "cabra_montesa": 585
+    },
+    "madrigueras_sincronizadas": 8535,
+    "socializar_contactos": 3470,
+    "roce_social": 3279,
+    "robos_intentados": 63,
+    "robos_exitosos": 14,
+    "compartir_confianza": 3,
+    "cocinar_resuelto": 17,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 130,
+    "provisiones_consumidas": 4,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100013,
+    "ticks_reales": 8880,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4808.4948761463165,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 17,
+        "lobo": 6,
+        "ardilla": 42,
+        "conejo": 26,
+        "venado": 9,
+        "caballo": 8,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 13,
+        "ardilla": 64,
+        "conejo": 39,
+        "lobo": 13,
+        "venado": 12,
+        "caballo": 10,
+        "cabra_montesa": 7
+      },
+      "3000": {
+        "gnomo": 24,
+        "ardilla": 83,
+        "lobo": 17,
+        "conejo": 37,
+        "caballo": 14,
+        "venado": 10,
+        "cabra_montesa": 6
+      },
+      "4000": {
+        "gnomo": 24,
+        "ardilla": 117,
+        "lobo": 12,
+        "conejo": 28,
+        "cabra_montesa": 9,
+        "venado": 9,
+        "caballo": 14
+      },
+      "5000": {
+        "ardilla": 169,
+        "gnomo": 25,
+        "conejo": 16,
+        "cabra_montesa": 7,
+        "venado": 7,
+        "caballo": 14,
+        "lobo": 9
+      },
+      "6000": {
+        "gnomo": 27,
+        "ardilla": 223,
+        "venado": 7,
+        "caballo": 15,
+        "cabra_montesa": 4,
+        "conejo": 3,
+        "lobo": 3
+      },
+      "7000": {
+        "gnomo": 30,
+        "caballo": 15,
+        "ardilla": 253,
+        "venado": 8,
+        "cabra_montesa": 2
+      },
+      "8000": {
+        "gnomo": 35,
+        "ardilla": 203,
+        "caballo": 18,
+        "venado": 8,
+        "cabra_montesa": 2
+      },
+      "8879": {
+        "ardilla": 131,
+        "gnomo": 34,
+        "caballo": 23,
+        "cabra_montesa": 1,
+        "venado": 13
+      }
+    },
+    "poblacion_final": {
+      "ardilla": 131,
+      "gnomo": 34,
+      "caballo": 23,
+      "cabra_montesa": 1,
+      "venado": 13
+    },
+    "especies_vivas": 5,
+    "muertes_por_especie": {
+      "ardilla": {
+        "depredacion": 8,
+        "vejez": 460,
+        "inanicion": 64,
+        "deshidratacion": 8
+      },
+      "conejo": {
+        "vejez": 108,
+        "depredacion": 33,
+        "inanicion": 3
+      },
+      "gnomo": {
+        "depredacion": 7,
+        "vejez": 2,
+        "inanicion": 4
+      },
+      "venado": {
+        "depredacion": 3,
+        "vejez": 7,
+        "inanicion": 2
+      },
+      "caballo": {
+        "deshidratacion": 4,
+        "inanicion": 4,
+        "vejez": 4
+      },
+      "lobo": {
+        "vejez": 12,
+        "inanicion": 8
+      },
+      "cabra_montesa": {
+        "inanicion": 4,
+        "vejez": 8
+      }
+    },
+    "concepciones_por_especie": {
+      "gnomo": 32,
+      "venado": 14,
+      "ardilla": 339,
+      "caballo": 28,
+      "conejo": 58,
+      "lobo": 3,
+      "cabra_montesa": 4
+    },
+    "nacimientos_por_especie": {
+      "conejo": 114,
+      "ardilla": 641,
+      "venado": 15,
+      "lobo": 14,
+      "caballo": 26,
+      "gnomo": 29,
+      "cabra_montesa": 5
+    },
+    "construcciones_completadas": {
+      "refugio": 26,
+      "almacen": 2,
+      "salon_comun": 2,
+      "cocina": 1
+    },
+    "num_asentamientos": 3,
+    "tamanos_asentamientos": [
+      13,
+      6,
+      3
+    ],
+    "parejas_estables_gnomo": 11,
+    "especies_vivas_criterio_5": 3,
+    "vocaciones_gnomo": {
+      "forrajero": 31,
+      "constructor": 3
+    },
+    "armas_fabricadas": 30,
+    "herramientas_fabricadas": 2,
+    "robos_material_intentados": 5915,
+    "robos_material_exitosos": 62,
+    "robos_arma_intentados": 130,
+    "robos_arma_exitosos": 2,
+    "crisis_violenta_contacto": 9024,
+    "memoria_compartida": 1008975,
+    "rumores_propagados": 256205,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 913,
+    "gate_manos_libres": 53952,
+    "lealtad_aplicada": 7247,
+    "material_descartado_kg": 666.0790257206019,
+    "madriguera_excluidos_cupo": 82,
+    "vinculos_purgados_decaimiento": 9479,
+    "sonidos_emitidos": 50769,
+    "reputacion_descalificados": 3,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1183,
+      "lobo": 424,
+      "ardilla": 1286,
+      "venado": 768,
+      "conejo": 932,
+      "caballo": 1004,
+      "cabra_montesa": 479
+    },
+    "madrigueras_sincronizadas": 6306,
+    "socializar_contactos": 24110,
+    "roce_social": 9502,
+    "robos_intentados": 29,
+    "robos_exitosos": 4,
+    "compartir_confianza": 3,
+    "cocinar_resuelto": 86,
+    "alacena_consumida": 11,
+    "provisiones_guardadas": 350,
+    "provisiones_consumidas": 7,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100014,
+    "ticks_reales": 9336,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4810.751167535782,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 14,
+        "lobo": 6,
+        "ardilla": 43,
+        "conejo": 34,
+        "venado": 9,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 10,
+        "caballo": 10,
+        "cabra_montesa": 9,
+        "lobo": 13,
+        "ardilla": 37,
+        "conejo": 47,
+        "venado": 10
+      },
+      "3000": {
+        "gnomo": 14,
+        "caballo": 12,
+        "cabra_montesa": 7,
+        "ardilla": 31,
+        "lobo": 17,
+        "conejo": 40,
+        "venado": 9
+      },
+      "4000": {
+        "gnomo": 15,
+        "caballo": 12,
+        "cabra_montesa": 5,
+        "ardilla": 15,
+        "lobo": 13,
+        "conejo": 19,
+        "venado": 7
+      },
+      "5000": {
+        "gnomo": 12,
+        "caballo": 11,
+        "cabra_montesa": 6,
+        "ardilla": 8,
+        "conejo": 9,
+        "venado": 5,
+        "lobo": 9
+      },
+      "6000": {
+        "gnomo": 15,
+        "caballo": 14,
+        "cabra_montesa": 6,
+        "conejo": 4,
+        "venado": 4,
+        "ardilla": 9,
+        "lobo": 5
+      },
+      "7000": {
+        "gnomo": 17,
+        "caballo": 14,
+        "cabra_montesa": 5,
+        "venado": 6,
+        "ardilla": 5,
+        "lobo": 4
+      },
+      "8000": {
+        "gnomo": 21,
+        "caballo": 14,
+        "venado": 3,
+        "cabra_montesa": 4,
+        "lobo": 1
+      },
+      "9000": {
+        "caballo": 21,
+        "gnomo": 17,
+        "cabra_montesa": 3,
+        "venado": 1
+      },
+      "9335": {
+        "caballo": 19,
+        "gnomo": 17,
+        "cabra_montesa": 1,
+        "venado": 1
+      }
+    },
+    "poblacion_final": {
+      "caballo": 19,
+      "gnomo": 17,
+      "cabra_montesa": 1,
+      "venado": 1
+    },
+    "especies_vivas": 4,
+    "muertes_por_especie": {
+      "ardilla": {
+        "depredacion": 22,
+        "vejez": 68,
+        "inanicion": 4,
+        "deshidratacion": 1
+      },
+      "gnomo": {
+        "depredacion": 9,
+        "vejez": 3,
+        "inanicion": 6
+      },
+      "conejo": {
+        "vejez": 134,
+        "depredacion": 7,
+        "inanicion": 2
+      },
+      "venado": {
+        "depredacion": 4,
+        "vejez": 10,
+        "inanicion": 2
+      },
+      "caballo": {
+        "deshidratacion": 2,
+        "vejez": 7,
+        "inanicion": 3
+      },
+      "cabra_montesa": {
+        "vejez": 8,
+        "inanicion": 7
+      },
+      "lobo": {
+        "vejez": 12,
+        "inanicion": 8
+      }
+    },
+    "concepciones_por_especie": {
+      "ardilla": 34,
+      "conejo": 57,
+      "cabra_montesa": 7,
+      "gnomo": 24,
+      "caballo": 24,
+      "lobo": 3,
+      "venado": 10
+    },
+    "nacimientos_por_especie": {
+      "conejo": 113,
+      "ardilla": 65,
+      "lobo": 14,
+      "caballo": 22,
+      "cabra_montesa": 8,
+      "venado": 7,
+      "gnomo": 17
+    },
+    "construcciones_completadas": {
+      "almacen": 3,
+      "salon_comun": 3,
+      "refugio": 16
+    },
+    "num_asentamientos": 3,
+    "tamanos_asentamientos": [
+      3,
+      7,
+      4
+    ],
+    "parejas_estables_gnomo": 12,
+    "especies_vivas_criterio_5": 2,
+    "vocaciones_gnomo": {
+      "forrajero": 16,
+      "constructor": 1
+    },
+    "armas_fabricadas": 23,
+    "herramientas_fabricadas": 0,
+    "robos_material_intentados": 4381,
+    "robos_material_exitosos": 22,
+    "robos_arma_intentados": 465,
+    "robos_arma_exitosos": 0,
+    "crisis_violenta_contacto": 14330,
+    "memoria_compartida": 228059,
+    "rumores_propagados": 65819,
+    "sonido_caza_fallback": 3,
+    "manada_cohesion_fallback_caza": 54,
+    "gate_manos_libres": 33267,
+    "lealtad_aplicada": 1489,
+    "material_descartado_kg": 337.44388741851253,
+    "madriguera_excluidos_cupo": 1003,
+    "vinculos_purgados_decaimiento": 1223,
+    "sonidos_emitidos": 16104,
+    "reputacion_descalificados": 1,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1240,
+      "lobo": 664,
+      "ardilla": 690,
+      "venado": 437,
+      "conejo": 701,
+      "caballo": 1021,
+      "cabra_montesa": 572
+    },
+    "madrigueras_sincronizadas": 5638,
+    "socializar_contactos": 4736,
+    "roce_social": 3476,
+    "robos_intentados": 13,
+    "robos_exitosos": 5,
+    "compartir_confianza": 5,
+    "cocinar_resuelto": 5,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 200,
+    "provisiones_consumidas": 8,
+    "muertes_intoxicacion": 0
+  },
+  {
+    "semilla": 1100015,
+    "ticks_reales": 8802,
+    "abortado_por_tiempo": true,
+    "duracion_segundos": 4800.859942913055,
+    "trayectoria": {
+      "0": {
+        "gnomo": 18,
+        "lobo": 6,
+        "ardilla": 30,
+        "venado": 10,
+        "conejo": 30,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "1000": {
+        "gnomo": 16,
+        "lobo": 5,
+        "ardilla": 38,
+        "conejo": 35,
+        "venado": 10,
+        "caballo": 9,
+        "cabra_montesa": 8
+      },
+      "2000": {
+        "gnomo": 13,
+        "lobo": 9,
+        "ardilla": 45,
+        "conejo": 45,
+        "venado": 16,
+        "caballo": 7,
+        "cabra_montesa": 7
+      },
+      "3000": {
+        "gnomo": 16,
+        "conejo": 67,
+        "caballo": 9,
+        "ardilla": 57,
+        "venado": 17,
+        "cabra_montesa": 6,
+        "lobo": 5
+      },
+      "4000": {
+        "gnomo": 17,
+        "conejo": 57,
+        "ardilla": 52,
+        "venado": 18,
+        "caballo": 7,
+        "cabra_montesa": 5,
+        "lobo": 3
+      },
+      "5000": {
+        "gnomo": 17,
+        "conejo": 78,
+        "ardilla": 23,
+        "venado": 23,
+        "caballo": 6,
+        "cabra_montesa": 3,
+        "lobo": 3
+      },
+      "6000": {
+        "gnomo": 18,
+        "conejo": 96,
+        "lobo": 3,
+        "cabra_montesa": 5,
+        "venado": 24,
+        "caballo": 7,
+        "ardilla": 4
+      },
+      "7000": {
+        "gnomo": 19,
+        "conejo": 100,
+        "caballo": 6,
+        "venado": 34,
+        "cabra_montesa": 5
+      },
+      "8000": {
+        "gnomo": 24,
+        "conejo": 132,
+        "caballo": 4,
+        "venado": 29,
+        "cabra_montesa": 4
+      },
+      "8801": {
+        "conejo": 125,
+        "gnomo": 24,
+        "caballo": 4,
+        "venado": 28,
+        "cabra_montesa": 4
+      }
+    },
+    "poblacion_final": {
+      "conejo": 125,
+      "gnomo": 24,
+      "caballo": 4,
+      "venado": 28,
+      "cabra_montesa": 4
+    },
+    "especies_vivas": 5,
+    "muertes_por_especie": {
+      "ardilla": {
+        "vejez": 108,
+        "depredacion": 2,
+        "inanicion": 12,
+        "deshidratacion": 2
+      },
+      "lobo": {
+        "vejez": 5,
+        "inanicion": 6
+      },
+      "conejo": {
+        "vejez": 389,
+        "depredacion": 3,
+        "inanicion": 14
+      },
+      "gnomo": {
+        "vejez": 4,
+        "depredacion": 5,
+        "incendio": 1,
+        "inanicion": 1
+      },
+      "caballo": {
+        "vejez": 5,
+        "deshidratacion": 13
+      },
+      "cabra_montesa": {
+        "inanicion": 4,
+        "vejez": 7
+      },
+      "venado": {
+        "inanicion": 8,
+        "vejez": 14
+      }
+    },
+    "concepciones_por_especie": {
+      "ardilla": 49,
+      "lobo": 3,
+      "conejo": 248,
+      "venado": 38,
+      "caballo": 12,
+      "gnomo": 27,
+      "cabra_montesa": 6
+    },
+    "nacimientos_por_especie": {
+      "conejo": 501,
+      "ardilla": 94,
+      "caballo": 13,
+      "venado": 40,
+      "lobo": 5,
+      "cabra_montesa": 7,
+      "gnomo": 17
+    },
+    "construcciones_completadas": {
+      "refugio": 20,
+      "almacen": 2,
+      "salon_comun": 1
+    },
+    "num_asentamientos": 3,
+    "tamanos_asentamientos": [
+      3,
+      9,
+      5
+    ],
+    "parejas_estables_gnomo": 11,
+    "especies_vivas_criterio_5": 3,
+    "vocaciones_gnomo": {
+      "forrajero": 24
+    },
+    "armas_fabricadas": 23,
+    "herramientas_fabricadas": 0,
+    "robos_material_intentados": 4942,
+    "robos_material_exitosos": 36,
+    "robos_arma_intentados": 271,
+    "robos_arma_exitosos": 3,
+    "crisis_violenta_contacto": 7174,
+    "memoria_compartida": 354898,
+    "rumores_propagados": 94738,
+    "sonido_caza_fallback": 0,
+    "manada_cohesion_fallback_caza": 14,
+    "gate_manos_libres": 19115,
+    "lealtad_aplicada": 1888,
+    "material_descartado_kg": 521.3500550628487,
+    "madriguera_excluidos_cupo": 15284,
+    "vinculos_purgados_decaimiento": 2741,
+    "sonidos_emitidos": 32908,
+    "reputacion_descalificados": 1,
+    "reputacion_desempates": 0,
+    "manadas_por_especie": {
+      "gnomo": 1070,
+      "lobo": 331,
+      "ardilla": 455,
+      "venado": 1002,
+      "conejo": 1228,
+      "caballo": 626,
+      "cabra_montesa": 509
+    },
+    "madrigueras_sincronizadas": 12553,
+    "socializar_contactos": 3136,
+    "roce_social": 4340,
+    "robos_intentados": 78,
+    "robos_exitosos": 24,
+    "compartir_confianza": 2,
+    "cocinar_resuelto": 21,
+    "alacena_consumida": 0,
+    "provisiones_guardadas": 206,
+    "provisiones_consumidas": 4,
+    "muertes_intoxicacion": 0
+  }
+]

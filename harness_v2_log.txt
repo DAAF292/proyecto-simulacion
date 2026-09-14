@@ -1,0 +1,98 @@
+Lanzando 15 semillas x 12000 ticks, 15 procesos en paralelo...
+Semillas: 1100001..1100015
+[semilla 1100004] listo (4800.1s, 8403 ticks, abortado=True) -- poblacion final: {'ardilla': 172, 'gnomo': 19, 'venado': 5, 'caballo': 3, 'cabra_montesa': 16, 'conejo': 4}
+[semilla 1100007] listo (4800.2s, 10624 ticks, abortado=True) -- poblacion final: {'gnomo': 10, 'venado': 6, 'caballo': 8}
+[semilla 1100008] listo (4800.5s, 9192 ticks, abortado=True) -- poblacion final: {'gnomo': 13, 'caballo': 8, 'ardilla': 28, 'cabra_montesa': 1, 'lobo': 1, 'venado': 2}
+[semilla 1100015] listo (4800.9s, 8802 ticks, abortado=True) -- poblacion final: {'conejo': 125, 'gnomo': 24, 'caballo': 4, 'venado': 28, 'cabra_montesa': 4}
+[semilla 1100006] listo (4803.9s, 9144 ticks, abortado=True) -- poblacion final: {'conejo': 16, 'gnomo': 27, 'cabra_montesa': 1, 'venado': 2, 'caballo': 1}
+[semilla 1100005] listo (4804.0s, 9648 ticks, abortado=True) -- poblacion final: {'gnomo': 11, 'conejo': 7, 'ardilla': 4, 'venado': 14, 'caballo': 13, 'cabra_montesa': 3}
+[semilla 1100012] listo (4804.7s, 9480 ticks, abortado=True) -- poblacion final: {'caballo': 11, 'cabra_montesa': 7, 'gnomo': 8, 'conejo': 31, 'venado': 1, 'ardilla': 2}
+[semilla 1100009] listo (4806.7s, 9816 ticks, abortado=True) -- poblacion final: {'gnomo': 13, 'caballo': 10, 'lobo': 2}
+[semilla 1100013] listo (4808.5s, 8880 ticks, abortado=True) -- poblacion final: {'ardilla': 131, 'gnomo': 34, 'caballo': 23, 'cabra_montesa': 1, 'venado': 13}
+[semilla 1100011] listo (4810.5s, 9240 ticks, abortado=True) -- poblacion final: {'gnomo': 24, 'cabra_montesa': 13, 'ardilla': 73, 'conejo': 53, 'caballo': 13, 'venado': 8}
+[semilla 1100014] listo (4810.8s, 9336 ticks, abortado=True) -- poblacion final: {'caballo': 19, 'gnomo': 17, 'cabra_montesa': 1, 'venado': 1}
+[semilla 1100010] listo (4812.7s, 9384 ticks, abortado=True) -- poblacion final: {'gnomo': 6, 'caballo': 13, 'venado': 3}
+[semilla 1100003] listo (4816.3s, 9192 ticks, abortado=True) -- poblacion final: {'caballo': 13, 'ardilla': 64, 'gnomo': 5, 'venado': 3}
+[semilla 1100001] listo (4818.9s, 9456 ticks, abortado=True) -- poblacion final: {'venado': 20, 'gnomo': 20, 'caballo': 22, 'ardilla': 36, 'cabra_montesa': 1}
+[semilla 1100002] listo (4819.4s, 9168 ticks, abortado=True) -- poblacion final: {'gnomo': 7, 'ardilla': 105, 'venado': 22, 'lobo': 1, 'caballo': 14}
+
+Total: 15 semillas en 4820.4s de pared
+Resultados guardados en resultados_harness_completo_v2.json
+
+=== RESUMEN (15/15 semillas validas) ===
+
+Semillas que no llegaron al tope de ticks (cortadas por tiempo): 15/15
+
+Extincion por especie:
+  gnomo: 0/15 (0%)
+  lobo: 12/15 (80%)
+  conejo: 9/15 (60%)
+  ardilla: 6/15 (40%)
+  caballo: 0/15 (0%)
+  venado: 1/15 (7%)
+  cabra_montesa: 5/15 (33%)
+
+Criterio maestro de Diego (5 especies originales vivas): 0/15 (0%)
+Criterio extendido (7 especies del catalogo vivas): 0/15 (0%)
+
+Semillas con al menos 1 asentamiento formado: 15/15
+Semillas con almacen completado: 6/15
+Semillas con salon comun completado: 4/15
+Semillas con cocina completada: 1/15
+
+Parejas estables de gnomo: 112 en total, presentes en 13/15 semillas
+Robos exitosos (agregado): 297
+Compartir por confianza (agregado): 43
+Cocinar resuelto (agregado): 280
+Alacena consumida (agregado): 11
+Muertes por intoxicacion (agregado): 2
+
+Fabricacion (agregado):
+  Armas fabricadas: 320
+  Herramientas fabricadas: 22
+Robo de material exitoso (agregado): 637
+Robo de arma exitoso (agregado): 22
+
+Vocaciones dominantes de gnomo (agregado al cierre de cada semilla):
+  {'forrajero': 233, 'constructor': 5}
+
+Flujos sociales/agregados:
+  Memoria compartida: 4959696
+  Rumores propagados: 1396128
+  Crisis violenta con contacto: 172231
+  Cohesion de manada fallback caza: 1649
+  Sonido como pista de caza (fallback): 20
+  Sonidos emitidos: 390671
+  Gate manos libres disparado: 522071
+  Lealtad a lider aplicada: 15772
+  Madriguera excluidos por cupo: 46970
+  Vinculos purgados por decaimiento: 19627
+  Material descartado por prioridad (kg): 5689.0
+  Reputacion: descalificados=96, desempates cambiados=0
+
+Poblacion final por especie (promedio / min / max):
+  gnomo: 15.9 / 5 / 34
+  lobo: 0.3 / 0 / 2
+  conejo: 15.7 / 0 / 125
+  ardilla: 41.0 / 0 / 172
+  caballo: 11.7 / 1 / 23
+  venado: 8.5 / 0 / 28
+  cabra_montesa: 3.2 / 0 / 16
+
+Causas de muerte agregadas por especie:
+  gnomo: {'vejez': 57, 'depredacion': 116, 'intoxicacion': 2, 'inanicion': 106, 'deshidratacion': 3, 'incendio': 2}
+  lobo: {'vejez': 122, 'inanicion': 128, 'incendio': 5, 'deshidratacion': 1}
+  conejo: {'vejez': 2524, 'depredacion': 168, 'deshidratacion': 6, 'inanicion': 59}
+  ardilla: {'depredacion': 235, 'vejez': 2473, 'inanicion': 251, 'deshidratacion': 24, 'incendio': 1}
+  caballo: {'vejez': 91, 'inanicion': 25, 'deshidratacion': 87}
+  venado: {'vejez': 139, 'depredacion': 48, 'inanicion': 60, 'incendio': 3}
+  cabra_montesa: {'vejez': 116, 'depredacion': 4, 'inanicion': 66, 'deshidratacion': 1}
+
+Funnel reproductivo (concepciones -> nacimientos) por especie:
+  gnomo: 311 concepciones -> 254 nacimientos (82%)
+  lobo: 55 concepciones -> 170 nacimientos (309%)
+  conejo: 1311 concepciones -> 2543 nacimientos (194%)
+  ardilla: 1652 concepciones -> 3149 nacimientos (191%)
+  caballo: 276 concepciones -> 243 nacimientos (88%)
+  venado: 249 concepciones -> 228 nacimientos (92%)
+  cabra_montesa: 139 concepciones -> 115 nacimientos (83%)

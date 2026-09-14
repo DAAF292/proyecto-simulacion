@@ -110,14 +110,21 @@ def pareja_presente(
     pos_y: int,
     zona_idx: int,
     umbral: float,
+    indice: Any = None,
 ) -> bool:
     """True si la pareja derivada de `entidad_id` esta en la celda EXACTA.
 
-    Busqueda lineal O(N) sobre entidades con (Relaciones, Posicion) en la
-    celda exacta (mismo x, y, zona_idx que hay_refugio_en/fogata_en --
-    sin radio de percepcion), excluyendo la propia. Devuelve True si
-    alguna de esas entidades es realmente pareja segun `son_pareja`
-    (ambas direcciones superan `umbral`).
+    Busqueda por celda exacta (mismo x, y, zona_idx que hay_refugio_en/
+    fogata_en -- sin radio de percepcion), excluyendo la propia. Devuelve
+    True si alguna de esas entidades es realmente pareja segun
+    `son_pareja` (ambas direcciones superan `umbral`).
+
+    indice (2026-09-12): con IndiceEspacial, los candidatos salen de
+    en_celda (solo las entidades de esa celda) en vez del escaneo lineal
+    O(N) sobre entidades_con(Relaciones, Posicion) que tenia antes --
+    mismo resultado booleano (_candidatos = entidades de la celda), sin
+    rng que desplazar. Sin indice, el escaneo original como fallback
+    (misma firma con default: los llamadores sin indice no cambian).
 
     Si la entidad no tiene Relaciones (relaciones=None) o no hay nadie
     mas en la celda, devuelve False.
@@ -126,6 +133,17 @@ def pareja_presente(
     from componentes.relaciones import Relaciones
 
     if relaciones is None:
+        return False
+    if indice is not None:
+        candidatos = indice.en_celda(pos_x, pos_y, zona_idx)
+        for cid in candidatos:
+            if cid == entidad_id:
+                continue
+            rel_otra = gestor.obtener_componente(cid, Relaciones)
+            if rel_otra is None:
+                continue
+            if son_pareja(relaciones, rel_otra, entidad_id, cid, umbral):
+                return True
         return False
     for cid in gestor.entidades_con(Relaciones, Posicion):
         if cid == entidad_id:
