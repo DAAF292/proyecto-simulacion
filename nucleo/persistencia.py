@@ -80,7 +80,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.38-fase0"
+VERSION_ESQUEMA = "0.39-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -251,7 +251,14 @@ class Persistencia:
                     -- criterio que agarre/semillas/relaciones -- perderlos
                     -- al recargar borraria la unica observabilidad real de
                     -- este circulo.
-                    vocacion TEXT
+                    vocacion TEXT,
+                    -- comodidad (2026-09-14, Necesidades.comodidad, Pieza C
+                    -- del arco "comodidad" -- ver CLAUDE.md): AL FINAL de
+                    -- la tabla a proposito, para no renumerar los indices
+                    -- posicionales fila[N] ya usados por el resto de este
+                    -- modulo al cargar -- un campo nuevo intercalado habria
+                    -- desplazado docenas de indices sin necesidad real.
+                    comodidad REAL NOT NULL DEFAULT 0.0
                 )
                 """
             )
@@ -606,6 +613,7 @@ class Persistencia:
                                     "conteo_cocinero": vocacion.conteo_cocinero,
                                 }
                             ) if vocacion else None,
+                            nec.comodidad,
                         )
                     )
             cur.executemany(
@@ -613,7 +621,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -858,7 +866,10 @@ class Persistencia:
             # añadió después de semillas, como fila[50], y desplaza en
             # +1 esos índices otra vez más (fila[51]..fila[55]); vocacion
             # (2026-09-11) se añadió después de relaciones, como fila[51],
-            # y desplaza en +1 esos índices otra vez más (fila[52]..fila[56]).
+            # y desplaza en +1 esos índices otra vez más (fila[52]..fila[56]);
+            # comodidad (2026-09-14, Pieza C del arco "comodidad") se
+            # añadió DESPUÉS de vocacion, como fila[52], y desplaza en +1
+            # esos índices una última vez (fila[53]..fila[57]).
             # La columna inventario (fila[46]) guarda un JSON único con
             # {"contenidos": ..., "objetos": ...} desde armas primitivas v2
             # (2026-09-03) -- ver carga de Inventario más abajo. Ninguno
@@ -885,6 +896,7 @@ class Persistencia:
                         oxigenacion=fila[8],
                         confort_termico=fila[9],
                         impulso_reproductivo=fila[10],
+                        comodidad=fila[52],
                     ),
                 )
                 dims = DimensionesFisicas(
@@ -1002,11 +1014,11 @@ class Persistencia:
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[52]),
-                        nombre=fila[53],
-                        tick_nacimiento=fila[54],
-                        id_madre=fila[55],
-                        id_padre=fila[56],
+                        especie=Especie(fila[53]),
+                        nombre=fila[54],
+                        tick_nacimiento=fila[55],
+                        id_madre=fila[56],
+                        id_padre=fila[57],
                     ),
                 )
 

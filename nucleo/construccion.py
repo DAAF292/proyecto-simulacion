@@ -100,6 +100,33 @@ def masa_apta_construccion(materiales: dict[str, float], catalogo: dict[str, Any
     return total
 
 
+def calidad_media_construccion(materiales: dict[str, float], catalogo: dict[str, Any]) -> float:
+    """Media de calidad_construccion (config/materiales.yaml) de
+    `materiales`, ponderada por la masa de cada uno -- 0.0 si no hay
+    ninguna masa apta (dict vacío, o solo materiales sin
+    calidad_construccion declarada). Único consumidor real hoy:
+    Necesidades.comodidad (2026-09-14, Pieza C del arco "comodidad" --
+    ver CLAUDE.md), que deriva su objetivo de esta media aplicada al
+    refugio PROPIO ya completado de cada individuo. Materiales sin
+    calidad_construccion en el catálogo (no apto_construccion, o
+    ausentes) se ignoran igual que masa_apta_construccion ignora los
+    no aptos -- mismo criterio permisivo por .get()."""
+    masa_total = 0.0
+    suma_ponderada = 0.0
+    for clave, cantidad in materiales.items():
+        if cantidad <= 0.0:
+            continue
+        info = catalogo.get(clave, {})
+        calidad = info.get("calidad_construccion")
+        if calidad is None:
+            continue
+        masa_total += cantidad
+        suma_ponderada += cantidad * float(calidad)
+    if masa_total <= 0.0:
+        return 0.0
+    return suma_ponderada / masa_total
+
+
 def masa_minima_para(tipo: str, config_construccion: dict[str, Any]) -> float:
     """Umbral de masa apta que exige el tipo de construcción para llegar
     a progreso=1.0 -- config/materiales.yaml sección construccion.

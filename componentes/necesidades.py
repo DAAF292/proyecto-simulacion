@@ -44,6 +44,24 @@ regla de muerte propia ni consumidor en la Utility AI: se mueve de
 verdad, pero ninguna consecuencia (mortalidad, utilidad, drenaje de
 otro pool) depende todavía de su valor.
 
+**comodidad** (2026-09-14, Pieza C del arco "comodidad" -- ver
+CLAUDE.md, "Comodidad -- diseño del arco completo"): necesidad
+SUPERIOR, mismo molde que confort_termico -- deriva hacia un objetivo
+(sistema_necesidades.py), no decae por el mero paso del tiempo. El
+objetivo es `nucleo.construccion.calidad_media_construccion` de los
+materiales del refugio PROPIO ya `completado_alguna_vez` de la entidad
+(0.0 sin refugio propio completado -- sin nada construido, no hay
+comodidad que sentir). Solo se calcula para CONSCIENTE (mismo umbral
+que ya gatea CONSTRUIR/RECOLECTAR) -- fauna nunca construye
+Construccion tipo="refugio" con propietario_id propio, así que su
+objetivo sería siempre 0.0 de todas formas; gatear explícitamente
+evita un escaneo de construcciones por individuo sin necesidad real.
+Convención estándar del resto del fichero (1.0=satisfecho, 0.0=nada),
+a diferencia de confort_termico (0.5 es el ideal). Sin ningún
+consumidor todavía -- ni utilidad en la Utility AI, ni mortalidad, ni
+drenaje de otro pool depende de su valor (misma fase que tuvo
+confort_termico antes de ganar sus propios bonos). SÍ se persiste.
+
 **impulso_reproductivo**: misma convención que el resto, 1.0=recién
 satisfecho, decae hacia 0.0 con el tiempo desde la última
 concepción/fecundación. Universal para las cuatro especies actuales,
@@ -70,3 +88,4 @@ class Necesidades:
     oxigenacion: float = 1.0
     confort_termico: float = 0.5
     impulso_reproductivo: float = 1.0
+    comodidad: float = 0.0

@@ -22,6 +22,15 @@ necesidades:
     tasa_perdida_oxigenacion_por_inmersion: 0.5
     tasa_recuperacion_oxigenacion: 1.0
     tasa_deriva_confort_termico: 0.03
+    # tasa_deriva_comodidad (2026-09-14, Necesidades.comodidad, Pieza C
+    # del arco "comodidad" -- ver CLAUDE.md): mismo patron de deriva
+    # hacia un objetivo que confort_termico, pero el objetivo aqui no es
+    # ambiental sino la calidad_media_construccion del refugio propio ya
+    # completado (nucleo/construccion.py). Algo mas lenta que la termica
+    # (0.03) a proposito -- la comodidad de un hogar no deberia sentirse
+    # de golpe en un tick, es un ajuste mas gradual que la temperatura
+    # del dia. PROVISIONAL, sin calibrar contra el motor en marcha.
+    tasa_deriva_comodidad: 0.02
     # bono_confort_refugio/fogata (2026-08-31, ver nucleo/fuego.py y
     # conversacion de diseno con Diego: "otoño 15 grados, estoy a
     # cubierto... invierno 3 grados, ¿es suficiente, o debo encender un

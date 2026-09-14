@@ -9471,3 +9471,60 @@ y el propio gate de piedra son PROVISIONALES, sin calibrar contra el
 harness completo; Piezas C y D (comodidad de verdad, el driver de
 mejora) son el siguiente trabajo real de este arco, sin empezar
 todavía.
+
+### Pieza C -- `Necesidades.comodidad`, cerrada (2026-09-14, mismo día)
+
+`componentes/necesidades.py` gana `comodidad: float = 0.0`, mismo
+molde de deriva-hacia-objetivo que `confort_termico` (a diferencia de
+ese campo, sigue la convención estándar del resto del fichero --
+1.0=satisfecho, 0.0=nada, no 0.5 como ideal). `nucleo/construccion.py:
+calidad_media_construccion(materiales, catalogo)` (nueva, pura): media
+de `calidad_construccion` (Pieza B) ponderada por masa, 0.0 si no hay
+ninguna masa con calidad declarada -- reutiliza el mismo patrón
+permisivo por `.get()` que `masa_apta_construccion`.
+`sistema_necesidades.py` calcula el objetivo cada tick (bloque 4b, justo
+tras confort térmico): 0.0 sin refugio propio, 0.0 mientras el refugio
+propio no esté `completado_alguna_vez`, si no
+`calidad_media_construccion` del `Construccion.materiales` del refugio
+propio -- SOLO para CONSCIENTE (mismo umbral que ya gatea CONSTRUIR/
+RECOLECTAR; fauna nunca construye refugio propio, así que gatear
+explícitamente evita un escaneo O(N) de construcciones por individuo
+sin necesidad real, no solo un atajo semántico).
+`tasa_deriva_comodidad=0.02` nueva (PROVISIONAL, algo más lenta que la
+térmica 0.03 a propósito -- la comodidad de un hogar no debería
+sentirse de golpe en un tick). Persistido: `comodidad` añadida como
+ÚLTIMA columna de `componentes_estado` (deliberadamente al final, no
+intercalada -- evita renumerar las docenas de índices posicionales
+`fila[N]` ya usados por el resto de `nucleo/persistencia.py` al
+cargar), `VERSION_ESQUEMA` sube a `0.39-fase0`. Sin ningún consumidor
+todavía -- ni utilidad en la Utility AI, ni mortalidad, ni drenaje de
+otro pool depende de su valor; la Pieza D es quien lo leerá.
+
+**Verificado**: 551/551 tests en verde (10 nuevos,
+`tests/test_comodidad.py` -- `calidad_media_construccion` en sus cuatro
+casos (ponderada por masa, no por conteo; vacía; ignora material no
+apto), objetivo 0.0 sin refugio, objetivo 0.0 mientras no está
+completado, deriva hacia la calidad real con refugio completado, baja
+si el objetivo cae por debajo del valor actual (refugio que se degrada
+por decomposición), gate de consciencia, tope exacto sin pasarse del
+objetivo). `BOSQUE_AUTO_TICKS=3000` con la semilla por defecto: mismos
+contadores exactos que antes de esta pieza (398 bloqueos de piedra, 149
+de tala, etc.) -- confirma que Pieza C es puramente aditiva, sin ningún
+efecto en decisión todavía, ninguna excepción. `BOSQUE_CONTINUAR=1`
+(200 ticks más) sin excepciones -- roundtrip limpio, y consultada la
+base de datos real (no solo "no lanzó excepción"): **9 gnomos con
+`comodidad > 0` tras la corrida**, valores reales entre 0.15 y 0.285 --
+coherente con refugios de arcilla (calidad_construccion=0.3, techo real
+que la deriva todavía no había alcanzado) -- el mecanismo se ejerce de
+verdad en juego libre desde el primer día, no "correcto pero
+invisible".
+
+**Pendiente real, explícito**: `tasa_deriva_comodidad=0.02` sigue
+PROVISIONAL, sin calibrar; `Necesidades.comodidad` sigue sin ningún
+consumidor -- Pieza D (`necesidad_trabajo` gana el déficit de comodidad
+como tercer input, gateado tras `completado_alguna_vez` por
+`umbral_necesidades_superiores`, más un modo "mejora" nuevo de
+CONSTRUIR para poder seguir aportando material de mejor calidad al
+refugio ya completado sin crecer `huella_m2`) es el siguiente trabajo
+real de este arco, sin empezar todavía -- es la pieza que de verdad da
+propósito a `calidad_construccion` y `comodidad` juntos.
