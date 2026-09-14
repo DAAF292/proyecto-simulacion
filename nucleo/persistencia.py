@@ -80,7 +80,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.37-fase0"
+VERSION_ESQUEMA = "0.38-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -265,7 +265,8 @@ class Persistencia:
                     y INTEGER NOT NULL,
                     especie TEXT NOT NULL,
                     etapa REAL NOT NULL,
-                    zona_idx INTEGER NOT NULL DEFAULT 0
+                    zona_idx INTEGER NOT NULL DEFAULT 0,
+                    masa_tronco_kg REAL NOT NULL DEFAULT 0.0
                 )
                 """
             )
@@ -626,9 +627,12 @@ class Persistencia:
                 pos_p = gestor.obtener_componente(pid, Posicion)
                 if planta and pos_p:
                     filas_flora.append(
-                        (pid, pos_p.x, pos_p.y, planta.especie, planta.etapa, pos_p.zona_idx)
+                        (
+                            pid, pos_p.x, pos_p.y, planta.especie, planta.etapa, pos_p.zona_idx,
+                            planta.masa_tronco_kg,
+                        )
                     )
-            cur.executemany("INSERT INTO plantas_estado VALUES (?, ?, ?, ?, ?, ?)", filas_flora)
+            cur.executemany("INSERT INTO plantas_estado VALUES (?, ?, ?, ?, ?, ?, ?)", filas_flora)
 
             # C. Necromasa
             cur.execute("DELETE FROM necromasa_estado")
@@ -1007,10 +1011,16 @@ class Persistencia:
                 )
 
             # 3. Cargar Flora
-            cur.execute("SELECT entidad_id, x, y, especie, etapa, zona_idx FROM plantas_estado")
-            for pid, px, py, esp, etapa, zidx in cur.fetchall():
+            cur.execute(
+                "SELECT entidad_id, x, y, especie, etapa, zona_idx, masa_tronco_kg "
+                "FROM plantas_estado"
+            )
+            for pid, px, py, esp, etapa, zidx, masa_tronco in cur.fetchall():
                 gestor.anadir_componente(pid, Posicion(x=px, y=py, zona_idx=zidx))
-                gestor.anadir_componente(pid, Planta(especie=esp, etapa=float(etapa)))
+                gestor.anadir_componente(
+                    pid,
+                    Planta(especie=esp, etapa=float(etapa), masa_tronco_kg=float(masa_tronco)),
+                )
 
             # 4. Cargar Necromasa
             cur.execute(

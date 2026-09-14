@@ -9178,3 +9178,106 @@ construcción, conocimiento). Reparto de Círculo 2 (tala real, destruye
 una `Planta` por primera vez en el motor) y Círculo 3+ (niveles de
 construcción, conocimiento transmisible, tipos nuevos) sin empezar --
 agricultura/ganadería aparcada como arco propio.
+
+## Tala real -- Círculo 2 del arco "asentamientos/profesiones", cerrado
+## (spec, implementado directamente por Claude, 2026-09-14)
+
+Diego, al cerrar minería (Círculo 1), dio el siguiente paso explícito:
+"vayamos con la tala, más adelante desarrollaremos necesidades y flujos
+que precisen de materiales y será el motivo de que un ser consciente
+vaya a minar" -- confirma que el hallazgo de minería ("motivo puramente
+oportunista, casi inalcanzable en juego libre", sección anterior)
+**queda deliberadamente DEFERIDO, no corregido en este círculo** --
+mismo criterio aplicado también a tala: sin sesgo de movimiento hacia
+un árbol conocido, sin motivo causal propio nuevo.
+
+Spec: `docs/superpowers/specs/2026-09-14-tala-real-design.md`. Mismo
+patrón exacto que minería -- ninguna Accion nueva, ningún
+`Intencion.recolectar_motivo_X` nuevo: la extracción de madera de un
+árbol EN PIE es una prioridad más dentro del bloque genérico ya
+existente de `_resolver_recolectar` (mineral > **tala** > material de
+flora a granel > sustrato). Diferencia real frente a minería: **por
+primera vez en el motor, una acción del jugador destruye deliberadamente
+una entidad `Planta`** -- hasta hoy, ninguna flora moría nunca (ni de
+vieja, ni por ninguna acción).
+
+**`Planta` gana `masa_tronco_kg: float = 0.0`** -- análogo exacto a
+`Celda.masa_mineral_restante`, fijado UNA VEZ al crear la planta
+(`nucleo/entidad.py:crear_planta`, nuevo parámetro opcional, sin
+acoplar la fábrica a `config`) vía `nucleo/flora.py:
+masa_tronco_inicial_kg(especie_cfg)` (nuevo, pura). Solo las 3 especies
+que ya declaraban un recurso `madera` real (`categoria: material`) y
+`compite_espacio_fisico: true` -- `manzano`, `roble`, `pino` -- reciben
+un valor > 0 en `config/flora.yaml` (PROVISIONAL, escalado a ojo por
+`huella_m2` ya existente: manzano=80kg, pino=90kg, roble=100kg).
+**Deliberadamente determinista, sin sorteo individual** -- a diferencia
+del patrón rango+sorteo que rige atributos de criatura, introducir una
+tirada de `rng` nueva por cada `crear_planta()` desplazaría la secuencia
+de aleatoriedad de TODO lo demás para cualquier semilla ya en marcha
+(mismo riesgo documentado repetidas veces en este proyecto) -- el valor
+ya varía por especie, suficiente sin necesidad real de variar también
+por individuo.
+
+**Gate: `"hacha_primitiva" in objetos_totales`, comprobación específica**
+-- no `tiene_herramienta()` genérico contra ningún catálogo (un hacha
+tala, no cualquier herramienta futura). Sin hacha, la tala no bloquea la
+resolución -- cae a material de flora a granel / sustrato, mismo
+criterio "no bloqueante" que minería. Solo talable una `Planta` MADURA
+(`etapa>=1.0`, mismo criterio que "solo una planta madura produce
+recurso" ya rige el resto de flora) con tronco real
+(`nucleo/flora.py:_planta_talable_en`, nuevo helper en
+`SistemaRecursos`, reutiliza `plantas_competidoras_en` de
+`nucleo/espacio.py`).
+
+**Extracción**: mismo patrón `min(tasa, espacio, masa_restante)` que
+veta, decrementa `Planta.masa_tronco_kg`; al llegar a 0,
+`GestorEntidades.eliminar_entidad(planta_id)`. **El cupo de espacio
+compartido de la celda se libera solo, sin código adicional** --
+confirmado por diseño y por test: `nucleo/espacio.py:
+plantas_competidoras_en`/`espacio_disponible` consultan la ECS en vivo
+cada vez, nunca cachean nada, así que destruir la entidad libera su
+`huella_m2` en la siguiente consulta. Evento `ArbolTalado` (NOTABLE,
+mismo criterio que `HerramientaFabricada`/`PicoFabricado`) al agotar el
+tronco -- `{x, y, zona_idx, especie}`.
+
+**Deliberadamente fuera de este círculo**: sin "tabla" procesada (sigue
+siendo el mismo material `madera` ya existente en el catálogo, solo una
+fuente mucho mayor y de una vez); sin regeneración de la `Planta`
+talada -- la propagación diaria ya causal (arco "tipos de propagación de
+flora", cerrado 2026-09-02) es el único mecanismo de reposición.
+
+**Persistencia**: `Planta.masa_tronco_kg` viaja en `plantas_estado`
+(nueva columna), `VERSION_ESQUEMA` sube a `0.38-fase0`
+(DROP-and-recreate, sin migración, mismo criterio ya establecido).
+
+**Verificado**: 533/533 tests en verde (12 nuevos,
+`tests/test_tala_real.py` -- catálogo de masa inicial, gate con/sin
+hacha (Inventario y Agarre), caída a sustrato sin hacha, sin motivo
+causal nuevo (RECOLECTAR activo por cualquier razón basta), extracción
+real con destrucción de la entidad al agotar / sin destruir en
+extracción parcial, liberación real de espacio de celda tras destruir
+-- medida con `nucleo/espacio.py:espacio_disponible` antes/después, no
+solo razonada --, prioridad mineral>tala en la misma celda, roundtrip
+de persistencia con masa parcial y agotada). `BOSQUE_AUTO_TICKS=3000`
+sin ninguna excepción: **152 bloqueos reales por falta de hacha, 0
+árboles talados** en esa semilla concreta -- el gate se ejerce con
+fuerza real desde el primer día (mismo patrón que minería: "correcto y
+verificado, pero el ciclo completo hacha→tala puede resultar raro en
+una sola semilla", confirmar con diagnóstico multi-semilla antes de
+concluir nada sobre frecuencia real). `BOSQUE_CONTINUAR=1` (200 ticks
+más tras recargar desde SQLite) sin excepciones -- roundtrip real con
+17 madrigueras físicas y el resto del estado social intactos, confirma
+que la columna `masa_tronco_kg` nueva no rompe nada del resto del
+snapshot.
+
+**Pendiente real, explícito**: `masa_tronco_kg` por especie
+PROVISIONAL, sin calibrar contra el harness completo; diagnóstico
+multi-semilla (mismo arnés que minería, 6 semillas nuevas × hasta 8000
+ticks) lanzado pero sin resultado documentado todavía a la hora de este
+commit -- seguimiento en un commit aparte en cuanto termine, mismo
+patrón de dos commits ya usado con minería; el hallazgo de minería
+("motivo puramente oportunista") queda igual de sin resolver para tala
+-- ambos deferidos explícitamente por Diego a "necesidades y flujos
+futuros que precisen de materiales"; sin ningún consumidor de
+`ArbolTalado` en narrador/vista_web todavía -- presentación,
+deliberadamente sin tocar (motor primero).

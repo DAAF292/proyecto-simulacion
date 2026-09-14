@@ -499,13 +499,18 @@ def crear_planta(
     pos_y: int,
     etapa: float = 1.0,
     zona_idx: int = 0,
+    masa_tronco_kg: float = 0.0,
 ) -> int:
-    """Fábrica ECS: Instancia una entidad vegetal en el grid."""
+    """Fábrica ECS: Instancia una entidad vegetal en el grid.
+    masa_tronco_kg (2026-09-12, "tala real"): valor fijo por especie --
+    ver nucleo/flora.py:masa_tronco_inicial_kg, calculado por el llamador
+    (necesita especie_cfg, que esta fábrica no recibe a propósito, para
+    no acoplarla a config)."""
     planta_id = gestor.crear_entidad()
     gestor.anadir_componente(planta_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
     gestor.anadir_componente(
         planta_id,
-        Planta(especie=especie, etapa=max(0.0, min(1.0, etapa))),
+        Planta(especie=especie, etapa=max(0.0, min(1.0, etapa)), masa_tronco_kg=masa_tronco_kg),
     )
     return planta_id
 

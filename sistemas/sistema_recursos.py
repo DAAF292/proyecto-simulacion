@@ -300,6 +300,11 @@ class SistemaRecursos:
         # totales descartados por un consciente para liberar sitio a
         # material de arma/herramienta que su intencion activa necesita.
         self._stats_material_descartado_por_prioridad_kg: float = 0.0
+        # Observacion (2026-09-14, "tala real"): árboles talados por
+        # completo, y cuántas veces el gate bloqueó de verdad la
+        # extracción de un árbol en pie por falta de hacha_primitiva.
+        self._stats_arboles_talados: int = 0
+        self._stats_arbol_bloqueado_sin_hacha: int = 0
 
     def ejecutar(
         self,
@@ -375,6 +380,7 @@ class SistemaRecursos:
                     recolectar_fuego=intencion.recolectar_motivo_fuego,
                     recolectar_mineria=intencion.recolectar_motivo_mineria,
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
+                    entidad_id=eid, bus_eventos=bus_eventos, tick_actual=reloj.tick_actual,
                 )
                 self._incrementar_vocacion(gestor, eid, consciente, "conteo_forrajero")
             elif intencion.accion == Accion.ENCENDER_FUEGO:
@@ -607,6 +613,9 @@ class SistemaRecursos:
         pos_x: int = 0,
         pos_y: int = 0,
         zona_idx: int = 0,
+        entidad_id: int = 0,
+        bus_eventos: BusEventos | None = None,
+        tick_actual: int = 0,
     ) -> None:
         """
         RECOLECTAR (ver componentes/intencion.py y nucleo/construccion.py).
@@ -838,6 +847,47 @@ class SistemaRecursos:
                 return
             self._stats_veta_bloqueada_sin_pico += 1
 
+        # Tala (2026-09-14, "tala real" -- ver docs/superpowers/specs/
+        # 2026-09-14-tala-real-design.md): mismo criterio que mineral --
+        # más especial que el goteo pasivo de ramas caídas (celda.recursos
+        # de más abajo, sistema_flora.py), pero sin motivo causal propio
+        # (RECOLECTAR ya activo por cualquier razón basta, mismo criterio
+        # deferido por Diego que rige minería: "más adelante... será el
+        # motivo de que un ser consciente vaya a minar/talar"). Gate por
+        # hacha_primitiva ESPECÍFICA, no tiene_herramienta() genérico --
+        # un hacha tala, no cualquier herramienta futura. Sin bloquear la
+        # resolución si falta hacha: cae al goteo pasivo/sustrato.
+        if gestor is not None:
+            planta_id = self._planta_talable_en(gestor, pos_x, pos_y, zona_idx)
+            if planta_id is not None:
+                objetos_para_hacha = list(inv.objetos)
+                if agarre is not None:
+                    objetos_para_hacha.extend(agarre.objetos)
+                if "hacha_primitiva" in objetos_para_hacha:
+                    planta = gestor.obtener_componente(planta_id, Planta)
+                    cantidad = min(tasa_recoleccion_efectiva, espacio, planta.masa_tronco_kg)
+                    inv.contenidos["madera"] = inv.contenidos.get("madera", 0.0) + cantidad
+                    planta.masa_tronco_kg -= cantidad
+                    if planta.masa_tronco_kg <= 0.0:
+                        especie_talada = planta.especie
+                        gestor.eliminar_entidad(planta_id)
+                        self._stats_arboles_talados += 1
+                        if bus_eventos is not None:
+                            bus_eventos.emitir(
+                                Evento(
+                                    tipo="ArbolTalado",
+                                    severidad=Severidad.NOTABLE,
+                                    tick=tick_actual,
+                                    entidad_id=entidad_id,
+                                    datos={
+                                        "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
+                                        "especie": especie_talada,
+                                    },
+                                )
+                            )
+                    return
+                self._stats_arbol_bloqueado_sin_hacha += 1
+
         for nombre, cantidad_disponible in celda.recursos.items():
             if cantidad_disponible <= 0.0:
                 continue
@@ -961,6 +1011,22 @@ class SistemaRecursos:
             if planta is not None and planta.especie == especie_origen:
                 return True
         return False
+
+    def _planta_talable_en(
+        self, gestor: GestorEntidades, pos_x: int, pos_y: int, zona_idx: int
+    ) -> int | None:
+        """Id de la primera Planta MADURA (etapa>=1.0) con madera real en
+        el tronco (masa_tronco_kg>0.0) en esta celda+zona -- 2026-09-14,
+        "tala real". Solo manzano/roble/pino la declaran (ver
+        config/flora.yaml:masa_tronco_kg); una plántula recién propagada
+        (etapa<1.0) nunca es talable, mismo criterio que "solo una planta
+        madura produce recurso" ya rige el resto de flora. None si no hay
+        ninguna."""
+        for pid in plantas_competidoras_en(gestor, pos_x, pos_y, zona_idx, self.especies_flora):
+            planta = gestor.obtener_componente(pid, Planta)
+            if planta is not None and planta.etapa >= 1.0 and planta.masa_tronco_kg > 0.0:
+                return pid
+        return None
 
     def _resolver_encender_fuego(
         self,
