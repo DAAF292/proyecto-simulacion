@@ -1360,3 +1360,130 @@ pero no nulo, no medido; visión más amplia de Diego (comodidad como
 motor GENERAL de "tecnologías" más allá de vivienda, conexión con ocio
 para dar pie a "arte") deliberadamente fuera de alcance de este arco,
 sin ningún diseño todavía -- horizonte futuro, no descartado.
+
+## Asentamiento como entidad propia -- arco nuevo, Pieza 1 (identidad
+## persistente) cerrada (2026-09-15)
+
+Diego, con el núcleo social ya medianamente construido (relaciones,
+manada, salón común, cocinas, comodidad -- todo lo de arriba), planteó
+la pregunta de fondo: *"quizás es momento de empezar a pensar como
+vamos a estructurar un asentamiento como entidad propia, con sus
+propias necesidades, interacciones, etc. porque es algo base de una
+sociedad."* Clasificada explícitamente como diseño conceptual (no
+calibración, no implementación directa) -- Diego pidió primero un
+**informe de alternativas**, mismo patrón ya usado para "hilo
+individual" (2026-09-04): investigar el código real, presentar piezas
+distinguibles con sus dependencias, sin comprometerse a ninguna hasta
+que Diego decida el orden.
+
+**Hallazgo real durante la investigación, no anticipado**: `Asentamiento`
+(`nucleo/asentamiento.py`) es un dataclass 100% derivado -- se
+recalcula ÍNTEGRO cada día desde cero por proximidad de refugios
+(`agrupar_por_proximidad`), sin ninguna identidad persistida entre
+recálculos, mismo criterio que `pendiente_local`. Verificando por qué
+esto podía ser un problema real (no solo teórico) para cualquier pieza
+que quisiera dar "necesidades propias" a un asentamiento, se encontró
+un **bug real, nunca detectado por los tests existentes** (todos
+probaban escenarios estáticos, no evolución día a día):
+`SistemaAsentamiento.ejecutar()` decidía si emitir el evento
+`AsentamientoFundado` comparando el conjunto EXACTO de miembros de hoy
+contra `self._miembros_vistos_ayer` -- cualquier fluctuación de
+población (un miembro muere, nace, o su refugio queda fuera del radio
+de clúster ese día concreto) hacía que el conjunto ya no coincidiera
+byte a byte, y el sistema volvía a tratarlo como un pueblo NUEVO,
+reemitiendo el evento HISTÓRICO para lo que en realidad es el mismo
+asentamiento con composición cambiante.
+
+**Informe entregado, 6 piezas distinguibles** (identidad persistente
+como prerrequisito; necesidades colectivas agregadas; efecto de vuelta
+hacia los miembros; interacción entre asentamientos; nombre propio +
+crónica; posible unificación con el roadmap ya vivo de
+"asentamientos/profesiones", ver `docs/historial_profesiones.md`),
+recomendando empezar por identidad persistente -- sin ella, cualquier
+"necesidad colectiva" que se fuera a diseñar después no tendría un
+sujeto estable al que atribuírsela (una necesidad que se resetea cada
+vez que el id cambia no es una necesidad real). Diego aprobó ("adelante
+si"), pidiendo primero `git pull` de master (se recogió de paso un pull
+grande y no relacionado de otra sesión: la poda de este mismo CLAUDE.md
+a los ficheros `docs/historial_*.md`, commit `cac1b25`/merge `4872988`).
+
+### Diseño e implementación (spec, implementado directamente por Claude)
+
+Spec: `docs/superpowers/specs/2026-09-15-identidad-persistente-asentamiento-design.md`.
+Implementado directamente -- mismo escenario ya documentado
+repetidamente en las últimas sesiones: este contenedor cloud no tiene
+`OPENROUTER_API_KEY` ni `mini-swe-agent`/centinela, y Diego lo pidió
+explícitamente.
+
+- `nucleo/asentamiento.py:resolver_identidades_persistentes(grupos_hoy,
+  registro_anterior, umbral_continuidad) -> dict[int, frozenset[int]]`
+  (nueva, pura): continuidad por **coeficiente de Jaccard**
+  (`|intersección|/|unión|`) en vez de igualdad exacta de conjunto --
+  cada clúster de hoy hereda el id de ayer con mayor solape si supera
+  `umbral_continuidad` (0.5, PROVISIONAL, `config/comportamiento.yaml`);
+  si no, recibe el siguiente id consecutivo al mayor ya visto.
+  Simplificación deliberada y documentada: si dos clústeres de hoy
+  compiten por el mismo id anterior, gana el de mayor solape -- el otro
+  recibe id nuevo; sin tracking real de fusión/escisión (fuera de
+  alcance, principio 2).
+- `Asentamiento` gana `tick_fundacion: int = 0` -- momento real de
+  fundación, no el día del recálculo actual.
+- El registro de continuidad (qué id corresponde a qué miembros ayer, y
+  cuándo se fundó cada uno) vive en `Mundo`, no en `Asentamiento`
+  (que sigue siendo 100% derivado): `mundo.asentamiento_registro_
+  identidad: dict[int, frozenset[int]]` y `mundo.asentamiento_tick_
+  fundacion: dict[int, int]`, ambos SÍ persistidos -- reutilizando la
+  tabla genérica `configuracion_ejecucion` (la misma que ya guarda
+  `rng_juego_state`/`rng_reproduccion_state`), sin tabla nueva y sin
+  subir `VERSION_ESQUEMA` (sigue en `0.39-fase0`).
+- `SistemaAsentamiento.ejecutar()`: retira `_miembros_vistos_ayer`,
+  construye los clústeres válidos del día (filtrados por
+  `poblacion_minima_asentamiento`), resuelve sus ids vía la función
+  nueva, y emite `AsentamientoFundado` únicamente cuando el id es
+  genuinamente nuevo (no estaba en el registro anterior) -- cierra el
+  bug de reemisión de raíz.
+
+**Verificado**: 10 tests nuevos
+(`tests/test_identidad_persistente_asentamiento.py` -- 7 leyes de la
+función pura: churn en ambas direcciones, sin solape suficiente,
+registro vacío, no-doble-reclamo del mismo id anterior, id consecutivo;
+2 de integración real con `SistemaAsentamiento.ejecutar()` de punta a
+punta -- pierde un miembro y conserva el id sin reemitir el evento,
+`tick_fundacion` se conserva entre días; 1 de roundtrip de
+persistencia). Dos tests fallaron al primer intento por usar solo 3
+fundadores (al quitar 1 quedaban 2, por debajo de
+`poblacion_minima_asentamiento=3`) -- corregidos a 4 fundadores.
+`BOSQUE_AUTO_TICKS=3000` y `BOSQUE_CONTINUAR=1` (roundtrip) sin
+ninguna excepción. Commit `ad7b28b`.
+
+**Corrección honesta sobre el propio commit**: el mensaje de `ad7b28b`
+dice "598/598 tests en verde" -- es incorrecto, un error de conteo al
+escribirlo. El número real, verificado con `pytest -q` antes y después
+del commit, es **590 passed**. No se ha amendado el commit ya empujado
+(regla del proyecto: nunca reescribir historia ya pusheada sin que
+Diego lo pida explícitamente) -- se corrige aquí, con la misma
+disciplina de honestidad que el resto de este documento.
+
+**Diagnóstico de juego libre** (scratchpad, 4 semillas nuevas
+401001-401004 × 5000 ticks, sin ningún escenario dirigido a mano):
+confirma la ley en condiciones no escritas para la ocasión --
+
+- Semilla 401002: un asentamiento nace con 3 miembros en el tick 2663 y
+  **conserva el mismo id=1** mientras crece a 5 y luego a 6 miembros a
+  lo largo de ~2200 ticks -- exactamente el caso que antes habría
+  reemitido el evento en cada cambio de tamaño.
+- Semilla 401004: **tres asentamientos distintos** nacen en momentos
+  distintos (tick 191, 3071, 4031) con ids 1, 2 y 3 -- nunca se
+  confunden entre sí; el primero (id=1) crece de 3→4→5 miembros sin
+  perder su identidad, mientras los otros dos permanecen estables en 3.
+- En las 4 semillas, el número de eventos `AsentamientoFundado` coincide
+  exactamente con el número de ids genuinamente nuevos -- ninguna
+  reemisión espuria.
+
+**Pendiente real, explícito**: `umbral_continuidad_identidad=0.5`
+PROVISIONAL, sin calibrar contra el harness completo; con esto la
+Pieza 1 queda cerrada -- las Piezas 2-6 del informe (necesidades
+colectivas agregadas, efecto de vuelta hacia miembros, interacción
+entre asentamientos, nombre propio + crónica, unificación con el
+roadmap de profesiones) siguen sin empezar, a la espera de que Diego
+decida el orden.

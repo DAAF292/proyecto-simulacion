@@ -302,6 +302,23 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   diseño pendiente de Diego (no una calibración numérica). De paso se
   corrigió una contradicción interna de este propio documento sobre la
   dirección de `factor_ampliacion_techo_manada`.
+- **Arco nuevo "asentamiento como entidad propia" — Pieza 1 (identidad
+  persistente) CERRADA 2026-09-15**, ver
+  `docs/historial_construccion_social.md`: `Asentamiento` sigue siendo
+  100% derivado (se recalcula cada día), pero ahora conserva un id
+  estable entre recálculos por solape de Jaccard en vez de comparar el
+  conjunto exacto de miembros — cierra de paso un bug real (reemisión
+  de `AsentamientoFundado` ante cualquier fluctuación de población).
+  Verificado con tests dirigidos y con un diagnóstico de 4 semillas
+  nuevas en juego libre (ids estables durante miles de ticks pese a
+  crecer/perder miembros, sin ninguna reemisión espuria). Corrección
+  honesta: el commit `ad7b28b` dice "598/598 tests" en su mensaje —
+  el conteo real verificado es **590 passed**, no amendado por ser un
+  commit ya empujado. **Piezas 2-6 del informe de alternativas**
+  (necesidades colectivas agregadas, efecto de vuelta hacia miembros,
+  interacción entre asentamientos, nombre propio + crónica, posible
+  unificación con el roadmap de profesiones) siguen sin empezar, a la
+  espera de que Diego decida el orden.
 - **Caza en manada de lobo contra caballo**: mecanismo verificado
   correcto, pero la coincidencia temporal que exige (~4-6 aliados
   cazando a la vez, dentro de `radio_apoyo_grupal`) es estructuralmente
