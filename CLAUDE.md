@@ -9942,3 +9942,142 @@ zorro sigue sin confirmar ni refutar; si se retoma, un lote mucho mayor
 (15-20 semillas nuevas por condición, no pareadas) sería el candidato
 metodológicamente correcto, mismo criterio que el resto del proyecto ya
 aprendió a aplicar tras la investigación de "Sobrepoblación...".
+
+## Cuatro recomendaciones del informe ecológico (2026-09-12) revisadas
+## con datos reales -- tres resultan en NO TOCAR NADA, una queda abierta
+## para decisión de diseño (2026-09-15)
+
+Diego pidió retomar las recomendaciones #2-#5 del informe ecológico de
+la sesión del 2026-09-12 (la #1, especie depredadora pequeña, ya se
+cerró como zorro, ver arriba). Investigadas las cuatro contra el motor
+real antes de tocar ningún número -- mismo criterio de siempre.
+
+### Corrección real -- CLAUDE.md se contradecía a sí mismo sobre la
+### dirección de `factor_ampliacion_techo_manada`
+
+Al revisar la recomendación #3 ("factor de manada hacia abajo, error de
+signo del 09-09 marcado"), verificado contra el código antes de tocar
+nada: la fórmula real (`sistema_depredacion.py`/`sistema_movimiento.py`)
+es `peso_maximo_presa = peso_cazador * (1 + aliados_cazando * factor)`
+-- SUBIR el factor baja el número de aliados necesarios (cada aliado
+pesa más en el umbral), nunca al revés. Esto coincide con la propia
+entrada del 2026-09-09 más citada en este documento ("subir
+`factor_ampliacion_techo_manada` (1.0→3.0, **menos aliados
+necesarios**)"). Pero DOS entradas posteriores del mismo día
+(sección "Balance del día" y la sección "'No se forma ninguna manada'
+era un artefacto...", 2026-09-10) afirman lo contrario ("habría que
+bajarlo, no subirlo, error de signo"; "bajar el factor... exigiría
+menos aliados") -- ambas incorrectas, contradicen la fórmula Y la
+entrada correcta del mismo documento. Un error de redacción real, no
+solo una entrada desactualizada -- corregido aquí explícitamente, sin
+borrar las entradas originales (mismo criterio de honestidad del resto
+del documento: registra qué se creyó en cada momento).
+
+**Verificado con un A/B real antes de decidir nada**, no solo con la
+corrección de la fórmula: 6 semillas nuevas (810001-810006) × 6000
+ticks, factor=1.0 (control, master) contra factor=6.0 (el doble del 3.0
+ya probado el 09-09, para dar a la dirección correcta toda la ventaja
+posible). **Resultado: 0 muertes de caballo por depredación en las 12
+corridas, en AMBAS condiciones, sin ninguna excepción** -- ni siquiera
+un factor 6x mayor (que matemáticamente reduce el umbral a 1-2 aliados
+en vez de 5-6) produjo una sola captura de caballo por manada de lobo.
+Confirma con más fuerza el diagnóstico ya cerrado el 2026-09-10 ("Lobo
+caza en manada... por qué los lobos en manada no cazan caballos"): el
+cuello de botella real no es el umbral de peso, es que casi nunca
+coinciden varios lobos cazando activamente cerca a la vez (máximo 4
+aliados observado en su día, 1.92% de los momentos) -- ningún valor del
+factor, en ninguna dirección, puede arreglar un problema de
+coincidencia temporal. **Conclusión: no se toca `factor_ampliacion_
+techo_manada`** -- ni la dirección "correcta" (subir) ni la "incorrecta"
+(bajar) tienen ningún efecto medible, la palanca en sí está agotada. Si
+se quiere revivir la caza en manada de caballo, el candidato real es
+`radio_apoyo_grupal` (ampliar cuántos lobos entran en el chequeo de
+"cazando cerca" en un instante dado) o aceptar que es, en la práctica,
+un evento estructuralmente raro y coherente con la escasez real de
+grandes cacerías coordinadas -- ninguno de los dos decidido ni probado
+en esta sesión.
+
+### Recomendación #2 (densidad de venado para el valle de lobo) --
+### probada, sin señal positiva, no aplicada
+
+A/B real, 6 semillas nuevas (720001-720006) × 6000 ticks,
+`venados_iniciales` 10 (control) contra 20 (doblado). Resultado: lobo
+final medio 7.17 (control) frente a 4.33 (doblado) -- **peor, no
+mejor**, con doblar venado; muertes de lobo por inanición agregadas 29
+(control) frente a 38 (doblado). Dirección contraria a la hipótesis que
+motivó la recomendación. **Diagnóstico honesto, no una conclusión
+causal firme**: con solo 6 semillas pareadas, esto es del mismo orden
+que el ruido de desplazamiento de secuencia de `rng` ya documentado
+repetidas veces en este proyecto (doblar la siembra de venado consume
+tiradas de `rng` extra en tick 0, desplazando toda la trayectoria
+posterior -- "la misma semilla" bajo ambas condiciones son, en la
+práctica, dos partidas distintas). No hay señal positiva que justifique
+subir `venados_iniciales`, y sí una señal direccional (aunque no
+concluyente) en contra -- **no se toca `config/poblacion.yaml`**. Si se
+quiere una respuesta fiable, hace falta el mismo tipo de lote grande no
+pareado que ya se recomienda para zorro, no repetir este A/B con más
+semillas pareadas.
+
+### Recomendaciones #4 (vocación) y #5 (reputación) -- confirmadas con
+### datos, ninguna es un bug de calibración, decisión de diseño
+### pendiente de Diego
+
+Diagnóstico con un lote de 6 semillas nuevas (940001-940006) × 6000
+ticks usando `herramientas/harness_calibracion.py` (que ya reporta
+ambos stats desde el informe del 12-09):
+
+- **Vocación**: `{'forrajero': 114, 'constructor': 3}` como vocación
+  dominante de gnomo agregada al cierre de las 6 semillas -- 0 artesano,
+  0 cocinero, pese a que `armas fabricadas` (93), `herramientas
+  fabricadas` (4) y `cocinar resuelto` (32) SÍ se ejercen en la misma
+  corrida. **Causa real, verificada leyendo `sistema_decision.py`**:
+  `factor_aptitud` es puramente MULTIPLICATIVO sobre una utilidad que ya
+  existe (nunca crea utilidad de donde no la había, por diseño
+  deliberado del círculo 1) -- modula QUIÉN dentro de la población tiene
+  más ventaja en una acción ya frecuente, pero no cambia la frecuencia
+  de base con la que el motor despacha RECOLECTAR frente a FABRICAR/
+  COCINAR/CONSTRUIR. RECOLECTAR responde a una necesidad casi constante
+  (comida/agua/material); las otras tres son condicionales y mucho más
+  raras por construcción del propio motor. `vocacion_dominante` cuenta
+  ticks de despacho real -- con una diferencia de frecuencia de ese
+  orden, ningún multiplicador razonable sobre la utilidad iba a
+  revertir el recuento agregado. **No es un bug de `peso_aptitud_
+  vocacional` mal calibrado** -- es una consecuencia esperable y neutral
+  (principio 5) del paisaje de frecuencias que el resto del motor ya
+  produce. Corregirlo de verdad exigiría una decisión de diseño real,
+  no una calibración: o bien medir vocación de otra forma (p.ej.
+  normalizada por oportunidad, no por tick bruto), o bien la señal de
+  escasez de grupo que el propio círculo 1 ya declaró explícitamente
+  fuera de alcance ("ninguna señal nueva de escasez de vocación a nivel
+  de grupo"). **No tocado sin decisión de Diego** -- señalado, no
+  resuelto por iniciativa propia.
+- **Reputación**: `descalificados=107, desempates cambiados=0` en la
+  misma corrida -- la rama de DESCALIFICACIÓN de `calcular_liderazgo`
+  (candidato dominante con reputación por debajo de
+  `umbral_reputacion_descalificante`) se ejerce con fuerza real, **no
+  está en 0 usos como sugería el informe del 12-09** (esa cifra parece
+  haber venido de una muestra distinta o de una lectura desactualizada,
+  no reproducida hoy). Lo que sí está confirmado en 0 es la rama de
+  DESEMPATE (reputación decidiendo entre dos candidatos empatados en
+  dominancia antes que la valentía) -- nunca cambió el ganador frente a
+  la fórmula anterior (dominancia+valentía) en ninguna de las 6
+  semillas. Razonable, no necesariamente un fallo: exige que dos
+  candidatos queden exactamente empatados dentro de
+  `margen_dominancia_elite` Y que su reputación real (no neutra 0.0) sea
+  la que de verdad decida antes de llegar a valentía -- una
+  intersección más estrecha que la descalificación, que solo necesita
+  reputación baja en UN candidato. **No tocado** -- es una rama del
+  mecanismo genuinamente rara, no evidencia de que esté rota; decidir si
+  vale la pena facilitar el desempate (bajar el margen, o comparar
+  reputación con más peso) es otra decisión de diseño, no una
+  calibración con datos que la respalden hoy.
+
+**Balance honesto de esta ronda**: de las 4 recomendaciones, 3 (techo
+de manada, densidad de venado, y la propia rama de desempate de
+reputación) quedan cerradas con NINGÚN cambio de config -- los datos no
+respaldan tocar nada, y este proyecto no ajusta a ciegas contra una
+hipótesis sin confirmar. La cuarta (vocación) queda genuinamente
+abierta como pregunta de diseño para Diego, no como una calibración
+pendiente. Ningún commit de código en esta ronda -- investigación pura,
+con resultados mayormente negativos, documentados con la misma
+honestidad que el resto del proyecto exige.
