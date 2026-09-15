@@ -25,3 +25,14 @@ nombres:
     sufijos_masculinos: [in, ar, und, eld, ol, ir, un, ash]
     prefijos_femeninos: [Brin, Isel, Mor, Thal, Sil, Grim, Fenn, Ver]
     sufijos_femeninos: [a, ia, eda, ith, ora, una, en, elda]
+
+# Nombres de ASENTAMIENTO (2026-09-15, ver docs/superpowers/specs/
+# 2026-09-15-nombre-cronica-asentamiento-design.md) -- mismo mecanismo
+# (prefijo+sufijo concatenados) pero catálogo propio de topónimo, nunca
+# nombre de persona, y sin distinción de sexo (un lugar no tiene sexo).
+# PROVISIONAL, curado a mano por Diego + Claude el mismo criterio que
+# nombres.gnomo -- candidato a ajuste si algo desentona en la crónica
+# real.
+nombres_asentamiento:
+  prefijos: [Kar, Dun, Bel, Thorn, Grim, Fen, Hol, Bar, Sten, Wyn, Mar, Vor]
+  sufijos: [ord, ale, olm, ing, ara, eth, un, ir, ost, ada, om, ern]

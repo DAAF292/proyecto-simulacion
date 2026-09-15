@@ -33,6 +33,7 @@ from nucleo.asentamiento import (
     almacen_cercano,
     calcular_centro,
     calcular_liderazgo,
+    generar_nombre,
     resolver_identidades_persistentes,
 )
 from nucleo.conocimiento import erosionar
@@ -62,6 +63,11 @@ class SistemaAsentamiento:
         )
         self.tasa_erosion_conocimiento: float = float(
             self.config_asentamiento.get("tasa_erosion_conocimiento_dia", 0.005)
+        )
+        # Nombre propio (2026-09-15, ver nucleo/asentamiento.py:
+        # generar_nombre y config/nombres.yaml:nombres_asentamiento).
+        self.catalogo_nombres_asentamiento: dict[str, Any] = self.config.get(
+            "nombres_asentamiento", {}
         )
         self._indice_actual = None
         # Observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b -- ver
@@ -173,19 +179,28 @@ class SistemaAsentamiento:
                     registrar_recuerdo(mem, "asentamiento", centro[0], centro[1], capacidad)
 
             if es_nuevo:
+                # Nombre propio (2026-09-15): sorteado UNA sola vez,
+                # exactamente aquí -- nunca se vuelve a tocar mientras
+                # este id persista (ver Mundo.asentamiento_nombre).
+                nombre_asentamiento = generar_nombre(self.rng, self.catalogo_nombres_asentamiento)
+                if nombre_asentamiento is not None:
+                    mundo.asentamiento_nombre[id_resuelto] = nombre_asentamiento
                 datos_evento: dict[str, Any] = {
                     "x": centro[0],
                     "y": centro[1],
                     "poblacion": len(grupo),
                     "lideres": sorted(lideres),
+                    "asentamiento_id": id_resuelto,
                 }
-                nombres = []
+                if nombre_asentamiento is not None:
+                    datos_evento["nombre_asentamiento"] = nombre_asentamiento
+                nombres_lideres = []
                 for lid in lideres:
                     ident = gestor.obtener_componente(lid, Identidad)
                     if ident is not None and ident.nombre:
-                        nombres.append(ident.nombre)
-                if nombres:
-                    datos_evento["nombres_lideres"] = nombres
+                        nombres_lideres.append(ident.nombre)
+                if nombres_lideres:
+                    datos_evento["nombres_lideres"] = nombres_lideres
                 bus_eventos.emitir(
                     Evento(
                         tipo="AsentamientoFundado",

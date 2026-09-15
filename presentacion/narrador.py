@@ -72,6 +72,19 @@ _PLANTILLAS = {
     # incendio, no en cada tick que arde -- tipo_desastre es de momento
     # siempre "incendio" (unico tipo implementado en esta pasada).
     "Desastre": "Tick {tick}: un incendio se declara en ({x}, {y}).",
+    # Nombre propio + crónica de asentamiento (2026-09-15, ver
+    # docs/superpowers/specs/2026-09-15-nombre-cronica-asentamiento-design.md).
+    # Cierra un hueco preexistente (ambos tipos caían en
+    # _PLANTILLA_GENERICA desde que existen) -- sin esto la crónica de
+    # un asentamiento sería ilegible pese a tener nombre propio.
+    "AsentamientoFundado": "Tick {tick}: se funda {nombre_asentamiento} ({poblacion} habitantes).",
+    # {tipo} aquí es Construccion.tipo (almacen/salon_comun/cocina), NO
+    # evento.tipo -- datos["tipo"] ya sobrescribe esa clave en
+    # _contexto() desde que este evento existe (ver sistema_recursos.py).
+    # Sin nombre_asentamiento (individuo sin asentamiento, caso raro hoy)
+    # esta plantilla falla y cae a _PLANTILLA_GENERICA, mismo mecanismo
+    # de siempre.
+    "AlmacenConstruido": "Tick {tick}: {nombre_asentamiento} completa su {tipo}.",
 }
 
 

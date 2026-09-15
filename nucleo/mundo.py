@@ -59,6 +59,12 @@ class Mundo:
         # tick en que cada id existió.
         self.asentamiento_registro_identidad: dict[int, frozenset[int]] = {}
         self.asentamiento_tick_fundacion: dict[int, int] = {}
+        # Nombre propio (2026-09-15, ver docs/superpowers/specs/
+        # 2026-09-15-nombre-cronica-asentamiento-design.md): sorteado
+        # UNA vez al fundarse (nucleo/asentamiento.py:generar_nombre),
+        # SÍ persistido -- nunca se vuelve a sortear mientras el id
+        # persista, con independencia de cuánto cambie la composición.
+        self.asentamiento_nombre: dict[int, str] = {}
 
         # Conocimiento colectivo transmisible (2026-09-15, ver
         # nucleo/conocimiento.py y docs/superpowers/specs/

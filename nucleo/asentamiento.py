@@ -26,6 +26,7 @@ Historial de diseño y decisiones: docs/historial_nucleo.md.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -41,7 +42,25 @@ __all__ = [
     "almacen_cercano",
     "disposicion_a_aportar",
     "resolver_identidades_persistentes",
+    "generar_nombre",
 ]
+
+
+def generar_nombre(rng: random.Random, catalogo: dict[str, Any]) -> str | None:
+    """Nombre propio de asentamiento (2026-09-15, ver docs/superpowers/
+    specs/2026-09-15-nombre-cronica-asentamiento-design.md) -- mismo
+    patrón prefijo+sufijo que nucleo/entidad.py:_generar_nombre (nombre
+    individual), pero sin distinción de sexo (un lugar no tiene sexo) y
+    sin generalizar esa función -- pequeña duplicación deliberada, más
+    simple que acoplar ambos conceptos. `None` si el catálogo está
+    vacío (config/nombres.yaml:nombres_asentamiento sin poblar). Se
+    llama UNA sola vez, al fundarse el asentamiento -- nunca se vuelve
+    a sortear mientras el id persista."""
+    prefijos = catalogo.get("prefijos") or []
+    sufijos = catalogo.get("sufijos") or []
+    if not prefijos or not sufijos:
+        return None
+    return rng.choice(prefijos) + rng.choice(sufijos)
 
 
 # Contadores de observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b

@@ -496,6 +496,41 @@ class Persistencia:
             for tick, tipo, severidad, eid, datos in filas
         ]
 
+    def cronica_de_asentamiento(self, asentamiento_id: int) -> list[Evento]:
+        """Crónica de UN asentamiento (2026-09-15, ver docs/superpowers/
+        specs/2026-09-15-nombre-cronica-asentamiento-design.md) -- mismo
+        molde que biografia_de, pero `cronica_eventos` no tiene columna
+        `asentamiento_id` (evita bump de esquema): filtra en Python
+        sobre `datos["asentamiento_id"]`, poblado solo en los eventos
+        inherentemente comunitarios (AsentamientoFundado,
+        RefugioConstruido/AlmacenConstruido) -- no es hot path, se
+        consulta bajo demanda."""
+        with self._conectar() as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                SELECT tick, tipo, severidad, entidad_id, datos
+                FROM cronica_eventos
+                ORDER BY tick, id
+                """
+            )
+            filas = cur.fetchall()
+        eventos = []
+        for tick, tipo, severidad, eid, datos in filas:
+            datos_dict = json.loads(datos) if datos else {}
+            if datos_dict.get("asentamiento_id") != asentamiento_id:
+                continue
+            eventos.append(
+                Evento(
+                    tipo=tipo,
+                    severidad=Severidad(severidad),
+                    tick=tick,
+                    entidad_id=eid,
+                    datos=datos_dict,
+                )
+            )
+        return eventos
+
     def guardar_snapshot(
         self,
         gestor: GestorEntidades,
@@ -784,6 +819,17 @@ class Persistencia:
                 (conocimiento_json,),
             )
 
+            # Nombre propio de asentamiento (2026-09-15, ver
+            # nucleo/asentamiento.py:generar_nombre) -- sorteado una
+            # sola vez al fundarse, mismo criterio de persistencia.
+            nombre_json = json.dumps(
+                {str(k): v for k, v in mundo.asentamiento_nombre.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_nombre', ?)",
+                (nombre_json,),
+            )
+
             con.commit()
 
     def cargar_snapshot(
@@ -878,6 +924,17 @@ class Persistencia:
             if fila_conocimiento:
                 mundo.asentamiento_conocimiento = {
                     int(k): v for k, v in json.loads(fila_conocimiento[0]).items()
+                }
+
+            # Nombre propio de asentamiento (2026-09-15) -- misma
+            # tolerancia a ausencia.
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_nombre'"
+            )
+            fila_nombre = cur.fetchone()
+            if fila_nombre:
+                mundo.asentamiento_nombre = {
+                    int(k): v for k, v in json.loads(fila_nombre[0]).items()
                 }
 
             # Limpiar gestor en memoria

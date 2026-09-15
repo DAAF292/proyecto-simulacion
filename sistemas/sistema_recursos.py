@@ -737,13 +737,27 @@ class SistemaRecursos:
                 evento_tipo, severidad = "RefugioConstruido", Severidad.NOTABLE
             else:
                 evento_tipo, severidad = "AlmacenConstruido", Severidad.HISTORICO
+            datos_evento: dict[str, Any] = {"x": pos_x, "y": pos_y, "tipo": construccion.tipo}
+            # Crónica de asentamiento (2026-09-15, ver docs/superpowers/
+            # specs/2026-09-15-nombre-cronica-asentamiento-design.md):
+            # si quien completó el aporte pertenece a un asentamiento
+            # (siempre el caso para almacén/salón/cocina, no garantizado
+            # para refugio individual), etiqueta el evento con su id y
+            # nombre -- sin esto, cronica_de_asentamiento nunca
+            # encontraría este evento.
+            asen_evento = asentamiento_de(mundo, entidad_id)
+            if asen_evento is not None:
+                datos_evento["asentamiento_id"] = asen_evento.id
+                nombre_asen = mundo.asentamiento_nombre.get(asen_evento.id)
+                if nombre_asen is not None:
+                    datos_evento["nombre_asentamiento"] = nombre_asen
             bus_eventos.emitir(
                 Evento(
                     tipo=evento_tipo,
                     severidad=severidad,
                     tick=tick_actual,
                     entidad_id=entidad_id,
-                    datos={"x": pos_x, "y": pos_y, "tipo": construccion.tipo},
+                    datos=datos_evento,
                 )
             )
 
