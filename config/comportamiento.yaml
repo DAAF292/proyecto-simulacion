@@ -179,6 +179,22 @@ asentamiento:
   # vez de refundarlo con un id nuevo. PROVISIONAL, sin calibrar contra
   # el motor en marcha.
   umbral_continuidad_identidad: 0.5
+  # Conocimiento colectivo transmisible (2026-09-15, ver
+  # nucleo/conocimiento.py): decaimiento diario multiplicativo de la
+  # cuenta bruta acumulada por cubeta -- 4x más lento que
+  # relaciones.tasa_decaimiento_dia_afinidad (0.02) porque el oficio de
+  # un pueblo no se olvida a la misma velocidad que un vínculo emocional
+  # individual. PROVISIONAL, sin calibrar.
+  tasa_erosion_conocimiento_dia: 0.005
+  # Cuenta bruta (ticks de trabajo real acumulados por el pueblo) que
+  # corresponde a nivel=1.0 (saturado) -- saturación lineal simple,
+  # PROVISIONAL, sin curva más sofisticada.
+  escala_saturacion_conocimiento: 2000.0
+  # Peso del multiplicador de tasa por conocimiento colectivo
+  # (factor = 1.0 + peso*nivel, sin penalización por debajo de 1.0 --
+  # ver nucleo/conocimiento.py:factor_conocimiento_colectivo). Mismo
+  # orden que decision.peso_aptitud_vocacional. PROVISIONAL.
+  peso_conocimiento_colectivo: 0.3
 
 # --- Conflicto (2026-08-30, resolutor genérico de disputas) --------------
 # nucleo/conflicto.py:resolver_disputa. Primer consumidor: refugio

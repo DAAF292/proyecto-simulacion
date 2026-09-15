@@ -35,6 +35,7 @@ from nucleo.asentamiento import (
     calcular_liderazgo,
     resolver_identidades_persistentes,
 )
+from nucleo.conocimiento import erosionar
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.indice_espacial import construir_indice_espacial
@@ -58,6 +59,9 @@ class SistemaAsentamiento:
         )
         self.umbral_continuidad_identidad: float = float(
             self.config_asentamiento.get("umbral_continuidad_identidad", 0.5)
+        )
+        self.tasa_erosion_conocimiento: float = float(
+            self.config_asentamiento.get("tasa_erosion_conocimiento_dia", 0.005)
         )
         self._indice_actual = None
         # Observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b -- ver
@@ -101,6 +105,7 @@ class SistemaAsentamiento:
             mundo.asentamientos = {}
             mundo.asentamiento_registro_identidad = {}
             mundo.asentamiento_tick_fundacion = {}
+            self._erosionar_conocimiento_diario(mundo)
             return
 
         # Un asentamiento no puede tener miembros que no comparten
@@ -206,6 +211,18 @@ class SistemaAsentamiento:
         # específicamente miembro->líder: los seguidores admiran al líder,
         # no necesariamente al revés (no se autora reciprocidad).
         self._acrecion_lealtad_liderazgo(gestor, mundo, reloj)
+        self._erosionar_conocimiento_diario(mundo)
+
+    def _erosionar_conocimiento_diario(self, mundo: Mundo) -> None:
+        """Decaimiento diario de conocimiento colectivo (2026-09-15, ver
+        nucleo/conocimiento.py) -- se aplica con independencia de si hoy
+        existe algún asentamiento vivo (entradas de un id ya retirado
+        del registro simplemente siguen ahí, inertes, sin que nada las
+        lea de nuevo -- no se purgan por id muerto, mismo criterio de
+        laissez-faire que Relaciones.vinculos apuntando a un id ya
+        muerto)."""
+        for conocimiento_asen in mundo.asentamiento_conocimiento.values():
+            erosionar(conocimiento_asen, self.tasa_erosion_conocimiento)
 
     def _acrecion_amistad_convivencia(
         self,

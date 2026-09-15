@@ -35,6 +35,12 @@ from nucleo.armas import (
     recolectar_material_arma_de_celda,
     tiene_arma_nivel2_o_mas,
 )
+from nucleo.asentamiento import asentamiento_de
+from nucleo.conocimiento import (
+    factor_conocimiento_colectivo,
+    nivel_conocimiento,
+    registrar_contribucion,
+)
 from nucleo.herramientas import tiene_herramienta
 from nucleo.celda import Celda
 from nucleo.construccion import (
@@ -179,6 +185,18 @@ class SistemaRecursos:
         # nucleo/construccion.py:objetivo_construccion_actual.
         self.radio_cluster_asentamiento: int = int(
             self.config.get("asentamiento", {}).get("radio_cluster_celdas", 6)
+        )
+        # Conocimiento colectivo transmisible (2026-09-15, ver
+        # nucleo/conocimiento.py) -- bono de tasa por práctica
+        # acumulada del ASENTAMIENTO, distinto del bono de aptitud
+        # individual ya existente (peso_aptitud_vocacional, en
+        # sistema_decision.py).
+        cfg_asen = self.config.get("asentamiento", {})
+        self.escala_saturacion_conocimiento: float = float(
+            cfg_asen.get("escala_saturacion_conocimiento", 2000.0)
+        )
+        self.peso_conocimiento_colectivo: float = float(
+            cfg_asen.get("peso_conocimiento_colectivo", 0.3)
         )
         # Agarre -- ver componentes/agarre.py y config/poblacion.yaml
         # seccion rangos_raciales.<especie>.puntos_agarre.
@@ -370,6 +388,13 @@ class SistemaRecursos:
             consciente = (
                 cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia
             )
+            # Conocimiento colectivo (2026-09-15, ver nucleo/conocimiento.py):
+            # búsqueda del asentamiento propio UNA vez por entidad
+            # consciente, reutilizada tanto para el bono de tasa (antes
+            # de resolver) como para la acumulación (en
+            # _incrementar_vocacion, tras resolver) -- evita repetir el
+            # escaneo de mundo.asentamientos dos veces por acción.
+            asen = asentamiento_de(mundo, eid) if consciente else None
 
             if intencion.accion == Accion.COMER:
                 self._resolver_comer(
@@ -385,8 +410,9 @@ class SistemaRecursos:
                 self._resolver_construir(
                     gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual,
                     bus_eventos, construir_motivo_mejora=intencion.construir_motivo_mejora,
+                    factor_conocimiento_colectivo=self._factor_conocimiento(mundo, asen, "constructor"),
                 )
-                self._incrementar_vocacion(gestor, eid, consciente, "conteo_constructor")
+                self._incrementar_vocacion(gestor, mundo, eid, consciente, "conteo_constructor", asen)
             elif intencion.accion == Accion.RECOLECTAR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 dims = gestor.obtener_componente(eid, DimensionesFisicas)
@@ -399,8 +425,9 @@ class SistemaRecursos:
                     recolectar_mineria=intencion.recolectar_motivo_mineria,
                     gestor=gestor, pos_x=pos.x, pos_y=pos.y, zona_idx=pos.zona_idx,
                     entidad_id=eid, bus_eventos=bus_eventos, tick_actual=reloj.tick_actual,
+                    factor_conocimiento_colectivo=self._factor_conocimiento(mundo, asen, "forrajero"),
                 )
-                self._incrementar_vocacion(gestor, eid, consciente, "conteo_forrajero")
+                self._incrementar_vocacion(gestor, mundo, eid, consciente, "conteo_forrajero", asen)
             elif intencion.accion == Accion.ENCENDER_FUEGO:
                 agarre_fuego = gestor.obtener_componente(eid, Agarre)
                 self._resolver_encender_fuego(
@@ -408,8 +435,11 @@ class SistemaRecursos:
                     agarre_fuego,
                 )
             elif intencion.accion == Accion.COCINAR:
-                self._resolver_cocinar(gestor, eid, pos.x, pos.y, pos.zona_idx)
-                self._incrementar_vocacion(gestor, eid, consciente, "conteo_cocinero")
+                self._resolver_cocinar(
+                    gestor, eid, pos.x, pos.y, pos.zona_idx,
+                    factor_conocimiento_colectivo=self._factor_conocimiento(mundo, asen, "cocinero"),
+                )
+                self._incrementar_vocacion(gestor, mundo, eid, consciente, "conteo_cocinero", asen)
             elif intencion.accion == Accion.FABRICAR:
                 inv = gestor.obtener_componente(eid, Inventario)
                 agarre_fabricar = gestor.obtener_componente(eid, Agarre)
@@ -417,7 +447,7 @@ class SistemaRecursos:
                     gestor, eid, inv, pos.x, pos.y, pos.zona_idx, bus_eventos, reloj.tick_actual,
                     intencion.fabricar_categoria, agarre=agarre_fabricar,
                 )
-                self._incrementar_vocacion(gestor, eid, consciente, "conteo_artesano")
+                self._incrementar_vocacion(gestor, mundo, eid, consciente, "conteo_artesano", asen)
 
         # Fogatas: consumo de combustible propio y extincion (ver
         # componentes/fogata.py) -- independiente de la Accion de nadie,
@@ -425,19 +455,44 @@ class SistemaRecursos:
         # para TODA fogata existente, no solo para quien la encendio.
         self._consumir_fogatas(gestor)
 
-    def _incrementar_vocacion(self, gestor, eid: int, consciente: bool, campo: str) -> None:
+    def _incrementar_vocacion(
+        self, gestor, mundo: Mundo, eid: int, consciente: bool, campo: str, asen: Any = None,
+    ) -> None:
         """Contador de práctica real (2026-09-11, ver componentes/
         vocacion.py) -- incrementado en el DESPACHO de la acción (no
         tras confirmar éxito del resolver), mismo criterio que el resto
         de contadores de observación de este sistema: representa "ticks
         dedicados a esta labor", no "kg conseguidos" -- solo consciente,
-        fauna nunca practica estas 4 acciones hoy."""
+        fauna nunca practica estas 4 acciones hoy.
+
+        Conocimiento colectivo (2026-09-15, ver nucleo/conocimiento.py):
+        el mismo tick de práctica que ya incrementa el contador
+        INDIVIDUAL suma también a la cuenta bruta del ASENTAMIENTO (si
+        `asen` no es None) -- reutiliza el mismo disparador, sin ningún
+        evento nuevo. Sobrevive a la muerte del individuo, a diferencia
+        de Vocacion."""
         if not consciente:
             return
         voc = gestor.obtener_componente(eid, Vocacion)
         if voc is None:
             return
         setattr(voc, campo, getattr(voc, campo) + 1)
+        if asen is not None:
+            cubeta = campo.removeprefix("conteo_")
+            conocimiento_asen = mundo.asentamiento_conocimiento.setdefault(asen.id, {})
+            registrar_contribucion(
+                conocimiento_asen, cubeta, 1.0, self.escala_saturacion_conocimiento,
+            )
+
+    def _factor_conocimiento(self, mundo: Mundo, asen: Any, cubeta: str) -> float:
+        """Multiplicador de tasa por conocimiento colectivo del
+        asentamiento propio (2026-09-15, ver nucleo/conocimiento.py) --
+        1.0 (sin efecto) si el individuo no pertenece a ninguno."""
+        if asen is None:
+            return 1.0
+        conocimiento_asen = mundo.asentamiento_conocimiento.get(asen.id)
+        nivel = nivel_conocimiento(conocimiento_asen, cubeta, self.escala_saturacion_conocimiento)
+        return factor_conocimiento_colectivo(nivel, self.peso_conocimiento_colectivo)
 
     def _actualizar_charcos(self, zona: Any) -> None:
         """Genera/evapora charco y llena/drena humedad de subsuelo según el
@@ -593,6 +648,7 @@ class SistemaRecursos:
         tick_actual: int,
         bus_eventos: BusEventos,
         construir_motivo_mejora: bool = False,
+        factor_conocimiento_colectivo: float = 1.0,
     ) -> None:
         """
         REFUGIO/ALMACÉN CONSTRUIDO (ver componentes/construccion.py,
@@ -637,7 +693,7 @@ class SistemaRecursos:
             refugio_mejora = gestor.obtener_componente(cid_refugio_propio, Construccion)
             if refugio_mejora is None:
                 return
-            self._resolver_mejora_refugio(inv, refugio_mejora)
+            self._resolver_mejora_refugio(inv, refugio_mejora, factor_conocimiento_colectivo)
             return
         objetivo = objetivo_construccion_actual(
             gestor, mundo, entidad_id, self.radio_cluster_asentamiento
@@ -660,6 +716,9 @@ class SistemaRecursos:
         tasa_aporte_efectiva = self.tasa_aporte_construccion
         if tiene_herramienta(inv.objetos, self.recetas_herramientas):
             tasa_aporte_efectiva *= self.factor_bono_tasa_aporte_construccion_con_herramienta
+        # Conocimiento colectivo (2026-09-15): segundo multiplicador
+        # independiente, ver nucleo/conocimiento.py.
+        tasa_aporte_efectiva *= factor_conocimiento_colectivo
         transferir_a_construccion(
             inv.contenidos,
             construccion.materiales,
@@ -688,7 +747,12 @@ class SistemaRecursos:
                 )
             )
 
-    def _resolver_mejora_refugio(self, inv: Inventario, construccion: Construccion) -> None:
+    def _resolver_mejora_refugio(
+        self,
+        inv: Inventario,
+        construccion: Construccion,
+        factor_conocimiento_colectivo: float = 1.0,
+    ) -> None:
         """Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" --
         ver CLAUDE.md): SUSTITUYE hasta tasa_mejora_refugio kg del
         material de PEOR calidad_construccion ya invertido en el refugio
@@ -727,7 +791,7 @@ class SistemaRecursos:
             key=lambda item: self.catalogo_materiales.get(item[0], {}).get("calidad_construccion", 0.0),
         )
         cantidad = min(
-            self.tasa_mejora_refugio,
+            self.tasa_mejora_refugio * factor_conocimiento_colectivo,
             construccion.materiales[peor_clave],
             inv.contenidos[mejor_clave],
         )
@@ -761,6 +825,7 @@ class SistemaRecursos:
         entidad_id: int = 0,
         bus_eventos: BusEventos | None = None,
         tick_actual: int = 0,
+        factor_conocimiento_colectivo: float = 1.0,
     ) -> None:
         """
         RECOLECTAR (ver componentes/intencion.py y nucleo/construccion.py).
@@ -974,6 +1039,9 @@ class SistemaRecursos:
             objetos_para_bono.extend(agarre.objetos)
         if tiene_herramienta(objetos_para_bono, self.recetas_herramientas):
             tasa_recoleccion_efectiva *= self.factor_bono_tasa_recolectar_con_herramienta
+        # Conocimiento colectivo (2026-09-15): segundo multiplicador
+        # independiente, ver nucleo/conocimiento.py.
+        tasa_recoleccion_efectiva *= factor_conocimiento_colectivo
 
         espacio = espacio_disponible_kg(
             inv.contenidos, dims.peso, self.fraccion_carga_maxima, inv.objetos, self.peso_objeto_kg
@@ -1262,6 +1330,7 @@ class SistemaRecursos:
         pos_x: int,
         pos_y: int,
         zona_idx: int,
+        factor_conocimiento_colectivo: float = 1.0,
     ) -> None:
         """Cocinar (2026-09-08, ver docs/superpowers/specs/
         2026-09-08-como-cocinar-design.md): transforma hasta
@@ -1293,12 +1362,17 @@ class SistemaRecursos:
         )
         if cid_cocina is not None:
             cocina = gestor.obtener_componente(cid_cocina, Construccion)
-            tasa = self.tasa_cocinar_kg_tick * self.factor_bono_tasa_cocina_comun
+            tasa = (
+                self.tasa_cocinar_kg_tick
+                * self.factor_bono_tasa_cocina_comun
+                * factor_conocimiento_colectivo
+            )
             transformado = elaborar_recurso(
                 inv.provisiones, recurso_crudo, tasa, destino=cocina.provisiones,
             )
         else:
-            transformado = elaborar_recurso(inv.provisiones, recurso_crudo, self.tasa_cocinar_kg_tick)
+            tasa = self.tasa_cocinar_kg_tick * factor_conocimiento_colectivo
+            transformado = elaborar_recurso(inv.provisiones, recurso_crudo, tasa)
         if transformado > 0.0:
             self._stats_cocinar_resuelto += 1
 

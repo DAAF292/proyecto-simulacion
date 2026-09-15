@@ -60,6 +60,16 @@ class Mundo:
         self.asentamiento_registro_identidad: dict[int, frozenset[int]] = {}
         self.asentamiento_tick_fundacion: dict[int, int] = {}
 
+        # Conocimiento colectivo transmisible (2026-09-15, ver
+        # nucleo/conocimiento.py y docs/superpowers/specs/
+        # 2026-09-15-conocimiento-colectivo-design.md): cuenta bruta
+        # acumulada por asentamiento y cubeta vocacional
+        # (forrajero/constructor/artesano/cocinero), SÍ persistida --
+        # sobrevive a la muerte de cualquier miembro individual, a
+        # diferencia de Vocacion (por individuo). Llave externa =
+        # Asentamiento.id (identidad estable de Pieza 1).
+        self.asentamiento_conocimiento: dict[int, dict[str, float]] = {}
+
         # Manadas (2026-09-07, ver nucleo/manada.py y
         # sistemas/sistema_manada.py). Mismo criterio que asentamientos --
         # recalculado íntegro cada día a partir de Posicion + Identidad de

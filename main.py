@@ -914,6 +914,28 @@ def main() -> None:
                 f"{sistemas['recursos']._stats_mejora_refugio_sustituciones} "
                 "sustituciones reales"
             )
+            # Verificacion obligatoria de "conocimiento colectivo
+            # transmisible" (2026-09-15, ver CLAUDE.md). Solo
+            # observacion: cuantos asentamientos acumularon algo, y el
+            # nivel [0,1] mas alto alcanzado en cualquier cubeta.
+            from nucleo.conocimiento import nivel_conocimiento as _nivel_conocimiento
+            escala_conoc = sistemas["recursos"].escala_saturacion_conocimiento
+            asentamientos_con_conocimiento = sum(
+                1 for c in mundo.asentamiento_conocimiento.values() if c
+            )
+            nivel_maximo = max(
+                (
+                    _nivel_conocimiento(c, cubeta, escala_conoc)
+                    for c in mundo.asentamiento_conocimiento.values()
+                    for cubeta in c
+                ),
+                default=0.0,
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] conocimiento colectivo: "
+                f"{asentamientos_con_conocimiento} asentamientos con algo acumulado, "
+                f"nivel maximo alcanzado {nivel_maximo:.3f}"
+            )
 
     except KeyboardInterrupt:
         pass

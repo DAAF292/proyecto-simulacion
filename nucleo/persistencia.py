@@ -772,6 +772,18 @@ class Persistencia:
                 (tick_fundacion_json,),
             )
 
+            # Conocimiento colectivo transmisible (2026-09-15, ver
+            # nucleo/conocimiento.py) -- sobrevive a la muerte de
+            # cualquier miembro, mismo criterio de persistencia que el
+            # registro de identidad de arriba.
+            conocimiento_json = json.dumps(
+                {str(k): v for k, v in mundo.asentamiento_conocimiento.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_conocimiento', ?)",
+                (conocimiento_json,),
+            )
+
             con.commit()
 
     def cargar_snapshot(
@@ -855,6 +867,17 @@ class Persistencia:
             if fila_tick_fundacion:
                 mundo.asentamiento_tick_fundacion = {
                     int(k): v for k, v in json.loads(fila_tick_fundacion[0]).items()
+                }
+
+            # Conocimiento colectivo transmisible (2026-09-15) -- misma
+            # tolerancia a ausencia que las dos claves de arriba.
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_conocimiento'"
+            )
+            fila_conocimiento = cur.fetchone()
+            if fila_conocimiento:
+                mundo.asentamiento_conocimiento = {
+                    int(k): v for k, v in json.loads(fila_conocimiento[0]).items()
                 }
 
             # Limpiar gestor en memoria
