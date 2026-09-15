@@ -9,7 +9,9 @@ from pathlib import Path
 from componentes.construccion import Construccion
 from componentes.identidad import Especie
 from main import cargar_configuracion
-from nucleo.asentamiento import Asentamiento, generar_nombre
+from nucleo.agrupacion import calcular_centro
+from nucleo.asentamiento import Asentamiento, generar_nombre, rasgo_geografico_notable
+from nucleo.celda import Celda, TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_construccion, crear_criatura
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
@@ -40,6 +42,71 @@ def test_ley_generar_nombre_none_si_catalogo_vacio():
     rng = random.Random(2)
     assert generar_nombre(rng, {}) is None
     assert generar_nombre(rng, {"prefijos": ["Kar"], "sufijos": []}) is None
+
+
+# ---------------------------------------------------------------------------
+# nucleo/asentamiento.py:rasgo_geografico_notable -- función pura
+# ---------------------------------------------------------------------------
+
+def test_ley_rasgo_agua_tiene_prioridad_sobre_montana():
+    celda = Celda(tipo_terreno=TipoTerreno.MONTANA, tipo_agua="rio")
+    assert rasgo_geografico_notable(celda) == "agua"
+
+
+def test_ley_rasgo_montana_sin_agua():
+    celda = Celda(tipo_terreno=TipoTerreno.MONTANA, tipo_agua="")
+    assert rasgo_geografico_notable(celda) == "montana"
+
+
+def test_ley_rasgo_ninguno_en_pradera_sin_agua():
+    celda = Celda(tipo_terreno=TipoTerreno.PRADERA, tipo_agua="")
+    assert rasgo_geografico_notable(celda) is None
+
+
+def test_ley_rasgo_agua_en_cualquier_bioma():
+    celda = Celda(tipo_terreno=TipoTerreno.BOSQUE, tipo_agua="lago")
+    assert rasgo_geografico_notable(celda) == "agua"
+
+
+# ---------------------------------------------------------------------------
+# nucleo/asentamiento.py:generar_nombre -- mix geográfico
+# ---------------------------------------------------------------------------
+
+def test_ley_generar_nombre_usa_tematico_con_rasgo_y_probabilidad_uno():
+    rng = random.Random(3)
+    catalogo = {
+        "prefijos": ["Kar"], "sufijos": ["ord"],
+        "prefijos_agua": ["Vad"],
+    }
+    nombre = generar_nombre(rng, catalogo, rasgo="agua", probabilidad_tematico=1.0)
+    assert nombre == "Vadord"  # prefijo temático, sufijo de siempre
+
+
+def test_ley_generar_nombre_cae_a_generico_con_probabilidad_cero():
+    rng = random.Random(4)
+    catalogo = {
+        "prefijos": ["Kar"], "sufijos": ["ord"],
+        "prefijos_agua": ["Vad"],
+    }
+    nombre = generar_nombre(rng, catalogo, rasgo="agua", probabilidad_tematico=0.0)
+    assert nombre == "Karord"  # nunca usa el temático
+
+
+def test_ley_generar_nombre_sin_rasgo_ignora_probabilidad():
+    rng = random.Random(5)
+    catalogo = {
+        "prefijos": ["Kar"], "sufijos": ["ord"],
+        "prefijos_agua": ["Vad"],
+    }
+    nombre = generar_nombre(rng, catalogo, rasgo=None, probabilidad_tematico=1.0)
+    assert nombre == "Karord"  # sin rasgo, el mix nunca se activa
+
+
+def test_ley_generar_nombre_rasgo_sin_catalogo_tematico_cae_a_generico():
+    rng = random.Random(6)
+    catalogo = {"prefijos": ["Kar"], "sufijos": ["ord"]}  # sin prefijos_montana
+    nombre = generar_nombre(rng, catalogo, rasgo="montana", probabilidad_tematico=1.0)
+    assert nombre == "Karord"
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +164,34 @@ def test_ley_evento_asentamiento_fundado_lleva_id_y_nombre():
     id_asen = next(iter(mundo.asentamientos))
     assert eventos[0].datos["asentamiento_id"] == id_asen
     assert eventos[0].datos["nombre_asentamiento"] == mundo.asentamiento_nombre[id_asen]
+
+
+def test_ley_fundacion_sobre_agua_real_usa_catalogo_tematico_con_probabilidad_uno():
+    """Integración real de punta a punta: fundar sobre una celda con
+    agua de verdad, forzando probabilidad_nombre_tematico=1.0, produce
+    un nombre construido con el catálogo prefijos_agua real (no el
+    genérico)."""
+    config = _config()
+    rng = random.Random(11)
+    gestor = GestorEntidades()
+    mundo = Mundo(20, 20, config, random.Random(11))
+    reloj = Reloj()
+    gnomos = [crear_criatura(gestor, Especie.GNOMO, x, 0, config, rng) for x in (0, 1, 2)]
+    for gid, x in zip(gnomos, (0, 1, 2)):
+        _refugio(gestor, gid, x, 0)
+    centro_x, _ = calcular_centro(
+        {gid: (x, 0) for gid, x in zip(gnomos, (0, 1, 2))}, {gnomos[0], gnomos[1], gnomos[2]}
+    )
+    mundo.territorio.zonas[0].obtener_celda(centro_x, 0).tipo_agua = "rio"
+
+    sistema = SistemaAsentamiento(config, rng)
+    sistema.probabilidad_nombre_tematico = 1.0
+    sistema.ejecutar(gestor, mundo, reloj, BusEventos())
+
+    id_asen = next(iter(mundo.asentamientos))
+    nombre = mundo.asentamiento_nombre[id_asen]
+    prefijos_agua = config["nombres_asentamiento"]["prefijos_agua"]
+    assert any(nombre.startswith(p) for p in prefijos_agua)
 
 
 # ---------------------------------------------------------------------------

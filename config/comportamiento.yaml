@@ -195,6 +195,15 @@ asentamiento:
   # ver nucleo/conocimiento.py:factor_conocimiento_colectivo). Mismo
   # orden que decision.peso_aptitud_vocacional. PROVISIONAL.
   peso_conocimiento_colectivo: 0.3
+  # Nombre propio, mix geográfico (2026-09-15, corrección tras feedback
+  # de Diego -- ver nucleo/asentamiento.py:generar_nombre/
+  # rasgo_geografico_notable): probabilidad de que, SI la celda de
+  # fundación tiene un rasgo geográfico notable (agua o montaña), el
+  # nombre use el catálogo temático de ese rasgo en vez del genérico de
+  # sílabas -- deliberadamente no determinista (0.6, no 1.0): un
+  # asentamiento junto a un río no siempre se llama por el río.
+  # PROVISIONAL.
+  probabilidad_nombre_tematico: 0.6
 
 # --- Conflicto (2026-08-30, resolutor genérico de disputas) --------------
 # nucleo/conflicto.py:resolver_disputa. Primer consumidor: refugio

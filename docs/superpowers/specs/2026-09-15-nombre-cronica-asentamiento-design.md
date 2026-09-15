@@ -101,6 +101,50 @@ ilegible pese a tener nombre):
   chequeo de unicidad, mismo criterio que nombre individual).
 - Extender esto a manadas u otras agrupaciones no-asentamiento.
 
+## Corrección tras feedback de Diego (mismo día, tras el primer cierre)
+
+Diego, viendo el resultado real ("Barost", "Karom", "Stenost"), señaló
+con razón que un catálogo de sílabas puro "no se diferencia mucho de
+una generación de nombres común" -- pidió mezclarlo con la zona o un
+accidente geográfico ("un asentamiento en una pradera quizás pone un
+nombre construido y otro en un valle decide nombrarse valle").
+
+Verificado contra el código real qué rasgos geográficos existen hoy
+(sin inventar un concepto nuevo como "valle", que el motor no modela):
+`Celda.tipo_terreno` (5 biomas) y `Celda.tipo_agua` (río/lago/poza,
+agua real ya generada causalmente). Diego confirmó, entre dos
+alcances propuestos, quedarse solo con los dos rasgos "fuertes" (agua
+y montaña) en vez de dar temática a los 5 biomas -- más fiel a su
+propio ejemplo (pradera sigue siendo genérica).
+
+**Diseño final**: `nucleo/asentamiento.py:rasgo_geografico_notable(celda)`
+devuelve `'agua'` (si `tipo_agua != ""`, prioridad sobre montaña),
+`'montana'` (bioma MONTANA sin agua), o `None` en cualquier otro caso.
+`generar_nombre` gana dos parámetros opcionales (`rasgo`,
+`probabilidad_tematico`, ambos con default que reproduce el
+comportamiento anterior sin romper nada): si hay rasgo Y la tirada de
+`asentamiento.probabilidad_nombre_tematico` (0.6, PROVISIONAL) lo
+confirma, sustituye `catalogo["prefijos"]` por
+`catalogo[f"prefijos_{rasgo}"]` -- los SUFIJOS siguen siendo siempre
+los mismos, solo el prefijo cambia de catálogo. Deliberadamente **no
+determinista**: un asentamiento junto a un río no siempre se llama por
+el río, coherente con el "quizás" de Diego en ambos ejemplos.
+
+`config/nombres.yaml:nombres_asentamiento` gana `prefijos_agua: [Vad,
+Rib, Font, Reman]` (Vado, Ribera, Fuente, Remanso) y `prefijos_montana:
+[Alt, Cim, Peñ, Risc]` (Alto, Cima, Peña, Risco) -- mismo criterio de
+curado a mano, PROVISIONAL.
+
+**Hallazgo real encontrado durante el diagnóstico de juego libre del
+primer cierre, corregido de paso**: `RefugioConstruido` (evento
+individual, no comunal) SÍ queda etiquetado con `asentamiento_id` igual
+que `AlmacenConstruido` (mismo bloque de código en
+`_resolver_construir`), así que aparece en la crónica del pueblo -- el
+spec original decía "sin cambios de fondo -- ya es un evento
+individual, se deja igual", pero sin plantilla dedicada caía en el
+genérico feo ("evento refugio (entidad 2016)"). Añadida una plantilla
+mínima, sin depender de datos nuevos.
+
 ## Verificación esperada
 
 - Tests dirigidos: `generar_nombre` puro (sortea del catálogo, `None`

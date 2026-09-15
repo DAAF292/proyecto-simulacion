@@ -32,6 +32,7 @@ from typing import Any
 
 from componentes.relaciones import Relaciones
 from nucleo.agrupacion import agrupar_por_proximidad, calcular_centro
+from nucleo.celda import Celda, TipoTerreno
 
 __all__ = [
     "Asentamiento",
@@ -43,20 +44,59 @@ __all__ = [
     "disposicion_a_aportar",
     "resolver_identidades_persistentes",
     "generar_nombre",
+    "rasgo_geografico_notable",
 ]
 
 
-def generar_nombre(rng: random.Random, catalogo: dict[str, Any]) -> str | None:
+def rasgo_geografico_notable(celda: Celda) -> str | None:
+    """Rasgo geográfico real (2026-09-15, corrección tras feedback de
+    Diego: "eso no se diferencia mucho de una generación de nombres
+    común... podemos hacer un mix" con el terreno) que puede dar nombre
+    TEMÁTICO a un asentamiento fundado sobre esta celda -- 'agua' si
+    tiene agua real (río/lago/poza, ya generada causalmente por
+    nucleo/agua.py), 'montana' si el bioma es MONTANA sin agua, `None`
+    en cualquier otro caso (pradera/bosque/desierto/tundra sin agua
+    cerca -- estos siguen usando solo el catálogo genérico de sílabas,
+    sin ningún tema). Agua tiene prioridad sobre montaña si ambos
+    coinciden (un río de montaña, caso raro) -- el agua es el rasgo más
+    determinante para dónde se funda un asentamiento de verdad."""
+    if celda.tipo_agua != "":
+        return "agua"
+    if celda.tipo_terreno == TipoTerreno.MONTANA:
+        return "montana"
+    return None
+
+
+def generar_nombre(
+    rng: random.Random,
+    catalogo: dict[str, Any],
+    rasgo: str | None = None,
+    probabilidad_tematico: float = 0.0,
+) -> str | None:
     """Nombre propio de asentamiento (2026-09-15, ver docs/superpowers/
     specs/2026-09-15-nombre-cronica-asentamiento-design.md) -- mismo
     patrón prefijo+sufijo que nucleo/entidad.py:_generar_nombre (nombre
     individual), pero sin distinción de sexo (un lugar no tiene sexo) y
     sin generalizar esa función -- pequeña duplicación deliberada, más
-    simple que acoplar ambos conceptos. `None` si el catálogo está
-    vacío (config/nombres.yaml:nombres_asentamiento sin poblar). Se
-    llama UNA sola vez, al fundarse el asentamiento -- nunca se vuelve
-    a sortear mientras el id persista."""
+    simple que acoplar ambos conceptos.
+
+    Mix geográfico (2026-09-15): si `rasgo` no es None y la tirada de
+    probabilidad lo confirma, sustituye `catalogo["prefijos"]` por
+    `catalogo[f"prefijos_{rasgo}"]` -- los SUFIJOS siguen siendo
+    siempre los mismos, solo el prefijo cambia de catálogo. Sin rasgo
+    (o sin catálogo temático para él, o sin que la tirada lo confirme),
+    cae al catálogo genérico de siempre -- deliberadamente NO
+    determinista: un asentamiento junto a un río no siempre se llama
+    por el río.
+
+    `None` si el catálogo genérico resultante está vacío. Se llama UNA
+    sola vez, al fundarse el asentamiento -- nunca se vuelve a sortear
+    mientras el id persista."""
     prefijos = catalogo.get("prefijos") or []
+    if rasgo is not None and rng.random() < probabilidad_tematico:
+        prefijos_tematicos = catalogo.get(f"prefijos_{rasgo}") or []
+        if prefijos_tematicos:
+            prefijos = prefijos_tematicos
     sufijos = catalogo.get("sufijos") or []
     if not prefijos or not sufijos:
         return None

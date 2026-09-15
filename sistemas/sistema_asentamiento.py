@@ -34,6 +34,7 @@ from nucleo.asentamiento import (
     calcular_centro,
     calcular_liderazgo,
     generar_nombre,
+    rasgo_geografico_notable,
     resolver_identidades_persistentes,
 )
 from nucleo.conocimiento import erosionar
@@ -68,6 +69,13 @@ class SistemaAsentamiento:
         # generar_nombre y config/nombres.yaml:nombres_asentamiento).
         self.catalogo_nombres_asentamiento: dict[str, Any] = self.config.get(
             "nombres_asentamiento", {}
+        )
+        # Mix geográfico (2026-09-15, corrección tras feedback de Diego):
+        # probabilidad de usar el catálogo temático (agua/montaña) en
+        # vez del genérico cuando la celda de fundación tiene un rasgo
+        # notable. PROVISIONAL.
+        self.probabilidad_nombre_tematico: float = float(
+            self.config_asentamiento.get("probabilidad_nombre_tematico", 0.6)
         )
         self._indice_actual = None
         # Observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b -- ver
@@ -182,7 +190,17 @@ class SistemaAsentamiento:
                 # Nombre propio (2026-09-15): sorteado UNA sola vez,
                 # exactamente aquí -- nunca se vuelve a tocar mientras
                 # este id persista (ver Mundo.asentamiento_nombre).
-                nombre_asentamiento = generar_nombre(self.rng, self.catalogo_nombres_asentamiento)
+                # Mix geográfico: rasgo real de la celda de fundación
+                # (agua/montaña/None), ver nucleo/asentamiento.py:
+                # rasgo_geografico_notable.
+                celda_centro = mundo.territorio.zonas[zona_asentamiento].obtener_celda(
+                    centro[0], centro[1]
+                )
+                rasgo = rasgo_geografico_notable(celda_centro)
+                nombre_asentamiento = generar_nombre(
+                    self.rng, self.catalogo_nombres_asentamiento,
+                    rasgo, self.probabilidad_nombre_tematico,
+                )
                 if nombre_asentamiento is not None:
                     mundo.asentamiento_nombre[id_resuelto] = nombre_asentamiento
                 datos_evento: dict[str, Any] = {

@@ -85,6 +85,13 @@ _PLANTILLAS = {
     # esta plantilla falla y cae a _PLANTILLA_GENERICA, mismo mecanismo
     # de siempre.
     "AlmacenConstruido": "Tick {tick}: {nombre_asentamiento} completa su {tipo}.",
+    # Hallazgo real del diagnóstico de juego libre de esta misma pieza
+    # (no anticipado en el spec, que decía "sin cambios de fondo"): un
+    # refugio individual etiquetado con asentamiento_id SÍ aparece en la
+    # crónica del pueblo, y sin plantilla propia caía en el genérico
+    # feo ("evento refugio (entidad N)"). Mínima, sin depender de datos
+    # nuevos (nombre/especie del individuo no viajan en este evento).
+    "RefugioConstruido": "Tick {tick}: se completa un nuevo refugio (habitante {entidad_id}).",
 }
 
 
