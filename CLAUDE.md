@@ -314,11 +314,23 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   crecer/perder miembros, sin ninguna reemisión espuria). Corrección
   honesta: el commit `ad7b28b` dice "598/598 tests" en su mensaje —
   el conteo real verificado es **590 passed**, no amendado por ser un
-  commit ya empujado. **Piezas 2-6 del informe de alternativas**
-  (necesidades colectivas agregadas, efecto de vuelta hacia miembros,
-  interacción entre asentamientos, nombre propio + crónica, posible
-  unificación con el roadmap de profesiones) siguen sin empezar, a la
-  espera de que Diego decida el orden.
+  commit ya empujado. **Unificado con el roadmap "asentamientos/
+  profesiones" (2026-09-12) el mismo día, a petición de Diego** —
+  "conocimiento colectivo transmisible" (Pieza 3 de ese roadmap +
+  Piezas 2-3 del informe de hoy) ya CERRADO también, ver
+  `docs/historial_construccion_social.md`: valor agregado por
+  asentamiento (sobrevive a la muerte de cualquier miembro, a
+  diferencia de `Vocacion` individual) que modula la tasa de
+  RECOLECTAR/CONSTRUIR/COCINAR — verificado con las mismas 4 semillas
+  de la Pieza 1, acumulando niveles reales (hasta saturado a 1.0 en
+  "forrajero") desde el primer momento en que existe un asentamiento,
+  a diferencia de casi todas las piezas sociales anteriores de este
+  proyecto que quedaron "correctas pero invisibles" semanas. Pendiente
+  real: "tipos de construcción nuevos" es ahora el siguiente círculo
+  natural del roadmap unificado (consumidor de esto + calidad de
+  materiales); interacción entre asentamientos y nombre propio +
+  crónica (Piezas 4-5 del informe original) siguen sin empezar, sin
+  decidir el orden.
 - **Caza en manada de lobo contra caballo**: mecanismo verificado
   correcto, pero la coincidencia temporal que exige (~4-6 aliados
   cazando a la vez, dentro de `radio_apoyo_grupal`) es estructuralmente

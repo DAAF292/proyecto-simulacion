@@ -1487,3 +1487,146 @@ colectivas agregadas, efecto de vuelta hacia miembros, interacción
 entre asentamientos, nombre propio + crónica, unificación con el
 roadmap de profesiones) siguen sin empezar, a la espera de que Diego
 decida el orden.
+
+## Conocimiento colectivo transmisible -- fusión del roadmap
+## "asentamientos/profesiones" con el informe "asentamiento como
+## entidad propia", cerrado el mismo día (2026-09-15)
+
+Diego, con la Pieza 1 ya cerrada, eligió explícitamente "unificar con
+roadmap de profesiones" en vez de seguir con cualquiera de las otras
+piezas sueltas del informe -- decisión tomada vía pregunta directa
+(`AskUserQuestion`), no autorada. Antes de diseñar nada, se recuperó el
+roadmap real ya aprobado el 2026-09-12 para "asentamientos/profesiones"
+(`docs/historial_profesiones.md`) para no diseñar dos veces la misma
+idea: 4 pasos -- (1) calidad de materiales, CERRADO (comodidad Pieza
+B); (2) niveles de construcción, parcialmente resuelto por comodidad
+Pieza D (mejora CONTINUA, sin categorías nombradas -- pregunta abierta
+sin cerrar sobre si eso ya basta); (3) conocimiento como componente
+propio, transmisible, aparcado sin spec en su momento porque
+`Asentamiento` no tenía identidad estable; (4) tipos de construcción
+nuevos, sin empezar.
+
+**El punto de fusión real**: la Pieza 3 del roadmap de profesiones
+("conocimiento... transmisible, no solo un stat que muere con el
+individuo") y las Piezas 2-3 del informe de hoy ("necesidades/
+capacidades colectivas agregadas" + "efecto de vuelta hacia miembros")
+son la misma pregunta de diseño -- algo que se acumula a nivel de
+pueblo y repercute hacia atrás en sus miembros. La razón por la que
+"conocimiento" quedó aparcado el 12-09 sin spec es que `Asentamiento`
+no tenía sujeto estable al que atribuírselo -- la Pieza 1 de esta misma
+sesión (identidad persistente) es exactamente el prerrequisito que
+faltaba, cerrado sin saber en su momento que serviría para esto.
+
+Roadmap unificado propuesto y aprobado ("adelante"): tras calidad de
+materiales/mejora continua (ya cerradas), conocimiento colectivo es el
+siguiente círculo real; tipos de construcción nuevos y interacción
+entre asentamientos vienen después (consumidores de este); nombre
+propio + crónica queda como pieza acotada y de bajo riesgo, intercalable
+en cualquier momento.
+
+### Diseño e implementación
+
+Spec: `docs/superpowers/specs/2026-09-15-conocimiento-colectivo-design.md`.
+Implementado directamente por Claude (mismo escenario de toda la
+sesión: sin `OPENROUTER_API_KEY`/`mini-swe-agent`/centinela en este
+contenedor).
+
+- `nucleo/conocimiento.py` (nuevo): funciones puras sobre las 4 cubetas
+  ya existentes de `nucleo/vocacion.py:CUBETAS` (forrajero/constructor/
+  artesano/cocinero) -- `registrar_contribucion` (suma topada),
+  `erosionar` (decaimiento multiplicativo diario, mismo patrón que
+  `Relaciones` pero 4x más lento -- `tasa_erosion_conocimiento_dia=0.005`
+  frente a `relaciones.tasa_decaimiento_dia_afinidad=0.02`, porque el
+  oficio de un pueblo no se olvida a la misma velocidad que un vínculo
+  emocional individual), `nivel_conocimiento` (saturación lineal [0,1],
+  `escala_saturacion_conocimiento=2000.0`), `factor_conocimiento_colectivo`
+  (multiplicador de TASA `1.0 + peso*nivel`, **sin penalización por
+  debajo de 1.0** -- decisión deliberada distinta de `factor_aptitud`:
+  un asentamiento recién fundado no es peor que un individuo disperso,
+  solo carece todavía del bonus).
+- `Mundo.asentamiento_conocimiento: dict[int, dict[str, float]]` (llave
+  = `Asentamiento.id`, la identidad estable de Pieza 1) -- persistido
+  igual que el registro de identidad, reutilizando
+  `configuracion_ejecucion`, sin bump de esquema. A diferencia de
+  `Vocacion` (contador por individuo, se pierde con él), este valor
+  sobrevive a la muerte de cualquier miembro -- "transmisible" en el
+  sentido más simple posible, nunca fue propiedad de una persona.
+- Acumulación: el mismo punto donde ya se incrementa `Vocacion`
+  (`SistemaRecursos._incrementar_vocacion`, en el despacho de
+  RECOLECTAR/CONSTRUIR/FABRICAR/COCINAR) suma +1.0 a la cuenta bruta del
+  asentamiento del individuo, si pertenece a uno
+  (`nucleo.asentamiento.asentamiento_de`, ya existente desde Pieza 1) --
+  reutiliza exactamente el disparador ya existente, sin ningún evento
+  nuevo. `asen` se resuelve UNA vez por entidad consciente en
+  `ejecutar()`, reutilizado tanto para el bono de tasa (antes de
+  resolver) como para la acumulación (después).
+- Erosión diaria: `SistemaAsentamiento._erosionar_conocimiento_diario`,
+  aplicada con independencia de si hoy existe algún asentamiento vivo
+  (entradas de un id ya retirado del registro simplemente quedan
+  inertes, nunca purgadas -- mismo criterio de laissez-faire que
+  `Relaciones.vinculos` apuntando a un id ya muerto).
+- Efecto de vuelta: multiplicador de tasa en los tres puntos donde ya
+  existía un bono equivalente por herramienta -- RECOLECTAR
+  (`tasa_recoleccion_efectiva`, cubeta "forrajero"), CONSTRUIR
+  (`tasa_aporte_efectiva` Y `tasa_mejora_refugio` de la Pieza D de
+  comodidad, cubeta "constructor"), COCINAR (`tasa_cocinar_kg_tick`,
+  cubeta "cocinero"). **Deliberadamente sin efecto para "artesano"**:
+  FABRICAR es determinista/instantáneo (sin ninguna tasa continua que
+  acelerar), así que esa cubeta acumula y se puede consultar igual que
+  las otras tres, pero sin ningún consumidor de comportamiento todavía
+  -- hueco honesto, no un error, candidato real para cuando exista
+  "tipos de construcción nuevos" (podría gatear recetas por nivel de
+  conocimiento artesano del pueblo).
+
+**Verificado**: 608/608 tests en verde (18 nuevos,
+`tests/test_conocimiento_colectivo.py` -- las funciones puras en sus
+leyes (suma topada, decaimiento con purga, saturación, factor sin
+penalización), acumulación real vía `_incrementar_vocacion` con y sin
+asentamiento, conocimiento sobreviviendo a `gestor.eliminar_entidad`
+del individuo que lo aportó, comparación directa de
+`_resolver_recolectar` con/sin bono confirmando que la cantidad
+recolectada escala EXACTAMENTE con el factor, erosión diaria real vía
+`SistemaAsentamiento.ejecutar()`, roundtrip de persistencia).
+`BOSQUE_AUTO_TICKS=3000` y `BOSQUE_CONTINUAR=1` (roundtrip) sin ninguna
+excepción -- con la semilla por defecto, 0 asentamientos llegaron a
+formarse en esa corrida concreta (mismo patrón ya visto varias veces en
+este proyecto: la formación de asentamiento con la semilla por defecto
+es poco fiable en ventanas cortas), así que el propio smoke test no
+tuvo nada que acumular -- esperado, no un fallo.
+
+**Diagnóstico de juego libre, resultado mucho más fuerte de lo
+habitual**: reutilizando las mismas 4 semillas nuevas
+(401001-401004 × 5000 ticks) que ya habían confirmado formar
+asentamiento real en la verificación de la Pieza 1 (mismo día) --
+**las 4 acumularon conocimiento colectivo real, con niveles
+significativos, no solo trazas**:
+
+- Semilla 401001: forrajero 0.454, constructor 0.786.
+- Semilla 401002: forrajero **saturado a 1.0**, constructor 0.311,
+  artesano 0.001 (trazas, coherente con FABRICAR siendo raro).
+- Semilla 401003: forrajero 0.04, constructor 0.221.
+- Semilla 401004 (2 asentamientos simultáneos, sin mezclarse entre
+  sí -- confirma aislamiento correcto por id): asentamiento 1 con
+  forrajero saturado a 1.0 y artesano 0.002; asentamiento 2 con
+  forrajero 0.481, constructor 0.208.
+
+A diferencia de varias piezas anteriores de este proyecto que quedaron
+"correctas pero invisibles" en juego libre durante semanas (asentamiento
+mismo en su día, pareja estable, parentesco, salón común, minería,
+tala...), esta se ejerce con fuerza real desde el primer momento en que
+existe un asentamiento -- probablemente porque RECOLECTAR/CONSTRUIR son,
+con diferencia, las acciones más frecuentes del repertorio consciente,
+así que su cubeta de conocimiento acumula rápido en cuanto hay pueblo.
+
+**Pendiente real, explícito**: `tasa_erosion_conocimiento_dia`,
+`escala_saturacion_conocimiento` y `peso_conocimiento_colectivo`
+PROVISIONALES, sin calibrar contra el harness completo; la cubeta
+"artesano" sigue sin ningún efecto de comportamiento (solo se
+acumula); ningún criterio maestro de Diego remedido con esta pieza ya
+aplicada -- riesgo de desplazamiento de secuencia de `rng` bajo pero no
+nulo, no medido; **con esto, "tipos de construcción nuevos" pasa a ser
+el siguiente círculo real del roadmap unificado** (consumidor directo
+de conocimiento colectivo + calidad de materiales), junto con
+"interacción entre asentamientos" y "nombre propio + crónica" (piezas
+4-5 del informe original), ninguna decidida todavía -- a la espera de
+que Diego elija.
