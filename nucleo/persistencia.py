@@ -752,6 +752,26 @@ class Persistencia:
                 (pickle.dumps(rng_reproduccion.getstate()),),
             )
 
+            # Identidad persistente de asentamiento (2026-09-15, ver
+            # nucleo/asentamiento.py:resolver_identidades_persistentes) --
+            # la única memoria real de Mundo.asentamientos entre días,
+            # reutiliza configuracion_ejecucion (clave/valor genérica, sin
+            # tabla nueva) en vez de pickle -- son solo ids de entidad.
+            registro_json = json.dumps(
+                {str(k): sorted(v) for k, v in mundo.asentamiento_registro_identidad.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_registro_identidad', ?)",
+                (registro_json,),
+            )
+            tick_fundacion_json = json.dumps(
+                {str(k): v for k, v in mundo.asentamiento_tick_fundacion.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_tick_fundacion', ?)",
+                (tick_fundacion_json,),
+            )
+
             con.commit()
 
     def cargar_snapshot(
@@ -814,6 +834,28 @@ class Persistencia:
             fila_rng_reproduccion = cur.fetchone()
             if fila_rng_reproduccion:
                 rng_reproduccion.setstate(pickle.loads(fila_rng_reproduccion[0]))
+
+            # Identidad persistente de asentamiento (2026-09-15) -- una
+            # partida guardada antes de esta pieza simplemente no tiene
+            # estas claves, `mundo.asentamiento_registro_identidad`/
+            # `asentamiento_tick_fundacion` quedan vacíos (comportamiento
+            # idéntico a un mundo recién creado, ningún crash).
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_registro_identidad'"
+            )
+            fila_registro = cur.fetchone()
+            if fila_registro:
+                mundo.asentamiento_registro_identidad = {
+                    int(k): frozenset(v) for k, v in json.loads(fila_registro[0]).items()
+                }
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_tick_fundacion'"
+            )
+            fila_tick_fundacion = cur.fetchone()
+            if fila_tick_fundacion:
+                mundo.asentamiento_tick_fundacion = {
+                    int(k): v for k, v in json.loads(fila_tick_fundacion[0]).items()
+                }
 
             # Limpiar gestor en memoria
             for eid in list(gestor.entidades_con(Posicion)):

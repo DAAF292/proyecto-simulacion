@@ -47,6 +47,19 @@ class Mundo:
         # corte de día, cuando SistemaAsentamiento lo repuebla.
         self.asentamientos: dict[int, Any] = {}
 
+        # Identidad persistente de asentamiento (2026-09-15, ver
+        # docs/superpowers/specs/
+        # 2026-09-15-identidad-persistente-asentamiento-design.md): a
+        # diferencia de `asentamientos` (arriba, recalculado íntegro y
+        # nunca persistido), estos dos SÍ se persisten -- son la única
+        # memoria real entre días de un asentamiento. `registro_identidad`
+        # es el resultado del día anterior (id -> miembros), usado por
+        # nucleo/asentamiento.py:resolver_identidades_persistentes para
+        # decidir continuidad por solape; `tick_fundacion` es el primer
+        # tick en que cada id existió.
+        self.asentamiento_registro_identidad: dict[int, frozenset[int]] = {}
+        self.asentamiento_tick_fundacion: dict[int, int] = {}
+
         # Manadas (2026-09-07, ver nucleo/manada.py y
         # sistemas/sistema_manada.py). Mismo criterio que asentamientos --
         # recalculado íntegro cada día a partir de Posicion + Identidad de

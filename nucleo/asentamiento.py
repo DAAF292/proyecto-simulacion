@@ -9,13 +9,17 @@ Territorio: cada refugio sigue siendo propiedad individual de su gnomo
 asentamiento es solo el CLÚSTER que emerge cuando el instinto gregario
 ya construido agrupa varios refugios cerca unos de otros.
 
-Recalculado ÍNTEGRO cada día (sistemas/sistema_asentamiento.py), sin
-identidad persistida entre recálculos -- mismo criterio que
-nucleo/agua.py:pendiente_local (dato derivado, más barato de recalcular
-que de mantener sincronizado). No se guarda en SQLite por el mismo
-motivo: es 100% derivable de Construccion + Temperamento, y el recálculo
-diario lo repone en menos de un día de partida tras cargar una partida
-guardada.
+Recalculado ÍNTEGRO cada día (sistemas/sistema_asentamiento.py) -- la
+mayoría de sus campos (centro, líderes, almacén) siguen siendo 100%
+derivables de Construccion + Temperamento, mismo criterio que
+nucleo/agua.py:pendiente_local. El `id` en sí, en cambio, SÍ es estable
+entre días desde el 2026-09-15 (ver
+resolver_identidades_persistentes más abajo y docs/superpowers/specs/
+2026-09-15-identidad-persistente-asentamiento-design.md) -- reutilizado
+por solape de miembros, no reasignado 1..N desde cero. El registro que
+sostiene esa continuidad (`Mundo.asentamiento_registro_identidad`/
+`asentamiento_tick_fundacion`) SÍ se persiste en SQLite (tabla
+`configuracion_ejecucion`), a diferencia del resto de este dataclass.
 
 Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
@@ -36,6 +40,7 @@ __all__ = [
     "asentamiento_de",
     "almacen_cercano",
     "disposicion_a_aportar",
+    "resolver_identidades_persistentes",
 ]
 
 
@@ -65,6 +70,70 @@ class Asentamiento:
     separado. Este campo es la zona de TODOS sus miembros (garantizado
     por esa partición previa, no algo que este dataclass verifique por
     sí solo)."""
+    tick_fundacion: int = 0
+    """Primer tick en que este id existió (2026-09-15, identidad
+    persistente -- ver docs/superpowers/specs/
+    2026-09-15-identidad-persistente-asentamiento-design.md). A
+    diferencia del resto de este dataclass (recalculado íntegro cada
+    día), este valor SÍ persiste entre días -- viene de
+    Mundo.asentamiento_tick_fundacion, no se recalcula desde cero."""
+
+
+def resolver_identidades_persistentes(
+    grupos: list[frozenset[int]],
+    registro_anterior: dict[int, frozenset[int]],
+    umbral_continuidad: float,
+) -> dict[int, frozenset[int]]:
+    """Asigna a cada grupo de HOY un id estable, reutilizando el de ayer
+    cuando el solape de miembros lo justifica -- en vez de reasignar
+    1..N desde cero cada día (lo que hacía `Asentamiento.id` antes de
+    esta pieza, ver historial). Devuelve {id_resuelto: miembros_de_hoy}.
+
+    Continuidad por coeficiente de Jaccard (|intersección| / |unión|)
+    contra cada id de `registro_anterior`: si el mejor solape de un
+    grupo supera `umbral_continuidad`, reutiliza ese id -- así un
+    asentamiento que pierde o gana un miembro sigue siendo "el mismo"
+    en vez de refundarse. Resolución determinista, no depende del orden
+    de iteración de ningún dict/set: candidatos ordenados por solape
+    descendente, empate por id_anterior más bajo, segundo empate por
+    orden de `grupos`; cada id anterior y cada grupo de hoy se usan como
+    máximo una vez (greedy). Un grupo sin ningún candidato por encima
+    del umbral recibe un id nuevo, consecutivo al mayor id ya visto
+    (anterior o ya asignado hoy).
+
+    Simplificación deliberada: si dos clústeres de hoy compiten por el
+    mismo id de ayer (fusión de dos asentamientos, o un asentamiento que
+    se escinde en dos), gana el de mayor solape y el otro recibe un id
+    nuevo -- sin tracking explícito de fusión/escisión, caso raro dado
+    que los refugios no se mueven una vez construidos."""
+    candidatos: list[tuple[float, int, int]] = []
+    for idx, grupo in enumerate(grupos):
+        for id_anterior, miembros_anterior in registro_anterior.items():
+            interseccion = grupo & miembros_anterior
+            if not interseccion:
+                continue
+            union_total = len(grupo | miembros_anterior)
+            solape = len(interseccion) / union_total if union_total else 0.0
+            if solape >= umbral_continuidad:
+                candidatos.append((solape, id_anterior, idx))
+
+    candidatos.sort(key=lambda c: (-c[0], c[1], c[2]))
+
+    id_resuelto_por_idx: dict[int, int] = {}
+    ids_anteriores_usados: set[int] = set()
+    for solape, id_anterior, idx in candidatos:
+        if idx in id_resuelto_por_idx or id_anterior in ids_anteriores_usados:
+            continue
+        id_resuelto_por_idx[idx] = id_anterior
+        ids_anteriores_usados.add(id_anterior)
+
+    siguiente_id_libre = max([0, *registro_anterior.keys(), *id_resuelto_por_idx.values()]) + 1
+    for idx in range(len(grupos)):
+        if idx not in id_resuelto_por_idx:
+            id_resuelto_por_idx[idx] = siguiente_id_libre
+            siguiente_id_libre += 1
+
+    return {id_resuelto_por_idx[idx]: grupos[idx] for idx in range(len(grupos))}
 
 
 # agrupar_por_proximidad / calcular_centro: extraídas a
