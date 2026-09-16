@@ -77,7 +77,7 @@ class SistemaRecursos:
     def __init__(self, config: dict[str, Any], rng: random.Random) -> None:
         self.config = config
         self.rng = rng
-        # Observación para BOSQUE_AUTO_TICKS (2026-09-07, ver spec
+        # Observación para SIMULACION_AUTO_TICKS (2026-09-07, ver spec
         # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
         # cuántas veces se dispara de verdad la entrada (guardar
         # excedente) y la salida (comer de la despensa). El spec ya avisa
@@ -158,7 +158,7 @@ class SistemaRecursos:
         )
         # Observacion (2026-09-14, Pieza D del arco "comodidad"): cuantas
         # veces _resolver_mejora_refugio sustituyo de verdad algo (no
-        # solo se llamo) -- ver print de BOSQUE_AUTO_TICKS en main.py.
+        # solo se llamo) -- ver print de SIMULACION_AUTO_TICKS en main.py.
         self._stats_mejora_refugio_sustituciones: int = 0
         # RECOLECTAR -- ver nucleo/construccion.py.
         self.tasa_recoleccion: float = float(

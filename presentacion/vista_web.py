@@ -71,6 +71,13 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
         "/datos.json": "datos.json",
     }
 
+    # Rutas de control de partida (2026-09-16, ver
+    # docs/superpowers/specs/2026-09-16-servidor-control-remoto-design.md):
+    # cuales esperan un `factor`/`semilla` opcional en el body y cuales no
+    # esperan body en absoluto -- una sola lista para no duplicar el set
+    # de rutas válidas entre el despachador y la validación de método.
+    _RUTAS_PARTIDA = {"/partida/nueva", "/partida/pausar", "/partida/reanudar", "/partida/velocidad", "/partida/finalizar"}
+
     def do_GET(self) -> None:
         if self.path in self._ARCHIVOS_TERMINAL:
             self._servir_terminal(self._ARCHIVOS_TERMINAL[self.path])
@@ -129,6 +136,65 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(destino.read_bytes())
 
+    def do_POST(self) -> None:
+        """Control de partida (2026-09-16, ver spec del servidor de
+        control remoto): nueva/pausar/reanudar/velocidad/finalizar. Si el
+        servidor lo arrancó main.py en modo SIMULACION_MODO_VISUAL=1 (el
+        camino CLI de siempre, sin GestorPartidas inyectado), estas rutas
+        responden 501 -- ese modo sigue sin saber nada de control remoto,
+        exactamente igual que antes de este círculo."""
+        gestor_partidas = self.servidor_ref.gestor_partidas if self.servidor_ref else None
+        if gestor_partidas is None:
+            self.send_response(501)
+            self.end_headers()
+            return
+        if self.path not in self._RUTAS_PARTIDA:
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        longitud = int(self.headers.get("Content-Length", 0) or 0)
+        cuerpo: dict[str, Any] = {}
+        if longitud > 0:
+            crudo = self.rfile.read(longitud)
+            try:
+                cuerpo = json.loads(crudo) if crudo else {}
+            except json.JSONDecodeError:
+                self._responder_json(400, {"ok": False, "error": "body JSON invalido"})
+                return
+
+        if self.path == "/partida/nueva":
+            semilla = cuerpo.get("semilla")
+            semilla_real = gestor_partidas.nueva(int(semilla) if semilla is not None else None)
+            self._responder_json(200, {"ok": True, "semilla": semilla_real})
+        elif self.path == "/partida/pausar":
+            ok = gestor_partidas.pausar()
+            self._responder_json(200 if ok else 409, {"ok": ok})
+        elif self.path == "/partida/reanudar":
+            ok = gestor_partidas.reanudar()
+            self._responder_json(200 if ok else 409, {"ok": ok})
+        elif self.path == "/partida/velocidad":
+            factor = cuerpo.get("factor")
+            if factor is None:
+                self._responder_json(400, {"ok": False, "error": "falta 'factor'"})
+                return
+            nueva_velocidad = gestor_partidas.velocidad(float(factor))
+            if nueva_velocidad is None:
+                self._responder_json(409, {"ok": False, "error": "sin partida activa"})
+            else:
+                self._responder_json(200, {"ok": True, "velocidad": nueva_velocidad})
+        else:  # /partida/finalizar -- idempotente, sin partida activa tambien responde ok
+            gestor_partidas.finalizar()
+            self._responder_json(200, {"ok": True})
+
+    def _responder_json(self, codigo: int, payload: dict[str, Any]) -> None:
+        cuerpo = json.dumps(payload).encode("utf-8")
+        self.send_response(codigo)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(cuerpo)))
+        self.end_headers()
+        self.wfile.write(cuerpo)
+
     def log_message(self, format: str, *args: Any) -> None:
         pass
 
@@ -139,6 +205,11 @@ class ServidorWeb:
     def __init__(self, puerto: int = 8765) -> None:
         self.puerto = puerto
         self.instantanea_json: str = "{}"
+        # Sin tipo concreto (evita import circular: gestor_partidas.py ya
+        # importa ServidorWeb de aqui) -- None mientras nadie lo inyecte,
+        # que es exactamente el caso del modo CLI de main.py (ver
+        # ManejadorWeb.do_POST, responde 501 cuando esto es None).
+        self.gestor_partidas: Any | None = None
         ManejadorWeb.servidor_ref = self
         self._httpd = http.server.ThreadingHTTPServer(("0.0.0.0", self.puerto), ManejadorWeb)
         self._hilo: threading.Thread | None = None
@@ -160,8 +231,17 @@ def construir_instantanea(
     gestor: GestorEntidades,
     reloj: Reloj,
     cronica: list[str],
+    semilla: int,
 ) -> dict[str, Any]:
     """Construye el DTO serializable para la interfaz web.
+
+    `semilla` explicita desde 2026-09-16 (antes se leia de
+    mundo.config.get("semilla_por_defecto"), que funcionaba solo porque
+    la semilla nunca cambiaba en caliente -- ver
+    docs/superpowers/specs/2026-09-16-servidor-control-remoto-design.md):
+    una partida lanzada desde el servidor de control web puede tener una
+    semilla aleatoria distinta de la del config, y este DTO no tiene
+    ninguna otra forma de saberla.
 
     Contrato honesto (Principio 4): cada campo expuesto aqui lee un
     componente o propiedad que YA existe en el ECS -- ningun dato se
@@ -391,7 +471,7 @@ def construir_instantanea(
         # Reloj.estacion es un int creciente, no el Enum Estacion.
         "estacion": estacion_actual(reloj.estacion).value,
         "clima": clima_actual.value if clima_actual else "despejado",
-        "semilla": mundo.config.get("semilla_por_defecto"),
+        "semilla": semilla,
         # Circulo 3: umbrales del clasificador para el lavado continuo del
         # visor -- una sola fuente de verdad (config bioma).
         # (2026-08-29, fix de auditoria) Esta clave estaba literalmente

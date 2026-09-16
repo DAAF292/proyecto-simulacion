@@ -98,18 +98,20 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- **Tests automatizados (CORREGIDO 2026-09-04, la cifra "87" ya estaba
-  desactualizada)**: `tests/` contiene 23 ficheros / 129 tests reales a
-  esta fecha (verificado con `pytest`, no de memoria), escritos como
-  "ley física" con docstring explicando el comportamiento que validan
-  (mismo criterio declarativo que pide este documento para las reglas
-  del motor). La cifra de 87 (fijada 2026-09-03) creció con armas
-  primitivas v2, cupo de espacio compartido, catálogo ampliado de flora,
-  y esta misma sesión (`test_narrador_genero.py`,
-  `test_amenaza_agresividad.py` -- ver más abajo, dos módulos que hasta
-  hoy no tenían ningún test dedicado). La cobertura sigue siendo parcial
-  (nada del bucle principal, la mayoría de sistemas de comportamiento, ni
-  la mayor parte de persistencia). CI/linting sigue sin configurar.
+- **Tests automatizados (CORREGIDO 2026-09-16, la cifra "129" llevaba
+  desactualizada desde el 2026-09-04 sin que nadie la revisara en las
+  ~12 sesiones intermedias -- mismo patrón de honestidad que ya obligó a
+  corregir 87→129 en su momento, esta vez con un salto mayor)**: `tests/`
+  contiene 76 ficheros / 675 tests reales a esta fecha (verificado con
+  `pytest --collect-only`, no de memoria). Los últimos 17 son de esta
+  misma sesión (`test_control_partida.py`/`test_gestor_partidas.py`, ver
+  servidor de control remoto más abajo) -- el resto del salto de 129 a
+  658 corresponde a todas las sesiones intermedias, nunca actualizado
+  aquí. Siguen escritos como "ley física" con docstring explicando el
+  comportamiento que validan. La cobertura sigue siendo parcial (nada
+  del bucle principal salvo el ciclo de vida del hilo de
+  `GestorPartidas`, la mayoría de sistemas de comportamiento, ni la
+  mayor parte de persistencia). CI/linting sigue sin configurar.
 
 ## Cómo comportarte al ayudar en este proyecto
 
@@ -484,6 +486,55 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   glifos/colores concreta — es una primera propuesta razonada, no una
   calibración cerrada; catálogo de eventos filtrable (panel
   "EVENTOS://LOG") sigue con el placeholder de siempre, sin implementar.
+- **Pictogramas reales para fauna y construcciones (2026-09-16, sesión
+  posterior a la retirada del Códice, mismo día)**: segunda excepción
+  deliberada a "mapa 100% glifos" tras el propio pivote de arriba —
+  Diego pidió pictogramas reales para las criaturas ("no convence del
+  todo, los iconos son demasiado pequeños" con emoji nativos), generó
+  8 sprites de fauna con IA en estilo pixel-art (referencia: un lobo
+  que subió como imagen) y 5 de construcciones (estilo "cabaña musgosa"
+  con 3 referencias propias), todos committeados en bruto a `iconos/` y
+  procesados por Claude (flood-fill de fondo desde los bordes —
+  ver histórico de por qué no un color-key global — recorte a bbox,
+  downscale `NEAREST`) hacia
+  `presentacion/terminal_prototipo/sprites_{criaturas,construcciones}/`,
+  servidos por rutas nuevas en `vista_web.py`
+  (`_servir_sprite(subcarpeta, ruta)`, mismo guardia anti path-traversal
+  reutilizado). Tamaño de sprite ya NO es fijo: fauna escala por
+  `DimensionesFisicas.altura_m` real del individuo, construcciones por
+  `masa_minima_<tipo>` real de `config/materiales.yaml` (no por
+  `huella_m2`, que es el área de suelo — desliz real corregido tras dos
+  rondas de feedback de Diego, ver commits `c939e2e`/`7cb8f90`) — ambas
+  con raíz N-ésima (0.5 fauna, 1/3 construcciones, la relación
+  físicamente correcta entre una MASA y un tamaño lineal) para comprimir
+  el rango real sin desbordar. Bug real de apilamiento encontrado y
+  corregido (commit `4a58e45`): un sprite más ancho que su celda quedaba
+  tapado por la celda vecina con el mismo z-index — construcciones pasan
+  a su propio nivel (500+fila) por encima de todo el suelo. El
+  resplandor de "consciente" (drop-shadow blanco heredado del sistema de
+  glifos) se retiró por completo a petición de Diego ("por que el gnomo
+  tiene un reborde blanco" → "quitalo") — se leía como un borde de
+  recorte mal hecho sobre una silueta de pixel-art real, no como señal
+  deliberada. **Tensión de diseño señalada en esta sesión, RESUELTA en
+  la sesión siguiente, mismo día — ver "Híbrido ASCII+sprite" justo
+  abajo**: con fauna y construcciones ya en sprite, el suelo desnudo
+  (glifo puro) pasaba a ser la única excepción, y Diego había subido
+  además 8 JPGs de flora sin procesar (`iconos/flora/`) sin decidir
+  todavía si integrarlos. Diego zanjó la disyuntiva: híbrido
+  deliberado, sprite donde se encuentre arte adecuado, introducido
+  gradualmente — flora ya integrada bajo ese criterio, ver más abajo.
+  **Hallazgo aparte sin corregir, sigue vigente**: el `@font-face` de
+  VGA437 (`fonts/Web437_IBM_VGA_9x16.woff`) devuelve 404 real al
+  servirse vía `ServidorWeb` — `ManejadorWeb` nunca tuvo una ruta para
+  `/fonts/*`, así que el visor lleva toda la sesión (y probablemente
+  desde que se conectó en vivo) cayendo a la fuente monospace del
+  navegador en vez de la bitmap CRT prevista. Fix trivial (una ruta más,
+  mismo patrón que `/sprites_*`), no aplicado por estar fuera del
+  encargo del momento en que se encontró. La leyenda desplegable
+  tampoco se actualizó tras esto: para fauna/construcciones con sprite
+  real sigue mostrando el glifo/emoji de respaldo del catálogo en vez
+  de una miniatura del sprite, inconsistente con lo que se ve en el
+  mapa — mismo hueco real para los sprites de flora añadidos después.
 - **Híbrido ASCII+sprite (2026-09-16, mismo día que la retirada de
   arriba, decisión de Diego que la corrige)**: el "mapa 100% ASCII sin
   ningún asset de imagen" de la entrada anterior no llegó a sostenerse
@@ -574,6 +625,50 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   mientras camina — aceptado como límite conocido de Y-sorting simple,
   no se abordó un mecanismo de interpolación de profundidad que no se
   pidió.
+- **Renombrado `BOSQUE_* -> SIMULACION_*` (2026-09-16)**: Diego, sobre la
+  spec de abajo: "lo de que aparezca bosque en todos los comandos de
+  test... deberíamos cambiarlo por simulación, que es lo que es, ya no
+  es un solo bosque". `SIMULACION_MODO_VISUAL`/`SIMULACION_AUTO_TICKS`/
+  `SIMULACION_CONTINUAR` (las 3 únicas lecturas reales de `os.environ`
+  del proyecto) y `datos/bosque.db` → `datos/simulacion.db`. Alcance
+  acotado a código y documentación VIVA (`main.py`, comentarios en
+  `sistemas/`/`nucleo/` que citan el nombre, `COMANDOS.md`, README del
+  visor) — la bitácora histórica ya cerrada (`docs/historial_*.md`,
+  `docs/plans/*`, las specs de sesiones anteriores) conserva el nombre
+  real usado en su momento a propósito, no se reescribió.
+- **Servidor de control remoto (2026-09-16, ver
+  `docs/superpowers/specs/2026-09-16-servidor-control-remoto-design.md`,
+  implementado directamente por Claude el mismo día — infraestructura de
+  control/presentación, no una regla nueva del motor)**: Diego preguntó
+  si podía alojarse el programa y lanzar/controlar una partida remota
+  por web, con la queja explícita de que el arranque actual por env vars
+  "debería ser un comando". `python3 servidor.py` (nuevo, raíz) arranca
+  `ServidorWeb`+`GestorPartidas` sin lanzar ninguna partida; desde el
+  navegador (barra de control nueva en `terminal.html`): NUEVA PARTIDA
+  (semilla aleatoria u opcional), PAUSAR/REANUDAR, velocidad (0.25x-8x,
+  límites sin calibrar), FINALIZAR — 5 endpoints `POST /partida/*`
+  nuevos en `vista_web.py`, 501 si el servidor no tiene
+  `GestorPartidas` inyectado (modo CLI de `main.py` de siempre, sin
+  cambios de comportamiento, condición de aceptación verificada con los
+  658 tests previos intactos). `main.py` se refactorizó en
+  `preparar_partida()`/`avanzar_un_tick()` reutilizables entre el modo
+  CLI y el nuevo `ejecutar_partida_controlada()` (hilo de fondo,
+  `nucleo/control_partida.py:ControlPartida` con pausado/detener/
+  velocidad thread-safe). **Bug real encontrado en verificación manual
+  contra el servidor real, no en tests**: `pausada` quedaba hardcodeada
+  a `False` en el payload, y aunque se leyera bien de `control`, el
+  hilo se queda bloqueado dentro de la espera de pausa y NUNCA vuelve a
+  publicar mientras dura — `GestorPartidas.pausar()/reanudar()` parchean
+  ahora directamente el último JSON servido. Verificado con Playwright
+  contra el servidor real (no solo tests): ciclo completo pantalla de
+  espera → nueva partida → mapa real → pausa (tick congelado, confirmado
+  con dos lecturas) → reanudar → velocidad → finalizar → vuelta a
+  pantalla de espera. Sin autenticación ni TLS (aceptado por ahora,
+  "solo quiero verlo yo"; hueco real si se comparte la URL); una partida
+  nueva sobreescribe `datos/simulacion.db` sin histórico de partidas
+  anteriores. **Pendiente real**: Diego no ha desplegado esto en ninguna
+  máquina remota todavía, solo verificado en local dentro de esta
+  sesión — sigue sin probarse el caso de uso real que lo motivó.
 - Selector de zona real en el visor web: nunca añadido, el visor solo
   dibuja superficie (`zona_idx == 0`).
 - Créditos de licencia de los paquetes PyxelSpace: pendiente desde la

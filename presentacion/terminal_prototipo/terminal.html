@@ -169,7 +169,33 @@
     letter-spacing: 1px;
   }
   .btn-mapa:hover, .btn-mapa.activo { background: rgba(255,176,0,0.18); }
+  .btn-mapa:disabled { opacity: 0.35; cursor: default; }
   .zoom-info { font-size: 11px; color: var(--ambar-tenue); }
+
+  /* Barra de control de partida (2026-09-16) -- misma altura/estetica que
+     .titulo, como una segunda fila del mismo panel. */
+  .barra-control { border-top: 1px solid var(--ambar-tenue); padding: 4px 10px; }
+  .control-estado { font-size: 11px; color: var(--ambar-tenue); }
+  .sel-velocidad {
+    font-family: inherit; font-size: 11px; background: #000; color: var(--ambar);
+    border: 1px solid var(--ambar-tenue); border-radius: 2px; padding: 2px 4px;
+  }
+  .sel-velocidad:disabled { opacity: 0.35; }
+
+  /* Pantalla de espera -- sustituye visualmente el mapa (nunca a la vez)
+     cuando no hay ninguna partida corriendo. Superpuesta dentro del mismo
+     #mapa-viewport en vez de un elemento hermano, para no pelear con su
+     position:relative/overflow:hidden ya establecidos. */
+  #pantalla-espera {
+    position: absolute; inset: 0; z-index: 900;
+    display: flex; align-items: center; justify-content: center;
+    background: #000;
+  }
+  .pantalla-espera-caja { text-align: center; }
+  .pantalla-espera-titulo {
+    color: var(--ambar-tenue); letter-spacing: 2px; font-size: 13px;
+    margin-bottom: 14px;
+  }
 
   /* Leyenda -- desplegable anclado bajo el boton, dentro del propio
      recuadro del mapa (position:absolute sobre #term-mapa) para no
@@ -233,9 +259,35 @@
         <button class="btn-mapa" id="btn-leyenda" type="button">LEYENDA &#9662;</button>
       </div>
     </div>
+    <!-- Barra de control de partida (2026-09-16, ver docs/superpowers/
+         specs/2026-09-16-servidor-control-remoto-design.md) -- oculta por
+         completo cuando el servidor no expone GestorPartidas (modo CLI de
+         main.py con SIMULACION_MODO_VISUAL=1, o datos.js estatico sin
+         servidor detras): ver actualizarControlPartida(null). -->
+    <div class="titulo barra-control" id="barra-control" style="display:none">
+      <span class="control-estado" id="control-estado"></span>
+      <div class="titulo-controles">
+        <button class="btn-mapa" id="btn-nueva-partida" type="button">NUEVA PARTIDA</button>
+        <button class="btn-mapa" id="btn-pausar" type="button" disabled>PAUSAR</button>
+        <select class="sel-velocidad" id="sel-velocidad" disabled>
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+          <option value="8">8x</option>
+        </select>
+        <button class="btn-mapa" id="btn-finalizar" type="button" disabled>FINALIZAR</button>
+      </div>
+    </div>
     <div id="mapa-viewport">
       <div id="mapa-contenido"></div>
       <div id="leyenda-panel"></div>
+      <div id="pantalla-espera" style="display:none">
+        <div class="pantalla-espera-caja">
+          <div class="pantalla-espera-titulo">SIN PARTIDA ACTIVA</div>
+          <button class="btn-mapa" id="btn-nueva-partida-inicial" type="button">NUEVA PARTIDA</button>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-derecha">
@@ -1255,29 +1307,161 @@ function renderNarrador() {
 // (servido suelto, sin ese endpoint), cae en silencio a la instantanea
 // estatica de datos.js -- no hay ninguna bifurcacion explicita de "modo",
 // solo un fetch que puede fallar o no.
+//
+// CAMBIADO 2026-09-16 (servidor de control remoto, ver spec): antes
+// devolvia `false` si el payload no traia `celdas` -- exactamente la
+// forma que tiene el payload de "sin partida activa"
+// ({partida:{activa:false,...}}, sin celdas). Ahora se devuelve el JSON
+// entero tal cual (o null si fallo la peticion) y es manejarNuevoEstado()
+// quien decide que hacer segun traiga o no `celdas`.
 async function cargarEstadoVivo() {
   try {
     const r = await fetch('estado.json', { cache: 'no-store' });
-    if (!r.ok) return false;
-    const nuevo = await r.json();
-    if (!nuevo || !nuevo.celdas) return false;
-    DATA = nuevo;
-    return true;
+    if (!r.ok) return null;
+    return await r.json();
   } catch (e) {
-    return false;
+    return null;
   }
 }
 
-async function iniciar() {
-  await cargarEstadoVivo(); // si funciona, sustituye DATA antes del primer render
-  if (!DATA) return; // ni datos.js ni /estado.json disponibles -- nada que dibujar
-  construirLeyenda();
+// Ultimo {activa,pausada,semilla,velocidad} conocido -- null cuando el
+// servidor no expone control de partida en absoluto (modo CLI de main.py
+// con SIMULACION_MODO_VISUAL=1, o datos.js estatico sin servidor detras).
+// Se mantiene SEPARADO de DATA a proposito: DATA solo se sustituye cuando
+// el payload trae `celdas` (hay algo real que dibujar), pero el estado de
+// la partida (p.ej. "se acaba de finalizar") sigue siendo real aunque ese
+// payload concreto no traiga mapa.
+let estadoPartidaActual = null;
+
+function actualizarControlPartida(partida) {
+  const barra = document.getElementById('barra-control');
+  const pantallaEspera = document.getElementById('pantalla-espera');
+  if (!partida) {
+    // Sin GestorPartidas detras -- nada que controlar, se oculta la
+    // barra entera en vez de dejar botones que siempre fallarian (501).
+    barra.style.display = 'none';
+    pantallaEspera.style.display = 'none';
+    return;
+  }
+  barra.style.display = 'flex';
+  const activa = !!partida.activa;
+  pantallaEspera.style.display = activa ? 'none' : 'flex';
+  const btnPausar = document.getElementById('btn-pausar');
+  btnPausar.textContent = partida.pausada ? 'REANUDAR' : 'PAUSAR';
+  btnPausar.disabled = !activa;
+  document.getElementById('btn-finalizar').disabled = !activa;
+  const selVel = document.getElementById('sel-velocidad');
+  selVel.disabled = !activa;
+  // No pisar el valor mientras el usuario tiene el selector abierto/
+  // enfocado -- evita que el propio polling le devuelva el valor viejo
+  // a mitad de un cambio.
+  if (activa && document.activeElement !== selVel) selVel.value = String(partida.velocidad || 1);
+  document.getElementById('control-estado').textContent = activa
+    ? `SEMILLA ${partida.semilla}${partida.pausada ? ' -- PAUSADA' : ''}`
+    : '';
+}
+
+let primerRenderHecho = false;
+function manejarNuevoEstado(nuevo) {
+  estadoPartidaActual = nuevo.partida || null;
+  actualizarControlPartida(estadoPartidaActual);
+  if (!nuevo.celdas) return; // sin partida activa: nada real que dibujar
+  DATA = nuevo;
   recalcularDerivados();
   renderMapa();
   renderCriaturas();
-  aplicarTransform();
   renderStats();
   renderNarrador();
+  if (!primerRenderHecho) {
+    aplicarTransform();
+    primerRenderHecho = true;
+  }
+  if (entidadSeleccionadaId != null) {
+    const ent = DATA.entidades.find(e => String(e.id) === entidadSeleccionadaId);
+    mostrarFicha(ent || null);
+  }
+}
+
+async function llamarControlPartida(ruta, cuerpo) {
+  try {
+    const r = await fetch(ruta, {
+      method: 'POST',
+      headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined,
+      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+    });
+    return await r.json().catch(() => ({ ok: r.ok }));
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+
+async function refrescarInmediato() {
+  const nuevo = await cargarEstadoVivo();
+  if (nuevo) manejarNuevoEstado(nuevo);
+}
+
+async function accionNuevaPartida() {
+  if (estadoPartidaActual && estadoPartidaActual.activa) {
+    if (!confirm('Ya hay una partida en curso -- se perdera. ¿Continuar?')) return;
+  }
+  const botones = [document.getElementById('btn-nueva-partida'), document.getElementById('btn-nueva-partida-inicial')];
+  botones.forEach(b => b.disabled = true);
+  await llamarControlPartida('/partida/nueva', {});
+  botones.forEach(b => b.disabled = false);
+  await refrescarInmediato();
+}
+document.getElementById('btn-nueva-partida').addEventListener('click', accionNuevaPartida);
+document.getElementById('btn-nueva-partida-inicial').addEventListener('click', accionNuevaPartida);
+
+document.getElementById('btn-pausar').addEventListener('click', async (ev) => {
+  const boton = ev.currentTarget;
+  const pausada = boton.textContent.trim() === 'REANUDAR';
+  boton.disabled = true;
+  await llamarControlPartida(pausada ? '/partida/reanudar' : '/partida/pausar');
+  boton.disabled = false;
+  await refrescarInmediato();
+});
+
+document.getElementById('sel-velocidad').addEventListener('change', async (ev) => {
+  await llamarControlPartida('/partida/velocidad', { factor: parseFloat(ev.target.value) });
+  await refrescarInmediato();
+});
+
+document.getElementById('btn-finalizar').addEventListener('click', async () => {
+  if (!confirm('¿Finalizar la partida actual?')) return;
+  const boton = document.getElementById('btn-finalizar');
+  boton.disabled = true;
+  await llamarControlPartida('/partida/finalizar');
+  boton.disabled = false;
+  await refrescarInmediato();
+});
+
+async function iniciar() {
+  construirLeyenda();
+  const primero = await cargarEstadoVivo();
+  if (primero) {
+    // Servidor vivo respondio -- puede traer celdas (partida activa,
+    // modo CLI de siempre) o solo {partida:{activa:false}} (servidor de
+    // control recien arrancado, sin partida todavia).
+    manejarNuevoEstado(primero);
+  } else if (DATA) {
+    // Sin servidor vivo (fetch fallo) pero datos.js cargo una
+    // instantanea estatica -- se dibuja tal cual, sin barra de control
+    // (ese payload nunca trae `partida`).
+    actualizarControlPartida(null);
+    recalcularDerivados();
+    renderMapa();
+    renderCriaturas();
+    aplicarTransform();
+    primerRenderHecho = true;
+    renderStats();
+    renderNarrador();
+  } else {
+    // Ni datos.js ni /estado.json respondieron -- nada que dibujar
+    // todavia, pero se deja la pantalla de espera visible por si el
+    // servidor de control aparece en el proximo sondeo.
+    actualizarControlPartida({ activa: false });
+  }
   // Sondeo continuo. CORREGIDO 2026-09-16 (Diego: "que quede natural
   // como se desplaza entre celdas, que no parezca que salta") -- bajado
   // de 1000ms a 400ms, igualando segundos_por_tick real del motor
@@ -1289,17 +1473,9 @@ async function iniciar() {
   // en vez de caminar (ver DURACION_PASO_CRIATURA mas arriba para el
   // detalle completo). A 400ms cada sondeo mueve como mucho 1 celda.
   setInterval(async () => {
-    const ok = await cargarEstadoVivo();
-    if (!ok) return;
-    recalcularDerivados();
-    renderMapa();
-    renderCriaturas();
-    renderStats();
-    renderNarrador();
-    if (entidadSeleccionadaId != null) {
-      const ent = DATA.entidades.find(e => String(e.id) === entidadSeleccionadaId);
-      mostrarFicha(ent || null);
-    }
+    const nuevo = await cargarEstadoVivo();
+    if (!nuevo) return;
+    manejarNuevoEstado(nuevo);
   }, 400);
 }
 iniciar();

@@ -39,7 +39,7 @@ class SistemaManada:
             self.config.get("manada", {}).get("radio_manada_celdas", 8)
         )
         self.rangos_raciales: dict[str, Any] = self.config.get("rangos_raciales", {})
-        # Observación para BOSQUE_AUTO_TICKS (2026-09-07, ver spec
+        # Observación para SIMULACION_AUTO_TICKS (2026-09-07, ver spec
         # docs/superpowers/specs/2026-09-07-manada-fauna-design.md):
         # cuántas manadas se forman por especie, y cuántas coordenadas de
         # madriguera se sincronizaron de verdad. Solo observación, ningún

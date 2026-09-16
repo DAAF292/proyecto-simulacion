@@ -31,7 +31,7 @@ Historico de decisiones: spec 4a en docs/superpowers/specs/.
 """
 
 # Contador de observacion para la verificacion obligatoria contra
-# BOSQUE_AUTO_TICKS (spec 4a): cuantos sonidos se emitieron de verdad
+# SIMULACION_AUTO_TICKS (spec 4a): cuantos sonidos se emitieron de verdad
 # durante una tanda real. Solo observacion, ningun camino de juego lo lee
 # -- mismo patron que los _stats_* de los sistemas.
 SONIDOS_EMITIDOS_TOTALES: int = 0

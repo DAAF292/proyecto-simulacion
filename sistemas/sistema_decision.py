@@ -430,13 +430,13 @@ class SistemaDecision:
         self.rng = rng  # sin consumidor en actualizar() hoy -- se conserva
         # por si una futura decisión estocástica (p.ej. desempate) lo necesita.
         # Contador de observacion para la verificacion obligatoria contra el
-        # motor real (BOSQUE_AUTO_TICKS, 2026-09-06, ocio consciente): cuantas
+        # motor real (SIMULACION_AUTO_TICKS, 2026-09-06, ocio consciente): cuantas
         # veces el argmax eligio de verdad Accion.SOCIALIZAR en la accion FINAL
         # (tras el compromiso de satisfaccion, ley B). Solo observacion, ningun
         # camino de decision lo lee -- mismo patron que los _stats_* de
         # SistemaMovimiento.
         self._stats_socializar_elegidas: int = 0
-        # Contador de observacion para BOSQUE_AUTO_TICKS (2026-09-11,
+        # Contador de observacion para SIMULACION_AUTO_TICKS (2026-09-11,
         # requisito de manos libres): cuantas veces el gate REALMENTE
         # bloqueo una utilidad que de otro modo habria sido positiva (no
         # cuenta los casos triviales donde ya era 0 por otro motivo).
@@ -466,7 +466,7 @@ def actualizar(
 ) -> None:
     # sistema_decision: opcional (SistemaDecision). Solo observacion -- se
     # pasa la instancia para incrementar _stats_socializar_elegidas en la
-    # verificacion BOSQUE_AUTO_TICKS. Ningun camino de decision lo lee.
+    # verificacion SIMULACION_AUTO_TICKS. Ningun camino de decision lo lee.
     #
     # indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
     # construido, opcional -- se reenvia a posicion_amenaza_mas_cercana
@@ -1355,7 +1355,7 @@ def actualizar(
             )
         if not mantiene:
             intencion.accion = elegida
-        # Observacion BOSQUE_AUTO_TICKS (ocio consciente): contar la accion
+        # Observacion SIMULACION_AUTO_TICKS (ocio consciente): contar la accion
         # FINAL tras el compromiso de satisfaccion -- si el compromiso (ley B)
         # mantuvo otro curso, el argmax no se ejecuto y no debe contar.
         if sistema_decision is not None and intencion.accion == Accion.SOCIALIZAR:

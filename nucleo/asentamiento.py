@@ -106,7 +106,7 @@ def generar_nombre(
     return rng.choice(prefijos) + rng.choice(sufijos)
 
 
-# Contadores de observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b
+# Contadores de observación para SIMULACION_AUTO_TICKS (2026-09-06, círculo 5b
 # -- ver docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md). Mismo
 # patrón que nucleo/sonido.py:SONIDOS_EMITIDOS_TOTALES: solo lectura/
 # observación, no cambian la simulación. Se incrementan dentro de
