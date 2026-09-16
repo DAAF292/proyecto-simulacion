@@ -754,13 +754,38 @@ function renderMapa() {
       // glifo de la capa de criaturas (que sigue arrancando en 1000+y), asi
       // una criatura de pie sobre una celda de fondo tintado nunca queda
       // tapada por ella.
+      //
+      // CORREGIDO 2026-09-16 (Diego, tras ver el almacen: "las criaturas o
+      // construcciones deben quedar por encima de todo, que no se solape
+      // ningun color o simbolo"). Bug real confirmado con un screenshot
+      // antes de tocar nada: un sprite de construccion es mas ANCHO que
+      // una celda (el almacen, p.ej., desborda ~12px a cada lado a esta
+      // escala) y se pinta centrado sobre su propia celda -- con el mismo
+      // z-index que el resto del suelo (=y), la celda VECINA de la derecha
+      // se inserta despues en el DOM en el mismo nivel de apilamiento y
+      // por tanto tapa el borde desbordado del tejado (confirmado con una
+      // captura: corte recto justo en el limite de celda). Los glifos de
+      // texto normales nunca desbordan su propia celda, asi que a ellos
+      // nunca les afectaba -- solo a los sprites de imagen, que son mas
+      // grandes que la celda a proposito (ver tamanoSpriteConstruccion).
+      // Fix: las construcciones van a su PROPIO nivel (500+y) -- por
+      // encima de TODO el suelo/flora/recursos (max real ~grid_alto,
+      // muy por debajo de 500) pero por debajo de las criaturas (1000+y),
+      // que deben seguir tapando un edificio si una camina delante.
+      // Limite conocido y no resuelto aqui (fuera de alcance de este
+      // circulo, mismo mecanismo de desempate por orden de insercion que
+      // ya existia): dos construcciones o dos criaturas ADYACENTES en la
+      // misma fila podrian seguir solapandose entre si por el mismo
+      // motivo -- no observado en juego libre, no se resuelve sin abrir
+      // un mecanismo de profundidad real por eje Y+X que no se pidio.
       const unico = info.items[0] || {};
+      const esConstruccionUnica = !!unico.img;
       const el = info.items.length > 1
         ? crearCeldaCuadrantes(info.items, cx, cy, info.fondo)
-        : unico.img
+        : esConstruccionUnica
           ? crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion))
           : crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, false, info.fondo);
-      el.style.zIndex = String(y);
+      el.style.zIndex = String((esConstruccionUnica ? 500 : 0) + y);
       capaEstatica.appendChild(el);
     }
   }
