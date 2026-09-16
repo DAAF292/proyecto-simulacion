@@ -331,25 +331,56 @@ function infoCriatura(ent) {
   return { ch: g.ch, color: g.color, glow: !!ent.consciente };
 }
 
+// REDISEÑADO 2026-09-16 (segundo feedback de Diego: "demasiado espaciado,
+// no se detecta que es un mapa, parece un conjunto de simbolos"). Correcto:
+// un glifo de un solo caracter por celda, por grande que sea, deja huecos
+// de negro puro entre celdas sin contenido -- Dwarf Fortress/CDDA leen
+// como mapa porque cada celda tiene COLOR DE FONDO (el suelo es una
+// superficie continua), y el glifo es solo "lo que hay encima" de ese
+// suelo, no el suelo en si. contenidoCelda devuelve ahora {ch,color,fondo}
+// siempre -- fondo cubre el 100% de las celdas (terreno o agua, en rgba de
+// baja opacidad para no tapar el negro de fondo del terminal), ch queda
+// VACIO en suelo desnudo (el fondo ya dice de que bioma es, no hace falta
+// un caracter ademas). Cobertura de suelo (hierba/liquen/musgo/flor/
+// helecho) deja de dibujar un glifo propio compitiendo con arbol/fauna/
+// construccion -- ecologicamente es textura de suelo, no un punto de
+// referencia, asi que solo enriquece el color de fondo con el tono de la
+// especie (dato real: Planta.etapa sigue modulando la intensidad).
+function fondoBioma(c) {
+  if (c.tiene_agua) {
+    const g = CATALOGO_GLIFOS.agua[c.tipo_agua] || CATALOGO_GLIFOS.agua.lago;
+    return g.color;
+  }
+  const g = CATALOGO_GLIFOS.terreno[c.bioma];
+  return g ? g.color : '#333333';
+}
+
 function contenidoCelda(c) {
-  // Prioridad de una sola representacion por celda (construccion > agua >
-  // planta > recurso suelto > terreno base) -- mismo orden que ya
-  // establecio el prototipo hibrido, aqui siempre resuelto a {ch,color}.
+  const fondoBase = fondoBioma(c);
+  // Prioridad de un solo glifo en PRIMER PLANO por celda (construccion >
+  // agua > planta competidora > recurso suelto); el FONDO se calcula aparte
+  // y siempre esta presente, incluso cuando no hay ningun glifo encima.
   const construcciones = construccionesPorCelda[c.x + ',' + c.y];
   if (construcciones && construcciones.length > 0) {
     const con = [...construcciones].sort((a, b) =>
       (ORDEN_HUELLA_CONSTRUCCION[b.tipo] || 1) - (ORDEN_HUELLA_CONSTRUCCION[a.tipo] || 1))[0];
     const g = CATALOGO_GLIFOS.construcciones[con.tipo] || { ch: '#', color: '#8a6a3a' };
-    return { ch: g.ch, color: g.color };
+    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
   }
   if (c.tiene_agua) {
     const g = CATALOGO_GLIFOS.agua[c.tipo_agua] || CATALOGO_GLIFOS.agua.lago;
     // Profundidad real (agua permanente o charco efimero segun el tipo) ->
     // mas oscuro/opaco cuanto mas profundo, dato real del motor, no un
-    // degradado inventado.
+    // degradado inventado. El fondo de agua usa mas opacidad que el de
+    // tierra (0.5 base): es una superficie, no solo un tinte de suelo.
     const prof = c.tipo_agua === 'poza' ? c.profundidad_charco : c.profundidad_agua;
-    const alfa = Math.max(0.55, Math.min(1, 0.55 + (prof || 0) * 0.6));
-    return { ch: g.ch, color: hexARgba(g.color, alfa) };
+    const alfaFondo = Math.max(0.45, Math.min(0.85, 0.5 + (prof || 0) * 0.35));
+    if (c.tipo_agua === 'poza') {
+      // charco efimero: discreto a proposito, sin glifo propio -- solo el
+      // fondo azulado lo diferencia de tierra seca.
+      return { ch: '', color: g.color, fondo: hexARgba(g.color, alfaFondo) };
+    }
+    return { ch: g.ch, color: g.color, fondo: hexARgba(g.color, alfaFondo) };
   }
   if (c.plantas && c.plantas.length > 0) {
     // dato real del motor (cupo de espacio compartido, 2026-09-03): si hay
@@ -359,31 +390,49 @@ function contenidoCelda(c) {
     const competidora = c.plantas.find(p => {
       const g = CATALOGO_GLIFOS.flora[p.especie];
       return g && g.categoria !== 'cobertura';
-    }) || c.plantas[0];
-    const g = CATALOGO_GLIFOS.flora[competidora.especie];
-    if (g) {
+    });
+    if (competidora) {
+      const g = CATALOGO_GLIFOS.flora[competidora.especie];
       // Etapa de crecimiento real (Planta.etapa 0..1) -> opacidad: un
       // brote se ve tenue, una planta madura llena de color.
       const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
-      return { ch: g.ch, color: hexARgba(g.color, alfa) };
+      return { ch: g.ch, color: hexARgba(g.color, alfa), fondo: hexARgba(fondoBase, 0.25) };
     }
-    // especie sin entrada en el catalogo todavia -> fallback generico
-    return { ch: "'", color: '#7a5a2a' };
+    // Solo cobertura (hierba/liquen/musgo/flor/helecho): sin glifo propio,
+    // enriquece el color de fondo hacia el tono de la especie -- sigue
+    // siendo dato real (Planta.etapa module la fuerza del tinte), pero se
+    // representa como textura de suelo, no como objeto sobre el suelo.
+    const cobertura = c.plantas[0];
+    const g = CATALOGO_GLIFOS.flora[cobertura.especie];
+    if (g) {
+      const alfa = 0.3 + Math.min(1, cobertura.etapa ?? 1) * 0.35;
+      return { ch: '', color: g.color, fondo: hexARgba(g.color, alfa) };
+    }
+    return { ch: '', color: fondoBase, fondo: hexARgba(fondoBase, 0.3) };
   }
   const recursos = c.recursos || {};
   if ((recursos.piedra_suelta || 0) > 0) {
-    return { ch: CATALOGO_GLIFOS.recursos.piedra_suelta.ch, color: CATALOGO_GLIFOS.recursos.piedra_suelta.color };
+    const g = CATALOGO_GLIFOS.recursos.piedra_suelta;
+    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
   }
   if ((recursos.madera || 0) > 0) {
-    return { ch: CATALOGO_GLIFOS.recursos.madera.ch, color: CATALOGO_GLIFOS.recursos.madera.color };
+    const g = CATALOGO_GLIFOS.recursos.madera;
+    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
   }
-  // Terreno base: montaña distingue pico de ladera por elevacion real
-  // (mismo umbral aproximado que el Codice usaba para su relieve).
+  // Terreno base desnudo: SIN glifo -- el fondo ya dice de que bioma es.
+  // Excepcion real: montaña distingue pico de ladera por elevacion real
+  // (mismo umbral aproximado que el Codice usaba para su relieve) -- un
+  // accidente de relieve real si merece un simbolo encima del fondo,
+  // convencion estandar de todo roguelike.
   if (c.bioma === 'montana' && c.elevacion > 0.72) {
-    return { ch: CATALOGO_GLIFOS.terreno.pico.ch, color: CATALOGO_GLIFOS.terreno.pico.color };
+    const g = CATALOGO_GLIFOS.terreno.pico;
+    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
   }
-  const g = CATALOGO_GLIFOS.terreno[c.bioma] || { ch: '?', color: '#666666' };
-  return { ch: g.ch, color: g.color };
+  if (c.bioma === 'montana') {
+    const g = CATALOGO_GLIFOS.terreno.montana;
+    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
+  }
+  return { ch: '', color: fondoBase, fondo: hexARgba(fondoBase, 0.3) };
 }
 
 function celdaAPantalla(wx, wy, tam) {
@@ -415,13 +464,14 @@ function asegurarCapas() {
   return cont;
 }
 
-function crearCeldaTxt(ch, color, cx, cy, glow) {
+function crearCeldaTxt(ch, color, cx, cy, glow, fondo) {
   const el = document.createElement('div');
   el.className = 'celda-txt';
   el.textContent = ch;
   el.style.width = CELDA + 'px'; el.style.height = CELDA + 'px';
   el.style.fontSize = Math.round(CELDA * 0.8) + 'px';
   el.style.color = color;
+  if (fondo) el.style.backgroundColor = fondo;
   if (glow) el.style.textShadow = `0 0 6px ${color}`;
   el.style.left = cx + 'px'; el.style.top = cy + 'px';
   return el;
@@ -437,8 +487,12 @@ function renderMapa() {
       const c = DATA.celdas[y][x];
       const { cx, cy } = celdaAPantalla(x, y, CELDA);
       const info = contenidoCelda(c);
-      const el = crearCeldaTxt(info.ch, info.color, cx, cy, false);
-      el.style.zIndex = String(1000 + y);
+      // z-index bajo (0..alto) para el fondo/suelo -- por debajo de CUALQUIER
+      // glifo de la capa de criaturas (que sigue arrancando en 1000+y), asi
+      // una criatura de pie sobre una celda de fondo tintado nunca queda
+      // tapada por ella.
+      const el = crearCeldaTxt(info.ch, info.color, cx, cy, false, info.fondo);
+      el.style.zIndex = String(y);
       capaEstatica.appendChild(el);
     }
   }
