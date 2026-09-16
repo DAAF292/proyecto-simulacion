@@ -194,28 +194,53 @@
 // dibuja en el mapa como para la leyenda desplegable: anadir una especie o
 // categoria nueva es una entrada aqui, nunca una tabla duplicada.
 let DATA = window.__DATOS__ || null;
-const CELDA = 26; // px base por celda, antes de aplicar zoom
+const CELDA = 32; // px base por celda, antes de aplicar zoom (subido de 26:
+// a ese tamano el glifo mas grande posible seguia leyendose pequeno en un
+// panel de 1400px con 40 celdas de ancho -- ver docs/informe_codice_cartografico.md
+// nota al pie del 2026-09-16 sobre la auditoria de legibilidad).
 
 // --- Catalogo canonico: glifo + color + nombre legible, agrupado por
 // seccion para la leyenda. "categoria" (solo en flora) permite que varias
 // especies compartan el mismo glifo (forma = funcion: arbol/arbusto/
 // cobertura, reutilizando la misma distincion que ya usa config/flora.yaml
 // via compite_espacio_fisico + huella_m2) diferenciandose solo por color.
+//
+// REDISEÑADO 2026-09-16 (feedback de Diego: "los iconos son demasiado
+// pequeños"): el problema real, confirmado con una auditoria visual
+// (renderizar los ~28 glifos a tamano fijo grande antes de tocar nada), no
+// era el tamano en pixeles -- era que varios glifos usaban puntuacion
+// (comillas, dos puntos, coma) para representar bioma/cobertura, y esos
+// caracteres son intrinsecamente diminutos en CUALQUIER fuente por grande
+// que se dibujen (una comilla nunca ocupa el cuerpo completo de su celda).
+// Los glifos con masa visual real (letras de fauna, formas de flora/
+// construccion) ya se leian perfectamente bien a cualquier tamano.
+//
+// Convencion adoptada (la misma que usan Dwarf Fortress/CDDA en las
+// capturas de referencia de Diego, no inventada): el suelo llano ("nada
+// que ver aqui") se representa SIEMPRE con el mismo punto '.', y el bioma
+// se distingue por COLOR, no por forma -- el color se compara mejor que
+// media docena de marcas de puntuacion casi identicas. Solo el relieve
+// real (montana/pico) rompe esa regla a proposito: una elevacion real
+// SI merece un simbolo con cuerpo (convencion estandar de todo roguelike).
+// Cobertura de suelo pasa de ',' a '▪' (cuadrado pequeño solido, con masa
+// real) -- sigue leyendose "mas discreta" que un arbusto/arbol por ser una
+// forma simple, pero ya no es invisible. poza deja de compartir glifo con
+// bosque (colision real de la version anterior, ambos usaban '"').
 const CATALOGO_GLIFOS = {
   terreno: {
     titulo: 'Terreno',
-    pradera:  { ch: '.', color: '#8fae4a', nombre: 'Pradera' },
-    bosque:   { ch: '"', color: '#3f6b2c', nombre: 'Bosque (suelo)' },
-    desierto: { ch: ':', color: '#d2a94a', nombre: 'Desierto' },
-    tundra:   { ch: '·', color: '#a9bcc9', nombre: 'Tundra' },
-    montana:  { ch: '^', color: '#8a7a5a', nombre: 'Montaña' },
+    pradera:  { ch: '.', color: '#a3c95a', nombre: 'Pradera' },
+    bosque:   { ch: '.', color: '#3f6b2c', nombre: 'Bosque (suelo)' },
+    desierto: { ch: '.', color: '#d9b566', nombre: 'Desierto' },
+    tundra:   { ch: '.', color: '#b8ccd6', nombre: 'Tundra' },
+    montana:  { ch: '^', color: '#9a8264', nombre: 'Montaña' },
     pico:     { ch: '▲', color: '#cdbb8c', nombre: 'Pico (elevación alta)' },
   },
   agua: {
     titulo: 'Agua',
     lago: { ch: '≈', color: '#3d7fa8', nombre: 'Lago / agua permanente' },
     rio:  { ch: '~', color: '#5fc0e0', nombre: 'Río (corriente)' },
-    poza: { ch: '"', color: '#5f8fa8', nombre: 'Poza / charco efímero' },
+    poza: { ch: ':', color: '#6fa8c0', nombre: 'Poza / charco efímero' },
   },
   flora: {
     titulo: 'Flora',
@@ -227,13 +252,13 @@ const CATALOGO_GLIFOS = {
     arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto' },
     arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto' },
     arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto' },
-    hierba_silvestre:  { ch: ',', color: '#8fae4a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
-    liquen:            { ch: ',', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
-    musgo:             { ch: ',', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
-    flor_silvestre:    { ch: ',', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura' },
-    hierba_desertica:  { ch: ',', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura' },
-    hierba_artica:     { ch: ',', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura' },
-    helecho:           { ch: ',', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura' },
+    hierba_silvestre:  { ch: '▪', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
+    liquen:            { ch: '▪', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
+    musgo:             { ch: '▪', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
+    flor_silvestre:    { ch: '▪', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura' },
+    hierba_desertica:  { ch: '▪', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura' },
+    hierba_artica:     { ch: '▪', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura' },
+    helecho:           { ch: '▪', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura' },
   },
   fauna: {
     titulo: 'Fauna',
@@ -395,7 +420,7 @@ function crearCeldaTxt(ch, color, cx, cy, glow) {
   el.className = 'celda-txt';
   el.textContent = ch;
   el.style.width = CELDA + 'px'; el.style.height = CELDA + 'px';
-  el.style.fontSize = Math.round(CELDA * 0.72) + 'px';
+  el.style.fontSize = Math.round(CELDA * 0.8) + 'px';
   el.style.color = color;
   if (glow) el.style.textShadow = `0 0 6px ${color}`;
   el.style.left = cx + 'px'; el.style.top = cy + 'px';
