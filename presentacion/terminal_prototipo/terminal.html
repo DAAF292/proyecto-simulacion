@@ -3,7 +3,27 @@
 <head>
 <meta charset="utf-8">
 <title>Vallis Runica -- Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
+  /* Fuente bitmap real de VGA (2026-09-16, paquete de Diego -- ver
+     oldschool_pc_font_pack_v2.2_web/LICENSE.TXT, CC BY-SA 4.0, atribucion
+     pendiente en el mismo lugar que las de PyxelSpace). Reproduccion fiel
+     de la ROM de fuente de una tarjeta VGA de IBM real -- la referencia
+     autentica del aspecto "terminal DOS/roguelike clasico" que pidio
+     Diego, verificada glifo a glifo contra el catalogo completo de
+     CATALOGO_GLIFOS antes de adoptarla (los 27 caracteres usados, incluidos
+     los menos comunes como ⚒/♨/▣, renderizan nitidos). JetBrains Mono
+     queda como fallback si el .woff no carga por lo que sea.
+     Fuente pixel: sin antialiasing, se sirve a su tamano nativo (16px,
+     multiplo entero del 9x16 real) y se escala con transform, no con
+     font-size directo, para no perder la nitidez del pixel -- ver
+     CELDA/escala mas abajo en el script. */
+  @font-face {
+    font-family: 'VGA437';
+    src: url('fonts/Web437_IBM_VGA_9x16.woff') format('woff');
+    font-display: swap;
+  }
   :root {
     --ambar: #ffb000;
     --ambar-tenue: #8a5a10;
@@ -13,7 +33,7 @@
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; background: #000;
-    font-family: "Courier New", ui-monospace, monospace;
+    font-family: 'VGA437', 'JetBrains Mono', "Courier New", ui-monospace, monospace;
     color: var(--ambar);
     height: 100%;
   }
@@ -51,8 +71,9 @@
     border-bottom: 1px solid var(--ambar-tenue);
     color: var(--ambar);
     text-shadow: 0 0 6px rgba(255,176,0,0.8);
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
   }
+  .titulo-controles { display: flex; align-items: center; gap: 8px; }
   .cuerpo {
     flex: 1 1 auto;
     overflow: auto;
@@ -73,35 +94,102 @@
   }
   #mapa-viewport.arrastrando { cursor: grabbing; }
   #mapa-contenido { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  /* VGA437 es una fuente de bitmap de un solo peso -- "bold" sobre ella
+     fuerza una negrita sintetica del navegador que emborrona el pixel
+     nitido (confirmado visualmente, no una suposicion), asi que estos dos
+     elementos (glifos del mapa y de la leyenda) se quedan en peso normal
+     -- el resto de la interfaz (titulos, stats) sigue en negrita/CSS
+     normal, no se ve afectado. */
   .celda-txt {
     position: absolute; display: flex; align-items: center; justify-content: center;
-    font-weight: bold;
+    font-weight: normal; font-family: inherit;
   }
-  .celda-img {
-    position: absolute; image-rendering: pixelated;
-    /* Contorno artificial: los sprites del pack no traen borde propio --
-       sin esto, dos copas de arbol vecinas se funden en una sola mancha
-       de color al solaparse. drop-shadow sigue la silueta alfa real
-       (no un rectangulo), asi que el contorno respeta la forma. */
-    filter:
-      drop-shadow(1px 0 0 #0a1a0a) drop-shadow(-1px 0 0 #0a1a0a)
-      drop-shadow(0 1px 0 #0a1a0a) drop-shadow(0 -1px 0 #0a1a0a);
-    /* Movimiento suave (2026-09-13, Diego: "el movimiento... parece que
-       saltan"): solo tiene efecto sobre elementos que YA estaban en el
-       DOM y cambian left/top (la capa de criaturas, ver renderCriaturas
-       mas abajo) -- un elemento recien creado no anima nada, asi que la
-       capa estatica (flora/agua/etc, recreada entera cada render) no se
-       ve afectada. Duracion cercana al intervalo de sondeo (1s) para que
-       el desplazamiento termine justo antes de la siguiente instantanea. */
-    transition: left 0.9s linear, top 0.9s linear;
+  /* Sprites de fauna (2026-09-16, ver comentario junto a CATALOGO_GLIFOS.
+     fauna) -- ancla inferior-centro (translate -50%,-100%) para que los
+     "pies" queden en el borde inferior de la celda, igual que el ancla
+     que ya usaban los glifos de texto por su propio centrado flex.
+     pixelated conserva el pixel-art nitido al escalar en el navegador. */
+  .criatura-img {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    image-rendering: pixelated;
+    width: auto;
   }
-  .celda-img-tile {
-    /* Agua: textura de suelo que rellena la celda exacta, sin desbordar
-       ni recibir el contorno de silueta (romperia la continuidad de un
-       tile pensado para repetirse borde con borde). */
-    position: absolute; image-rendering: pixelated;
+  /* Sprites de construccion (2026-09-16, ver crearCeldaImgEstatica) --
+     ancla inferior-centro dentro de la celda contenedora (.celda-txt,
+     position:absolute -> establece el contexto para este hijo), mismo
+     criterio visual que .criatura-img pero SIN transicion de movimiento:
+     las construcciones no se desplazan. */
+  .construccion-img {
+    position: absolute;
+    left: 50%; bottom: 0;
+    transform: translateX(-50%);
+    image-rendering: pixelated;
+    width: auto;
   }
+  /* Dentro de un cuadrante del mosaico 2x2 (celda compartida con otro
+     elemento real) el propio flex del cuadrante ya centra -- se anula el
+     posicionamiento absoluto para no salirse de su cuarto de celda. */
+  .construccion-img-cuadrante {
+    position: static;
+    transform: none;
+  }
+  /* Mosaico 2x2 (subdivision puramente visual, ver itemsCelda en el
+     script) -- misma celda de 100m2 del motor, hasta 4 elementos reales
+     distintos repartidos en cuadrantes en vez de colapsados a uno solo. */
+  .celda-cuadrantes {
+    position: absolute; display: grid;
+    grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  }
+  .cuadrante {
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit; font-weight: normal; overflow: hidden;
+  }
+  .btn-mapa {
+    font-family: inherit;
+    font-size: 11px;
+    background: transparent;
+    color: var(--ambar);
+    border: 1px solid var(--ambar-tenue);
+    border-radius: 2px;
+    padding: 2px 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  .btn-mapa:hover, .btn-mapa.activo { background: rgba(255,176,0,0.18); }
   .zoom-info { font-size: 11px; color: var(--ambar-tenue); }
+
+  /* Leyenda -- desplegable anclado bajo el boton, dentro del propio
+     recuadro del mapa (position:absolute sobre #term-mapa) para no
+     empujar el layout de columnas ni tapar los paneles laterales. */
+  #leyenda-panel {
+    position: absolute;
+    top: 30px; right: 8px;
+    width: 280px;
+    max-height: calc(100% - 40px);
+    overflow-y: auto;
+    background: rgba(5,3,0,0.95);
+    border: 1px solid var(--ambar-tenue);
+    border-radius: 3px;
+    box-shadow: 0 0 16px rgba(0,0,0,0.6);
+    padding: 8px 10px;
+    font-size: 12px;
+    z-index: 500;
+    display: none;
+  }
+  #leyenda-panel.abierta { display: block; }
+  #leyenda-panel h4 {
+    margin: 10px 0 4px 0; font-size: 11px; letter-spacing: 1.5px;
+    color: var(--ambar-fuerte); text-transform: uppercase;
+    border-bottom: 1px solid var(--ambar-tenue); padding-bottom: 2px;
+  }
+  #leyenda-panel h4:first-child { margin-top: 0; }
+  .leyenda-fila { display: flex; align-items: center; gap: 8px; padding: 1px 0; }
+  .leyenda-glifo {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; font-weight: normal; text-shadow: 0 0 4px currentColor;
+  }
+  .leyenda-nombre { color: #d8c8a0; }
 
   .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-bottom: 6px;}
   .kv div.k { color: var(--ambar-tenue); }
@@ -127,10 +215,15 @@
   <div class="terminal" id="term-mapa">
     <div class="titulo">
       <span>MAPA://SUPERFICIE &mdash; <span id="titulo-mapa-info"></span></span>
-      <span class="zoom-info" id="zoom-info"></span>
+      <div class="titulo-controles">
+        <span class="zoom-info" id="zoom-info"></span>
+        <button class="btn-mapa" id="btn-centrar" type="button">CENTRAR</button>
+        <button class="btn-mapa" id="btn-leyenda" type="button">LEYENDA &#9662;</button>
+      </div>
     </div>
     <div id="mapa-viewport">
       <div id="mapa-contenido"></div>
+      <div id="leyenda-panel"></div>
     </div>
   </div>
   <div class="col-derecha">
@@ -157,165 +250,149 @@
 </div>
 <script src="datos.js"></script>
 <script>
-// CONECTADO AL MOTOR (2026-09-13, Diego: "conectalo al motor"): DATA ya
-// no es una foto fija -- si este HTML se sirve desde el mismo servidor
-// que corre la simulacion real (main.py BOSQUE_MODO_VISUAL=1, ver
-// vista_web.py:ManejadorWeb), se sondea /estado.json cada segundo y se
-// vuelve a renderizar con el estado real del motor en marcha. Si se
-// sirve suelto (python -m http.server sobre esta carpeta, sin
-// /estado.json disponible), el fetch falla en silencio y se queda con
-// la instantanea estatica de datos.js -- mismo comportamiento de
-// siempre, nada se rompe para quien lo use asi.
+// PIVOTE A MAPA 100% ASCII (2026-09-16, decision de Diego): se retira el
+// Codice Cartografico (presentacion/vista_web.py, ver
+// docs/informe_codice_cartografico.md) y este prototipo deja de ser un
+// hibrido ASCII+sprite -- CERO imagenes en el mapa a partir de ahora, todo
+// se representa con glifo+color de texto. El CATALOGO de mas abajo
+// (CATALOGO_GLIFOS) es la UNICA fuente de verdad tanto para lo que se
+// dibuja en el mapa como para la leyenda desplegable: anadir una especie o
+// categoria nueva es una entrada aqui, nunca una tabla duplicada.
 let DATA = window.__DATOS__ || null;
-const CELDA = 28; // px base por celda, antes de aplicar zoom
+const CELDA = 32; // px base por celda, antes de aplicar zoom (subido de 26:
+// a ese tamano el glifo mas grande posible seguia leyendose pequeno en un
+// panel de 1400px con 40 celdas de ancho -- ver docs/informe_codice_cartografico.md
+// nota al pie del 2026-09-16 sobre la auditoria de legibilidad).
 
-const SIMBOLO_BIOMA = {
-  pradera:  { s: '.', color: '#c99a3a' },
-  bosque:   { s: '"', color: '#6b4a1a' },
-  desierto: { s: ':', color: '#d9a340' },
-  tundra:   { s: '.', color: '#9a7a4a' },
-  montana:  { s: '^', color: '#8a6a3a' },
+// --- Catalogo canonico: glifo + color + nombre legible, agrupado por
+// seccion para la leyenda. "categoria" (solo en flora) permite que varias
+// especies compartan el mismo glifo (forma = funcion: arbol/arbusto/
+// cobertura, reutilizando la misma distincion que ya usa config/flora.yaml
+// via compite_espacio_fisico + huella_m2) diferenciandose solo por color.
+//
+// REDISEÑADO 2026-09-16 (feedback de Diego: "los iconos son demasiado
+// pequeños"): el problema real, confirmado con una auditoria visual
+// (renderizar los ~28 glifos a tamano fijo grande antes de tocar nada), no
+// era el tamano en pixeles -- era que varios glifos usaban puntuacion
+// (comillas, dos puntos, coma) para representar bioma/cobertura, y esos
+// caracteres son intrinsecamente diminutos en CUALQUIER fuente por grande
+// que se dibujen (una comilla nunca ocupa el cuerpo completo de su celda).
+// Los glifos con masa visual real (letras de fauna, formas de flora/
+// construccion) ya se leian perfectamente bien a cualquier tamano.
+//
+// Convencion adoptada (la misma que usan Dwarf Fortress/CDDA en las
+// capturas de referencia de Diego, no inventada): el suelo llano ("nada
+// que ver aqui") se representa SIEMPRE con el mismo punto '.', y el bioma
+// se distingue por COLOR, no por forma -- el color se compara mejor que
+// media docena de marcas de puntuacion casi identicas. Solo el relieve
+// real (montana/pico) rompe esa regla a proposito: una elevacion real
+// SI merece un simbolo con cuerpo (convencion estandar de todo roguelike).
+// Cobertura de suelo pasa de ',' a '▪' (cuadrado pequeño solido, con masa
+// real) -- sigue leyendose "mas discreta" que un arbusto/arbol por ser una
+// forma simple, pero ya no es invisible. poza deja de compartir glifo con
+// bosque (colision real de la version anterior, ambos usaban '"').
+const CATALOGO_GLIFOS = {
+  terreno: {
+    titulo: 'Terreno',
+    pradera:  { ch: '░', color: '#a3c95a', nombre: 'Pradera' },
+    bosque:   { ch: '░', color: '#3f6b2c', nombre: 'Bosque (suelo)' },
+    desierto: { ch: '░', color: '#d9b566', nombre: 'Desierto' },
+    tundra:   { ch: '░', color: '#b8ccd6', nombre: 'Tundra' },
+    montana:  { ch: '^', color: '#9a8264', nombre: 'Montaña' },
+    pico:     { ch: '▲', color: '#cdbb8c', nombre: 'Pico (elevación alta)' },
+  },
+  agua: {
+    titulo: 'Agua',
+    lago: { ch: '≈', color: '#3d7fa8', nombre: 'Lago / agua permanente' },
+    rio:  { ch: '~', color: '#5fc0e0', nombre: 'Río (corriente)' },
+    poza: { ch: ':', color: '#6fa8c0', nombre: 'Poza / charco efímero' },
+  },
+  flora: {
+    titulo: 'Flora',
+    // (2026-09-16) pino usa '♠' en vez de '♣': silueta puntiaguda real de
+    // conifera frente a la copa redondeada de un arbol de hoja ancha --
+    // shape real, no una eleccion arbitraria (auditada contra la fuente
+    // VGA437 antes de decidir, ambos glifos existen y renderizan nitidos).
+    manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol' },
+    roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol' },
+    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol' },
+    cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto' },
+    arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto' },
+    arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto' },
+    arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto' },
+    arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto' },
+    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
+    liquen:            { ch: '▒', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
+    musgo:             { ch: '▒', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
+    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura' },
+    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura' },
+    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura' },
+    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura' },
+  },
+  // (2026-09-16) Pictogramas reales en vez de letras -- Diego: "podriamos
+  // buscar pictogramas para las criaturas". Emoji nativos del sistema/
+  // navegador (CERO descarga, a diferencia de VGA437/Nerd Fonts): ya
+  // vienen con la fuente de emoji del propio SO, verificados nitidos y
+  // reconocibles a este tamaño antes de adoptarlos. Limitacion real y
+  // aceptada: un emoji ignora `color` CSS -- siempre se ve a todo color
+  // nativo, no se puede teñir de ambar. No es un choque de estilo (el
+  // resto del mapa ya usa muchos colores por categoria, no solo ambar),
+  // pero significa que `color` en esta seccion ya no pinta el glifo --
+  // se conserva solo como referencia en la leyenda. Sin emoji real de
+  // "gnomo": se uso 🧙 (figura humanoide con
+  // gorro puntiagudo, la silueta mas cercana disponible, ver
+  // docs/informe_codice_cartografico.md-style de honestidad: aproximacion
+  // documentada, no un hallazgo perfecto). 🐿️ (ardilla) es una secuencia
+  // de 2 codepoints (animal + selector de variacion) -- verificado que
+  // renderiza como un solo glifo, no dos, en Chromium/fuente del sistema.
+  // SEGUNDO PIVOTE DE FAUNA (2026-09-16, mismo dia): Diego pidio pictogramas
+  // propios en vez de emoji nativos -- generados por IA, estilo pixel art
+  // de cuerpo completo (no solo cabeza), colores naturales de cada especie
+  // (nunca una paleta gris fija -- ver correccion real de Diego cuando
+  // generalice por error el gris del lobo de referencia a todo el set).
+  // Los .jpg originales de Diego traian un cuadriculado de "transparencia"
+  // HORNEADO como pixeles opacos reales (JPG no soporta canal alfa) --
+  // recortado por software con relleno por inundacion desde los bordes
+  // (ver /tmp/quitar_fondo.py de la sesion, no versionado -- un recorte de
+  // color global habria comido pelaje real: el gris claro del lobo, p.ej.,
+  // es casi identico a uno de los dos tonos del cuadriculado). `img`
+  // apunta al PNG ya procesado (fondo real transparente, recortado al
+  // contenido); `ch`/`color` quedan como referencia de la leyenda y como
+  // unico camino para necromasa, que se queda con el emoji 💀 (no se pidio
+  // sprite propio para restos). Excepcion real y deliberada a "mapa 100%
+  // glifos" -- CP437 no tiene pictogramas de animales (auditado) y los
+  // emoji nativos no convencieron del todo a Diego.
+  fauna: {
+    titulo: 'Fauna',
+    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo', img: 'sprites_criaturas/gnomo.png' },
+    lobo:          { ch: '🐺', color: '#e05a3a', nombre: 'Lobo', img: 'sprites_criaturas/lobo.png' },
+    conejo:        { ch: '🐰', color: '#c9b590', nombre: 'Conejo', img: 'sprites_criaturas/conejo.png' },
+    ardilla:       { ch: '🐿️', color: '#d98a2e', nombre: 'Ardilla', img: 'sprites_criaturas/ardilla.png' },
+    caballo:       { ch: '🐴', color: '#c9a06a', nombre: 'Caballo', img: 'sprites_criaturas/caballo.png' },
+    venado:        { ch: '🦌', color: '#a3703f', nombre: 'Venado', img: 'sprites_criaturas/venado.png' },
+    cabra_montesa: { ch: '🐐', color: '#b8c0c4', nombre: 'Cabra montesa', img: 'sprites_criaturas/cabra.png' },
+    zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro', img: 'sprites_criaturas/zorro.png' },
+    necromasa:     { ch: '💀', color: '#7a7268', nombre: 'Restos (necromasa)' },
+  },
+  // `img` (2026-09-16, Diego subio 5 construcciones a `master` -- "quitales
+  // el fondo y usalos"): mismo criterio que fauna, ch/color quedan como
+  // referencia de leyenda. El fichero se llama `salon.png` (nombre corto
+  // que Diego uso al generarlo) pero la clave real del motor es
+  // `salon_comun` -- mapeo explicito aqui, no un rename de fichero.
+  construcciones: {
+    titulo: 'Construcciones',
+    refugio:     { ch: '⌂', color: '#c98a4a', nombre: 'Refugio', img: 'sprites_construcciones/refugio.png' },
+    almacen:     { ch: '▣', color: '#a98a5a', nombre: 'Almacén', img: 'sprites_construcciones/almacen.png' },
+    salon_comun: { ch: '♦', color: '#e0b84a', nombre: 'Salón común', img: 'sprites_construcciones/salon.png' },
+    cocina:      { ch: '♨', color: '#e0603a', nombre: 'Cocina', img: 'sprites_construcciones/cocina.png' },
+    taller:      { ch: '⚒', color: '#9a9aa0', nombre: 'Taller', img: 'sprites_construcciones/taller.png' },
+  },
+  recursos: {
+    titulo: 'Recursos en el suelo',
+    piedra_suelta: { ch: '•', color: '#9a9a9a', nombre: 'Piedra suelta' },
+    madera:        { ch: '/', color: '#8a6a3a', nombre: 'Madera (rama caída)' },
+  },
 };
-const COLOR_AGUA = '#3a7a9a';
-// Fallback ASCII, solo si por lo que sea la especie no tiene sprite en
-// SPRITES_CRIATURA (hoy las 7 especies + necromasa lo tienen, esto ya no
-// deberia dispararse en juego normal -- se conserva como red de seguridad).
-const SIMBOLO_ENTIDAD = {
-  gnomo:         { s: '@', color: '#ffe9c2' },
-  lobo:          { s: 'w', color: '#ff5533' },
-  conejo:        { s: 'r', color: '#d9c9a0' },
-  ardilla:       { s: 's', color: '#e8952e' },
-  caballo:       { s: 'H', color: '#c9a06a' },
-  venado:        { s: 'd', color: '#a3703f' },
-  cabra_montesa: { s: 'c', color: '#b59a6a' },
-  necromasa:     { s: '%', color: '#5a4a3a' },
-};
-// (CORREGIDO 2026-09-13, mismo dia -- Diego: "quiero que solo uses los
-// nuevos") Primera version de este lote dejaba conviviendo el pack viejo
-// (pixel art retro, "recortado/clasificado por Diego" el mismo dia) con
-// el nuevo de inspiracion/ dentro del mismo pool -- mezcla de estilo no
-// deseada. Cada especie con material real en inspiracion/ usa AHORA SOLO
-// sus sprites nuevos (los viejos de esa especie se borraron del disco,
-// ver git log). Las 5 especies sin material propio en inspiracion/
-// (arbusto_montano, arbusto_artico, hierba_artica, liquen, musgo) se
-// resolvieron aparte, ver el comentario junto a esas 5 entradas mas
-// abajo -- ninguna especie del catalogo usa ya el pack retro viejo.
-const SPRITES_FLORA = {
-  manzano: ['sprites/manzano_3.png','sprites/manzano_4.png'],
-  roble: ['sprites/roble_3.png'],
-  helecho: ['sprites/helecho_7.png','sprites/helecho_8.png'],
-  hierba_silvestre: ['sprites/hierba_silvestre_4.png','sprites/hierba_silvestre_5.png','sprites/hierba_silvestre_6.png','sprites/hierba_silvestre_7.png','sprites/hierba_silvestre_8.png'],
-  pino: ['sprites/pino_7.png'],
-  // arbusto_montano/arbusto_artico/hierba_artica/liquen/musgo (2026-09-13,
-  // segunda pasada -- Diego: "usa las hierbas que existen, adaptala a los
-  // colores... para cada tipo"): inspiracion/ no traia material propio
-  // para estas 5, asi que se derivaron RETINENDO una forma ya nueva
-  // (mascara solo sobre el verde, ramas/bayas/contorno intactos -- ver
-  // presentacion/arnes/adaptar_especies_faltantes.py) en vez de dejarlas
-  // con el pack retro viejo. arbusto_montano parte de un arbusto de bayas
-  // real a proposito: la especie produce "bayas_montanas" en el catalogo.
-  arbusto_montano: ['sprites/arbusto_montano_5.png'],
-  arbusto_artico: ['sprites/arbusto_artico_6.png'],
-  arbusto_desertico: ['sprites/arbusto_desertico_6.png'],
-  arbusto_espinoso: ['sprites/arbusto_espinoso_6.png','sprites/arbusto_espinoso_7.png','sprites/arbusto_espinoso_8.png'],
-  cactus: ['sprites/cactus_5.png','sprites/cactus_6.png','sprites/cactus_7.png'],
-  flor_silvestre: ['sprites/flor_silvestre_6.png','sprites/flor_silvestre_7.png','sprites/flor_silvestre_8.png','sprites/flor_silvestre_9.png','sprites/flor_silvestre_10.png'],
-  hierba_desertica: ['sprites/hierba_desertica_5.png'],
-  hierba_artica: ['sprites/hierba_artica_4.png'],
-  liquen: ['sprites/liquen_3.png'],
-  musgo: ['sprites/musgo_3.png'],
-};
-// Sprites de GRUPO (2+ arboles ya agrupados en el propio sprite) -- se usan
-// cuando la celda tiene mas de una planta (cupo de espacio compartido, dato
-// real del motor: cobertura + competidora coexistiendo), no un adorno
-// inventado. Especies sin variante de grupo dedicada caen al individual.
-const SPRITES_FLORA_GRUPO = {
-  manzano: ['sprites/manzano_grupo_1.png'],
-};
-// Especies que compiten por espacio fisico real (config/flora.yaml,
-// compite_espacio_fisico: true) -- son las que preferimos representar
-// cuando una celda tiene mas de una planta a la vez (cupo compartido).
-const ESPECIES_COMPETIDORAS_SET = new Set([
-  'manzano','roble','cactus','arbusto_espinoso','arbusto_desertico',
-  'pino','arbusto_montano','arbusto_artico',
-]);
-// CORREGIDO 2026-09-13 (Diego: "un arbol mas pequeno que un caballo?
-// arbustos del tamano de un arbol"): el bug real era usar DOS formulas
-// de escala sin relacion entre si -- fauna por raiz cuadrada del PESO
-// (peso/90, un caballo de 450kg ya saturaba el tope) y flora por un
-// factor inventado a mano (1.0-1.7) sin ninguna unidad en comun, asi
-// que ambas colisionaban en el mismo rango de pixeles por pura
-// coincidencia. Sustituido por UNA sola formula (escalaPorAltura, mas
-// abajo) aplicada por igual a fauna (altura real del individuo, ya
-// real en dimensiones.altura_m) y flora (altura aproximada real de una
-// planta madura, PROVISIONAL, sin fuente en config/flora.yaml -- son
-// metros de referencia solo para el render, nunca datos de simulacion).
-// Con esto un roble/pino (6-7m) queda con claridad por encima de un
-// caballo (1.4-1.8m), y un arbusto (0.9-1.3m) por debajo de ambos.
-const ALTURA_REAL_FLORA_M = {
-  manzano: 3.5, roble: 6.0, pino: 7.0,
-  helecho: 0.7, hierba_silvestre: 0.3,
-  // arbustos bajados de 0.9-1.3m a 0.65-0.9m (revision tras verificar la
-  // comparacion a escala real: con 0.9-1.3 quedaban casi tan grandes
-  // como un caballo -- un matorral real es mas bajo que el lomo de un
-  // caballo, no del mismo porte).
-  arbusto_montano: 0.9, arbusto_artico: 0.65, arbusto_desertico: 0.85, arbusto_espinoso: 0.8,
-  cactus: 2.5,
-  flor_silvestre: 0.3, hierba_desertica: 0.3, hierba_artica: 0.25,
-  liquen: 0.03, musgo: 0.04,
-};
-// Pivote de escala 1.0 en 1m (aprox. la altura de un gnomo, la "unidad
-// humana" de este mundo) -- raiz cuadrada para que el rango no se
-// dispare (un pino de 7m no debe medir 7x un gnomo en pantalla).
-const ALTURA_REFERENCIA_M = 1.0;
-function escalaPorAltura(alturaM) {
-  return Math.max(0.35, Math.min(3.2, Math.sqrt((alturaM || ALTURA_REFERENCIA_M) / ALTURA_REFERENCIA_M)));
-}
-// Sprites reales de criatura (2026-09-13, mismo pool que
-// presentacion/assets/criaturas/ del motor real, YA BORRADO -- ver
-// comentario de SPRITES_FLORA). CORREGIDO 2026-09-13: las 7 especies
-// usan ya SOLO su sprite nuevo de inspiracion/ (los viejos se borraron
-// del disco) -- caballo fue la ultima en incorporarse, Diego lo genero
-// aparte el mismo dia tras detectar el hueco.
-const SPRITES_CRIATURA = {
-  gnomo: ['sprites/criaturas/gnomo_3.png','sprites/criaturas/gnomo_4.png','sprites/criaturas/gnomo_5.png','sprites/criaturas/gnomo_6.png','sprites/criaturas/gnomo_7.png','sprites/criaturas/gnomo_8.png'],
-  lobo: ['sprites/criaturas/lobo_2.png'],
-  conejo: ['sprites/criaturas/conejo_2.png'],
-  ardilla: ['sprites/criaturas/ardilla_2.png'],
-  caballo: ['sprites/criaturas/caballo_1.png'],
-  venado: ['sprites/criaturas/venado_2.png'],
-  cabra_montesa: ['sprites/criaturas/cabra_montesa_2.png'],
-};
-// Construcciones (refugio/almacen) -- categoria nueva (2026-09-13): antes
-// de este lote el visor no dibujaba NINGUNA construccion, en ningun
-// momento de su historia (ver construir_instantanea, ahora exporta
-// DATA.construcciones). salon_comun/cocina existen como tipo real en el
-// motor pero sin sprite propio todavia -- sin entrada aqui, caen al
-// fallback ascii generico como cualquier tipo desconocido.
-const SPRITES_CONSTRUCCION = {
-  refugio: ['sprites/construcciones/refugio_1.png'],
-  almacen: ['sprites/construcciones/almacen_1.png'],
-};
-// Objetos ambientales -- decoracion de suelo ligada a un recurso REAL ya
-// presente en c.recursos (nunca inventada): roca cuando hay piedra_suelta
-// (la misma piedra de percusion del fuego), rama cuando hay madera (las
-// ramas caidas que un gnomo recolecta, ver sistema_recursos.py). Sin
-// consumidor de deposito_mineral/tipo_sustrato -- ese DTO no los expone.
-const SPRITES_OBJETOS = {
-  roca: ['sprites/objetos/roca_1.png','sprites/objetos/roca_2.png'],
-  rama: ['sprites/objetos/rama_1.png','sprites/objetos/rama_2.png'],
-};
-// Agua: mismo pool pixel que presentacion/assets/agua/ (lago = cuerpos de
-// agua permanentes, poza = charcos efimeros/pozas pequenas).
-const SPRITES_AGUA = {
-  lago: ['sprites/agua/lago_1.png','sprites/agua/lago_2.png','sprites/agua/lago_3.png','sprites/agua/lago_4.png','sprites/agua/lago_5.png','sprites/agua/lago_6.png','sprites/agua/lago_7.png','sprites/agua/lago_8.png','sprites/agua/lago_9.png','sprites/agua/lago_10.png','sprites/agua/lago_11.png','sprites/agua/lago_12.png'],
-  poza: ['sprites/agua/poza_1.png','sprites/agua/poza_2.png','sprites/agua/poza_3.png','sprites/agua/poza_4.png','sprites/agua/poza_5.png','sprites/agua/poza_6.png'],
-};
-// Aspecto real (ancho/alto) de cada fichero de sprite -- necesario para no
-// deformar criaturas/pinos/cactus (nada de esto es cuadrado de verdad) al
-// dibujarlos. Generado una vez desde los ficheros reales (2026-09-13), no
-// a mano.
-const ASPECTO_SPRITE = {"sprites/agua/lago_1.png":1.2308,"sprites/agua/lago_10.png":1.0667,"sprites/agua/lago_11.png":1.0667,"sprites/agua/lago_12.png":1.2308,"sprites/agua/lago_2.png":1.2308,"sprites/agua/lago_3.png":1.2308,"sprites/agua/lago_4.png":1.0,"sprites/agua/lago_5.png":1.2308,"sprites/agua/lago_6.png":1.2308,"sprites/agua/lago_7.png":1.3333,"sprites/agua/lago_8.png":1.0,"sprites/agua/lago_9.png":1.0,"sprites/agua/poza_1.png":0.9375,"sprites/agua/poza_2.png":0.9375,"sprites/agua/poza_3.png":1.3333,"sprites/agua/poza_4.png":1.3333,"sprites/agua/poza_5.png":1.1429,"sprites/agua/poza_6.png":0.875,"sprites/arbusto_artico_6.png":1.0,"sprites/arbusto_desertico_6.png":1.0826,"sprites/arbusto_espinoso_6.png":1.0,"sprites/arbusto_espinoso_7.png":1.1479,"sprites/arbusto_espinoso_8.png":0.9518,"sprites/arbusto_montano_5.png":1.1479,"sprites/cactus_5.png":0.7862,"sprites/cactus_6.png":0.7449,"sprites/cactus_7.png":0.9114,"sprites/construcciones/almacen_1.png":1.1201,"sprites/construcciones/refugio_1.png":1.1809,"sprites/criaturas/ardilla_2.png":0.9564,"sprites/criaturas/caballo_1.png":1.0064,"sprites/criaturas/cabra_montesa_2.png":0.9728,"sprites/criaturas/conejo_2.png":0.4839,"sprites/criaturas/gnomo_3.png":0.445,"sprites/criaturas/gnomo_4.png":0.445,"sprites/criaturas/gnomo_5.png":0.4448,"sprites/criaturas/gnomo_6.png":0.4969,"sprites/criaturas/gnomo_7.png":0.4976,"sprites/criaturas/gnomo_8.png":0.4971,"sprites/criaturas/lobo_2.png":1.1563,"sprites/criaturas/venado_2.png":0.8157,"sprites/flor_silvestre_10.png":1.2294,"sprites/flor_silvestre_6.png":0.7064,"sprites/flor_silvestre_7.png":0.7064,"sprites/flor_silvestre_8.png":0.7064,"sprites/flor_silvestre_9.png":1.1825,"sprites/helecho_7.png":0.9529,"sprites/helecho_8.png":0.5188,"sprites/hierba_artica_4.png":0.2142,"sprites/hierba_desertica_5.png":0.7039,"sprites/hierba_silvestre_4.png":1.2294,"sprites/hierba_silvestre_5.png":1.3782,"sprites/hierba_silvestre_6.png":0.2142,"sprites/hierba_silvestre_7.png":0.688,"sprites/hierba_silvestre_8.png":1.102,"sprites/liquen_3.png":1.102,"sprites/manzano_3.png":0.9762,"sprites/manzano_4.png":0.9767,"sprites/manzano_grupo_1.png":1.0,"sprites/musgo_3.png":0.9529,"sprites/objetos/rama_1.png":1.1663,"sprites/objetos/rama_2.png":0.834,"sprites/objetos/roca_1.png":1.1807,"sprites/objetos/roca_2.png":1.5054,"sprites/pino_7.png":0.7959,"sprites/roble_3.png":1.0073};
 
 function hashDet(x,y,sal) {
   let h = (x*374761393 + y*668265263 + sal*2654435761) >>> 0;
@@ -323,259 +400,231 @@ function hashDet(x,y,sal) {
   return h / 4294967296;
 }
 
-let construccionesPorCelda = {};
-// Tamano relativo de cada tipo de construccion -- una construccion real
-// domina mas su celda que un arbol individual.
-const FACTOR_TAMANO_CONSTRUCCION = { refugio: 1.6, almacen: 2.0 };
-
-// AGUA (2026-09-13, corregido -- Diego: "el agua esta fatal" / "ese
-// verde que es como un cauce no lo uses, solo usa la textura y el
-// charco... con transparencia"). Dos problemas reales en el diseno
-// original, no solo de gusto: (1) cada CELDA elegia su propio sprite al
-// azar de los 12 de "lago" -- un lago de 20 celdas podia mostrar hasta
-// 12 texturas/tonos distintos sin ninguna relacion entre celdas vecinas,
-// pura colcha de retazos; (2) "poza" nunca fueron texturas repetibles --
-// son siluetas de un charco COMPLETO (forma redondeada + borde propio),
-// pensadas para dibujarse UNA vez por charco entero, no una vez por
-// celda (un charco de 3 celdas con 3 siluetas distintas y bordes que no
-// encajan es aun peor que el problema de lago).
-//
-// CORREGIDO 2026-09-13 (segunda pasada, Diego: "quiero que uses solo la
-// textura de agua de la imagen"): la primera pasada dejaba 8 variantes
-// en rotacion sin comprobar el CANAL ALFA de cada una -- lago_1/3/5/10/
-// 11/12 tienen alfa real (0-255, huecos transparentes de verdad dentro
-// del propio tile de oleaje), asi que sobre el fondo negro del mapa se
-// veian como un enrejado/parcheado con hueco negro, no como agua solida
-// (la imagen que envio Diego era exactamente ese enrejado). Solo
-// lago_8/lago_9 son opacos de principio a fin (alfa=255 siempre, sin
-// huecos) -- verificado con PIL, no a ojo. Un solo tile, el mas oscuro
-// de los dos (lago_8), como pidio Diego ("solo la textura", singular).
-const LAGO_TILEABLE = ['sprites/agua/lago_8.png'];
-
-function componentesConexasAgua(tipoAgua) {
-  // Flood-fill 4-vecinos sobre DATA.celdas -- mismo algoritmo que
-  // nucleo/materiales.py:componentes_conexas del motor real, aqui en JS
-  // porque el DTO no agrupa celdas de agua, solo las marca individualmente.
-  const visitado = new Set();
-  const comps = [];
-  for (let y = 0; y < DATA.alto; y++) {
-    for (let x = 0; x < DATA.ancho; x++) {
-      const clave = x + ',' + y;
-      const celda = DATA.celdas[y][x];
-      if (visitado.has(clave) || !celda.tiene_agua || celda.tipo_agua !== tipoAgua) continue;
-      const pila = [[x, y]];
-      visitado.add(clave);
-      const celdas = [];
-      while (pila.length) {
-        const [cx, cy] = pila.pop();
-        celdas.push([cx, cy]);
-        for (const [nx, ny] of [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]]) {
-          if (nx < 0 || ny < 0 || nx >= DATA.ancho || ny >= DATA.alto) continue;
-          const nk = nx + ',' + ny;
-          if (visitado.has(nk)) continue;
-          const nCelda = DATA.celdas[ny][nx];
-          if (!nCelda.tiene_agua || nCelda.tipo_agua !== tipoAgua) continue;
-          visitado.add(nk);
-          pila.push([nx, ny]);
-        }
-      }
-      comps.push(celdas);
-    }
-  }
-  return comps;
+// rgba con alfa variable a partir de un color hex -- usado para atenuar
+// flora joven (Planta.etapa real, 0=brote..1=madura: un brote se ve mas
+// tenue, no un color inventado) y para el desvanecido de agua por
+// profundidad real (Celda.profundidad_agua/profundidad_charco).
+function hexARgba(hex, alfa) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r},${g},${b},${alfa})`;
 }
 
-// UN solo sprite por CUERPO de agua conexo (no por celda) -- lago se
-// dibuja per-celda pero con la misma textura en todas las celdas del
-// mismo lago; poza se dibuja UNA vez, escalada a la caja del charco
-// entero (ver pozaOverlays, usado en renderMapa).
-let lagoVariantePorCelda = {};
-let pozaOverlays = [];
+// TEXTURA "TEJIDA" (2026-09-16, tercer feedback de Diego comparando contra
+// capturas reales de Dwarf Fortress: "necesitamos que quede lo mas vivo
+// posible"). Diagnostico: DF nunca deja una celda de suelo sin tinta --
+// imprime el MISMO puñado de glifos base en todas las celdas de un
+// material, pero con variacion real de tono celda a celda, lo que se lee
+// como superficie "tejida" en vez de un bloque de color CSS plano (lo que
+// habiamos hecho en el circulo anterior). tonoCelda varia el tono +-rango
+// de forma DETERMINISTA por celda (mismo hash de siempre -- nunca cambia
+// de un frame a otro); glifoTextura elige entre 2-3 variantes de glifo
+// por el mismo mecanismo. Ambos se usan solo en las capas de "suelo"
+// (terreno desnudo, agua, cobertura) -- los landmarks reales (arbol,
+// arbusto, fauna, construccion, recurso) se quedan con un color fijo y
+// consistente a proposito, para que sigan destacando sobre el ruido de
+// textura del suelo en vez de mezclarse con el.
+function tonoCelda(hex, x, y, sal, rango, alfa = 1) {
+  const t = (hashDet(x, y, sal) - 0.5) * 2 * rango;
+  const n = parseInt(hex.slice(1), 16);
+  const ajustar = (canal) => Math.max(0, Math.min(255, Math.round(canal * (1 + t))));
+  const r = ajustar((n >> 16) & 255), g = ajustar((n >> 8) & 255), b = ajustar(n & 255);
+  return `rgba(${r},${g},${b},${alfa})`;
+}
+function glifoTextura(pool, x, y, sal) {
+  return pool[Math.floor(hashDet(x, y, sal) * pool.length) % pool.length];
+}
+// Pools de glifo base por bioma (montaña queda fuera: conserva su propio
+// simbolo '^'/'▲' de relieve, ya establecido).
+//
+// CORREGIDO 2026-09-16 (Diego: "hay otros iconos quizas mejores?" --
+// auditoria real contra la fuente VGA437 antes de decidir, no a ojo):
+// '.'/','/'\'' tienen muy poca masa visual incluso con variacion de tono
+// -- CP437 trae una familia de "sombreado" graduada por densidad
+// (░ claro, ▒ medio, ▓ oscuro) pensada exactamente para esto en
+// terminales DOS/roguelikes reales, confirmada nitida en la fuente real
+// con una pagina de prueba aislada. ░ para todo el suelo desnudo (mucha
+// mas presencia que un punto, sigue leyendose "de fondo" por su propio
+// patron moteado interno) y ▒ para cobertura vegetal (un escalon mas
+// denso que el suelo desnudo, jerarquia visual real: suelo < cobertura <
+// arbusto/arbol solidos).
+const TEXTURA_TERRENO = {
+  pradera:  ['░'],
+  bosque:   ['░'],
+  desierto: ['░'],
+  tundra:   ['░'],
+};
+const TEXTURA_COBERTURA = ['▒'];
 
-// Todo lo de arriba (construccionesPorCelda, lago/poza) dependia de un
-// DATA fijo, calculado una sola vez al cargar el script -- con el modo
-// en vivo (ver cargarEstadoVivo/iniciar mas abajo) DATA cambia cada
-// segundo, asi que esto tiene que poder recalcularse tantas veces como
-// haga falta, no solo la primera. (entidadPorCelda se retiro el
-// 2026-09-13 al mover las criaturas a su propia capa persistente --
-// ver renderCriaturas -- nadie mas la leia.)
+let construccionesPorCelda = {};
 function recalcularDerivados() {
-  // Construcciones (DATA.construcciones, 2026-09-13 -- ver
-  // construir_instantanea): una celda podria en teoria tener mas de una
-  // (refugio+almacen compartiendo espacio, cupo real del motor) --
-  // guardamos una LISTA por celda, mismo criterio que ya corrigio el bug
+  // Construcciones (DATA.construcciones): una celda podria en teoria tener
+  // mas de una (refugio+almacen compartiendo espacio, cupo real del motor)
+  // -- guardamos una LISTA por celda, mismo criterio que ya corrigio el bug
   // de plantas_por_celda (2026-08-31).
   construccionesPorCelda = {};
   for (const con of (DATA.construcciones || [])) {
     const clave = con.x + ',' + con.y;
     (construccionesPorCelda[clave] = construccionesPorCelda[clave] || []).push(con);
   }
-
-  lagoVariantePorCelda = {};
-  pozaOverlays = [];
-  for (const comp of componentesConexasAgua('lago')) {
-    const [ox, oy] = comp[0];
-    const src = LAGO_TILEABLE[Math.floor(hashDet(ox, oy, 29) * LAGO_TILEABLE.length)];
-    for (const [cx, cy] of comp) lagoVariantePorCelda[cx + ',' + cy] = src;
-  }
-  for (const comp of componentesConexasAgua('poza')) {
-    const [ox, oy] = comp[0];
-    const src = SPRITES_AGUA.poza[Math.floor(hashDet(ox, oy, 31) * SPRITES_AGUA.poza.length)];
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const [cx, cy] of comp) {
-      minX = Math.min(minX, cx); maxX = Math.max(maxX, cx);
-      minY = Math.min(minY, cy); maxY = Math.max(maxY, cy);
-    }
-    pozaOverlays.push({ minX, maxX, minY, maxY, src });
-  }
 }
 
-// CORREGIDO 2026-09-13 (Diego: "el movimiento... parece que saltan"):
-// antes las criaturas se dibujaban dentro del mismo recorrido por celda
-// que la flora/agua, en la capa ESTATICA que se destruye y se recrea
-// entera en cada sondeo -- un elemento nuevo no tiene "posicion
-// anterior" de la que animar, asi que cada actualizacion se veia como
-// un salto instantaneo a la celda nueva. Las criaturas pasan a vivir en
-// su propia capa persistente (capaCriaturas, ver renderCriaturas) --
-// esta funcion ya NO las gestiona, solo el suelo (planta/agua/
-// construccion/bioma). Efecto colateral correcto, no un bug: una
-// criatura de pie sobre hierba ahora deja ver la hierba debajo, en vez
-// de taparla por completo como antes.
+// Orden de huella real (config/materiales.yaml: huella_m2_<tipo>, valores
+// reales copiados aqui solo para desempatar que sello dibujar si dos
+// construcciones comparten celda -- almacen(40) > salon_comun(35) ==
+// cocina(35) > refugio(15) == taller(15)).
+const ORDEN_HUELLA_CONSTRUCCION = { almacen: 40, salon_comun: 35, cocina: 35, refugio: 15, taller: 15 };
+
 function infoCriatura(ent) {
-  const pool = SPRITES_CRIATURA[ent.tipo];
-  // Escala por ALTURA real del individuo (dimensiones.altura_m, ya
-  // exportada por construir_instantanea) -- misma formula que flora
-  // (ALTURA_REAL_FLORA_M/escalaPorAltura mas arriba), corregido
-  // 2026-09-13 (antes usaba PESO, ver historial de esta seccion).
-  const alturaM = ent.dimensiones ? ent.dimensiones.altura_m : null;
-  const escala = escalaPorAltura(alturaM);
-  if (pool) {
-    // variante determinista por individuo (hoy solo gnomo tiene varias)
-    // -- no por celda, cada entidad conserva su propia variante siempre.
-    const idx = Math.floor(hashDet(ent.id, 0, 73) * pool.length);
-    return { tipo: 'sprite', src: pool[idx], escala };
-  }
-  // fallback ASCII -- especie sin sprite (hoy solo necromasa cae aqui).
-  const s = SIMBOLO_ENTIDAD[ent.tipo] || { s: '?', color: '#fff' };
-  return { tipo: 'txt', ch: s.s, color: s.color, glow: true, escala };
+  const g = CATALOGO_GLIFOS.fauna[ent.tipo] || { ch: '?', color: '#ffffff', nombre: ent.tipo };
+  return { ch: g.ch, color: g.color, img: g.img || null };
 }
 
-function contenidoCelda(c) {
-  // devuelve {tipo:'sprite'|'agua'|'txt', src/ch, color, escala} -- SOLO
-  // suelo (plantas/agua/construccion/bioma), las criaturas ya no pasan
-  // por aqui (ver infoCriatura/renderCriaturas).
-  const construcciones = construccionesPorCelda[c.x + ',' + c.y];
-  if (construcciones && construcciones.length > 0) {
-    // varias construcciones en la misma celda (cupo compartido, dato
-    // real): se dibuja la de mayor huella real primero (almacen > refugio,
-    // mismo orden que huella_m2_almacen > huella_m2_refugio en
-    // config/materiales.yaml) -- el resto queda oculto, mismo criterio de
-    // "una sola representacion por celda" que ya usa plantas.
-    const con = [...construcciones].sort((a, b) =>
-      (FACTOR_TAMANO_CONSTRUCCION[b.tipo] || 1) - (FACTOR_TAMANO_CONSTRUCCION[a.tipo] || 1))[0];
-    const pool = SPRITES_CONSTRUCCION[con.tipo];
-    if (pool) {
-      const idx = Math.floor(hashDet(c.x, c.y, 83) * pool.length);
-      return { tipo: 'sprite', src: pool[idx], escala: FACTOR_TAMANO_CONSTRUCCION[con.tipo] || 1.5 };
-    }
-    // tipo real sin sprite todavia (salon_comun/cocina) -- fallback ascii.
-    return { tipo: 'txt', ch: '#', color: '#8a6a3a', escala: 1.2 };
-  }
+// REDISEÑADO 2026-09-16, dos veces seguidas. Primero (feedback: "demasiado
+// espaciado, no se detecta que es un mapa"): un glifo suelto por celda deja
+// huecos de negro puro entre celdas sin contenido -- se añadió COLOR DE
+// FONDO a cada celda (terreno/agua) y se vacio el glifo del suelo desnudo,
+// confiando solo en el fondo CSS. Segunda vuelta (feedback comparando
+// contra capturas reales de Dwarf Fortress: "necesitamos que quede lo mas
+// vivo posible") corrigio el resultado de la primera -- un bloque de color
+// CSS plano no es como lee DF su propio suelo: alli CADA celda imprime un
+// glifo real (el mismo puñado de caracteres repetido, pero con variacion
+// de TONO por celda), lo que se lee como textura "tejida" en vez de un
+// mosaico de rectangulos. La funcion que calculaba esto (contenidoCelda,
+// {ch,color,fondo} con un solo glifo) se sustituyo despues por itemsCelda
+// ({items:[...],fondo}, ver mas abajo) al añadir el mosaico 2x2 -- ch ya
+// no queda vacio en ninguna de las dos, ver TEXTURA_TERRENO/
+// TEXTURA_COBERTURA/tonoCelda mas arriba para el mecanismo de variante+tono
+// determinista por celda.
+function fondoBioma(c) {
   if (c.tiene_agua) {
-    // CORREGIDO 2026-09-13 (Diego: "el agua esta fatal" / "ese verde...
-    // no lo uses, solo usa la textura y el charco... con transparencia"):
-    // ver el bloque AGUA_* mas abajo (antes de contenidoCelda en el
-    // orden de ejecucion, ver comentario alli) -- lago ya no elige un
-    // sprite al azar POR CELDA (mezclaba hasta 12 texturas y tonos
-    // distintos en un mismo lago, parche visual). poza se dibuja aparte,
-    // una sola vez por cuerpo conexo -- aqui no se dibuja nada.
-    if (c.tipo_agua === 'poza') return { tipo: 'omitir' };
-    const src = lagoVariantePorCelda[c.x + ',' + c.y] || LAGO_TILEABLE[0];
-    return { tipo: 'agua', src };
+    const g = CATALOGO_GLIFOS.agua[c.tipo_agua] || CATALOGO_GLIFOS.agua.lago;
+    return g.color;
   }
+  const g = CATALOGO_GLIFOS.terreno[c.bioma];
+  return g ? g.color : '#333333';
+}
+
+// MOSAICO 2x2 (2026-09-16, Diego: "y si creamos mas celdas... eso nos
+// permitiria ser mas fieles a mostrar los recursos de una celda"). Cada
+// celda del motor sigue siendo la misma (100 m², config/mundo.yaml:
+// metros_por_celda=10, sin tocar nada de nucleo/) -- esto es subdivision
+// PURAMENTE VISUAL: en vez de colapsar a un unico glifo el contenido de
+// una celda, itemsCelda() junta TODOS los elementos reales y distintos
+// que el motor ya expone (construcciones, planta competidora + coberturas,
+// recursos en el suelo) en una lista, y renderMapa() los reparte en un
+// mosaico de hasta 4 cuadrantes en vez de descartar todo menos el primero.
+// El orden de entrada a la lista es determinista (construcciones por
+// huella, luego planta, luego recursos) -- nunca cambia de un frame a otro
+// para el mismo estado. Agua queda FUERA de este mecanismo a proposito:
+// una celda de agua no tiene una "mitad seca" que el motor modele, mezclar
+// agua con otro icono en el mismo mosaico inventaria una particion que no
+// existe en los datos.
+function itemsCelda(c) {
+  const fondoBase = fondoBioma(c);
+
+  if (c.tiene_agua) {
+    const g = CATALOGO_GLIFOS.agua[c.tipo_agua] || CATALOGO_GLIFOS.agua.lago;
+    // Profundidad real (agua permanente o charco efimero segun el tipo) ->
+    // mas oscuro/opaco cuanto mas profundo, dato real del motor, no un
+    // degradado inventado.
+    const prof = c.tipo_agua === 'poza' ? c.profundidad_charco : c.profundidad_agua;
+    const alfaFondo = Math.max(0.45, Math.min(0.85, 0.5 + (prof || 0) * 0.35));
+    const item = c.tipo_agua === 'poza'
+      ? { ch: ':', color: tonoCelda(g.color, c.x, c.y, 61, 0.2) }
+      : { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 63, 0.2) };
+    return { items: [item], fondo: hexARgba(g.color, alfaFondo) };
+  }
+
+  const items = [];
+
+  const construcciones = construccionesPorCelda[c.x + ',' + c.y] || [];
+  for (const con of [...construcciones].sort((a, b) =>
+      (ORDEN_HUELLA_CONSTRUCCION[b.tipo] || 1) - (ORDEN_HUELLA_CONSTRUCCION[a.tipo] || 1))) {
+    const g = CATALOGO_GLIFOS.construcciones[con.tipo] || { ch: '#', color: '#8a6a3a' };
+    items.push({ ch: g.ch, color: g.color, img: g.img || null, tipoConstruccion: con.tipo });
+  }
+
+  // Segundo plano combinado (mismo mecanismo que ya existia, ahora dentro
+  // de itemsCelda): si un arbol/arbusto comparte celda con cobertura real,
+  // la cobertura tiñe el fondo en vez de perderse.
+  let fondoColor = fondoBase, fondoAlfa = items.length > 0 ? 0.3 : 0.22;
   if (c.plantas && c.plantas.length > 0) {
-    // dato real del motor (cupo de espacio compartido, 2026-09-03): mas de
-    // una planta en la celda -- preferimos representar eso con un sprite
-    // de grupo ya denso en vez de repetir el mismo arbol individual.
-    const competidora = c.plantas.find(p => ESPECIES_COMPETIDORAS_SET.has(p.especie)) || c.plantas[0];
-    const especie = competidora.especie;
-    // Escala por ETAPA DE CRECIMIENTO real (Planta.etapa, 0=brote..1=madura)
-    // -- un brote se ve pequeno, una planta madura llena mas su celda --
-    // combinada con la altura real aproximada de la especie madura
-    // (ALTURA_REAL_FLORA_M, misma formula que fauna -- ver mas arriba).
-    const escalaEtapa = (0.55 + Math.min(1, competidora.etapa || 1) * 0.75) * escalaPorAltura(ALTURA_REAL_FLORA_M[especie]);
-    const pool = SPRITES_FLORA[especie];
-    if (pool) {
-      const idx = Math.floor(hashDet(c.x, c.y, 17) * pool.length);
-      if (c.plantas.length > 1) {
-        // celda con mas de una planta (dato real, cupo compartido) --
-        // en vez de un sprite de grupo aparte (que traia su propia
-        // paleta, no siempre coherente con la elegida aqui), dibujamos
-        // el MISMO pool dos veces con un segundo indice distinto y un
-        // pequeno offset, heredando automaticamente el color correcto.
-        const idx2 = Math.floor(hashDet(c.x, c.y, 41) * pool.length);
-        return { tipo: 'sprite-doble', srcs: [pool[idx], pool[idx2]], escala: escalaEtapa };
+    const competidora = c.plantas.find(p => {
+      const g = CATALOGO_GLIFOS.flora[p.especie];
+      return g && g.categoria !== 'cobertura';
+    });
+    const coberturas = c.plantas.filter(p => {
+      const g = CATALOGO_GLIFOS.flora[p.especie];
+      return g && g.categoria === 'cobertura';
+    });
+    if (competidora) {
+      const g = CATALOGO_GLIFOS.flora[competidora.especie];
+      // Etapa de crecimiento real (Planta.etapa 0..1) -> opacidad: un
+      // brote se ve tenue, una planta madura llena de color.
+      const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
+      items.push({ ch: g.ch, color: hexARgba(g.color, alfa) });
+      if (coberturas.length > 0) {
+        fondoColor = CATALOGO_GLIFOS.flora[coberturas[0].especie].color;
+        fondoAlfa = 0.4;
       }
-      return { tipo: 'sprite', src: pool[idx], escala: escalaEtapa };
+    } else {
+      // Sin competidora: cada especie de cobertura real (normalmente una,
+      // pero el motor permite mas de una) entra como su propio item --
+      // antes solo se representaba la primera, el resto se descartaba.
+      coberturas.forEach((cob, i) => {
+        const g = CATALOGO_GLIFOS.flora[cob.especie];
+        if (!g) return;
+        const alfa = 0.55 + Math.min(1, cob.etapa ?? 1) * 0.45;
+        const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
+        items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3, alfa) });
+      });
     }
-    // especie sin sprite todavia -> fallback ascii generico
-    return { tipo: 'txt', ch: "'", color: '#7a5a2a', escala: 1.0 };
   }
-  // Objetos ambientales: decoracion de suelo ligada a un recurso REAL ya
-  // presente en c.recursos (2026-09-13) -- nunca inventado. Solo se llega
-  // aqui si la celda no tiene ya entidad/construccion/agua/planta, para no
-  // amontonar sprites encima de algo mas relevante. piedra_suelta (la
-  // misma piedra de percusion del fuego) antes que madera (las ramas
-  // caidas que RECOLECTAR ya consume) -- orden arbitrario entre las dos,
-  // ambas son igual de frecuentes en el catalogo.
+
   const recursos = c.recursos || {};
   if ((recursos.piedra_suelta || 0) > 0) {
-    const pool = SPRITES_OBJETOS.roca;
-    const idx = Math.floor(hashDet(c.x, c.y, 97) * pool.length);
-    return { tipo: 'sprite', src: pool[idx], escala: 0.5 };
+    const g = CATALOGO_GLIFOS.recursos.piedra_suelta;
+    items.push({ ch: g.ch, color: g.color });
   }
   if ((recursos.madera || 0) > 0) {
-    const pool = SPRITES_OBJETOS.rama;
-    const idx = Math.floor(hashDet(c.x, c.y, 101) * pool.length);
-    return { tipo: 'sprite', src: pool[idx], escala: 0.45 };
+    const g = CATALOGO_GLIFOS.recursos.madera;
+    items.push({ ch: g.ch, color: g.color });
   }
-  let simb = SIMBOLO_BIOMA[c.bioma] || { s: '?', color: '#666' };
-  let color = simb.color, ch = simb.s;
-  if (c.bioma === 'montana') {
-    const t = Math.min(1, c.elevacion);
-    color = `rgb(${Math.round(90+t*130)},${Math.round(70+t*110)},${Math.round(40+t*70)})`;
-    ch = c.elevacion > 0.5 ? '^' : '.';
+
+  if (items.length === 0) {
+    // Terreno base desnudo: SIEMPRE imprime un glifo (nunca vacio) --
+    // variante de textura + tono elegidos por hash determinista de la
+    // celda (ver TEXTURA_TERRENO/tonoCelda arriba). Excepcion real:
+    // montaña distingue pico de ladera por elevacion real, convencion
+    // estandar de todo roguelike.
+    if (c.bioma === 'montana' && c.elevacion > 0.72) {
+      const g = CATALOGO_GLIFOS.terreno.pico;
+      items.push({ ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 41, 0.2) });
+    } else if (c.bioma === 'montana') {
+      const g = CATALOGO_GLIFOS.terreno.montana;
+      items.push({ ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 43, 0.2) });
+    } else {
+      const pool = TEXTURA_TERRENO[c.bioma] || ['░'];
+      const ch = glifoTextura(pool, c.x, c.y, 47);
+      items.push({ ch, color: tonoCelda(fondoBase, c.x, c.y, 53, 0.35) });
+    }
   }
-  return { tipo: 'txt', ch, color, escala: 1.0 };
+
+  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa) };
 }
 
-// CORREGIDO 2026-09-13 (Diego: "igual hay demasiada densidad?", y de
-// nuevo despues: "sigue habiendo mucho solapamiento y no se distinguen
-// bien los sprites"). Verificado contra los datos reales antes de la
-// primera pasada -- solo 50% de las celdas tienen alguna planta (39%
-// vacias, 11% agua), no es un problema de cuanta flora siembra el
-// motor, es cuanto se desborda cada sprite sobre sus celdas vecinas.
-// 1.4 -> 1.05 no bastaba (un pino maduro seguia ocupando ~2.7 celdas de
-// lado) -- bajado otra vez a 0.85. Mismo criterio relativo entre
-// especies en ambas pasadas (todas se reducen por igual, el orden
-// arbol > caballo > arbusto ya corregido no cambia).
-const FACTOR_SPRITE_GRANDE = 0.85;
-
-// --- Cenital RECTO (sin desplazamiento diagonal por fila -- la Caballera
-// se probo y no convencio) + solape: cada celda en su cuadricula normal,
-// pero los sprites se dibujan mas grandes que su celda y anclados por la
-// base, con Y-sort, para la sensacion de "viveza" que si funcionaba.
-function celdaAPantalla(wx, wy, elevacion, tam) {
+function celdaAPantalla(wx, wy, tam) {
   return { cx: wx * tam, cy: wy * tam };
 }
 
-// Dos capas dentro de #mapa-contenido: la ESTATICA (suelo -- flora,
-// agua, construcciones, objetos ambientales) se destruye y se recrea
-// entera en cada render, igual que siempre; la de CRIATURAS es
-// persistente entre renders (ver renderCriaturas) para poder animar su
-// movimiento con una transicion CSS en vez de teletransportarlas.
-// Creadas una sola vez, la primera vez que hace falta cualquiera de
-// las dos -- ninguna asume que la otra ya exista.
+// Dos capas dentro de #mapa-contenido: la ESTATICA (suelo -- terreno,
+// agua, flora, construcciones, recursos) se destruye y se recrea entera en
+// cada render; la de CRIATURAS es persistente entre renders (un elemento
+// por id, solo se actualiza left/top) para poder animar su desplazamiento
+// con una transicion CSS en vez de teletransportarlas -- mismo mecanismo
+// que ya tenia el prototipo hibrido, ahora aplicado a texto en vez de
+// imagenes.
 let capaEstatica = null, capaCriaturas = null;
 function asegurarCapas() {
   const cont = document.getElementById('mapa-contenido');
@@ -594,6 +643,155 @@ function asegurarCapas() {
   return cont;
 }
 
+// Escala generica por raiz N-esima de una razon contra una referencia
+// propia -- MISMO metodo de compresion para fauna y construcciones (evita
+// que un rango real amplio se dispare de forma absurda en pantalla), pero
+// SIN forzar que compartan la misma unidad, el mismo punto de anclaje NI
+// el mismo exponente: metros (altura real de un individuo) y kg (masa
+// minima de material de un edificio) no son la misma magnitud fisica y
+// cruzarlas como si lo fueran fue precisamente el bug de un circulo
+// anterior (ver comentario de tamanoSpriteConstruccion mas abajo).
+// exponente=0.5 (raiz cuadrada) por defecto -- el que ya usaba fauna.
+function escalarPorRaiz(valor, valorReferencia, pxReferencia, minPx, maxPx, exponente = 0.5) {
+  const escala = Math.pow(Math.max(0.0001, valor) / valorReferencia, exponente);
+  return Math.max(minPx, Math.min(maxPx, pxReferencia * escala));
+}
+
+// RECALIBRADO 2026-09-16 (Diego, tercera vuelta sobre este mismo
+// mecanismo): "tampoco hagas gigantes las construcciones, igual lo que
+// hay que hacer es las criaturas mas pequeñas, porque al final tambien
+// estan los arboles y flora" -- la flora (arbol/arbusto/cobertura) sigue
+// siendo un unico glifo confinado a su celda (CELDA=32px, nunca
+// reescalado), asi que criaturas/construcciones demasiado grandes frente
+// a ese ancla rompen la coherencia visual del mapa completo, no solo la
+// proporcion entre ellas dos. Referencia de gnomo bajada de CELDA*1.4 a
+// CELDA*1.0 (una persona ~del ancho de una celda, no 1.4x) y el tope de
+// fauna de CELDA*2.2 a CELDA*1.5 (un caballo ya no supera 1.5 celdas).
+const ALTURA_REFERENCIA_M = 0.9; // ~altura media de gnomo (rango 0.9-1.2m)
+const BASE_SPRITE_A_REFERENCIA = CELDA * 1.0;
+const ALTURA_SPRITE_MIN = CELDA * 0.5;
+const ALTURA_SPRITE_MAX = CELDA * 1.5;
+
+// Tamaño de sprite de construccion -- REESCRITO 2026-09-16, tres veces en
+// el mismo circulo. 1er intento: huella_m2 (area) cruzada con la
+// referencia de metros de fauna -- Diego: "ese gnomo es enorme en
+// comparacion a la construccion" (un refugio salia mas pequeño en
+// pantalla que una persona). 2o intento: huella_m2 ya cruzada
+// correctamente, pero seguia siendo la metrica EQUIVOCADA para decidir
+// cual es "el mas grande" -- Diego: "el mas grande deberia ser el salon
+// comun", y por huella_m2 NO lo es (almacen=40 > salon_comun=35).
+// Investigado contra el propio config antes de tocar nada mas:
+// huella_m2_salon_comun se bajo de 45 a 35 el 2026-09-09 por una razon
+// puramente aritmetica (que cupiera junto al almacen dentro de
+// capacidad_construccion_celda_m2=80), NO porque el edificio sea mas
+// pequeño -- el comentario original de salon_comun ya decia
+// explicitamente "Algo mas grande que el almacen (masa)", y
+// masa_minima_salon_comun (70) SI es mayor que masa_minima_almacen (60).
+// La masa de material -- no la huella en el suelo -- es el eje que
+// realmente codifica la jerarquia de importancia constructiva que Diego
+// ya habia fijado en su propio config. huella_m2 sigue siendo la
+// metrica CORRECTA para ORDEN_HUELLA_CONSTRUCCION (desempatar que sello
+// dibujar cuando 2 construcciones compiten por la misma celda -- ese
+// mecanismo es literalmente sobre area de suelo), asi que se queda
+// intacta; el tamaño VISUAL usa una tabla separada.
+//
+// 3er intento (este): con masa arreglando el orden, el resultado
+// (refugio 81px, salon_comun 175px sin zoom) volvia a ser "gigante" --
+// Diego lo señalo de nuevo, pidiendo ademas reducir fauna (ver arriba).
+// Cambio de exponente de 0.5 (raiz cuadrada) a 1/3 (raiz CUBICA) para
+// las construcciones, no un ajuste arbitrario de constantes: masa ~
+// volumen ~ lado³ es la relacion fisicamente correcta entre una MASA
+// (kg) y un tamaño LINEAL, a diferencia de huella_m2 (area, donde raiz
+// cuadrada si es lo correcto) -- de paso, al ser un exponente menor,
+// comprime mas el rango real (70/15=4.67x en masa queda en 1.67x en
+// pantalla, antes 2.16x con raiz cuadrada), exactamente lo que Diego
+// pedia sin inventar un factor de ajuste sin justificar.
+const MASA_MINIMA_CONSTRUCCION = { salon_comun: 70, almacen: 60, cocina: 50, taller: 50, refugio: 15 };
+const MASA_REFERENCIA_KG = 15; // masa_minima_refugio
+// Referencia propia (no cruzada con metros): el edificio mas pequeño real
+// (refugio) se ancla apenas por encima del sprite de la criatura mas
+// grande posible (caballo, tope ALTURA_SPRITE_MAX) -- un edificio, por
+// modesto que sea, nunca deberia caber "dentro" de una persona, pero
+// tampoco desbordar varias celdas de flora vecinas.
+const SPRITE_CONSTRUCCION_REFERENCIA = ALTURA_SPRITE_MAX * 1.1;
+const SPRITE_CONSTRUCCION_MIN = CELDA * 1.0;
+const SPRITE_CONSTRUCCION_MAX = CELDA * 3.0;
+function tamanoSpriteConstruccion(tipo) {
+  const masa = MASA_MINIMA_CONSTRUCCION[tipo] || MASA_REFERENCIA_KG;
+  return escalarPorRaiz(masa, MASA_REFERENCIA_KG, SPRITE_CONSTRUCCION_REFERENCIA, SPRITE_CONSTRUCCION_MIN, SPRITE_CONSTRUCCION_MAX, 1 / 3);
+}
+
+function crearCeldaTxt(ch, color, cx, cy, fondo) {
+  const el = document.createElement('div');
+  el.className = 'celda-txt';
+  el.textContent = ch;
+  el.style.width = CELDA + 'px'; el.style.height = CELDA + 'px';
+  el.style.fontSize = Math.round(CELDA * 0.8) + 'px';
+  el.style.color = color;
+  if (fondo) el.style.backgroundColor = fondo;
+  el.style.left = cx + 'px'; el.style.top = cy + 'px';
+  return el;
+}
+
+// Construcciones con sprite real (2026-09-16, mismo criterio ya aplicado a
+// fauna) -- a diferencia de las criaturas (capa persistente, animada), las
+// construcciones viven en la capa ESTATICA: se recrean enteras en cada
+// renderMapa() igual que cualquier otro elemento del suelo, no necesitan
+// transicion de movimiento propia. El contenedor conserva el color de
+// fondo de la celda (rastro de terreno bajo el edificio, mismo `fondo` que
+// ya calculaba itemsCelda); el <img> se ancla abajo-centro dentro de el,
+// igual que .criatura-img, escalado por huella_m2 real
+// (tamanoSpriteConstruccion) en vez de un tamaño fijo.
+function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
+  const cont = document.createElement('div');
+  cont.className = 'celda-txt';
+  cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
+  cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
+  if (fondo) cont.style.backgroundColor = fondo;
+  const img = document.createElement('img');
+  img.className = 'construccion-img';
+  img.src = src;
+  img.style.height = tamano + 'px';
+  cont.appendChild(img);
+  return cont;
+}
+
+// Mosaico 2x2 -- solo se usa cuando itemsCelda() devuelve 2 o mas items
+// reales (ver su comentario mas arriba); con 0 o 1 item, crearCeldaTxt
+// sigue dibujando un glifo a tamaño completo, la representacion mas
+// legible para el caso mas comun (suelo desnudo, un unico landmark).
+function crearCeldaCuadrantes(items, cx, cy, fondo) {
+  const cont = document.createElement('div');
+  cont.className = 'celda-cuadrantes';
+  cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
+  cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
+  if (fondo) cont.style.backgroundColor = fondo;
+  const fontSize = Math.round(CELDA * 0.42);
+  for (let i = 0; i < 4; i++) {
+    const cuad = document.createElement('div');
+    cuad.className = 'cuadrante';
+    const item = items[i];
+    if (item && item.img) {
+      // Construccion compartiendo celda con otro elemento real (recurso,
+      // planta) -- caso raro pero posible dentro del presupuesto de
+      // huella_m2 del motor. El sprite se reduce al tamaño del propio
+      // cuadrante en vez de al de celda completa (tamanoSpriteConstruccion
+      // asume celda completa), para no desbordar sobre los demas.
+      const img = document.createElement('img');
+      img.className = 'construccion-img construccion-img-cuadrante';
+      img.src = item.img;
+      img.style.height = Math.round(CELDA * 0.42) + 'px';
+      cuad.appendChild(img);
+    } else if (item) {
+      cuad.textContent = item.ch;
+      cuad.style.color = item.color;
+      cuad.style.fontSize = fontSize + 'px';
+    }
+    cont.appendChild(cuad);
+  }
+  return cont;
+}
+
 function renderMapa() {
   const cont = asegurarCapas();
   capaEstatica.innerHTML = '';
@@ -602,107 +800,86 @@ function renderMapa() {
   for (let y = 0; y < DATA.alto; y++) {
     for (let x = 0; x < DATA.ancho; x++) {
       const c = DATA.celdas[y][x];
-      const { cx, cy } = celdaAPantalla(x, y, c.elevacion, CELDA);
-      const baseLeft = cx;
-      const baseTop = cy;
-      const info = contenidoCelda(c);
-      const zi = String(1000 + y);
-      // Jitter determinista: la planta no siempre esta en el centro exacto
-      // de su celda -- un pequeno desplazamiento (mismo hash de siempre,
-      // reproducible, no aleatorio en cada carga) rompe la sensacion de
-      // "todo alineado a rejilla" sin perder la correspondencia real con
-      // los datos (sigue siendo ESA celda, solo no pixel-perfect centrada).
-      const jitterX = (hashDet(x, y, 53) - 0.5) * CELDA * 0.7;
-      const jitterY = (hashDet(x, y, 61) - 0.5) * CELDA * 0.35;
-      function colocarSprite(src, offsetX) {
-        const el = document.createElement('img');
-        el.className = 'celda-img';
-        el.src = src;
-        // Lado de referencia (el mayor de los dos ejes) segun escala real;
-        // el aspecto real del fichero decide como se reparte entre ancho y
-        // alto -- sin esto, una criatura o un pino (nada cuadrado de
-        // verdad) se deforma al forzarlo a una caja cuadrada.
-        const lado = CELDA * FACTOR_SPRITE_GRANDE * info.escala;
-        const aspecto = ASPECTO_SPRITE[src] || 1;
-        const anchoImg = aspecto >= 1 ? lado : lado * aspecto;
-        const altoImg = aspecto >= 1 ? lado / aspecto : lado;
-        el.style.width = anchoImg + 'px';
-        el.style.height = altoImg + 'px';
-        el.style.left = (baseLeft - (anchoImg-CELDA)/2 + offsetX + jitterX) + 'px';
-        el.style.top = (baseTop - (altoImg-CELDA) + jitterY) + 'px';
-        el.style.zIndex = zi;
-        capaEstatica.appendChild(el);
-      }
-      if (info.tipo === 'agua') {
-        // Textura de suelo: rellena la celda exacta, sin desbordar, sin
-        // jitter ni contorno -- es agua continua, no un objeto aislado.
-        const el = document.createElement('img');
-        el.className = 'celda-img-tile';
-        el.src = info.src;
-        el.style.width = CELDA + 'px';
-        el.style.height = CELDA + 'px';
-        el.style.left = baseLeft + 'px';
-        el.style.top = baseTop + 'px';
-        el.style.zIndex = zi;
-        capaEstatica.appendChild(el);
-      } else if (info.tipo === 'sprite') {
-        colocarSprite(info.src, 0);
-      } else if (info.tipo === 'sprite-doble') {
-        // dos sprites del mismo pool, ligeramente separados -- da sensacion
-        // de mas de un individuo sin depender de un sprite de grupo aparte.
-        colocarSprite(info.srcs[0], -CELDA*0.28);
-        colocarSprite(info.srcs[1], CELDA*0.28);
-      } else if (info.tipo === 'omitir') {
-        // poza: no se dibuja por celda, ver el bucle de pozaOverlays
-        // mas abajo -- una sola pieza por charco entero.
-      } else {
-        const el = document.createElement('div');
-        el.className = 'celda-txt';
-        el.textContent = info.ch;
-        const tam = CELDA * info.escala;
-        el.style.width = CELDA + 'px';
-        el.style.height = CELDA + 'px';
-        el.style.fontSize = Math.round(tam*0.7) + 'px';
-        el.style.color = info.color;
-        if (info.glow) el.style.textShadow = `0 0 6px ${info.color}`;
-        el.style.left = baseLeft + 'px';
-        el.style.top = baseTop + 'px';
-        el.style.zIndex = zi;
-        capaEstatica.appendChild(el);
-      }
+      const { cx, cy } = celdaAPantalla(x, y, CELDA);
+      const info = itemsCelda(c);
+      // z-index bajo (0..alto) para el fondo/suelo -- por debajo de CUALQUIER
+      // glifo de la capa de criaturas (que sigue arrancando en 1000+y), asi
+      // una criatura de pie sobre una celda de fondo tintado nunca queda
+      // tapada por ella.
+      //
+      // CORREGIDO 2026-09-16 (Diego, tras ver el almacen: "las criaturas o
+      // construcciones deben quedar por encima de todo, que no se solape
+      // ningun color o simbolo"). Bug real confirmado con un screenshot
+      // antes de tocar nada: un sprite de construccion es mas ANCHO que
+      // una celda (el almacen, p.ej., desborda ~12px a cada lado a esta
+      // escala) y se pinta centrado sobre su propia celda -- con el mismo
+      // z-index que el resto del suelo (=y), la celda VECINA de la derecha
+      // se inserta despues en el DOM en el mismo nivel de apilamiento y
+      // por tanto tapa el borde desbordado del tejado (confirmado con una
+      // captura: corte recto justo en el limite de celda). Los glifos de
+      // texto normales nunca desbordan su propia celda, asi que a ellos
+      // nunca les afectaba -- solo a los sprites de imagen, que son mas
+      // grandes que la celda a proposito (ver tamanoSpriteConstruccion).
+      // Fix: las construcciones van a su PROPIO nivel (500+y) -- por
+      // encima de TODO el suelo/flora/recursos (max real ~grid_alto,
+      // muy por debajo de 500) pero por debajo de las criaturas (1000+y),
+      // que deben seguir tapando un edificio si una camina delante.
+      // Limite conocido y no resuelto aqui (fuera de alcance de este
+      // circulo, mismo mecanismo de desempate por orden de insercion que
+      // ya existia): dos construcciones o dos criaturas ADYACENTES en la
+      // misma fila podrian seguir solapandose entre si por el mismo
+      // motivo -- no observado en juego libre, no se resuelve sin abrir
+      // un mecanismo de profundidad real por eje Y+X que no se pidio.
+      const unico = info.items[0] || {};
+      const esConstruccionUnica = !!unico.img;
+      const el = info.items.length > 1
+        ? crearCeldaCuadrantes(info.items, cx, cy, info.fondo)
+        : esConstruccionUnica
+          ? crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion))
+          : crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
+      el.style.zIndex = String((esConstruccionUnica ? 500 : 0) + y);
+      capaEstatica.appendChild(el);
     }
-  }
-  // Charcos: una sola pieza por cuerpo conexo, escalada a su caja
-  // real (no una silueta rota por celda) y con transparencia (Diego:
-  // "el charco usalo con un grado de transparencia") para que lea como
-  // agua superficial sobre el terreno, no como una pegatina opaca.
-  for (const ov of pozaOverlays) {
-    const el = document.createElement('img');
-    el.className = 'celda-img-tile';
-    el.src = ov.src;
-    el.style.opacity = '0.7';
-    el.style.width = ((ov.maxX - ov.minX + 1) * CELDA) + 'px';
-    el.style.height = ((ov.maxY - ov.minY + 1) * CELDA) + 'px';
-    el.style.left = (ov.minX * CELDA) + 'px';
-    el.style.top = (ov.minY * CELDA) + 'px';
-    el.style.zIndex = String(1000 + ov.minY);
-    capaEstatica.appendChild(el);
   }
   document.getElementById('titulo-mapa-info').textContent =
     `TICK ${DATA.tick} · DIA ${DATA.dia} · ${DATA.estacion.toUpperCase()} · ${DATA.clima.toUpperCase()}`;
 }
 
-// Criaturas: capa PERSISTENTE (2026-09-13, Diego: "el movimiento...
-// parece que saltan" + "que las criaturas miren hacia donde se van a
-// desplazar"). Un <img> por id de entidad, reutilizado entre renders --
-// solo se cambian left/top/src, nunca se recrea el elemento mientras la
-// entidad siga viva, asi que la transicion CSS de .celda-img anima el
-// desplazamiento real en vez de teletransportar. La direccion se infiere
-// comparando la x anterior conocida de ESE id con la x nueva; sin
-// movimiento horizontal (solo vertical, o primera aparicion) se
-// conserva la ultima orientacion conocida, por defecto mirando a la
-// izquierda (orientacion nativa observada en la mayoria de los sprites
-// de este lote -- PROVISIONAL, sin comprobar especie por especie).
+// CORREGIDO 2026-09-16 (Diego: "caballos mas pequeños que zorros, cabras
+// del tamaño de conejos, haz que tenga sentido eso"). El bug real: una
+// altura de sprite FIJA para todas las especies solo reflejaba cuanto
+// margen vacio dejaba el recorte de cada PNG generado, no el tamaño real
+// del animal. Corregido igual que ya se documento para el sistema
+// retirado (escalaPorAltura del prototipo hibrido pre-ASCII): escala por
+// DimensionesFisicas.altura real del INDIVIDUO (dimensiones.altura_m, ya
+// expuesta en el DTO) -- dato real del motor, no una tabla inventada.
+// Raiz cuadrada en vez de lineal: el rango real de config/poblacion.yaml
+// va de 0.15m (ardilla) a 1.8m (caballo), mas de 10x -- un caballo 10
+// veces mas alto que una ardilla en pantalla seria absurdo a esta escala
+// de celda, pero el ORDEN relativo (mayor altura real = mayor sprite) se
+// conserva siempre, a diferencia del bug anterior donde no se conservaba
+// en absoluto. Ancho en 'auto': el navegador preserva la proporcion real
+// de cada PNG (todas distintas -- un conejo sentado es alto y estrecho,
+// un zorro de perfil es ancho y bajo).
+// ALTURA_REFERENCIA_M / BASE_SPRITE_A_REFERENCIA / ALTURA_SPRITE_MIN/MAX /
+// escalarPorRaiz ya definidos mas arriba (ver su comentario -- el mismo
+// METODO de compresion se reutiliza para tamanoSpriteConstruccion, pero
+// cada una con su propia unidad y referencia, nunca cruzadas entre si).
+function alturaSpriteCriatura(ent) {
+  const alturaM = (ent.dimensiones && ent.dimensiones.altura_m) || ALTURA_REFERENCIA_M;
+  return escalarPorRaiz(alturaM, ALTURA_REFERENCIA_M, BASE_SPRITE_A_REFERENCIA, ALTURA_SPRITE_MIN, ALTURA_SPRITE_MAX);
+}
+
+function crearCeldaImg(src, cx, cy, altura) {
+  const el = document.createElement('img');
+  el.className = 'criatura-img';
+  el.src = src;
+  el.style.height = altura + 'px';
+  el.style.left = (cx + CELDA / 2) + 'px';
+  el.style.top = (cy + CELDA) + 'px';
+  return el;
+}
+
 let elementosCriatura = {};
 function renderCriaturas() {
   asegurarCapas();
@@ -711,64 +888,44 @@ function renderCriaturas() {
     const idStr = String(ent.id);
     vistos.add(idStr);
     const info = infoCriatura(ent);
-    const { cx, cy } = celdaAPantalla(ent.x, ent.y, 0, CELDA);
-    const previo = elementosCriatura[idStr];
-    let mirarIzquierda = previo ? previo.mirarIzquierda : true;
-    if (previo && ent.x !== previo.x) mirarIzquierda = ent.x < previo.x;
-
-    if (info.tipo === 'sprite') {
-      let el = previo && previo.esImg ? previo.el : null;
-      if (!el) {
-        if (previo) previo.el.remove(); // era un div de fallback ascii, sustituido por sprite real
-        el = document.createElement('img');
-        el.className = 'celda-img';
-        capaCriaturas.appendChild(el);
-      }
-      if (el.src.indexOf(info.src) === -1) el.src = info.src;
-      const lado = CELDA * FACTOR_SPRITE_GRANDE * info.escala;
-      const aspecto = ASPECTO_SPRITE[info.src] || 1;
-      const anchoImg = aspecto >= 1 ? lado : lado * aspecto;
-      const altoImg = aspecto >= 1 ? lado / aspecto : lado;
-      el.style.width = anchoImg + 'px';
-      el.style.height = altoImg + 'px';
-      el.style.left = (cx - (anchoImg-CELDA)/2) + 'px';
-      el.style.top = (cy - (altoImg-CELDA)) + 'px';
-      el.style.zIndex = String(1000 + ent.y);
-      el.style.transform = mirarIzquierda ? 'scaleX(1)' : 'scaleX(-1)';
-      el.dataset.entId = idStr;
-      elementosCriatura[idStr] = { el, x: ent.x, y: ent.y, mirarIzquierda, esImg: true };
+    const { cx, cy } = celdaAPantalla(ent.x, ent.y, CELDA);
+    let el = elementosCriatura[idStr];
+    const esImg = !!info.img;
+    // Si el tipo de elemento cambia (no deberia pasar en juego normal,
+    // el catalogo es estatico, pero es una red de seguridad barata) se
+    // recrea en vez de intentar mutar un <img> en un <div> de texto.
+    if (el && !!el.dataset.esImg !== esImg) { el.remove(); el = null; }
+    if (!el) {
+      el = esImg ? crearCeldaImg(info.img, cx, cy, alturaSpriteCriatura(ent)) : crearCeldaTxt(info.ch, info.color, cx, cy);
+      el.dataset.esImg = esImg ? '1' : '';
+      el.style.transition = esImg ? 'left 0.9s linear, top 0.9s linear' : 'left 0.9s linear, top 0.9s linear';
+      capaCriaturas.appendChild(el);
+      elementosCriatura[idStr] = el;
+    } else if (esImg) {
+      if (!el.src.endsWith(info.img)) el.src = info.img;
+      el.style.height = alturaSpriteCriatura(ent) + 'px';
+      el.style.left = (cx + CELDA / 2) + 'px';
+      el.style.top = (cy + CELDA) + 'px';
     } else {
-      // fallback ascii (necromasa, u otra especie sin sprite todavia) --
-      // sin animar posicion, no tiene sentido "deslizar" un cadaver.
-      let el = previo && !previo.esImg ? previo.el : null;
-      if (!el) {
-        if (previo) previo.el.remove();
-        el = document.createElement('div');
-        el.className = 'celda-txt';
-        capaCriaturas.appendChild(el);
-      }
       el.textContent = info.ch;
-      el.style.width = CELDA + 'px'; el.style.height = CELDA + 'px';
-      el.style.fontSize = Math.round(CELDA*info.escala*0.7) + 'px';
       el.style.color = info.color;
-      if (info.glow) el.style.textShadow = `0 0 6px ${info.color}`;
-      el.style.left = cx + 'px'; el.style.top = cy + 'px';
-      el.style.zIndex = String(1000 + ent.y);
-      el.dataset.entId = idStr;
-      elementosCriatura[idStr] = { el, x: ent.x, y: ent.y, mirarIzquierda, esImg: false };
+      el.style.left = cx + 'px';
+      el.style.top = cy + 'px';
     }
+    el.style.zIndex = String(1000 + ent.y);
+    el.dataset.entId = idStr;
   }
   // Entidades que ya no existen (murieron, o salieron de la zona
   // exportada) -- se retira su elemento, no se deja huerfano en el DOM.
   for (const id of Object.keys(elementosCriatura)) {
     if (!vistos.has(id)) {
-      elementosCriatura[id].el.remove();
+      elementosCriatura[id].remove();
       delete elementosCriatura[id];
     }
   }
 }
 
-// --- zoom (rueda) + pan (arrastre) ---
+// --- zoom centrado en el cursor + pan por arrastre ---
 let zoom = 1, panX = -CELDA*7, panY = -CELDA*3;
 const viewport = document.getElementById('mapa-viewport');
 const contenido = document.getElementById('mapa-contenido');
@@ -778,8 +935,17 @@ function aplicarTransform() {
 }
 viewport.addEventListener('wheel', (ev) => {
   ev.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
   const factor = ev.deltaY < 0 ? 1.12 : 1/1.12;
-  zoom = Math.min(6, Math.max(0.4, zoom * factor));
+  const nuevoZoom = Math.min(6, Math.max(0.35, zoom * factor));
+  // Mantener el mismo punto de MUNDO bajo el cursor tras cambiar el zoom
+  // (sin esto, el mapa "deriva" al hacer zoom si ya se habia desplazado).
+  const contentX = (mx - panX) / zoom;
+  const contentY = (my - panY) / zoom;
+  panX = mx - contentX * nuevoZoom;
+  panY = my - contentY * nuevoZoom;
+  zoom = nuevoZoom;
   aplicarTransform();
 }, { passive: false });
 let arrastrando = false, ax=0, ay=0;
@@ -790,6 +956,43 @@ window.addEventListener('mousemove', (ev) => {
   panX += (ev.clientX - ax); panY += (ev.clientY - ay);
   ax = ev.clientX; ay = ev.clientY;
   aplicarTransform();
+});
+document.getElementById('btn-centrar').addEventListener('click', () => {
+  if (!DATA) return;
+  const rect = viewport.getBoundingClientRect();
+  zoom = 1;
+  panX = rect.width / 2 - (DATA.ancho * CELDA) / 2;
+  panY = rect.height / 2 - (DATA.alto * CELDA) / 2;
+  aplicarTransform();
+});
+
+// --- leyenda desplegable: una sola fuente de verdad (CATALOGO_GLIFOS) ---
+function construirLeyenda() {
+  const panel = document.getElementById('leyenda-panel');
+  let html = '';
+  for (const clave of ['terreno', 'agua', 'flora', 'fauna', 'construcciones', 'recursos']) {
+    const seccion = CATALOGO_GLIFOS[clave];
+    html += `<h4>${seccion.titulo}</h4>`;
+    for (const k in seccion) {
+      if (k === 'titulo') continue;
+      const it = seccion[k];
+      html += `<div class="leyenda-fila"><span class="leyenda-glifo" style="color:${it.color}">${it.ch}</span><span class="leyenda-nombre">${it.nombre}</span></div>`;
+    }
+  }
+  panel.innerHTML = html;
+}
+const btnLeyenda = document.getElementById('btn-leyenda');
+const panelLeyenda = document.getElementById('leyenda-panel');
+btnLeyenda.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  panelLeyenda.classList.toggle('abierta');
+  btnLeyenda.classList.toggle('activo', panelLeyenda.classList.contains('abierta'));
+});
+document.addEventListener('click', (ev) => {
+  if (panelLeyenda.classList.contains('abierta') && !panelLeyenda.contains(ev.target) && ev.target !== btnLeyenda) {
+    panelLeyenda.classList.remove('abierta');
+    btnLeyenda.classList.remove('activo');
+  }
 });
 
 function mostrarFicha(ent) {
@@ -832,11 +1035,11 @@ function renderNarrador() {
   cont.innerHTML = DATA.cronica.map(l => `<div class="cronica-linea">${l}</div>`).join('');
 }
 
-// Modo en vivo (2026-09-13): intenta /estado.json (relativo -- funciona
-// tanto si esto se sirve en la raiz de ManejadorWeb como en cualquier
-// prefijo). Si falla (servido suelto, sin ese endpoint), cae en
-// silencio a la instantanea estatica de datos.js -- no hay ninguna
-// bifurcacion explicita de "modo", solo un fetch que puede fallar o no.
+// Modo en vivo: intenta /estado.json (relativo -- funciona tanto si esto
+// se sirve en la raiz de ManejadorWeb como en cualquier prefijo). Si falla
+// (servido suelto, sin ese endpoint), cae en silencio a la instantanea
+// estatica de datos.js -- no hay ninguna bifurcacion explicita de "modo",
+// solo un fetch que puede fallar o no.
 async function cargarEstadoVivo() {
   try {
     const r = await fetch('estado.json', { cache: 'no-store' });
@@ -853,6 +1056,7 @@ async function cargarEstadoVivo() {
 async function iniciar() {
   await cargarEstadoVivo(); // si funciona, sustituye DATA antes del primer render
   if (!DATA) return; // ni datos.js ni /estado.json disponibles -- nada que dibujar
+  construirLeyenda();
   recalcularDerivados();
   renderMapa();
   renderCriaturas();
@@ -861,7 +1065,7 @@ async function iniciar() {
   renderNarrador();
   // Sondeo continuo. segundos_por_tick real del motor es 0.4 (config/
   // visual.yaml) -- 1000ms de por si ya sondea mas lento que cada tick
-  // real, evita recalcular componentes conexas de agua en cada uno.
+  // real, evita recalcular derivados en cada uno.
   setInterval(async () => {
     const ok = await cargarEstadoVivo();
     if (!ok) return;
