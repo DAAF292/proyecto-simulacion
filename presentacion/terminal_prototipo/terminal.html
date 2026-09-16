@@ -268,9 +268,13 @@ const CATALOGO_GLIFOS = {
   },
   flora: {
     titulo: 'Flora',
+    // (2026-09-16) pino usa '♠' en vez de '♣': silueta puntiaguda real de
+    // conifera frente a la copa redondeada de un arbol de hoja ancha --
+    // shape real, no una eleccion arbitraria (auditada contra la fuente
+    // VGA437 antes de decidir, ambos glifos existen y renderizan nitidos).
     manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol' },
     roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol' },
-    pino:              { ch: '♣', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol' },
+    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol' },
     cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto' },
     arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto' },
     arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto' },
@@ -352,15 +356,26 @@ function glifoTextura(pool, x, y, sal) {
   return pool[Math.floor(hashDet(x, y, sal) * pool.length) % pool.length];
 }
 // Pools de glifo base por bioma (montaña queda fuera: conserva su propio
-// simbolo '^'/'▲' de relieve, ya establecido). Todos caracteres ASCII
-// basicos, garantizados en cualquier fuente (incluida la bitmap VGA437).
+// simbolo '^'/'▲' de relieve, ya establecido).
+//
+// CORREGIDO 2026-09-16 (Diego: "hay otros iconos quizas mejores?" --
+// auditoria real contra la fuente VGA437 antes de decidir, no a ojo):
+// '.'/','/'\'' tienen muy poca masa visual incluso con variacion de tono
+// -- CP437 trae una familia de "sombreado" graduada por densidad
+// (░ claro, ▒ medio, ▓ oscuro) pensada exactamente para esto en
+// terminales DOS/roguelikes reales, confirmada nitida en la fuente real
+// con una pagina de prueba aislada. ░ para todo el suelo desnudo (mucha
+// mas presencia que un punto, sigue leyendose "de fondo" por su propio
+// patron moteado interno) y ▒ para cobertura vegetal (un escalon mas
+// denso que el suelo desnudo, jerarquia visual real: suelo < cobertura <
+// arbusto/arbol solidos).
 const TEXTURA_TERRENO = {
-  pradera:  ['.', "'", ','],
-  bosque:   ['"', "'", '.'],
-  desierto: ['.', ':', "'"],
-  tundra:   ['.', '·', "'"],
+  pradera:  ['░'],
+  bosque:   ['░'],
+  desierto: ['░'],
+  tundra:   ['░'],
 };
-const TEXTURA_COBERTURA = [',', "'", '`'];
+const TEXTURA_COBERTURA = ['▒'];
 
 let construccionesPorCelda = {};
 function recalcularDerivados() {
