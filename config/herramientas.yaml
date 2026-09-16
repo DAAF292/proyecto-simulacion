@@ -46,3 +46,24 @@ herramientas:
     - materiales: [madera, piedra]
       nombre: pico
       nivel: 1
+  # Mobiliario (2026-09-16, taller de artesano -- ver docs/superpowers/
+  # specs/2026-09-16-taller-mobiliario-almacen-refugio-design.md):
+  # catálogo SEPARADO, mismo criterio que recetas_mineria -- nunca
+  # compite con hacha_primitiva/pico pese a compartir materiales.
+  # A diferencia de arma/herramienta/mineria (que producen 1 objeto
+  # discreto en Inventario.objetos), estas recetas ganan `cantidad_kg`:
+  # el resultado se añade a Inventario.contenidos como material más
+  # (ver config/materiales.yaml, sección mobiliario) -- el mecanismo ya
+  # existente de mejora de vivienda lo reconoce sin cambios de código.
+  # `nivel` decide cuál es "mejor" si ambas recetas fueran completables
+  # a la vez (mismo criterio que mejor_receta_completable ya usa para
+  # arma/herramienta), sin relación con nivel de arma.
+  recetas_mobiliario:
+    - materiales: [madera]
+      nombre: utensilios_domesticos
+      nivel: 1
+      cantidad_kg: 3.0
+    - materiales: [madera, piedra]
+      nombre: mueble_tallado
+      nivel: 2
+      cantidad_kg: 5.0

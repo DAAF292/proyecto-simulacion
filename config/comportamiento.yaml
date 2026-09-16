@@ -204,6 +204,14 @@ asentamiento:
   # asentamiento junto a un río no siempre se llama por el río.
   # PROVISIONAL.
   probabilidad_nombre_tematico: 0.6
+  # Taller de artesano (2026-09-16, ver docs/superpowers/specs/
+  # 2026-09-16-taller-mobiliario-almacen-refugio-design.md): nivel [0,1]
+  # de conocimiento colectivo "artesano" que el asentamiento necesita
+  # para que FABRICAR-mobiliario esté disponible en su taller -- primer
+  # efecto real de esa cubeta. PROVISIONAL, razonado a mitad de escala
+  # (ni recién fundado ni saturado), sin calibrar contra el motor en
+  # marcha.
+  umbral_conocimiento_taller: 0.3
 
 # --- Conflicto (2026-08-30, resolutor genérico de disputas) --------------
 # nucleo/conflicto.py:resolver_disputa. Primer consumidor: refugio

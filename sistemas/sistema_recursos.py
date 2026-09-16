@@ -317,6 +317,14 @@ class SistemaRecursos:
         self.recetas_mineria: list[dict[str, Any]] = self.config_herramientas.get(
             "recetas_mineria", []
         )
+        # Mobiliario (2026-09-16, taller de artesano -- ver docs/superpowers/
+        # specs/2026-09-16-taller-mobiliario-almacen-refugio-design.md):
+        # catálogo separado, mismo criterio que recetas_mineria. A
+        # diferencia de arma/herramienta/mineria, el resultado se añade a
+        # Inventario.contenidos (kg), no a objetos -- ver _resolver_fabricar.
+        self.recetas_mobiliario: list[dict[str, Any]] = self.config_herramientas.get(
+            "recetas_mobiliario", []
+        )
         # Observacion (2026-09-11), solo _stats -- confirma que la pieza
         # se ejerce de verdad en juego libre.
         self._stats_herramientas_fabricadas: int = 0
@@ -325,6 +333,11 @@ class SistemaRecursos:
         # por falta de pico (confirma que el mecanismo se ejerce, no solo
         # que existe).
         self._stats_picos_fabricados: int = 0
+        # Observacion (2026-09-16, taller de artesano): muebles
+        # fabricados, y cuántas veces el depósito automático en el
+        # almacén del refugio se ejerció de verdad.
+        self._stats_muebles_fabricados: int = 0
+        self._stats_deposito_almacen_refugio: int = 0
         self._stats_veta_bloqueada_sin_pico: int = 0
         # Observacion (2026-09-11, "cargar con prioridad" -- ver
         # nucleo/inventario.py:descartar_contenidos_para_liberar): kg
@@ -448,6 +461,11 @@ class SistemaRecursos:
                     intencion.fabricar_categoria, agarre=agarre_fabricar,
                 )
                 self._incrementar_vocacion(gestor, mundo, eid, consciente, "conteo_artesano", asen)
+            elif intencion.accion == Accion.DORMIR and consciente:
+                inv_deposito = gestor.obtener_componente(eid, Inventario)
+                self._resolver_deposito_almacen_refugio(
+                    gestor, eid, inv_deposito, pos.x, pos.y, pos.zona_idx,
+                )
 
         # Fogatas: consumo de combustible propio y extincion (ver
         # componentes/fogata.py) -- independiente de la Accion de nadie,
@@ -819,6 +837,44 @@ class SistemaRecursos:
         if inv.contenidos[mejor_clave] <= 0.0:
             del inv.contenidos[mejor_clave]
         self._stats_mejora_refugio_sustituciones += 1
+
+    def _resolver_deposito_almacen_refugio(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        inv: Inventario | None,
+        pos_x: int,
+        pos_y: int,
+        zona_idx: int,
+    ) -> None:
+        """Almacén personal en el refugio (2026-09-16, ver docs/
+        superpowers/specs/2026-09-16-taller-mobiliario-almacen-refugio-
+        design.md): al DORMIR en el propio refugio ya completado, todo
+        el material a granel que se porta (Inventario.contenidos) que no
+        está usándose activamente (dormir, no construir/mejorar, es el
+        momento -- evita vaciar el inventario de alguien de PASO hacia
+        el almacén comunal) se deposita en Construccion.almacen,
+        liberando capacidad de carga real. Solo depósito -- sin
+        mecanismo de retirada todavía (pendiente honesto, ver spec)."""
+        if inv is None or not inv.contenidos:
+            return
+        cid_refugio = construccion_propia(gestor, entidad_id, "refugio")
+        if cid_refugio is None:
+            return
+        pos_refugio = gestor.obtener_componente(cid_refugio, Posicion)
+        if pos_refugio is None or pos_refugio.x != pos_x or pos_refugio.y != pos_y:
+            return
+        if pos_refugio.zona_idx != zona_idx:
+            return
+        refugio = gestor.obtener_componente(cid_refugio, Construccion)
+        if refugio is None or not refugio.completado_alguna_vez:
+            return
+        for clave, cantidad in inv.contenidos.items():
+            if cantidad <= 0.0:
+                continue
+            refugio.almacen[clave] = refugio.almacen.get(clave, 0.0) + cantidad
+            self._stats_deposito_almacen_refugio += 1
+        inv.contenidos.clear()
 
     def _resolver_recolectar(
         self,
@@ -1446,6 +1502,8 @@ class SistemaRecursos:
             recetas = self.recetas_herramientas
         elif categoria == "mineria":
             recetas = self.recetas_mineria
+        elif categoria == "mobiliario":
+            recetas = self.recetas_mobiliario
         else:
             return
         receta = mejor_receta_completable(objetos_portados, recetas)
@@ -1457,6 +1515,30 @@ class SistemaRecursos:
             elif agarre is not None and material in agarre.objetos:
                 agarre.objetos.remove(material)
         nombre_objeto = str(receta.get("nombre", ""))
+        if categoria == "mobiliario":
+            # A diferencia de arma/herramienta/mineria (objeto discreto
+            # en Inventario.objetos), el mueble se produce como cantidad
+            # en kg añadida a Inventario.contenidos -- se trata como un
+            # material más con calidad_construccion alta (ver
+            # config/materiales.yaml), así que el mecanismo YA
+            # CONSTRUIDO de mejora de vivienda lo reconoce sin ningún
+            # cambio de código.
+            cantidad_kg = float(receta.get("cantidad_kg", 0.0))
+            inv.contenidos[nombre_objeto] = inv.contenidos.get(nombre_objeto, 0.0) + cantidad_kg
+            self._stats_muebles_fabricados += 1
+            bus_eventos.emitir(
+                Evento(
+                    tipo="MuebleFabricado",
+                    severidad=Severidad.NOTABLE,
+                    tick=tick_actual,
+                    entidad_id=entidad_id,
+                    datos={
+                        "x": pos_x, "y": pos_y, "zona_idx": zona_idx,
+                        "mueble": nombre_objeto, "cantidad_kg": cantidad_kg,
+                    },
+                )
+            )
+            return
         inv.objetos.append(nombre_objeto)
         if categoria == "arma":
             nivel = int(receta.get("nivel", 0))

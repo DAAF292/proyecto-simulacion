@@ -204,8 +204,9 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
-from nucleo.asentamiento import disposicion_a_aportar
+from nucleo.asentamiento import asentamiento_de, disposicion_a_aportar
 from nucleo.amenaza import posicion_amenaza_mas_cercana
+from nucleo.conocimiento import nivel_conocimiento
 from nucleo.armas import (
     celda_ofrece_material_arma,
     manos_libres,
@@ -588,6 +589,17 @@ def actualizar(
     umbral_prosocial_comunal = float(
         config.get("decision", {}).get("umbral_prosocial_comunal", 0.5)
     )
+    # Taller de artesano (2026-09-16, ver docs/superpowers/specs/
+    # 2026-09-16-taller-mobiliario-almacen-refugio-design.md):
+    # config compartida por el bloque de FABRICAR-mobiliario más abajo.
+    cfg_asentamiento_taller = config.get("asentamiento", {})
+    umbral_conocimiento_taller = float(
+        cfg_asentamiento_taller.get("umbral_conocimiento_taller", 0.3)
+    )
+    escala_saturacion_conocimiento = float(
+        cfg_asentamiento_taller.get("escala_saturacion_conocimiento", 2000.0)
+    )
+    recetas_mobiliario = config.get("herramientas", {}).get("recetas_mobiliario", [])
 
     # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
     # docstring del modulo): cache local por llamada -- cuatro especies x
@@ -1001,6 +1013,7 @@ def actualizar(
         # en ningún sitio -- se satura sola en cuanto ya no hay nada
         # mejor cerca / que portar.
         construir_con_motivo_mejora = False
+        utilidad_categoria_mobiliario = 0.0
         if cap_mental.consciencia >= umbral_consciencia_agencia and not fisica_bajo_umbral:
             cid_refugio_propio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
             if cid_refugio_propio is not None:
@@ -1071,6 +1084,40 @@ def actualizar(
                             utilidad_construir = deficit_comodidad
                             construir_con_motivo_mejora = True
 
+                        # Taller de artesano (2026-09-16, ver docs/
+                        # superpowers/specs/2026-09-16-taller-mobiliario-
+                        # almacen-refugio-design.md): TERCERA vía de
+                        # mejora de vivienda, junto a RECOLECTAR-mejora y
+                        # CONSTRUIR-mejora -- hereda el MISMO
+                        # deficit_comodidad, sin valor propio (mismo
+                        # criterio que herramienta/mineria heredan de
+                        # necesidad_trabajo). Gateada por estar en un
+                        # taller completado del propio asentamiento Y
+                        # que su conocimiento colectivo "artesano" supere
+                        # el umbral -- primer efecto real de esa cubeta.
+                        if utilidad_categoria_mobiliario == 0.0 and hay_construccion_de_tipo_en(
+                            gestor, pos.x, pos.y, pos.zona_idx, "taller", indice=indice,
+                        ):
+                            asen_taller = asentamiento_de(mundo, id_entidad)
+                            if asen_taller is not None:
+                                nivel_artesano = nivel_conocimiento(
+                                    mundo.asentamiento_conocimiento.get(asen_taller.id),
+                                    "artesano", escala_saturacion_conocimiento,
+                                )
+                                if nivel_artesano >= umbral_conocimiento_taller:
+                                    receta_mobiliario = mejor_receta_completable(
+                                        objetos_para_mejora, recetas_mobiliario
+                                    )
+                                    if receta_mobiliario is not None:
+                                        nombre_mueble = str(receta_mobiliario.get("nombre", ""))
+                                        calidad_mueble = float(
+                                            catalogo_materiales.get(nombre_mueble, {}).get(
+                                                "calidad_construccion", 0.0
+                                            )
+                                        )
+                                        if calidad_mueble > calidad_actual_refugio:
+                                            utilidad_categoria_mobiliario = deficit_comodidad
+
         # Resuelve CUÁL de los cuatro eslabones heredados de arriba (fuego,
         # arma, herramienta, mineria) es el motivo REAL que explica el
         # valor FINAL de utilidad_recolectar -- comparación contra el
@@ -1108,13 +1155,15 @@ def actualizar(
             and valor_heredado_mineria == utilidad_recolectar
         )
 
-        # Resolutor interno de FABRICAR: tres candidatos ("arma",
+        # Resolutor interno de FABRICAR: cuatro candidatos ("arma",
         # "herramienta", "mineria" -- 2026-09-12, el tercero real desde el
-        # rename FABRICAR_ARMA -> FABRICAR).
+        # rename FABRICAR_ARMA -> FABRICAR; "mobiliario" -- 2026-09-16,
+        # taller de artesano).
         candidatos_fabricar: list[tuple[str, float]] = [
             ("arma", utilidad_categoria_arma),
             ("herramienta", utilidad_categoria_herramienta),
             ("mineria", utilidad_categoria_mineria),
+            ("mobiliario", utilidad_categoria_mobiliario),
         ]
         categoria_fabricar_ganadora, utilidad_fabricar = max(
             candidatos_fabricar, key=lambda c: c[1]

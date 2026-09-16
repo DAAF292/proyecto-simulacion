@@ -936,6 +936,16 @@ def main() -> None:
                 f"{asentamientos_con_conocimiento} asentamientos con algo acumulado, "
                 f"nivel maximo alcanzado {nivel_maximo:.3f}"
             )
+            # Verificacion obligatoria de "taller de artesano" (2026-09-16,
+            # ver CLAUDE.md). Solo observacion: confirma que el mecanismo
+            # se ejerce de verdad en juego libre, no solo en tests
+            # dirigidos.
+            print(
+                "[BOSQUE_AUTO_TICKS] taller de artesano: "
+                f"{sistemas['recursos']._stats_muebles_fabricados} muebles fabricados, "
+                f"{sistemas['recursos']._stats_deposito_almacen_refugio} depositos "
+                "en almacen de refugio"
+            )
 
     except KeyboardInterrupt:
         pass

@@ -139,6 +139,10 @@ def test_objetivo_none_solo_cuando_ambos_paralelos_completos():
     assert objetivo[0] == "cocina"
 
     _construccion(gestor, "cocina", 5, 5)  # ahora tambien completa
+    objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)
+    assert objetivo[0] == "taller"
+
+    _construccion(gestor, "taller", 5, 5)  # ahora tambien completa
     assert objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10) is None
 
 

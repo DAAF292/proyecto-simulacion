@@ -313,7 +313,7 @@ def objetivo_construccion_actual(
     if almacen is None or almacen.progreso < 1.0:
         return ("almacen", cid_almacen, asen.centro)
 
-    tipos_paralelos = ["salon_comun", "cocina"]
+    tipos_paralelos = ["salon_comun", "cocina", "taller"]
     pendientes: list[tuple[str, Any, float]] = []
     for tipo in tipos_paralelos:
         cid = almacen_cercano(

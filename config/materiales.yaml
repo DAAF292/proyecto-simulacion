@@ -346,6 +346,35 @@ materiales:
     calidad_construccion: 0.75
     fertilidad_base: 0.0
 
+  # --- Mobiliario (2026-09-16, taller de artesano -- ver docs/superpowers/
+  # specs/2026-09-16-taller-mobiliario-almacen-refugio-design.md) ---------
+  # A diferencia del resto de este catálogo, estos dos NUNCA aparecen en
+  # Celda.recursos/tipo_sustrato -- solo se originan vía
+  # Accion.FABRICAR (categoría "mobiliario", config/herramientas.yaml:
+  # recetas_mobiliario), producidos como cantidad en kg añadida
+  # directamente a Inventario.contenidos (no como objeto discreto, a
+  # diferencia de arma/herramienta). Al llevar apto_construccion+
+  # calidad_construccion, el mecanismo YA CONSTRUIDO de mejora de
+  # vivienda (CONSTRUIR-mejora) los reconoce sin ningún cambio de
+  # código -- son "material" más para ese mecanismo.
+  utensilios_domesticos:
+    categoria: manufacturado
+    apto_construccion: true
+    # calidad_construccion (ver piedra arriba): oficio doméstico
+    # básico -- mejor que madera cruda (0.55), peor que piedra tallada
+    # de cantera (0.85). PROVISIONAL, razonado, sin calibrar.
+    calidad_construccion: 0.65
+    fertilidad_base: 0.0
+  mueble_tallado:
+    categoria: manufacturado
+    apto_construccion: true
+    # calidad_construccion: oficio de artesano con más materiales --
+    # por encima de piedra tallada (0.85), deliberadamente por DEBAJO
+    # de hierro (0.95): un mueble de madera no debería superar al
+    # metal estructural real como techo del catálogo. PROVISIONAL.
+    calidad_construccion: 0.9
+    fertilidad_base: 0.0
+
 # --- Sustrato por bioma (círculo 1) ---------------------------------------
 # Qué material de la lista de arriba ocupa cada bioma -- consumido en
 # generación (nucleo/zona_bioma.py) para fijar Celda.tipo_sustrato. Bosque
@@ -522,6 +551,27 @@ construccion:
   # edificio de trabajo, no de reunion. PROVISIONAL, sin calibrar.
   masa_minima_cocina: 50.0
   huella_m2_cocina: 35.0
+  # masa_minima_taller/huella_m2_taller (2026-09-16, ver docs/superpowers/
+  # specs/2026-09-16-taller-mobiliario-almacen-refugio-design.md):
+  # CUARTO paralelo en la cadena, junto a salon_comun/cocina -- un
+  # taller primitivo es un cobertizo de trabajo, más pequeño que los
+  # otros dos (huella deliberadamente baja, igual que un refugio
+  # individual).
+  #
+  # HALLAZGO REAL, no resuelto aquí: almacen(40) + salon_comun(35) +
+  # cocina(35) + taller(15) = 125 > capacidad_construccion_celda_m2
+  # (80.0) -- con CUATRO paralelos, la suma ya excede lo que cabe en una
+  # sola celda centro incluso con el taller reducido al mínimo. En la
+  # práctica, como mucho 2 de los 4 edificios comunales llegarán a
+  # coexistir completados de forma permanente en el centro exacto del
+  # asentamiento antes de agotar el espacio -- mismo límite conocido ya
+  # señalado para almacén desde el 31-08 ("sin búsqueda de celda vecina
+  # de respaldo"), ahora más visible con más paralelos. No se toca
+  # huella_m2_salon_comun/cocina (ya calibrados, ajustarlos sin
+  # necesidad real violaría el criterio de no tocar a ciegas) ni se
+  # añade selección de celda vecina (fuera de alcance de este círculo).
+  masa_minima_taller: 50.0
+  huella_m2_taller: 15.0
   capacidad_construccion_celda_m2: 80.0
   # Cuánta masa apta transfiere Accion.CONSTRUIR del Inventario a la
   # Construccion por tick, estando en su misma celda -- PROVISIONAL, sin
