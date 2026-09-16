@@ -470,7 +470,21 @@ function contenidoCelda(c) {
       // Etapa de crecimiento real (Planta.etapa 0..1) -> opacidad: un
       // brote se ve tenue, una planta madura llena de color.
       const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
-      return { ch: g.ch, color: hexARgba(g.color, alfa), fondo: hexARgba(fondoBase, 0.25) };
+      // "Varios iconos en una celda" (Diego): un segundo glifo superpuesto
+      // seria ilegible en cualquier grid de caracteres -- ni Dwarf Fortress
+      // lo hace, su densidad viene de muchas celdas pequeñas, no de apilar
+      // simbolos en una. La tecnica real (la misma que ya usa el propio
+      // motor de terminal: primer plano = lo dominante, fondo = lo que hay
+      // debajo) SI estaba disponible y se desperdiciaba -- si ademas hay
+      // cobertura real bajo el arbol/arbusto (cupo de espacio compartido,
+      // dato real del motor), su color tiñe el FONDO en vez de descartarse.
+      const coberturaBajo = c.plantas.find(p => {
+        const gp = CATALOGO_GLIFOS.flora[p.especie];
+        return gp && gp.categoria === 'cobertura';
+      });
+      const gCobertura = coberturaBajo ? CATALOGO_GLIFOS.flora[coberturaBajo.especie] : null;
+      const colorFondo = gCobertura ? gCobertura.color : fondoBase;
+      return { ch: g.ch, color: hexARgba(g.color, alfa), fondo: hexARgba(colorFondo, gCobertura ? 0.4 : 0.25) };
     }
     // Solo cobertura (hierba/liquen/musgo/flor/helecho): glifo de textura
     // (de nuevo real, antes vacio) con variante + tono por celda, en vez
