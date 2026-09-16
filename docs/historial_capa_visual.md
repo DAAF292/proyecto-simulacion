@@ -1382,3 +1382,62 @@ nombre 1:1 exacto, dejando sin sprite las especies que exigían
 interpretación? ¿conservar el nombre de fichero original del icono en
 vez de renombrarlo a la clave de especie?) que no se adivinó una tercera
 vez -- se preguntó explícitamente en vez de asumir de nuevo.
+
+### Mapeo fichero→especie CONFIRMADO por Diego (mismo día, dos rondas)
+
+La pregunta explícita del punto anterior recibió una primera respuesta
+("los árboles están definidos por su nombre, los arbustos también, el
+arbusto seco sería de desierto, helecho para helecho y lo que falte se
+queda sin assets de momento") que se interpretó, de forma demasiado
+literal, como "solo el nombre de fichero exacto cuenta" -- bajo esa
+lectura se retiró sprite a arbusto_espinoso/arbusto_montano/
+arbusto_artico/hierba_silvestre/flor_silvestre, dejando solo 6 especies
+con sprite. Diego corrigió esa lectura de inmediato, aclarando el
+criterio real: "hay un asset para hierba, usa ese para todos los casos
+de hierba, y hay uno para flores silvestres también, los arbustos están
+claramente definidos, uno que se usa en pradera y en bosque, otro para
+montaña y tundra y uno para desierto". El criterio real nunca fue "el
+nombre del fichero debe coincidir con la clave de especie" -- es el
+**bioma real** de cada fichero (mismo campo `biomas` de
+`config/flora.yaml` que ya gobierna dónde crece cada especie en el
+motor), y un solo fichero puede cubrir varias especies con clima afín.
+
+Verificado contra `config/flora.yaml` antes de aplicar (no de memoria):
+`arbusto_espinoso` tiene `biomas: [pradera]` (ninguna especie de
+arbusto tiene `bosque` en su lista -- la descripción de Diego de
+"pradera y bosque" es aproximada, pero pradera es inequívocamente la
+única coincidencia entre los 4 arbustos, confirma la asignación
+original). Mapeo final, 13 de 15 especies con sprite:
+
+- `manzano.jpg`→`manzano`, `roble.jpg`→`roble`, `pino.jpg`→`pino`,
+  `cactus.jpg`→`cactus`, `helecho.jpg`→`helecho` (coincidencia directa).
+- `arbustoSeco.jpg`→`arbusto_desertico`.
+- `arbustoMontañaTundra.jpg`→`arbusto_montano` Y `arbusto_artico`
+  (mismo archivo para ambas especies).
+- `arbustoPraderaBosque.jpg`→`arbusto_espinoso`.
+- `hierba.jpg`→`hierba_silvestre`, `hierba_desertica` Y `hierba_artica`
+  (mismo archivo para las 3 variantes).
+- `flores.jpg`→`flor_silvestre`.
+
+Sin sprite, honesto: `liquen` y `musgo` -- las únicas 2 especies del
+catálogo para las que Diego no aportó ningún icono, no una decisión de
+diseño ni una interpretación descartada.
+
+**Extensión real de mecanismo, no solo de datos**: la ronda anterior de
+este mismo círculo había decidido dejar TODA la categoría "cobertura"
+sin sprite ("no tiene un mecanismo de mezcla equivalente todavía").
+Confirmado que 5 de sus 7 especies SÍ llevan sprite (hierba×3,
+flor_silvestre, helecho), hizo falta extender `itemsCelda()`: la rama
+"sin competidora" (coberturas.forEach) ahora empuja `img` +
+`especieCobertura` cuando la especie tiene sprite, en vez de siempre el
+glifo de textura tejida -- reutilizando SIN CAMBIOS el mecanismo de
+mosaico 2x2 ya existente (`crearCeldaCuadrantes` ya trataba `item.img`
+de forma genérica) para cuando varias coberturas coinciden en la misma
+celda. Tamaño: `tamanoSpriteCobertura()`, FIJO (`CELDA*0.75`) en vez de
+escalado por `huella_m2` como árbol/arbusto -- esta categoría no compite
+por espacio físico en el motor (`compite_espacio_fisico: false`), no
+hay ningún dato real del que derivar un tamaño proporcional sin
+inventarlo. Verificado en el visor real (Playwright): sprites de
+cobertura visibles tanto a celda completa (una sola especie) como en
+cuadrante compartido (mezclada con otro elemento), sin errores de carga
+de ningún PNG.

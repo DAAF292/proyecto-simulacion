@@ -501,40 +501,49 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   investigó licencia individual más allá de eso).
   Estado real a esta fecha: fauna (8 especies) y las 5 construcciones
   comunales ya tenían sprite desde antes de esta sesión; en esta sesión
-  se añadió **flora** — 8 de las 15 especies del catálogo (los 3
-  árboles: manzano/roble/pino; los 4 arbustos con `compite_espacio_fisico`
-  real: cactus/arbusto_desertico/arbusto_montano/arbusto_artico, más
-  arbusto_espinoso) a partir de 10 iconos JPEG que Diego añadió en
-  `iconos/flora/` (2048×2048, fondo de tablero de ajedrez "quemado" en
-  el propio JPEG, no alfa real -- se limpiaron con flood-fill desde el
-  borde para no agujerear brillos internos, se recortaron al bounding
-  box y se guardaron como PNG RGBA en
-  `presentacion/terminal_prototipo/sprites_flora/`). Tamaño en pantalla
-  escalado por `huella_m2` real de `config/flora.yaml` (mismo dato que
-  ya usa el motor para el cupo de espacio compartido, raíz cuadrada por
-  ser área — no la raíz cúbica de construcción, que escala masa/volumen),
-  mismo mecanismo `escalarPorRaiz` ya existente, rango MIN/MAX
-  PROVISIONAL sin calibrar contra captura real.
-  **Dos huecos reales, no completados por iniciativa propia**:
-  (1) el mapeo de fichero→especie es una interpretación razonada de
-  nombres de icono genéricos que NO coinciden 1:1 con las claves
-  canónicas (`arbustoMontañaTundra.jpg` cubre montano Y ártico con el
-  mismo arte; `arbustoSeco.jpg`→desértico; `arbustoPraderaBosque.jpg`
-  →espinoso) — sin confirmar con Diego todavía. (2) las 7 especies de
-  categoría "cobertura" (hierba_silvestre, liquen, musgo, flor_silvestre,
-  hierba_desertica, hierba_artica, helecho) siguen sin sprite a
-  propósito: se dibujan mezclando varias especies solapadas por celda
-  como textura tejida (`TEXTURA_COBERTURA`), y un sprite único por
-  especie no tiene todavía un mecanismo de mezcla equivalente definido
-  — quedan 3 PNG ya procesados y listos pero sin usar
-  (`hierba_silvestre.png`, `flor_silvestre.png`, `helecho.png`) a la
-  espera de esa decisión de diseño. De paso se encontró y corrigió un
-  bug real preexistente (desde que se añadieron sprites de fauna/
-  construcciones): `presentacion/vista_web.py` solo servía
-  `/sprites_criaturas/` y `/sprites_construcciones/` por HTTP — cualquier
-  sprite servido a través de `ServidorWeb` (no abierto por `file://`
-  directamente) que viviera en otra subcarpeta habría devuelto 404 sin
-  que nadie lo hubiera notado hasta abrir el visor así.
+  se añadió **flora** — **CONFIRMADO por Diego tras dos rondas de
+  corrección** (ver `docs/historial_capa_visual.md`, entrada
+  "Corrección real..."), 13 de las 15 especies del catálogo tienen
+  sprite: los 3 árboles (manzano/roble/pino), las 4 de arbusto
+  (cactus/arbusto_desertico/arbusto_montano/arbusto_artico/
+  arbusto_espinoso) y 5 de las 7 de cobertura
+  (hierba_silvestre/hierba_desertica/hierba_artica/flor_silvestre/
+  helecho) — el criterio real, aclarado por Diego dos veces: NO exige
+  que el nombre de fichero coincida 1:1 con la clave de especie, sino
+  que el arte corresponda al `bioma` real de `config/flora.yaml` — un
+  mismo fichero puede cubrir varias especies con clima afín
+  (`arbustoMontañaTundra.jpg`→montano+ártico, `hierba.jpg`→las 3
+  variantes de hierba). Solo quedan sin sprite **liquen y musgo**, las
+  2 especies para las que Diego no aportó ningún icono. Los 10 iconos
+  JPEG viven en `iconos/flora/` (2048×2048, fondo de tablero de ajedrez
+  "quemado" en el propio JPEG, no alfa real), procesados a
+  `presentacion/terminal_prototipo/sprites_flora/` (10 PNG RGBA,
+  resolución proporcional a `huella_m2` real por especie, ver más
+  abajo). Tamaño en pantalla de árbol/arbusto escalado por `huella_m2`
+  real de `config/flora.yaml` (mismo dato que ya usa el motor para el
+  cupo de espacio compartido, raíz cuadrada por ser área — no la raíz
+  cúbica de construcción, que escala masa/volumen), mismo mecanismo
+  `escalarPorRaiz` ya existente; cobertura (sin `huella_m2` real, no
+  compite por espacio físico) usa un tamaño FIJO en vez de inventar un
+  dato que el motor no tiene. Ambos rangos PROVISIONALES, sin calibrar
+  contra captura real.
+  **Dos rondas de corrección real tras el primer resultado, ambas
+  documentadas en detalle en `docs/historial_capa_visual.md`, no solo
+  aquí**: (1) Diego señaló huecos de fondo sin limpiar entre ramas
+  ("el roble no está bn entre las ramas") y pérdida de calidad por un
+  resize demasiado agresivo — corregido con verificación visual manual
+  por icono (una heurística automática de bimodalidad/fase de
+  cuadrícula estuvo a punto de agujerear pétalos reales de una flor,
+  descartada) y resolución de exportación proporcional a `huella_m2`.
+  (2) El primer mapeo fichero→especie (interpretado sin confirmar) fue
+  rechazado por Diego — el mapeo final de arriba es el que él confirmó
+  explícitamente tras dos aclaraciones, no una interpretación propia.
+  De paso se encontró y corrigió un bug real preexistente (desde que se
+  añadieron sprites de fauna/construcciones): `presentacion/vista_web.py`
+  solo servía `/sprites_criaturas/` y `/sprites_construcciones/` por
+  HTTP — cualquier sprite servido a través de `ServidorWeb` (no abierto
+  por `file://` directamente) que viviera en otra subcarpeta habría
+  devuelto 404 sin que nadie lo hubiera notado hasta abrir el visor así.
 - Selector de zona real en el visor web: nunca añadido, el visor solo
   dibuja superficie (`zona_idx == 0`).
 - Créditos de licencia de los paquetes PyxelSpace: pendiente desde la

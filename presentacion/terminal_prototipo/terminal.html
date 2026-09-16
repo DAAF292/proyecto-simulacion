@@ -320,19 +320,17 @@ const CATALOGO_GLIFOS = {
     // shape real, no una eleccion arbitraria (auditada contra la fuente
     // VGA437 antes de decidir, ambos glifos existen y renderizan nitidos).
     // img (2026-09-16, assets aportados por Diego -- ver
-    // docs/historial_capa_visual.md, entrada del mismo dia): SOLO arbol y
-    // arbusto (la unica "planta competidora" por celda, ver competidora en
-    // itemsCelda) tienen sprite real por ahora. cobertura sigue en glifo de
-    // textura tejida (TEXTURA_COBERTURA/tonoCelda) a proposito -- esa
-    // categoria se dibuja mezclando varias especies solapadas en la misma
-    // celda para leerse como una alfombra continua, y un sprite unico por
-    // especie no tiene todavia un mecanismo de mezcla equivalente. Quedan 3
-    // PNG ya procesados y sin usar en sprites_flora/ (hierba_silvestre,
-    // flor_silvestre, helecho) a la espera de esa decision de diseño.
-    // Mapeo icono->especie es una interpretacion razonada de nombres de
-    // fichero genericos (arbustoMontañaTundra.jpg cubre montano Y artico
-    // con el mismo arte, arbustoSeco.jpg->desertico,
-    // arbustoPraderaBosque.jpg->espinoso) -- PROVISIONAL, sin confirmar.
+    // docs/historial_capa_visual.md, entrada del mismo dia): CRITERIO
+    // CONFIRMADO por Diego, aclarado dos veces tras un primer mapeo que
+    // interprete solo. El nombre de fichero no tiene que ser 1:1 con la
+    // clave de especie -- el criterio real es el BIOMA real de cada
+    // fichero (config/flora.yaml campo `biomas`, mismo dato que ya usa el
+    // motor): un unico arbusto puede compartir arte entre especies con
+    // clima afin (arbustoMontañaTundra.jpg -> montano Y artico) y un
+    // unico fichero generico cubre TODAS las variantes climaticas de una
+    // misma forma (hierba.jpg -> las 3 especies de hierba). Solo quedan
+    // SIN sprite las 2 especies para las que Diego no aporto ningun icono
+    // -- liquen y musgo (categoria cobertura, sin arte disponible).
     manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol', img: 'sprites_flora/manzano.png' },
     roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol', img: 'sprites_flora/roble.png' },
     pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol', img: 'sprites_flora/pino.png' },
@@ -341,13 +339,13 @@ const CATALOGO_GLIFOS = {
     arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto', img: 'sprites_flora/arbusto_desertico.png' },
     arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
     arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
-    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
+    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
     liquen:            { ch: '▒', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
     musgo:             { ch: '▒', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
-    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura' },
-    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura' },
-    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura' },
-    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura' },
+    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura', img: 'sprites_flora/flor_silvestre.png' },
+    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
+    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
+    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura', img: 'sprites_flora/helecho.png' },
   },
   // (2026-09-16) Pictogramas reales en vez de letras -- Diego: "podriamos
   // buscar pictogramas para las criaturas". Emoji nativos del sistema/
@@ -599,8 +597,17 @@ function itemsCelda(c) {
         const g = CATALOGO_GLIFOS.flora[cob.especie];
         if (!g) return;
         const alfa = 0.55 + Math.min(1, cob.etapa ?? 1) * 0.45;
-        const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
-        items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3, alfa) });
+        if (g.img) {
+          // Cobertura CON sprite (2026-09-16: hierba/flor_silvestre/
+          // helecho) -- especieCobertura distingue este caso de
+          // especieFlora (arbol/arbusto) en renderMapa, porque el tamaño
+          // se calcula distinto (tamanoSpriteCobertura, fijo, sin
+          // huella_m2 real para esta categoria).
+          items.push({ ch: g.ch, color: g.color, img: g.img, especieCobertura: cob.especie, alfaSprite: alfa });
+        } else {
+          const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
+          items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3, alfa) });
+        }
       });
     }
   }
@@ -767,6 +774,19 @@ function tamanoSpriteFlora(especie) {
   return escalarPorRaiz(huella, HUELLA_REFERENCIA_FLORA_M2, SPRITE_FLORA_REFERENCIA, SPRITE_FLORA_MIN, SPRITE_FLORA_MAX, 0.5);
 }
 
+// Tamaño de sprite de cobertura (hierba/flor_silvestre/helecho, mismo dia)
+// -- a diferencia de arbol/arbusto, estas especies NO compiten por
+// espacio fisico (compite_espacio_fisico: false en config/flora.yaml,
+// sin huella_m2 real) -- no hay ningun dato del motor del que derivar un
+// tamaño proporcional sin inventarlo. Tamaño FIJO, mas pequeño que el
+// arbusto mas pequeño (arbusto_artico, CELDA*1.0), consistente con que
+// cobertura ya se describe en este mismo catalogo como "mas discreta que
+// un arbusto/arbol". PROVISIONAL, sin calibrar contra captura real.
+const SPRITE_COBERTURA_ALTURA = CELDA * 0.75;
+function tamanoSpriteCobertura() {
+  return SPRITE_COBERTURA_ALTURA;
+}
+
 function crearCeldaTxt(ch, color, cx, cy, fondo) {
   const el = document.createElement('div');
   el.className = 'celda-txt';
@@ -892,7 +912,8 @@ function renderMapa() {
       // vecinas ya documentada arriba para construccion.
       const unico = info.items[0] || {};
       const esConstruccionUnica = !!unico.tipoConstruccion;
-      const esFloraUnica = !esConstruccionUnica && !!unico.img;
+      const esFloraUnica = !esConstruccionUnica && !!unico.especieFlora;
+      const esCoberturaUnica = !esConstruccionUnica && !esFloraUnica && !!unico.especieCobertura;
       let el;
       if (info.items.length > 1) {
         el = crearCeldaCuadrantes(info.items, cx, cy, info.fondo);
@@ -900,10 +921,12 @@ function renderMapa() {
         el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion));
       } else if (esFloraUnica) {
         el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora), unico.alfaSprite);
+      } else if (esCoberturaUnica) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(), unico.alfaSprite);
       } else {
         el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
       }
-      el.style.zIndex = String((esConstruccionUnica ? 500 : esFloraUnica ? 400 : 0) + y);
+      el.style.zIndex = String((esConstruccionUnica ? 500 : (esFloraUnica || esCoberturaUnica) ? 400 : 0) + y);
       capaEstatica.appendChild(el);
     }
   }
