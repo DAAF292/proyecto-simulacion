@@ -1,60 +1,93 @@
-# Terminal — prototipo del nuevo sistema visual
+# Terminal — único sistema visual del proyecto
 
-Pivote decidido con Diego: se aparca el Códice Cartográfico
-(`presentacion/vista_web.py`, pergamino/acuarela) y se prueba un sistema
-nuevo con estética de terminal informática antigua (fondo negro, ámbar,
-CRT) — mapa híbrido ASCII+sprite, con paneles de ficha, narrador,
-estadísticas y eventos.
+**Pivote completo (2026-09-16, decisión de Diego)**: se retiró por completo
+el Códice Cartográfico (`presentacion/vista_web.py`, pergamino/acuarela —
+ver `docs/informe_codice_cartografico.md` para su documentación íntegra) y
+este visor de estética de terminal informática antigua (fondo negro, ámbar,
+CRT) pasa a ser el **único** sistema visual del proyecto. El pivote anterior
+(23-08 a 13-09-2026) era un híbrido ASCII+sprite; desde hoy es **mapa 100%
+glifos de texto, sin ningún asset de imagen** — los ~83MB de sprites que
+usaba (`sprites/`) se retiraron del repositorio (recuperables por
+`git log` si algún día se decide volver a una vía gráfica).
 
-Estado real: **prototipo estático, no está enchufado a `main.py`**. No hay
-servidor propio ni actualización en vivo — `datos.json`/`datos.js` es una
-instantánea real del motor (generada con `generar_datos.py`, corriendo el
-motor de verdad sin persistencia) en un tick concreto (2500, semilla 42
--- subido desde 600 el 2026-09-13: con solo 600 ticks ninguna
-construcción llegaba nunca a completarse, así que `DATA.construcciones`
-quedaba siempre vacío en la instantánea de referencia). Para verla:
+Motivo del pivote a ASCII puro: varias sesiones sin encontrar un estilo de
+arte/asset definitivo (ver `docs/historial_capa_visual.md` para toda la
+saga de fuentes descartadas — PyxelSpace, Urizen, Mini Medieval, y antes de
+eso el propio Códice) estaban restando foco real al desarrollo del motor de
+simulación. Un mapa de glifos+color no depende de ningún pack de terceros
+ni de su licencia, y es trivialmente extensible: añadir una especie o
+categoría nueva es una entrada en un catálogo, no un recorte de sprite.
+
+## Cómo verlo
+
+Servido por el mismo servidor que la simulación real:
+
+```
+BOSQUE_MODO_VISUAL=1 python main.py
+# abrir http://localhost:8765/  (o el puerto de config/visual.yaml)
+```
+
+También puede verse suelto, sin motor en marcha, con la instantánea
+estática de referencia:
 
 ```
 python3 -m http.server 8877 --directory presentacion/terminal_prototipo
 # abrir http://localhost:8877/terminal.html
 ```
 
-Para refrescar la instantánea con otra semilla/duración, corre
-`python presentacion/terminal_prototipo/generar_datos.py [N_TICKS]`
-desde la raíz del proyecto (por defecto 2500 si se omite el argumento).
-**CORREGIDO (2026-09-13)**: el script tenía dos rutas absolutas
-hardcodeadas de otra máquina/sesión (`/home/user/proyecto-simulacion` y
-un directorio de scratch que no existía aquí) -- nunca había corrido de
-verdad en este entorno hasta que se arregló. Ahora usa rutas relativas
-al propio fichero y escribe `datos.json` **y** `datos.js` junto a sí
-mismo.
+Para refrescar esa instantánea con otra semilla/duración:
+`python presentacion/terminal_prototipo/generar_datos.py [N_TICKS]` desde
+la raíz del proyecto (por defecto 2500 ticks).
 
-`sprites/` ya NO es una copia de `presentacion/assets/` -- esa carpeta
-se borró del repositorio (commit `0c625cb`, "borrar assets viejos") el
-mismo día que se creó este prototipo; la nota anterior quedó
-desactualizada sin corregir. El catálogo real hoy son dos capas
-independientes: la biblioteca base "recortada/clasificada por Diego"
-(flora de los 5 biomas, criaturas, agua -- estilo pixel art retro,
-sprites nativos de 40-370px) más un segundo lote de
-`inspiracion/procesado/` (2026-09-13, mismo fondo transparente,
-resolución nativa 2048px sin downscalear a petición explícita de Diego)
-integrado con `presentacion/arnes/integrar_inspiracion_terminal.py` --
-variantes nuevas para 6 de las 7 especies de fauna (falta `caballo`,
-sin material en `inspiracion/`) y para gran parte del catálogo de flora,
-más dos categorías que el visor nunca había dibujado hasta ahora:
-`SPRITES_CONSTRUCCION` (refugio/almacen -- `salon_comun`/`cocina`
-existen como tipo real en el motor pero sin sprite propio todavía) y
-`SPRITES_OBJETOS` (roca/rama, decoración ambiental ligada a
-`Celda.recursos.piedra_suelta`/`madera` reales, ver `terminal.html`).
-`presentacion/vista_web.py:construir_instantanea` ganó la clave
-`"construcciones"` en el DTO para que esto tuviera datos reales que
-consumir -- antes ninguna versión del visor (ni el Códice Cartográfico
-en su día) llegó a exportar construcciones.
+## Arquitectura del mapa ASCII
 
-Pendiente real, sin resolver aquí: decidir si este prototipo sustituye a
-`vista_web.py` en producción (serverificarlo en vivo, panel de eventos con
-filtro real, catálogo de comandos) o se queda como referencia de diseño;
-sprite propio para `caballo` desde `inspiracion/` (pendiente de que Diego
-lo genere); sprite para `salon_comun`/`cocina`; las construcciones no son
-clickeables todavía (sin ficha de inspección, a diferencia de las
-entidades vivas).
+Todo el mapa se dibuja con `<div>` de texto (una celda de terreno + una capa
+aparte, persistente entre renders, para las criaturas — así se puede animar
+su desplazamiento con una transición CSS en vez de teletransportarlas).
+
+**Una única fuente de verdad**: el objeto `CATALOGO_GLIFOS` en
+`terminal.html` — glifo + color + nombre legible por cada tipo de terreno,
+agua, especie de flora/fauna, tipo de construcción y recurso en el suelo.
+Tanto el renderizado del mapa como la leyenda desplegable (botón
+"LEYENDA ▾" en la barra del mapa) leen de esta misma tabla; añadir algo
+nuevo al mundo es una entrada aquí, nunca dos tablas que puedan
+desincronizarse.
+
+Decisiones de diseño concretas:
+- **Flora por categoría, no por especie**: en vez de 15 glifos distintos
+  (uno por especie del catálogo), el glifo indica la FORMA/FUNCIÓN (árbol
+  `♣`, arbusto `*`, cobertura de suelo `,` — reutilizando la misma
+  distinción que ya usa `config/flora.yaml` vía `compite_espacio_fisico` +
+  `huella_m2`) y el COLOR diferencia la especie dentro de esa categoría.
+  Evita "sopa de glifos" con 15 símbolos casi ilegibles a la vez.
+- **Prioridad de una sola representación por celda**: construcción > agua >
+  planta > recurso suelto en el suelo > terreno base — mismo orden que ya
+  usaba el prototipo híbrido anterior.
+- **Datos reales del motor modulan la presentación, no números inventados**:
+  la opacidad de una planta sube con `Planta.etapa` real (brote tenue,
+  madura llena de color); la de una celda de agua sube con
+  `profundidad_agua`/`profundidad_charco` real; una montaña muestra pico
+  (`▲`) en vez de ladera (`^`) cuando `elevacion > 0.72`; una criatura
+  consciente (mismo umbral de agencia que usa el motor,
+  `capacidad_mental.consciente`) recibe un resplandor de texto.
+- **Zoom centrado en el cursor**: al hacer scroll, el punto de mundo bajo
+  el cursor permanece fijo en pantalla (antes el zoom escalaba siempre
+  desde el origen, así que el mapa "derivaba" si ya se había desplazado).
+  Paneo por arrastre directo (1:1 con el ratón).
+
+## Pendiente real, sin resolver aquí
+
+- **Confirmación visual de Diego sobre la elección concreta de
+  glifos/colores** — es una primera propuesta razonada (reutilizando el
+  fallback ASCII que ya existía en el prototipo híbrido para fauna, y
+  aplicando el mismo criterio de "forma=función, color=especie" a flora),
+  no una calibración ya cerrada. Un glifo o color concreto que no se lea
+  bien es un ajuste aislado en `CATALOGO_GLIFOS`, sin tocar el mecanismo.
+- Catálogo de eventos filtrable (panel "EVENTOS://LOG") sigue siendo un
+  placeholder, sin implementar — no tocado en este círculo.
+- Construcciones no son clickeables todavía (sin ficha de inspección, a
+  diferencia de las entidades vivas).
+- `salon_comun`/`cocina`/`taller` ya tienen entrada propia en
+  `CATALOGO_GLIFOS.construcciones` (glifo dedicado), pero no se ha
+  verificado en juego libre con una semilla donde lleguen a construirse
+  las tres a la vez.

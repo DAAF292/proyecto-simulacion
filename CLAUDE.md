@@ -24,6 +24,12 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
   Medieval → retirada de orillas), movido aquí el 2026-09-02 por tamaño
   (era el 37% de este documento) tras haber quedado superseded por el
   pivote al Códice Cartográfico. Solo relevante si se retoma ese tema.
+- `docs/informe_codice_cartografico.md` — documentación completa (única
+  que existe) del Códice Cartográfico, el frontend Canvas de
+  pergamino/acuarela que sustituyó a la saga de arriba (27-08-2026) y que
+  a su vez se retiró por completo el 2026-09-16 (ver "Estado actual" más
+  abajo) sin haber encontrado nunca un estilo de arte definitivo. Solo
+  relevante si se retoma esa vía (no ASCII) en el futuro.
 
 ## Los cinco principios de diseño — no son opcionales
 
@@ -36,10 +42,11 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
    complejidad, y se valida antes de sumar la siguiente. Desconfía de
    cualquier propuesta que resuelva varios problemas a la vez sin necesidad.
 3. **El motor primero, la presentación después.** Cómo se muestra el mundo
-   (hoy, terminal + vista web — Códice Cartográfico, con biblioteca real de
-   sprites en `presentacion/assets/` desde 2026-09-04, ver más abajo) es una
-   capa desacoplada y sustituible. No acoples la lógica de simulación a cómo
-   se presenta.
+   (hoy, visor terminal — estética CRT ámbar, mapa 100% glifos/ASCII sin
+   ningún asset de imagen, único sistema visual desde 2026-09-16 tras
+   retirar el Códice Cartográfico, ver
+   `docs/informe_codice_cartografico.md`) es una capa desacoplada y
+   sustituible. No acoples la lógica de simulación a cómo se presenta.
 4. **Honestidad sobre lo pendiente.** Ningún sistema se da por cerrado sin
    una necesidad real que lo reclame. Si algo no está resuelto, dilo con
    claridad — nunca improvises una respuesta que aparente más solidez de la
@@ -430,6 +437,25 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   sistemáticamente, ver "Flujo de implementación" arriba).
 - **Ciudad enana**: aparcada explícitamente por Diego hasta que se
   plantee la raza enana — no retomar el tema hasta entonces.
+- **Retirada completa del Códice Cartográfico y pivote a mapa 100% ASCII
+  (2026-09-16, decisión de Diego)**: varias sesiones sin encontrar un
+  estilo de arte definitivo (ver `docs/historial_capa_visual.md` y
+  `docs/informe_codice_cartografico.md`) estaban restando foco al
+  desarrollo del motor. `presentacion/vista_web.py` quedó reducido a
+  servidor + contrato JSON (`construir_instantanea`, sin tocar); el
+  visor terminal (`presentacion/terminal_prototipo/`) pasa a ser el
+  ÚNICO sistema visual, ahora sin ningún asset de imagen — todo
+  (terreno, agua, relieve, flora por categoría árbol/arbusto/cobertura,
+  fauna, construcciones, recursos en el suelo) se representa con
+  glifo+color de texto desde un catálogo único (`CATALOGO_GLIFOS` en
+  `terminal.html`), con leyenda desplegable generada desde ese mismo
+  catálogo, zoom centrado en el cursor y paneo por arrastre. Los ~83MB
+  de sprites del prototipo anterior se retiraron del repositorio
+  (recuperables por git history si algún día se retoma una vía gráfica).
+  Pendiente real: confirmación visual de Diego sobre la elección de
+  glifos/colores concreta — es una primera propuesta razonada, no una
+  calibración cerrada; catálogo de eventos filtrable (panel
+  "EVENTOS://LOG") sigue con el placeholder de siempre, sin implementar.
 - Selector de zona real en el visor web: nunca añadido, el visor solo
   dibuja superficie (`zona_idx == 0`).
 - Créditos de licencia de los paquetes PyxelSpace: pendiente desde la
