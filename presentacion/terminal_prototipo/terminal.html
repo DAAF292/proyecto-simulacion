@@ -115,6 +115,25 @@
     image-rendering: pixelated;
     width: auto;
   }
+  /* Sprites de construccion (2026-09-16, ver crearCeldaImgEstatica) --
+     ancla inferior-centro dentro de la celda contenedora (.celda-txt,
+     position:absolute -> establece el contexto para este hijo), mismo
+     criterio visual que .criatura-img pero SIN transicion de movimiento:
+     las construcciones no se desplazan. */
+  .construccion-img {
+    position: absolute;
+    left: 50%; bottom: 0;
+    transform: translateX(-50%);
+    image-rendering: pixelated;
+    width: auto;
+  }
+  /* Dentro de un cuadrante del mosaico 2x2 (celda compartida con otro
+     elemento real) el propio flex del cuadrante ya centra -- se anula el
+     posicionamiento absoluto para no salirse de su cuarto de celda. */
+  .construccion-img-cuadrante {
+    position: static;
+    transform: none;
+  }
   /* Mosaico 2x2 (subdivision puramente visual, ver itemsCelda en el
      script) -- misma celda de 100m2 del motor, hasta 4 elementos reales
      distintos repartidos en cuadrantes en vez de colapsados a uno solo. */
@@ -356,13 +375,18 @@ const CATALOGO_GLIFOS = {
     zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro', img: 'sprites_criaturas/zorro.png' },
     necromasa:     { ch: '💀', color: '#7a7268', nombre: 'Restos (necromasa)' },
   },
+  // `img` (2026-09-16, Diego subio 5 construcciones a `master` -- "quitales
+  // el fondo y usalos"): mismo criterio que fauna, ch/color quedan como
+  // referencia de leyenda. El fichero se llama `salon.png` (nombre corto
+  // que Diego uso al generarlo) pero la clave real del motor es
+  // `salon_comun` -- mapeo explicito aqui, no un rename de fichero.
   construcciones: {
     titulo: 'Construcciones',
-    refugio:     { ch: '⌂', color: '#c98a4a', nombre: 'Refugio' },
-    almacen:     { ch: '▣', color: '#a98a5a', nombre: 'Almacén' },
-    salon_comun: { ch: '♦', color: '#e0b84a', nombre: 'Salón común' },
-    cocina:      { ch: '♨', color: '#e0603a', nombre: 'Cocina' },
-    taller:      { ch: '⚒', color: '#9a9aa0', nombre: 'Taller' },
+    refugio:     { ch: '⌂', color: '#c98a4a', nombre: 'Refugio', img: 'sprites_construcciones/refugio.png' },
+    almacen:     { ch: '▣', color: '#a98a5a', nombre: 'Almacén', img: 'sprites_construcciones/almacen.png' },
+    salon_comun: { ch: '♦', color: '#e0b84a', nombre: 'Salón común', img: 'sprites_construcciones/salon.png' },
+    cocina:      { ch: '♨', color: '#e0603a', nombre: 'Cocina', img: 'sprites_construcciones/cocina.png' },
+    taller:      { ch: '⚒', color: '#9a9aa0', nombre: 'Taller', img: 'sprites_construcciones/taller.png' },
   },
   recursos: {
     titulo: 'Recursos en el suelo',
@@ -523,7 +547,7 @@ function itemsCelda(c) {
   for (const con of [...construcciones].sort((a, b) =>
       (ORDEN_HUELLA_CONSTRUCCION[b.tipo] || 1) - (ORDEN_HUELLA_CONSTRUCCION[a.tipo] || 1))) {
     const g = CATALOGO_GLIFOS.construcciones[con.tipo] || { ch: '#', color: '#8a6a3a' };
-    items.push({ ch: g.ch, color: g.color });
+    items.push({ ch: g.ch, color: g.color, img: g.img || null, tipoConstruccion: con.tipo });
   }
 
   // Segundo plano combinado (mismo mecanismo que ya existia, ahora dentro
@@ -624,6 +648,26 @@ function asegurarCapas() {
   return cont;
 }
 
+// Escala de sprite de construccion por huella_m2 REAL (2026-09-16, mismo
+// principio que alturaSpriteCriatura aplicado a edificios: el dato real
+// del motor manda sobre cuanto margen dejo el recorte del PNG generado).
+// Reutiliza ORDEN_HUELLA_CONSTRUCCION (huella_m2 real de
+// config/materiales.yaml, ya definida mas arriba para desempatar sello) en
+// vez de duplicar los mismos numeros en una tabla aparte. Referencia:
+// refugio/taller (15 m², los mas pequeños reales) -- almacen (40 m², el
+// mayor) sale ~1.6x mas grande en pantalla, no 2.7x lineal, mismo criterio
+// de compresion por raiz cuadrada que ya se aplico a fauna para no llegar
+// a tamaños absurdos a esta escala de celda.
+const HUELLA_REFERENCIA_M2 = 15;
+const BASE_SPRITE_CONSTRUCCION_A_REFERENCIA = CELDA * 0.95;
+const SPRITE_CONSTRUCCION_MIN = CELDA * 0.75;
+const SPRITE_CONSTRUCCION_MAX = CELDA * 1.7;
+function tamanoSpriteConstruccion(tipo) {
+  const huella = ORDEN_HUELLA_CONSTRUCCION[tipo] || HUELLA_REFERENCIA_M2;
+  const escala = Math.sqrt(huella / HUELLA_REFERENCIA_M2);
+  return Math.max(SPRITE_CONSTRUCCION_MIN, Math.min(SPRITE_CONSTRUCCION_MAX, BASE_SPRITE_CONSTRUCCION_A_REFERENCIA * escala));
+}
+
 function crearCeldaTxt(ch, color, cx, cy, glow, fondo) {
   const el = document.createElement('div');
   el.className = 'celda-txt';
@@ -635,6 +679,29 @@ function crearCeldaTxt(ch, color, cx, cy, glow, fondo) {
   if (glow) el.style.textShadow = `0 0 6px ${color}`;
   el.style.left = cx + 'px'; el.style.top = cy + 'px';
   return el;
+}
+
+// Construcciones con sprite real (2026-09-16, mismo criterio ya aplicado a
+// fauna) -- a diferencia de las criaturas (capa persistente, animada), las
+// construcciones viven en la capa ESTATICA: se recrean enteras en cada
+// renderMapa() igual que cualquier otro elemento del suelo, no necesitan
+// transicion de movimiento propia. El contenedor conserva el color de
+// fondo de la celda (rastro de terreno bajo el edificio, mismo `fondo` que
+// ya calculaba itemsCelda); el <img> se ancla abajo-centro dentro de el,
+// igual que .criatura-img, escalado por huella_m2 real
+// (tamanoSpriteConstruccion) en vez de un tamaño fijo.
+function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
+  const cont = document.createElement('div');
+  cont.className = 'celda-txt';
+  cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
+  cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
+  if (fondo) cont.style.backgroundColor = fondo;
+  const img = document.createElement('img');
+  img.className = 'construccion-img';
+  img.src = src;
+  img.style.height = tamano + 'px';
+  cont.appendChild(img);
+  return cont;
 }
 
 // Mosaico 2x2 -- solo se usa cuando itemsCelda() devuelve 2 o mas items
@@ -652,7 +719,18 @@ function crearCeldaCuadrantes(items, cx, cy, fondo) {
     const cuad = document.createElement('div');
     cuad.className = 'cuadrante';
     const item = items[i];
-    if (item) {
+    if (item && item.img) {
+      // Construccion compartiendo celda con otro elemento real (recurso,
+      // planta) -- caso raro pero posible dentro del presupuesto de
+      // huella_m2 del motor. El sprite se reduce al tamaño del propio
+      // cuadrante en vez de al de celda completa (tamanoSpriteConstruccion
+      // asume celda completa), para no desbordar sobre los demas.
+      const img = document.createElement('img');
+      img.className = 'construccion-img construccion-img-cuadrante';
+      img.src = item.img;
+      img.style.height = Math.round(CELDA * 0.42) + 'px';
+      cuad.appendChild(img);
+    } else if (item) {
       cuad.textContent = item.ch;
       cuad.style.color = item.color;
       cuad.style.fontSize = fontSize + 'px';
@@ -676,9 +754,12 @@ function renderMapa() {
       // glifo de la capa de criaturas (que sigue arrancando en 1000+y), asi
       // una criatura de pie sobre una celda de fondo tintado nunca queda
       // tapada por ella.
+      const unico = info.items[0] || {};
       const el = info.items.length > 1
         ? crearCeldaCuadrantes(info.items, cx, cy, info.fondo)
-        : crearCeldaTxt((info.items[0] || {}).ch || '', (info.items[0] || {}).color || '#000', cx, cy, false, info.fondo);
+        : unico.img
+          ? crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion))
+          : crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, false, info.fondo);
       el.style.zIndex = String(y);
       capaEstatica.appendChild(el);
     }

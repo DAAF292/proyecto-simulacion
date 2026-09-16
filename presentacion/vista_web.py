@@ -81,7 +81,9 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             payload = self.servidor_ref.instantanea_json if self.servidor_ref else "{}"
             self.wfile.write(payload.encode("utf-8"))
         elif self.path.startswith("/sprites_criaturas/"):
-            self._servir_sprite_criatura(self.path[len("/sprites_criaturas/"):])
+            self._servir_sprite("sprites_criaturas", self.path[len("/sprites_criaturas/"):])
+        elif self.path.startswith("/sprites_construcciones/"):
+            self._servir_sprite("sprites_construcciones", self.path[len("/sprites_construcciones/"):])
         else:
             self.send_response(404)
             self.end_headers()
@@ -98,16 +100,16 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(destino.read_bytes())
 
-    def _servir_sprite_criatura(self, ruta_relativa: str) -> None:
-        """Sprites reales de fauna (2026-09-16, ver
-        presentacion/terminal_prototipo/sprites_criaturas/) -- unica
-        excepcion deliberada a "mapa 100% glifos": Diego pidio pictogramas
-        con estilo propio para las criaturas despues de que ni CP437 ni
-        los emoji nativos convencieran del todo. Mismo guardia anti path-
-        traversal que el resto de rutas de disco de este archivo."""
+    def _servir_sprite(self, subcarpeta: str, ruta_relativa: str) -> None:
+        """Sprites reales de fauna y construcciones (2026-09-16, ver
+        presentacion/terminal_prototipo/sprites_criaturas/ y
+        sprites_construcciones/) -- unica excepcion deliberada a "mapa 100%
+        glifos": Diego pidio pictogramas con estilo propio despues de que ni
+        CP437 ni los emoji nativos convencieran del todo. Mismo guardia anti
+        path-traversal que el resto de rutas de disco de este archivo."""
         from urllib.parse import unquote
 
-        carpeta_sprites = (RUTA_TERMINAL / "sprites_criaturas").resolve()
+        carpeta_sprites = (RUTA_TERMINAL / subcarpeta).resolve()
         destino = (carpeta_sprites / unquote(ruta_relativa)).resolve()
         if not destino.is_relative_to(carpeta_sprites):
             self.send_response(403)
