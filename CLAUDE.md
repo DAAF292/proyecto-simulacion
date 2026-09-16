@@ -279,7 +279,7 @@ sesiones quede junto).
   añadió la reconstrucción real de la biblioteca de sprites (2026-09-04)
   y sus correcciones, que hasta ahora vivían sueltas en este documento.
 
-## Estado actual y pendientes reales (actualizado 2026-09-15, tras esta poda)
+## Estado actual y pendientes reales (actualizado 2026-09-16)
 
 Lista corta de lo que sigue genuinamente abierto hoy — para el detalle de
 cómo se llegó a cada punto, abre el historial correspondiente de arriba.
@@ -325,12 +325,46 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   de la Pieza 1, acumulando niveles reales (hasta saturado a 1.0 en
   "forrajero") desde el primer momento en que existe un asentamiento,
   a diferencia de casi todas las piezas sociales anteriores de este
-  proyecto que quedaron "correctas pero invisibles" semanas. Pendiente
-  real: "tipos de construcción nuevos" es ahora el siguiente círculo
-  natural del roadmap unificado (consumidor de esto + calidad de
-  materiales); interacción entre asentamientos y nombre propio +
-  crónica (Piezas 4-5 del informe original) siguen sin empezar, sin
-  decidir el orden.
+  proyecto que quedaron "correctas pero invisibles" semanas.
+  **"Nombre propio + crónica de asentamiento" (Pieza 4-5 del informe
+  original) CERRADO el mismo 2026-09-15**, ver
+  `docs/historial_construccion_social.md`: nombre generado al fundarse
+  (prefijo+sufijo silábico), con mix probabilístico hacia un catálogo
+  temático si la celda-centro tiene un rasgo geográfico fuerte (agua o
+  montaña — alcance deliberadamente acotado a esos dos, no los 5 biomas,
+  tras feedback crítico de Diego de que un generador puramente silábico
+  "no se diferencia mucho de una generación de nombres común"), más
+  `Persistencia.cronica_de_asentamiento(id)` para consultar los eventos
+  propios de un pueblo aislados de otros. **"Tipos de construcción
+  nuevos" (taller de artesano → mobiliario → comodidad, más almacén
+  personal en refugio) CERRADO 2026-09-16, mismo círculo, dos piezas
+  unificadas a petición explícita de Diego** (contra el criterio
+  habitual de "una complejidad a la vez"), ver
+  `docs/historial_construccion_social.md`: taller como tercer paralelo
+  comunal, gateado por conocimiento colectivo "artesano" del propio
+  asentamiento, habilita FABRICAR "mobiliario" — el mueble se trata como
+  un material más (kg, calidad alta), reutilizando SIN NINGÚN CAMBIO el
+  mecanismo ya construido de mejora de vivienda por sustitución; en
+  paralelo, dormir en el refugio propio ya completado deposita
+  automáticamente el material a granel portado en un almacén personal
+  (`Construccion.almacen`, solo depósito, sin retirada todavía).
+  **Diagnóstico de 4 semillas × 10000 ticks, resultado dividido y
+  honesto**: el almacén de refugio se ejerce con fuerza real en las 4
+  (4 a 198 depósitos según semilla); el taller/mobiliario, en cambio,
+  **0 muebles fabricados en las 4**, incluida la única semilla
+  (402001) donde la cadena comunal SÍ avanzó lo bastante (salón común y
+  cocina completos) — ni siquiera ahí llegó a construirse el taller
+  dentro de la ventana de 10000 ticks. Mecanismo verificado correcto por
+  16 tests dirigidos, pero **"correcto pero invisible" en juego libre**,
+  mismo patrón que ya sufrieron salón común/minería/tala en su día —
+  agravado aquí por el conflicto de capacidad ya documentado en
+  `config/materiales.yaml` (huella_m2 de los 4 edificios comunales suma
+  125, por encima de `capacidad_construccion_celda_m2=80`). Pendiente
+  real: interacción entre asentamientos (Pieza 4 restante del roadmap
+  unificado) sigue sin empezar; remedir el criterio maestro de Diego
+  contra el ecosistema sigue siendo el pendiente más urgente de todos
+  (ver primer punto de esta lista), sin decidir el orden frente a lo
+  anterior.
 - **Caza en manada de lobo contra caballo**: mecanismo verificado
   correcto, pero la coincidencia temporal que exige (~4-6 aliados
   cazando a la vez, dentro de `radio_apoyo_grupal`) es estructuralmente

@@ -1630,3 +1630,240 @@ de conocimiento colectivo + calidad de materiales), junto con
 "interacción entre asentamientos" y "nombre propio + crónica" (piezas
 4-5 del informe original), ninguna decidida todavía -- a la espera de
 que Diego elija.
+
+## Nombre propio + crónica de asentamiento, con mix geográfico -- cerrado
+## el mismo día (2026-09-15)
+
+Elegida por Diego, vía `AskUserQuestion`, como la más acotada y de menor
+riesgo de las piezas restantes del informe "asentamiento como entidad
+propia" (Piezas 4-5) -- pura identidad narrativa + consulta de solo
+lectura, sin tocar ningún mecanismo de comportamiento, mismo alcance que
+"biografía consultable" (Círculo 6 del arco "hilo individual",
+2026-09-04). Spec:
+`docs/superpowers/specs/2026-09-15-nombre-cronica-asentamiento-design.md`.
+Implementado directamente por Claude (sin pipeline en este contenedor).
+
+### Diseño e implementación, primera versión
+
+- `config/nombres.yaml` gana `nombres_asentamiento` (prefijos/sufijos
+  planos, catálogo NUEVO de topónimos, nunca nombres de persona).
+- `nucleo/asentamiento.py:generar_nombre(rng, catalogo) -> str | None`
+  (nueva, pura): mismo patrón `rng.choice(prefijos) + rng.choice(sufijos)`
+  que `nucleo/entidad.py:_generar_nombre`, sin generalizar esa función
+  -- pequeña duplicación deliberada.
+- Sorteado UNA vez, exactamente cuando `SistemaAsentamiento.ejecutar()`
+  determina que un id es genuinamente nuevo (mismo punto donde ya se
+  emite `AsentamientoFundado`) -- nunca se resortea mientras el id
+  persista. Persistido en `Mundo.asentamiento_nombre: dict[int, str]`,
+  reutilizando `configuracion_ejecucion` (sin bump de esquema).
+- Crónica: sin columna nueva en `cronica_eventos` -- se añade
+  `datos["asentamiento_id"]`/`datos["nombre_asentamiento"]` a
+  `AsentamientoFundado` y `RefugioConstruido`/`AlmacenConstruido` (estos
+  últimos resolviendo `asentamiento_de` en el momento de emitir, mismo
+  helper que ya usa conocimiento colectivo).
+  `Persistencia.cronica_de_asentamiento(id) -> list[Evento]` (nueva,
+  mismo molde que `biografia_de`): filtra `cronica_eventos` en Python,
+  no vía SQL/json1 -- consulta bajo demanda, no hot path.
+- `presentacion/narrador.py` gana plantillas para `AsentamientoFundado`
+  y `AlmacenConstruido` (hueco preexistente en `_PLANTILLA_GENERICA`,
+  cerrado de paso).
+
+### Corrección tras feedback crítico de Diego (mismo día)
+
+Viendo el resultado real ("Barost", "Karom", "Stenost"), Diego señaló
+con razón que un catálogo de sílabas puro "no se diferencia mucho de
+una generación de nombres común" -- pidió mezclarlo con la zona o un
+accidente geográfico, dando el ejemplo de una pradera con nombre
+construido frente a un valle que se nombra a sí mismo por el accidente.
+
+Verificado contra el código real qué rasgos geográficos existen hoy
+(sin inventar "valle", que el motor no modela): `Celda.tipo_terreno` (5
+biomas) y `Celda.tipo_agua`. Vía `AskUserQuestion`, Diego escogió
+acotar el mix a **solo los dos rasgos "fuertes" (agua y montaña)**, no
+dar temática a los 5 biomas -- más fiel a su propio ejemplo (una
+pradera sigue siendo genérica).
+
+- `nucleo/asentamiento.py:rasgo_geografico_notable(celda)` (nueva):
+  `'agua'` si `celda.tipo_agua != ""` (prioridad sobre montaña),
+  `'montana'` si bioma MONTANA sin agua, `None` en cualquier otro caso.
+  **Corrección real durante el desarrollo**: la primera versión miraba
+  `celda.tiene_agua`, que NO se deriva automáticamente de `tipo_agua` al
+  construir una `Celda` a mano (solo lo sincroniza el generador de
+  mundo real) -- 2 tests fallaron hasta cambiar la comprobación a
+  `celda.tipo_agua != ""` directamente, la fuente de verdad real según
+  el propio docstring del campo.
+- `generar_nombre` gana dos parámetros opcionales (`rasgo`,
+  `probabilidad_tematico`, ambos con default que reproduce el
+  comportamiento anterior): con rasgo presente y la tirada de
+  `asentamiento.probabilidad_nombre_tematico` (0.6, PROVISIONAL)
+  favorable, sustituye `catalogo["prefijos"]` por
+  `catalogo[f"prefijos_{rasgo}"]` -- los SUFIJOS siguen siendo siempre
+  los mismos. Deliberadamente no determinista, coherente con el
+  "quizás" de Diego.
+- `config/nombres.yaml:nombres_asentamiento` gana `prefijos_agua` (Vad,
+  Rib, Font, Reman) y `prefijos_montana` (Alt, Cim, Peñ, Risc).
+- **Hallazgo real, corregido de paso**: `RefugioConstruido` (evento
+  individual) ya quedaba etiquetado con `asentamiento_id` desde la
+  primera versión (mismo bloque de `_resolver_construir` que
+  `AlmacenConstruido`), pero sin plantilla dedicada caía en el genérico
+  feo ("evento refugio (entidad 2016)") -- añadida una plantilla mínima.
+
+**Verificado**: 628/628 tests en verde (creció de 11 a 20 en
+`tests/test_nombre_cronica_asentamiento.py` entre las dos rondas).
+`BOSQUE_AUTO_TICKS`/`BOSQUE_CONTINUAR` sin excepciones.
+
+**Diagnóstico de juego libre, reutilizando las mismas 4 semillas
+(401001-401004) que ya confirmaron formar asentamiento**: el mecanismo
+base funciona -- las 4 corridas generan nombre al fundarse y la crónica
+reconstruida es coherente (aislada correctamente entre los 2
+asentamientos simultáneos de la semilla 401004: "Karom" con sus 4
+refugios propios, "Stenost" con sus almacenes/salón común propios, sin
+mezclarse). **Pero el mix geográfico no llegó a observarse en esta
+muestra**: los 5 asentamientos resultantes (4 semillas, 2 en la 401004)
+salieron con nombre puramente silábico -- Thornom, Barost, Dunom,
+Karom, Stenost, ninguno con prefijo `_agua`/`_montana`. Con
+`probabilidad_nombre_tematico=0.6`, 0/5 temáticos es estadísticamente
+posible pero low-probability SI el centro cae en agua/montaña con
+frecuencia -- lectura más honesta: los centros de asentamiento de esta
+muestra concreta simplemente no cayeron sobre esos dos biomas
+concretos, no que el mecanismo falle (verificado aparte por tests
+dirigidos que sí ejercen la sustitución). **Pendiente real**: el mix
+geográfico sigue sin confirmarse en juego libre con una muestra mayor;
+`probabilidad_nombre_tematico` PROVISIONAL, sin calibrar.
+
+## Tipos de construcción nuevos: taller de artesano, mobiliario y
+## almacén personal en refugio -- cerrado, resultado dividido en juego
+## libre (2026-09-16)
+
+Siguiente círculo natural del roadmap unificado (arco "asentamiento
+como entidad propia" + "asentamientos/profesiones"), primer consumidor
+real de conocimiento colectivo con efecto de comportamiento (la cubeta
+"artesano" venía acumulando desde la pieza anterior sin ningún
+consumidor). Ante la pregunta abierta "qué más podemos añadir", Diego
+eligió esta pieza y, al detallar qué objeto concreto debía desbloquear
+el taller, respondió con una idea EXPANDIDA en vez de elegir una de las
+opciones ofrecidas: objetos que suban la comodidad de un individuo
+(mobiliario) Y que un refugio propio tenga su propio almacén para
+guardar pertenencias. Vía `AskUserQuestion`, Diego eligió explícitamente
+implementar **ambas piezas en el mismo círculo**, contra la
+recomendación de mantenerlas separadas por el principio habitual de
+"una complejidad a la vez". Spec:
+`docs/superpowers/specs/2026-09-16-taller-mobiliario-almacen-refugio-design.md`.
+Implementado directamente por Claude (sin pipeline en este contenedor).
+
+### Pieza A -- taller de artesano -> mobiliario -> comodidad
+
+- `nucleo/construccion.py:tipos_paralelos` gana un tercer elemento,
+  `"taller"` (junto a `salon_comun`/`cocina`, ya generalizado para esto
+  desde su comentario original) -- `objetivo_construccion_actual` solo
+  devuelve `None` cuando los TRES paralelos están completos.
+- `config/materiales.yaml` gana `masa_minima_taller`/`huella_m2_taller`,
+  y dos materiales nuevos: `utensilios_domesticos` (calidad 0.65) y
+  `mueble_tallado` (calidad 0.9, deliberadamente por debajo del hierro
+  0.95). **Conflicto de capacidad real, documentado sin resolver**: la
+  suma de `huella_m2` de los 4 edificios comunales (almacén+salón
+  común+cocina+taller) da 125, por encima de
+  `capacidad_construccion_celda_m2=80` -- ni retocado el valor ni
+  añadida búsqueda en celda vecina, honestamente señalado en el propio
+  fichero de config.
+- `config/herramientas.yaml:recetas_mobiliario` (catálogo separado,
+  mismo criterio que `recetas_mineria`): `utensilios_domesticos` (nivel
+  1, madera) y `mueble_tallado` (nivel 2, madera+piedra).
+- **Reutilización arquitectónica real**: FABRICAR es determinista/
+  instantáneo, sin ninguna tasa continua que un bono pudiera acelerar --
+  en vez de inventar un mecanismo nuevo, el mueble se trata como un
+  MATERIAL más (kg añadidos a `Inventario.contenidos`, no un objeto
+  discreto en `.objetos`), con `calidad_construccion` alta en el
+  catálogo. Esto hace que el mecanismo YA CONSTRUIDO de mejora de
+  vivienda por sustitución (`_resolver_mejora_refugio`, Pieza D del arco
+  comodidad) lo reconozca **sin ningún cambio de código** -- verificado
+  con una regresión dedicada.
+- `sistemas/sistema_decision.py`: tercera vía de mejora de vivienda,
+  junto a RECOLECTAR-mejora y CONSTRUIR-mejora, heredando el mismo
+  `deficit_comodidad` -- gateada por estar en un `taller` completado del
+  propio asentamiento Y que `nivel_conocimiento(..., "artesano", ...)`
+  supere `umbral_conocimiento_taller` (0.3, PROVISIONAL) -- primer
+  efecto de comportamiento real de esa cubeta, hasta ahora solo
+  acumulada.
+
+### Pieza B -- almacén personal en refugio
+
+- `componentes/construccion.py:Construccion.almacen` (nuevo,
+  `dict[str, float]`, mismo molde que `provisiones`/`materiales`) --
+  universal en el componente pero solo poblado hoy en tipo "refugio".
+- `sistemas/sistema_recursos.py:_resolver_deposito_almacen_refugio`:
+  disparado por `Accion.DORMIR` (elegido deliberadamente frente a
+  cualquier otra acción para no vaciar el inventario de alguien
+  meramente de paso hacia el almacén comunal) -- si el individuo duerme
+  exactamente en la celda de su propio refugio ya
+  `completado_alguna_vez`, todo `Inventario.contenidos` se mueve a
+  `Construccion.almacen` (sumando sobre lo ya guardado), liberando
+  capacidad de carga real. Solo depósito -- sin mecanismo de retirada
+  todavía, pendiente honesto señalado en el spec.
+- `nucleo/persistencia.py`: `VERSION_ESQUEMA` 0.39 -> 0.40-fase0,
+  columna `almacen TEXT` nueva en `construccion_estado` (bump de
+  esquema, a diferencia de nombre+crónica -- aquí sí hace falta porque
+  `construccion_estado` es tabla de esquema fijo, no
+  `configuracion_ejecucion`).
+
+### Regresión corregida de paso
+
+Añadir `"taller"` como tercer paralelo rompió 2 tests preexistentes
+(`test_cocinas_comunes.py::test_objetivo_none_solo_cuando_ambos_
+paralelos_completos`, `test_salon_comun.py::test_objetivo_none_cuando_
+salon_comun_tambien_esta_completo`) que asumían solo 2 paralelos --
+corregidos construyendo también un `"taller"` completado antes de
+esperar `None`, preservando el invariante real bajo prueba (ahora son 3
+paralelos, no 2), no debilitando la aserción.
+
+**Verificado**: 644/644 tests en verde (16 nuevos,
+`tests/test_taller_mobiliario_almacen.py`): fabricación de mobiliario
+como kg en `contenidos` no objeto discreto, preferencia por receta de
+mayor nivel completable, no-op sin receta; depósito automático (deposita,
+suma sin sobrescribir, y sus 4 no-op reales: sin refugio propio, refugio
+no completado, fuera de la celda del refugio, inventario vacío); el gate
+completo de la utilidad de mobiliario en `sistema_decision.py` (6
+escenarios: gana con todo presente, y falla sin taller/sin asentamiento/
+con conocimiento insuficiente/sin receta/sin mejora de calidad real); y
+la regresión de `_resolver_mejora_refugio` reconociendo `mueble_tallado`
+sin ningún cambio de código. `BOSQUE_AUTO_TICKS=3000` y
+`BOSQUE_CONTINUAR=1` (roundtrip con la columna `almacen` nueva) sin
+ninguna excepción.
+
+**Diagnóstico de juego libre, 4 semillas × 10000 ticks (401001 +
+402001-402003 -- ticks más largos que el resto de diagnósticos de esta
+sesión a propósito, porque esta pieza depende de una cadena comunal de
+4 pasos, la más profunda probada hasta ahora), resultado DIVIDIDO y
+honesto**:
+
+- **Pieza B (almacén de refugio): se ejerce con fuerza real en las 4
+  semillas** -- 143, 198, 4 y 122 depósitos automáticos respectivamente
+  (variación entre semillas coherente con cuánta población consciente
+  con refugio propio llegó a sobrevivir lo bastante en cada corrida).
+- **Pieza A (taller/mobiliario): 0 muebles fabricados en las 4
+  semillas**, sin ninguna excepción. Solo la semilla 402001 llegó a
+  completar tanto salón común como cocina (los dos paralelos previos al
+  taller) dentro de los 10000 ticks -- ni siquiera en ese caso llegó a
+  completarse el taller mismo (tercer paralelo) en el resto de la
+  ventana. Las otras 3 semillas ni siquiera completaron salón común,
+  así que el taller nunca entró en juego -- conocimiento colectivo
+  "artesano" alcanzó niveles muy por encima del umbral (0.947, 1.000,
+  0.380, 0.960 según semilla) en todas, así que el umbral de
+  conocimiento NO es el cuello de botella real: lo es la profundidad de
+  la cadena comunal (4 construcciones paralelas en secuencia) combinada
+  con el conflicto de capacidad ya documentado (125m² > 80m²).
+
+**Lectura honesta**: Pieza A queda en el mismo patrón que salón
+común/minería/tala sufrieron en su día -- "correcta pero invisible" en
+juego libre, verificada solo por los 16 tests dirigidos. No es un bug:
+el mecanismo dispara exactamente como se diseñó en cuanto sus 3
+precondiciones (taller completo + asentamiento + conocimiento sobre
+umbral) se cumplen a la vez, pero la primera de esas tres es
+estructuralmente rara a esta escala de ticks. **Pendiente real,
+explícito**: el conflicto de capacidad (125m² > 80m²) sigue sin
+resolverse -- ni retocada la huella de ningún edificio comunal, ni
+añadida búsqueda en celda vecina; sin esa resolución, es dudoso que el
+taller llegue a completarse nunca en juego libre a esta escala de
+población, por mucho conocimiento colectivo que se acumule. Candidato
+real para la próxima calibración numérica de este arco, no para más
+diseño sobre el papel.
