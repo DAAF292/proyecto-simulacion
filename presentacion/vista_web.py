@@ -80,12 +80,39 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             payload = self.servidor_ref.instantanea_json if self.servidor_ref else "{}"
             self.wfile.write(payload.encode("utf-8"))
+        elif self.path.startswith("/sprites_criaturas/"):
+            self._servir_sprite_criatura(self.path[len("/sprites_criaturas/"):])
         else:
             self.send_response(404)
             self.end_headers()
 
     def _servir_terminal(self, nombre_archivo: str) -> None:
         destino = RUTA_TERMINAL / nombre_archivo
+        if not destino.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return
+        tipo, _ = mimetypes.guess_type(str(destino))
+        self.send_response(200)
+        self.send_header("Content-Type", tipo or "application/octet-stream")
+        self.end_headers()
+        self.wfile.write(destino.read_bytes())
+
+    def _servir_sprite_criatura(self, ruta_relativa: str) -> None:
+        """Sprites reales de fauna (2026-09-16, ver
+        presentacion/terminal_prototipo/sprites_criaturas/) -- unica
+        excepcion deliberada a "mapa 100% glifos": Diego pidio pictogramas
+        con estilo propio para las criaturas despues de que ni CP437 ni
+        los emoji nativos convencieran del todo. Mismo guardia anti path-
+        traversal que el resto de rutas de disco de este archivo."""
+        from urllib.parse import unquote
+
+        carpeta_sprites = (RUTA_TERMINAL / "sprites_criaturas").resolve()
+        destino = (carpeta_sprites / unquote(ruta_relativa)).resolve()
+        if not destino.is_relative_to(carpeta_sprites):
+            self.send_response(403)
+            self.end_headers()
+            return
         if not destino.is_file():
             self.send_response(404)
             self.end_headers()

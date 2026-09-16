@@ -104,6 +104,17 @@
     position: absolute; display: flex; align-items: center; justify-content: center;
     font-weight: normal; font-family: inherit;
   }
+  /* Sprites de fauna (2026-09-16, ver comentario junto a CATALOGO_GLIFOS.
+     fauna) -- ancla inferior-centro (translate -50%,-100%) para que los
+     "pies" queden en el borde inferior de la celda, igual que el ancla
+     que ya usaban los glifos de texto por su propio centrado flex.
+     pixelated conserva el pixel-art nitido al escalar en el navegador. */
+  .criatura-img {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    image-rendering: pixelated;
+    width: auto;
+  }
   /* Mosaico 2x2 (subdivision puramente visual, ver itemsCelda en el
      script) -- misma celda de 100m2 del motor, hasta 4 elementos reales
      distintos repartidos en cuadrantes en vez de colapsados a uno solo. */
@@ -316,16 +327,33 @@ const CATALOGO_GLIFOS = {
   // documentada, no un hallazgo perfecto). 🐿️ (ardilla) es una secuencia
   // de 2 codepoints (animal + selector de variacion) -- verificado que
   // renderiza como un solo glifo, no dos, en Chromium/fuente del sistema.
+  // SEGUNDO PIVOTE DE FAUNA (2026-09-16, mismo dia): Diego pidio pictogramas
+  // propios en vez de emoji nativos -- generados por IA, estilo pixel art
+  // de cuerpo completo (no solo cabeza), colores naturales de cada especie
+  // (nunca una paleta gris fija -- ver correccion real de Diego cuando
+  // generalice por error el gris del lobo de referencia a todo el set).
+  // Los .jpg originales de Diego traian un cuadriculado de "transparencia"
+  // HORNEADO como pixeles opacos reales (JPG no soporta canal alfa) --
+  // recortado por software con relleno por inundacion desde los bordes
+  // (ver /tmp/quitar_fondo.py de la sesion, no versionado -- un recorte de
+  // color global habria comido pelaje real: el gris claro del lobo, p.ej.,
+  // es casi identico a uno de los dos tonos del cuadriculado). `img`
+  // apunta al PNG ya procesado (fondo real transparente, recortado al
+  // contenido); `ch`/`color` quedan como referencia de la leyenda y como
+  // unico camino para necromasa, que se queda con el emoji 💀 (no se pidio
+  // sprite propio para restos). Excepcion real y deliberada a "mapa 100%
+  // glifos" -- CP437 no tiene pictogramas de animales (auditado) y los
+  // emoji nativos no convencieron del todo a Diego.
   fauna: {
     titulo: 'Fauna',
-    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo' },
-    lobo:          { ch: '🐺', color: '#e05a3a', nombre: 'Lobo' },
-    conejo:        { ch: '🐰', color: '#c9b590', nombre: 'Conejo' },
-    ardilla:       { ch: '🐿️', color: '#d98a2e', nombre: 'Ardilla' },
-    caballo:       { ch: '🐴', color: '#c9a06a', nombre: 'Caballo' },
-    venado:        { ch: '🦌', color: '#a3703f', nombre: 'Venado' },
-    cabra_montesa: { ch: '🐐', color: '#b8c0c4', nombre: 'Cabra montesa' },
-    zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro' },
+    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo', img: 'sprites_criaturas/gnomo.png' },
+    lobo:          { ch: '🐺', color: '#e05a3a', nombre: 'Lobo', img: 'sprites_criaturas/lobo.png' },
+    conejo:        { ch: '🐰', color: '#c9b590', nombre: 'Conejo', img: 'sprites_criaturas/conejo.png' },
+    ardilla:       { ch: '🐿️', color: '#d98a2e', nombre: 'Ardilla', img: 'sprites_criaturas/ardilla.png' },
+    caballo:       { ch: '🐴', color: '#c9a06a', nombre: 'Caballo', img: 'sprites_criaturas/caballo.png' },
+    venado:        { ch: '🦌', color: '#a3703f', nombre: 'Venado', img: 'sprites_criaturas/venado.png' },
+    cabra_montesa: { ch: '🐐', color: '#b8c0c4', nombre: 'Cabra montesa', img: 'sprites_criaturas/cabra.png' },
+    zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro', img: 'sprites_criaturas/zorro.png' },
     necromasa:     { ch: '💀', color: '#7a7268', nombre: 'Restos (necromasa)' },
   },
   construcciones: {
@@ -430,7 +458,7 @@ function infoCriatura(ent) {
   // dato real via capacidad_mental.consciente) destacan con resplandor --
   // mismo criterio que el Codice retirado reservaba para runas de
   // criaturas conscientes, aqui sin necesitar ningun asset.
-  return { ch: g.ch, color: g.color, glow: !!ent.consciente };
+  return { ch: g.ch, color: g.color, img: g.img || null, glow: !!ent.consciente };
 }
 
 // REDISEÑADO 2026-09-16, dos veces seguidas. Primero (feedback: "demasiado
@@ -659,6 +687,43 @@ function renderMapa() {
     `TICK ${DATA.tick} · DIA ${DATA.dia} · ${DATA.estacion.toUpperCase()} · ${DATA.clima.toUpperCase()}`;
 }
 
+// CORREGIDO 2026-09-16 (Diego: "caballos mas pequeños que zorros, cabras
+// del tamaño de conejos, haz que tenga sentido eso"). El bug real: una
+// altura de sprite FIJA para todas las especies solo reflejaba cuanto
+// margen vacio dejaba el recorte de cada PNG generado, no el tamaño real
+// del animal. Corregido igual que ya se documento para el sistema
+// retirado (escalaPorAltura del prototipo hibrido pre-ASCII): escala por
+// DimensionesFisicas.altura real del INDIVIDUO (dimensiones.altura_m, ya
+// expuesta en el DTO) -- dato real del motor, no una tabla inventada.
+// Raiz cuadrada en vez de lineal: el rango real de config/poblacion.yaml
+// va de 0.15m (ardilla) a 1.8m (caballo), mas de 10x -- un caballo 10
+// veces mas alto que una ardilla en pantalla seria absurdo a esta escala
+// de celda, pero el ORDEN relativo (mayor altura real = mayor sprite) se
+// conserva siempre, a diferencia del bug anterior donde no se conservaba
+// en absoluto. Ancho en 'auto': el navegador preserva la proporcion real
+// de cada PNG (todas distintas -- un conejo sentado es alto y estrecho,
+// un zorro de perfil es ancho y bajo).
+const ALTURA_REFERENCIA_M = 0.9; // ~altura media de gnomo (rango 0.9-1.2m), unidad de referencia
+const BASE_SPRITE_A_REFERENCIA = CELDA * 1.4;
+const ALTURA_SPRITE_MIN = CELDA * 0.55;
+const ALTURA_SPRITE_MAX = CELDA * 2.2;
+function alturaSpriteCriatura(ent) {
+  const alturaM = (ent.dimensiones && ent.dimensiones.altura_m) || ALTURA_REFERENCIA_M;
+  const escala = Math.sqrt(alturaM / ALTURA_REFERENCIA_M);
+  return Math.max(ALTURA_SPRITE_MIN, Math.min(ALTURA_SPRITE_MAX, BASE_SPRITE_A_REFERENCIA * escala));
+}
+
+function crearCeldaImg(src, cx, cy, glow, altura) {
+  const el = document.createElement('img');
+  el.className = 'criatura-img';
+  el.src = src;
+  el.style.height = altura + 'px';
+  el.style.left = (cx + CELDA / 2) + 'px';
+  el.style.top = (cy + CELDA) + 'px';
+  if (glow) el.style.filter = 'drop-shadow(0 0 4px rgba(255,255,255,0.9))';
+  return el;
+}
+
 let elementosCriatura = {};
 function renderCriaturas() {
   asegurarCapas();
@@ -669,11 +734,23 @@ function renderCriaturas() {
     const info = infoCriatura(ent);
     const { cx, cy } = celdaAPantalla(ent.x, ent.y, CELDA);
     let el = elementosCriatura[idStr];
+    const esImg = !!info.img;
+    // Si el tipo de elemento cambia (no deberia pasar en juego normal,
+    // el catalogo es estatico, pero es una red de seguridad barata) se
+    // recrea en vez de intentar mutar un <img> en un <div> de texto.
+    if (el && !!el.dataset.esImg !== esImg) { el.remove(); el = null; }
     if (!el) {
-      el = crearCeldaTxt(info.ch, info.color, cx, cy, info.glow);
-      el.style.transition = 'left 0.9s linear, top 0.9s linear';
+      el = esImg ? crearCeldaImg(info.img, cx, cy, info.glow, alturaSpriteCriatura(ent)) : crearCeldaTxt(info.ch, info.color, cx, cy, info.glow);
+      el.dataset.esImg = esImg ? '1' : '';
+      el.style.transition = esImg ? 'left 0.9s linear, top 0.9s linear' : 'left 0.9s linear, top 0.9s linear';
       capaCriaturas.appendChild(el);
       elementosCriatura[idStr] = el;
+    } else if (esImg) {
+      if (!el.src.endsWith(info.img)) el.src = info.img;
+      el.style.height = alturaSpriteCriatura(ent) + 'px';
+      el.style.filter = info.glow ? 'drop-shadow(0 0 4px rgba(255,255,255,0.9))' : '';
+      el.style.left = (cx + CELDA / 2) + 'px';
+      el.style.top = (cy + CELDA) + 'px';
     } else {
       el.textContent = info.ch;
       el.style.color = info.color;
