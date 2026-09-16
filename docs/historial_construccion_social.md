@@ -1867,3 +1867,151 @@ taller llegue a completarse nunca en juego libre a esta escala de
 población, por mucho conocimiento colectivo que se acumule. Candidato
 real para la próxima calibración numérica de este arco, no para más
 diseño sobre el papel.
+
+## Pertenencia explícita, colocación satélite y necesidad diferenciada de
+## los edificios comunales -- cerrado, confirmado en juego libre
+## (2026-09-16, mismo día)
+
+Círculo abierto por crítica directa de Diego al conflicto de capacidad
+del taller (ver pieza anterior): "creo que los edificios comunes
+deberían estar cada uno en celdas distintas". Diego confirmó explícitamente
+mi propuesta de ancla (salón_común, fijo al centro) + satélite (el
+resto, celda vecina con cupo), y en la misma conversación añadió otras
+dos peticiones que se cerraron juntas en el mismo círculo, a petición
+suya ("todo junto", contra la recomendación inicial de trocearlo): (1)
+aplanar el orden de los 4 comunales (que decidan las necesidades del
+individuo, no una jerarquía fija), y (2) ahora que `Asentamiento` tiene
+identidad estable (Pieza 1, 2026-09-15), que los edificios comunes le
+pertenezcan explícitamente. Spec:
+`docs/superpowers/specs/2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md`.
+Implementado directamente por Claude (sin pipeline en este contenedor).
+
+### Pertenencia explícita (`Construccion.asentamiento_id`)
+
+Hallazgo real que motivó esto, no solo limpieza: `almacen_cercano`
+(nucleo/asentamiento.py) resolvía "¿existe ya un X de mi pueblo?" por
+PURA PROXIMIDAD (radio `radio_cluster_celdas=6` alrededor de
+`Asentamiento.centro`, sin comprobar pertenencia real) -- dos
+asentamientos con centros a menos de 6 celdas podían confundir sus
+edificios entre sí, un bug agazapado que la colocación satélite (más
+dispersión espacial real) habría hecho mucho más fácil de disparar.
+`Construccion` gana `asentamiento_id: int | None` (mismo rol que
+`propietario_id` para refugio individual), asignado en creación, nunca
+reasignado. Nueva `construccion_comunal_de_tipo(gestor, asentamiento_id,
+tipo)` reemplaza `almacen_cercano` en todos sus consumidores reales.
+Bump de esquema (`VERSION_ESQUEMA` 0.40 -> 0.41-fase0), columna
+`asentamiento_id INTEGER` en `construccion_estado`.
+
+**Hallazgo aparte, de paso**: `Asentamiento.almacen_id` (cacheado a
+diario por `sistema_asentamiento.py` desde el 2026-09-08) **nunca se
+leía en ningún consumidor real de todo el repositorio** -- cache muerta
+desde que se introdujo, verificado por grep antes de tocar nada, no de
+memoria. Retirada junto con `almacen_cercano`, sin sustituto (ya no
+aporta nada que `construccion_comunal_de_tipo` no resuelva bajo
+demanda).
+
+### Colocación ancla/satélite
+
+Solo **salon_comun** es "ancla": siempre construye exactamente en
+`asen.centro`, igual que todos los comunales hacían antes -- si no cabe,
+simplemente no se crea (mismo bloqueo ya aceptado desde el 31-08, sin
+plan B). **almacén, cocina y taller son "satélite"**: nueva
+`nucleo/espacio.py:celda_satelite_con_cupo` busca la celda habitable más
+próxima con cupo, expandiendo en anillos Manhattan 1..radio_cluster --
+**excluyendo deliberadamente el anillo 0 (el propio centro)**, para que
+una carrera de creación entre satélites no deje al ancla sin cupo
+suficiente cuando le toque su turno. Orden determinista dentro de cada
+anillo (ordenado por `(dx, dy)`), sin comprobación de terreno
+transitable (mismo criterio ya aceptado para refugio individual, que
+tampoco la comprueba).
+
+### Necesidad diferenciada por tipo, no jerarquía fija
+
+Antes: cadena refugio -> almacén (con gate de excedente) -> {salón_común,
+cocina, taller} en paralelo (SIN gate, `dispuesto=True` siempre) --
+"qué se construye primero" lo decidía casi en exclusiva el desempate
+mecánico por progreso ya invertido, no ninguna necesidad real del
+individuo. Ahora, los 4 tipos compiten al MISMO nivel, cada uno con su
+propio gate binario:
+
+| Tipo | Gate |
+|------|------|
+| almacén | excedente `min(saciedad, hidratación)` sobre el umbral de carácter (idéntico al de siempre) |
+| cocina | excedente de SOLO saciedad sobre el mismo umbral -- **PROVISIONAL**, sin eje mejor identificado que no exigiera inventar un componente nuevo |
+| salón_común | `(sociabilidad + curiosidad) / 2` sobre `umbral_prosocial_comunal` (reutilizado, no un umbral nuevo) |
+| taller | `comodidad < 1.0` -- casi siempre cierto pronto en la partida |
+
+Entre quienes pasan su gate, gana quien lleve más progreso ya invertido
+(mismo criterio de convergencia ya validado el 2026-09-08). Empate
+exacto (nadie empezado) resuelto por el orden fijo de `TIPOS_COMUNALES`
+-- deliberadamente reordenado a `("almacen", "salon_comun", "cocina",
+"taller")` para preservar el desempate histórico ya probado
+("salon_comun antes que cocina"), en vez de dejarlo caer donde
+alfabéticamente/arbitrariamente hubiera quedado.
+
+**Arquitectura**: `sistema_decision.py` decide QUÉ tipo perseguir (con
+temperamento/necesidades, que solo él tiene a mano) y lo guarda en
+`Intencion.construir_tipo_objetivo` (mismo patrón transitorio por tick
+que `fabricar_categoria`) -- pero NO resuelve cid/posición ahí.
+`sistema_movimiento.py`/`sistema_recursos.py` vuelven a resolver eso EN
+VIVO para el tipo ya decidido, preservando la protección contra
+duplicados del 2026-09-09 (decision corre antes que movimiento sobre
+TODAS las entidades; cachear ahí "existe/no existe" reabriría esa
+carrera).
+
+### Verificado
+
+658/658 tests en verde: 16 nuevos dedicados
+(`tests/test_pertenencia_colocacion_necesidad_comunal.py` --
+`celda_satelite_con_cupo` en sus leyes: encuentra el vecino del anillo 1,
+nunca devuelve el propio centro, determinismo, salta de anillo cuando el
+primero está lleno, `None` fuera de radio, respeta límites del grid;
+`resolver_posicion_comunal` ancla-siempre-centro vs satélite-nunca-centro;
+integración con `_calcular_construir`; gates de almacén y taller
+-- cocina/salón_común ya cubiertos en los ficheros migrados; roundtrip
+de `asentamiento_id`) más una migración grande de
+`test_cocinas_comunes.py`/`test_salon_comun.py` (las pruebas que
+testeaban `objetivo_construccion_actual` como resolutor de cascada ya
+no tenían sentido -- esa responsabilidad se partió entre
+`candidatos_comunales_pendientes`, que solo lista, y el argmax real por
+necesidad que ahora vive en `sistema_decision.py`).
+`BOSQUE_AUTO_TICKS=3000` y `BOSQUE_CONTINUAR=1` (roundtrip con la
+columna `asentamiento_id` nueva) sin ninguna excepción -- ya en el
+segundo smoke test (200 ticks tras continuar) se observó un edificio
+satélite creado en una celda vecina real.
+
+**Diagnóstico de juego libre, 4 semillas nuevas (403001-403004) ×
+10000 ticks, resultado fuerte y consistente en las 4**:
+
+- Semilla 403001: 1 ancla, **4 satélite**.
+- Semilla 403002: 1 ancla, **3 satélite**.
+- Semilla 403003: 1 ancla, **2 satélite**.
+- Semilla 403004: 2 ancla, **4 satélite**.
+
+En las 4 semillas, más edificios comunales nacieron en celda satélite
+que en el ancla -- la colocación satélite no es un mecanismo latente
+como le pasó a la mayoría de piezas sociales de este proyecto en su
+día: se ejerce con fuerza desde el primer momento en que hay más de un
+tipo comunal pendiente a la vez. Conocimiento colectivo alcanzó nivel
+saturado (1.000) en las 4 semillas, salón común llegó a completarse en
+3/4, cocina en 2/4.
+
+**Lo que este círculo NO resolvió, honesto**: taller/mobiliario sigue
+en **0 muebles fabricados en las 4 semillas** (igual que el diagnóstico
+de ayer) -- la colocación satélite quita al taller la competencia
+directa por el espacio del centro, pero no garantiza que su propio gate
+(`comodidad < 1.0`) gane el argmax frente a almacén/cocina/salón_común
+cuando compiten de verdad, ni que se complete a tiempo dentro de la
+ventana. No se instrumentó qué TIPO concreto ocupó cada celda satélite
+en esta corrida (`_stats_comunal_creado_satelite` es un agregado, no
+desglosado por tipo) -- pendiente real si se quiere confirmar si taller
+en concreto llega a crearse en juego libre, solo que no se completa, o
+si ni siquiera eso.
+
+**Pendiente real, explícito**: el gate de cocina (excedente de solo
+saciedad) sigue PROVISIONAL, sin un eje mejor identificado que no
+exigiera inventar un componente nuevo; interacción entre asentamientos
+(pieza 4 restante del roadmap unificado del 2026-09-15) sigue sin
+empezar; remedir el criterio maestro de Diego contra el ecosistema
+sigue siendo el pendiente más urgente de todos, sin decidir el orden
+frente a lo anterior.

@@ -359,8 +359,42 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   mismo patrón que ya sufrieron salón común/minería/tala en su día —
   agravado aquí por el conflicto de capacidad ya documentado en
   `config/materiales.yaml` (huella_m2 de los 4 edificios comunales suma
-  125, por encima de `capacidad_construccion_celda_m2=80`). Pendiente
-  real: interacción entre asentamientos (Pieza 4 restante del roadmap
+  125, por encima de `capacidad_construccion_celda_m2=80`).
+  **"Pertenencia explícita, colocación satélite y necesidad
+  diferenciada de los comunales" CERRADO el mismo 2026-09-16, mismo
+  día, tres cambios en un único círculo a petición explícita de
+  Diego** ("todo junto"), ver `docs/historial_construccion_social.md`:
+  a raíz de la crítica de Diego al conflicto de capacidad de arriba
+  ("los edificios comunes deberían estar cada uno en celdas
+  distintas") — `Construccion.asentamiento_id` (pertenencia explícita,
+  reemplaza una búsqueda por proximidad que podía confundir dos
+  pueblos vecinos — hallazgo aparte: `Asentamiento.almacen_id`, cacheado
+  a diario desde 2026-09-08, nunca se leía en ningún consumidor real,
+  cache muerta, retirada); solo `salon_comun` sigue anclado al centro
+  exacto, almacén/cocina/taller pasan a "satélite" (celda vecina más
+  próxima con cupo, excluyendo el propio centro para no competir con el
+  ancla); y los 4 tipos comunales compiten AL MISMO NIVEL (se retira la
+  jerarquía "almacén primero", accidente histórico) — cada uno gatea por
+  su propia necesidad real (almacén/cocina: excedente de
+  saciedad/hidratación; salón_común: sociabilidad+curiosidad; taller:
+  déficit de comodidad), desempatando por progreso ya invertido.
+  **Diagnóstico de 4 semillas nuevas (403001-403004) × 10000 ticks,
+  resultado fuerte y consistente en las 4 — a diferencia de la mayoría
+  de piezas sociales de este proyecto, que tardaron semanas en
+  observarse**: en las 4, nacieron MÁS edificios comunales en celda
+  satélite que en el ancla (1-2 ancla frente a 2-4 satélite según
+  semilla) — la colocación satélite se ejerce con fuerza desde el
+  primer momento en que hay más de un tipo comunal pendiente a la vez.
+  Lo que este círculo NO resolvió, honesto: taller/mobiliario sigue en
+  0 muebles fabricados en las 4 semillas (igual que el diagnóstico
+  anterior) — quitarle la competencia directa por espacio no basta por
+  sí solo para que su propio gate gane el argmax a tiempo; no se
+  desglosó por tipo qué construcción concreta ocupó cada celda
+  satélite, así que no se sabe si taller en particular llegó a
+  crearse sin completarse, o ni siquiera eso. Pendiente real: el gate
+  de cocina (excedente de solo saciedad) sigue PROVISIONAL, sin eje
+  mejor identificado que no exigiera inventar un componente nuevo;
+  interacción entre asentamientos (Pieza 4 restante del roadmap
   unificado) sigue sin empezar; remedir el criterio maestro de Diego
   contra el ecosistema sigue siendo el pendiente más urgente de todos
   (ver primer punto de esta lista), sin decidir el orden frente a lo
