@@ -80,7 +80,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.40-fase0"
+VERSION_ESQUEMA = "0.41-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -312,7 +312,8 @@ class Persistencia:
                     completado_alguna_vez BOOLEAN NOT NULL,
                     zona_idx INTEGER NOT NULL DEFAULT 0,
                     provisiones TEXT NOT NULL DEFAULT '{}',
-                    almacen TEXT NOT NULL DEFAULT '{}'
+                    almacen TEXT NOT NULL DEFAULT '{}',
+                    asentamiento_id INTEGER
                 )
                 """
             )
@@ -719,10 +720,11 @@ class Persistencia:
                             pos_c.zona_idx,
                             json.dumps(con_comp.provisiones),
                             json.dumps(con_comp.almacen),
+                            con_comp.asentamiento_id,
                         )
                     )
             cur.executemany(
-                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
+                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
             )
 
             # C3. Fogatas (ver componentes/fogata.py)
@@ -1185,11 +1187,12 @@ class Persistencia:
             # 4b. Cargar Construcciones
             cur.execute(
                 "SELECT entidad_id, x, y, tipo, materiales, propietario_id, progreso, "
-                "completado_alguna_vez, zona_idx, provisiones, almacen FROM construccion_estado"
+                "completado_alguna_vez, zona_idx, provisiones, almacen, asentamiento_id "
+                "FROM construccion_estado"
             )
             for (
                 coid, cx, cy, tipo, mats_json, propietario_id, progreso, completado, zidx,
-                provisiones_json, almacen_json,
+                provisiones_json, almacen_json, asentamiento_id,
             ) in cur.fetchall():
                 gestor.anadir_componente(coid, Posicion(x=cx, y=cy, zona_idx=zidx))
                 gestor.anadir_componente(
@@ -1202,6 +1205,7 @@ class Persistencia:
                         completado_alguna_vez=bool(completado),
                         provisiones=json.loads(provisiones_json),
                         almacen=json.loads(almacen_json) if almacen_json else {},
+                        asentamiento_id=asentamiento_id,
                     ),
                 )
 

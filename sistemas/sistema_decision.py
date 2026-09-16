@@ -218,12 +218,12 @@ from nucleo.armas import (
 from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.construccion import (
     calidad_media_construccion,
+    candidatos_comunales_pendientes,
     construccion_propia,
     hay_construccion_de_tipo_en,
     masa_apta_construccion,
     material_mejora_disponible_en,
     material_suficiente_para,
-    objetivo_construccion_actual,
 )
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
@@ -319,14 +319,20 @@ def _compromiso_construir_mantiene(
     Intencion.accion = CONSTRUIR para siempre (progreso < 1.0 sigue
     siendo cierto), sin volver nunca a RECOLECTAR.
 
-    Para ALMACÉN, el compromiso también re-verifica la disposición a
-    aportar (nucleo/asentamiento.py:disposicion_a_aportar) en cada tick,
-    no solo en el instante en que se eligió la acción -- sin esto, un
-    individuo fundamentalmente egoísta (agresividad alta, empatía/lealtad
-    bajas, necesidades sin excedente real) podría terminar de construir
-    TODO un almacén él solo con solo un pico momentáneo de saciedad. El
-    refugio propio NO exige esta re-verificación (nunca exigió
-    disposición para empezar, tampoco debe exigirla para continuar).
+    Para ALMACÉN y COCINA (2026-09-16: cocina gana el mismo tipo de gate
+    por excedente que almacén ya tenía, ver docs/superpowers/specs/
+    2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md), el
+    compromiso también re-verifica la disposición a aportar
+    (nucleo/asentamiento.py:disposicion_a_aportar) en cada tick, no solo
+    en el instante en que se eligió la acción -- sin esto, un individuo
+    fundamentalmente egoísta (agresividad alta, empatía/lealtad bajas,
+    necesidades sin excedente real) podría terminar de construir TODO un
+    almacén o cocina él solo con solo un pico momentáneo de
+    saciedad/hidratación. salón_común y taller NO exigen esta
+    re-verificación -- su gate (sociabilidad+curiosidad, deficit de
+    comodidad) no es un excedente que pueda desaparecer del mismo modo, y
+    el refugio propio tampoco (nunca exigió disposición para empezar,
+    tampoco debe exigirla para continuar).
 
     Mismo principio que el techo efectivo del compromiso de satisfacción
     (_compromiso_mantiene): se libera en cuanto ya no hay nada más que
@@ -347,6 +353,9 @@ def _compromiso_construir_mantiene(
     if construccion.tipo == "almacen":
         excedente = min(necesidades.saciedad, necesidades.hidratacion)
         if excedente < disposicion_a_aportar(temperamento, config_asentamiento):
+            return False
+    elif construccion.tipo == "cocina":
+        if necesidades.saciedad < disposicion_a_aportar(temperamento, config_asentamiento):
             return False
     return True
 
@@ -734,32 +743,72 @@ def actualizar(
         utilidad_construir = 0.0
         utilidad_recolectar = 0.0
         cid_objetivo = None
+        tipo_objetivo = ""
         if cap_mental.consciencia >= umbral_consciencia_agencia:
-            objetivo = objetivo_construccion_actual(
-                gestor, mundo, id_entidad, radio_cluster_asentamiento, indice=indice
-            )
-            if objetivo is not None:
-                tipo_objetivo, cid_objetivo, _ = objetivo
-                dispuesto = True
-                if tipo_objetivo == "almacen":
-                    excedente = min(necesidades.saciedad, necesidades.hidratacion)
-                    umbral_individual = disposicion_a_aportar(temperamento, config_asentamiento)
-                    dispuesto = excedente >= umbral_individual
-                if dispuesto:
-                    suficiente = material_suficiente_para(
-                        gestor,
-                        cid_objetivo,
-                        tipo_objetivo,
-                        inventario.contenidos,
-                        catalogo_materiales,
-                        config_construccion,
-                    )
-                    if not suficiente and espacio_disponible_kg(
-                        inventario.contenidos, dims.peso, fraccion_carga_maxima
-                    ) > 0.0:
-                        utilidad_recolectar = utilidad_recolectar_base
-                    if masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0:
-                        utilidad_construir = utilidad_construir_base
+            cid_refugio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
+            refugio_pendiente = cid_refugio is None
+            if not refugio_pendiente:
+                refugio_comp = gestor.obtener_componente(cid_refugio, Construccion)
+                refugio_pendiente = refugio_comp is None or refugio_comp.progreso < 1.0
+            if refugio_pendiente:
+                tipo_objetivo, cid_objetivo = "refugio", cid_refugio
+            else:
+                # Necesidad diferenciada por tipo comunal (2026-09-16,
+                # ver docs/superpowers/specs/2026-09-16-pertenencia-
+                # colocacion-necesidad-comunal-design.md): los 4 tipos
+                # (almacen/cocina/salon_comun/taller) compiten AL MISMO
+                # NIVEL, sin jerarquía -- cada uno gana solo si SU
+                # propio gate real pasa; entre los que pasan, gana quien
+                # ya lleve más progreso invertido (mismo criterio de
+                # convergencia ya validado, ahora aplicado solo dentro
+                # del subconjunto de candidatos que de verdad interesan
+                # a este individuo).
+                mejor_progreso = -1.0
+                for tipo_c, cid_c, _pos_c in candidatos_comunales_pendientes(
+                    gestor, mundo, id_entidad, config, radio_cluster_asentamiento
+                ):
+                    if tipo_c == "almacen":
+                        gate = min(necesidades.saciedad, necesidades.hidratacion) >= (
+                            disposicion_a_aportar(temperamento, config_asentamiento)
+                        )
+                    elif tipo_c == "cocina":
+                        # PROVISIONAL (2026-09-16): solo saciedad, no
+                        # hidratación -- cocinar es sobre comida, no
+                        # agua. Mismo umbral de carácter que almacén.
+                        gate = necesidades.saciedad >= disposicion_a_aportar(
+                            temperamento, config_asentamiento
+                        )
+                    elif tipo_c == "salon_comun":
+                        gate = (
+                            temperamento.sociabilidad + temperamento.curiosidad
+                        ) / 2.0 >= umbral_prosocial_comunal
+                    else:  # taller
+                        gate = necesidades.comodidad < 1.0
+                    if not gate:
+                        continue
+                    progreso_c = 0.0
+                    if cid_c is not None:
+                        construccion_c = gestor.obtener_componente(cid_c, Construccion)
+                        progreso_c = construccion_c.progreso if construccion_c is not None else 0.0
+                    if progreso_c > mejor_progreso:
+                        mejor_progreso = progreso_c
+                        tipo_objetivo, cid_objetivo = tipo_c, cid_c
+
+            if tipo_objetivo != "":
+                suficiente = material_suficiente_para(
+                    gestor,
+                    cid_objetivo,
+                    tipo_objetivo,
+                    inventario.contenidos,
+                    catalogo_materiales,
+                    config_construccion,
+                )
+                if not suficiente and espacio_disponible_kg(
+                    inventario.contenidos, dims.peso, fraccion_carga_maxima
+                ) > 0.0:
+                    utilidad_recolectar = utilidad_recolectar_base
+                if masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0:
+                    utilidad_construir = utilidad_construir_base
 
         # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/
         # fogata.py y nucleo/fuego.py). Misma compuerta de consciencia
@@ -1020,16 +1069,18 @@ def actualizar(
                 refugio_propio = gestor.obtener_componente(cid_refugio_propio, Construccion)
                 if refugio_propio is not None and refugio_propio.completado_alguna_vez:
                     sesgo_prosocial = (temperamento.empatia + temperamento.sociabilidad) / 2.0
-                    # objetivo (no cid_objetivo): el objetivo comunal
-                    # puede existir aun sin Construccion creada todavia
-                    # (cid_objetivo=None, ver objetivo_construccion_actual
-                    # -- "almacen"/paralelo pendiente de fundarse). Al
-                    # llegar aqui ya se confirmo refugio_propio.
-                    # completado_alguna_vez, asi que CUALQUIER objetivo
-                    # no-None devuelto arriba es necesariamente comunal
-                    # (objetivo_construccion_actual solo devuelve
-                    # "refugio" mientras no esta terminado).
-                    cadena_comunal_pendiente = objetivo is not None
+                    # tipo_objetivo (no cid_objetivo): ya resuelto más
+                    # arriba en esta misma iteración (bloque CONSTRUIR/
+                    # RECOLECTAR) -- puede ser "" (ningún comunal supera
+                    # su propio gate para este individuo ahora mismo) o
+                    # uno de TIPOS_COMUNALES, aunque NO exista todavía
+                    # Construccion creada (cid_objetivo=None, pendiente
+                    # de fundarse). Al llegar aquí ya se confirmó
+                    # refugio_propio.completado_alguna_vez, así que
+                    # tipo_objetivo NUNCA puede ser "refugio" en este
+                    # punto (ver objetivo_construccion_actual: refugio
+                    # solo se elige mientras no está terminado).
+                    cadena_comunal_pendiente = tipo_objetivo != ""
                     prioriza_comunal = (
                         cadena_comunal_pendiente and sesgo_prosocial >= umbral_prosocial_comunal
                     )
@@ -1356,6 +1407,18 @@ def actualizar(
         )
         if sistema_decision is not None and intencion.construir_motivo_mejora:
             sistema_decision._stats_construir_mejora_elegido += 1
+        # Vuelca a Intencion el tipo de construcción resuelto este tick
+        # (2026-09-16, ver docs/superpowers/specs/2026-09-16-pertenencia-
+        # colocacion-necesidad-comunal-design.md) -- a diferencia de
+        # fabricar_categoria/construir_motivo_mejora, NO se gatea por cuál
+        # acción ganó el argmax final: el robo de materiales
+        # (sistema_movimiento.py) necesita saber "cuál es mi objetivo de
+        # construcción actual" con independencia de si HUIR/CAZAR/etc.
+        # terminó ganando este tick concreto (mismo criterio que ya tenía
+        # el robo antes de esta pieza, cuando recalculaba
+        # objetivo_construccion_actual por su cuenta sin mirar
+        # intencion.accion).
+        intencion.construir_tipo_objetivo = tipo_objetivo
 
         # Empunyar/guardar (armas primitivas v2, ver config/armas.yaml):
         # ajuste automatico recalculado cada tick junto a la Accion

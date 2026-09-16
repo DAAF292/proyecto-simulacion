@@ -423,6 +423,7 @@ class SistemaRecursos:
                 self._resolver_construir(
                     gestor, mundo, eid, mem, cap_mental, inv, pos.x, pos.y, reloj.tick_actual,
                     bus_eventos, construir_motivo_mejora=intencion.construir_motivo_mejora,
+                    tipo_objetivo=intencion.construir_tipo_objetivo,
                     factor_conocimiento_colectivo=self._factor_conocimiento(mundo, asen, "constructor"),
                 )
                 self._incrementar_vocacion(gestor, mundo, eid, consciente, "conteo_constructor", asen)
@@ -666,6 +667,7 @@ class SistemaRecursos:
         tick_actual: int,
         bus_eventos: BusEventos,
         construir_motivo_mejora: bool = False,
+        tipo_objetivo: str = "",
         factor_conocimiento_colectivo: float = 1.0,
     ) -> None:
         """
@@ -693,11 +695,17 @@ class SistemaRecursos:
         -- ver CLAUDE.md): cuando sistema_decision.py marcó CONSTRUIR
         como motivado por mejora de vivienda (refugio propio ya
         completado_alguna_vez, se porta algo mejor que lo peor ya
-        invertido), se ignora por completo objetivo_construccion_actual
-        -- ese objetivo YA es None o apunta a la cadena comunal, ninguno
-        de los dos es el refugio propio en modo sustitución -- y se
-        resuelve directamente contra el refugio propio vía
-        _resolver_mejora_refugio.
+        invertido), se ignora por completo tipo_objetivo -- ese valor YA
+        es "" o apunta a la cadena comunal, ninguno de los dos es el
+        refugio propio en modo sustitución -- y se resuelve directamente
+        contra el refugio propio vía _resolver_mejora_refugio.
+
+        tipo_objetivo (2026-09-16, ver docs/superpowers/specs/
+        2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md):
+        QUÉ tipo perseguir ya lo decidió sistema_decision.py este mismo
+        tick (Intencion.construir_tipo_objetivo) -- aquí solo se
+        resuelve EN VIVO si ya existe y dónde, igual que
+        sistema_movimiento.py.
         """
         if inv is None:
             return
@@ -713,8 +721,10 @@ class SistemaRecursos:
                 return
             self._resolver_mejora_refugio(inv, refugio_mejora, factor_conocimiento_colectivo)
             return
+        if tipo_objetivo == "":
+            return
         objetivo = objetivo_construccion_actual(
-            gestor, mundo, entidad_id, self.radio_cluster_asentamiento
+            gestor, mundo, entidad_id, self.config, self.radio_cluster_asentamiento, tipo_objetivo,
         )
         if objetivo is None:
             return

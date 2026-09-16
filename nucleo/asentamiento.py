@@ -10,9 +10,13 @@ asentamiento es solo el CLÚSTER que emerge cuando el instinto gregario
 ya construido agrupa varios refugios cerca unos de otros.
 
 Recalculado ÍNTEGRO cada día (sistemas/sistema_asentamiento.py) -- la
-mayoría de sus campos (centro, líderes, almacén) siguen siendo 100%
-derivables de Construccion + Temperamento, mismo criterio que
-nucleo/agua.py:pendiente_local. El `id` en sí, en cambio, SÍ es estable
+mayoría de sus campos (centro, líderes) siguen siendo 100% derivables
+de Construccion + Temperamento, mismo criterio que
+nucleo/agua.py:pendiente_local. Qué edificios comunales pertenecen a
+este asentamiento vive en Construccion.asentamiento_id (2026-09-16,
+pertenencia explícita), no cacheado aquí -- el campo almacen_id que
+existió hasta esa fecha nunca se leía en ningún consumidor real,
+cache muerta desde que se introdujo. El `id` en sí, en cambio, SÍ es estable
 entre días desde el 2026-09-15 (ver
 resolver_identidades_persistentes más abajo y docs/superpowers/specs/
 2026-09-15-identidad-persistente-asentamiento-design.md) -- reutilizado
@@ -40,7 +44,6 @@ __all__ = [
     "calcular_centro",
     "calcular_liderazgo",
     "asentamiento_de",
-    "almacen_cercano",
     "disposicion_a_aportar",
     "resolver_identidades_persistentes",
     "generar_nombre",
@@ -120,7 +123,6 @@ class Asentamiento:
     centro: tuple[int, int]
     miembros: frozenset[int]
     lideres: frozenset[int] = field(default_factory=frozenset)
-    almacen_id: int | None = None
     zona_idx: int = 0
     """Un asentamiento no puede tener miembros en zonas distintas -- sus
     refugios no comparten espacio real (ver
@@ -308,55 +310,6 @@ def asentamiento_de(mundo: Any, id_entidad: int) -> Asentamiento | None:
             return asen
     return None
 
-
-def almacen_cercano(
-    gestor: Any, centro: tuple[int, int], radio: int, zona_idx: int = 0,
-    tipo: str = "almacen", indice=None,
-):
-    """Id de la Construccion de tipo `tipo` más cercana a `centro` dentro
-    de `radio`, o None -- búsqueda EN VIVO (no el almacen_id cacheado a
-    diario en Asentamiento) para no perder una construcción arrancada por
-    otro miembro este mismo día, antes del próximo recálculo diario.
-
-    `tipo` (2026-09-08, salón común -- ver docs/superpowers/specs/
-    2026-09-08-salon-comun-design.md): generaliza la función más allá de
-    "almacen" para su segundo consumidor real, sin romper a los dos
-    consumidores existentes (no lo pasan, comportamiento idéntico). El
-    nombre `almacen_cercano` se conserva -- mismo criterio ya aceptado en
-    `espacio_disponible_para_construir`, que también conserva un nombre
-    histórico por los consumidores que ya lo importan.
-
-    zona_idx: sin este filtro, un almacén en una cueva y otro en
-    superficie (o en otra cueva) con coordenadas numéricamente cercanas
-    se confundirían entre sí -- caso real con varias cuevas por mundo
-    compartiendo rangos de coordenadas pequeños.
-
-    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
-    construido, opcional -- si se pasa, se consulta indice.en_radio en
-    vez del escaneo lineal O(N) sobre todas las construcciones del
-    mundo. Sin indice, comportamiento identico a antes."""
-    from componentes.construccion import Construccion
-    from componentes.posicion import Posicion
-
-    mejor = None
-    mejor_dist = None
-    fuente = (
-        indice.en_radio(centro[0], centro[1], zona_idx, radio)
-        if indice is not None
-        else gestor.entidades_con(Construccion, Posicion)
-    )
-    for cid in fuente:
-        construccion = gestor.obtener_componente(cid, Construccion)
-        if construccion is None or construccion.tipo != tipo:
-            continue
-        pos = gestor.obtener_componente(cid, Posicion)
-        if pos is None or pos.zona_idx != zona_idx:
-            continue
-        dist = abs(pos.x - centro[0]) + abs(pos.y - centro[1])
-        if dist <= radio and (mejor_dist is None or dist < mejor_dist):
-            mejor = cid
-            mejor_dist = dist
-    return mejor
 
 
 def disposicion_a_aportar(temperamento: Any, config_asentamiento: dict[str, Any]) -> float:

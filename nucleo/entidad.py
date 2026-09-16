@@ -245,6 +245,7 @@ def crear_construccion(
     tipo: str,
     propietario_id: int | None = None,
     zona_idx: int = 0,
+    asentamiento_id: int | None = None,
 ) -> int:
     """
     Fábrica ECS: Instancia una construcción física vacía (progreso 0.0,
@@ -256,12 +257,18 @@ def crear_construccion(
 
     zona_idx: quien construye pasa su propio zona_idx -- un refugio se
     crea donde el constructor ya está.
+
+    asentamiento_id (2026-09-16, ver docs/superpowers/specs/
+    2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md): quien
+    crea un comunal (almacen/cocina/salon_comun/taller) pasa el id de su
+    propio asentamiento; refugio individual lo deja en None (usa
+    propietario_id en su lugar).
     """
     con_id = gestor.crear_entidad()
     gestor.anadir_componente(con_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
     gestor.anadir_componente(
         con_id,
-        Construccion(tipo=tipo, propietario_id=propietario_id),
+        Construccion(tipo=tipo, propietario_id=propietario_id, asentamiento_id=asentamiento_id),
     )
     return con_id
 

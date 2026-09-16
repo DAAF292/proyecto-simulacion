@@ -15,8 +15,12 @@ from componentes.necesidades import Necesidades
 from componentes.relaciones import Relaciones
 from componentes.temperamento import Temperamento
 from main import cargar_configuracion
-from nucleo.asentamiento import Asentamiento, almacen_cercano
-from nucleo.construccion import hay_construccion_de_tipo_en, objetivo_construccion_actual
+from nucleo.asentamiento import Asentamiento
+from nucleo.construccion import (
+    candidatos_comunales_pendientes,
+    construccion_comunal_de_tipo,
+    hay_construccion_de_tipo_en,
+)
 from nucleo.entidad import GestorEntidades, crear_construccion, crear_criatura
 from nucleo.fuego import hay_refugio_en
 from nucleo.mundo import Mundo
@@ -59,8 +63,10 @@ def _rel(gestor, eid) -> Relaciones:
     return gestor.obtener_componente(eid, Relaciones)
 
 
-def _construccion(gestor, tipo, x, y, progreso=1.0, completado=True):
-    cid = crear_construccion(gestor, x, y, tipo, propietario_id=None)
+def _construccion(gestor, tipo, x, y, progreso=1.0, completado=True, asentamiento_id=None):
+    cid = crear_construccion(
+        gestor, x, y, tipo, propietario_id=None, asentamiento_id=asentamiento_id,
+    )
     c = gestor.obtener_componente(cid, Construccion)
     c.progreso = progreso
     c.completado_alguna_vez = completado
@@ -68,56 +74,59 @@ def _construccion(gestor, tipo, x, y, progreso=1.0, completado=True):
 
 
 # ---------------------------------------------------------------------------
-# nucleo/asentamiento.py:almacen_cercano -- generalizado por tipo
+# nucleo/construccion.py:construccion_comunal_de_tipo -- pertenencia
+# explícita por asentamiento_id (2026-09-16), generalizada por tipo
 # ---------------------------------------------------------------------------
 
-def test_almacen_cercano_con_tipo_encuentra_salon_no_almacen():
+def test_construccion_comunal_de_tipo_encuentra_salon_no_almacen():
     gestor = GestorEntidades()
-    _construccion(gestor, "almacen", 0, 0)
-    cid_salon = _construccion(gestor, "salon_comun", 2, 2)
+    _construccion(gestor, "almacen", 0, 0, asentamiento_id=1)
+    cid_salon = _construccion(gestor, "salon_comun", 2, 2, asentamiento_id=1)
 
-    encontrado = almacen_cercano(gestor, centro=(0, 0), radio=5, tipo="salon_comun")
+    encontrado = construccion_comunal_de_tipo(gestor, 1, "salon_comun")
     assert encontrado == cid_salon
 
 
-def test_almacen_cercano_sin_tipo_sigue_buscando_almacen():
-    """Regresión: sin pasar `tipo`, comportamiento idéntico al de siempre."""
+def test_construccion_comunal_de_tipo_aisla_por_asentamiento():
+    """Ley: dos asentamientos distintos, aunque tengan el mismo tipo de
+    edificio, nunca se confunden entre sí (2026-09-16, pertenencia
+    explícita -- reemplaza la búsqueda por proximidad que sí podía
+    confundirlos)."""
     gestor = GestorEntidades()
-    cid_almacen = _construccion(gestor, "almacen", 0, 0)
-    _construccion(gestor, "salon_comun", 0, 0)
+    cid_propio = _construccion(gestor, "almacen", 0, 0, asentamiento_id=1)
+    _construccion(gestor, "almacen", 1, 1, asentamiento_id=2)
 
-    encontrado = almacen_cercano(gestor, centro=(0, 0), radio=5)
-    assert encontrado == cid_almacen
+    encontrado = construccion_comunal_de_tipo(gestor, 1, "almacen")
+    assert encontrado == cid_propio
 
 
 # ---------------------------------------------------------------------------
-# nucleo/construccion.py:objetivo_construccion_actual -- cadena encadenada
+# nucleo/construccion.py:candidatos_comunales_pendientes -- los 4 tipos
+# comunales AL MISMO NIVEL (2026-09-16), sin jerarquía almacén-primero
 # ---------------------------------------------------------------------------
 
-def test_objetivo_avanza_a_salon_comun_tras_refugio_y_almacen_completos():
+def test_candidatos_incluye_almacen_tras_refugio_completo():
     config = _config()
     rng = random.Random(1)
     gestor = GestorEntidades()
     mundo = Mundo(10, 10, config, random.Random(1))
     gnomo = _gnomo(gestor, config, rng)
-    crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
-    gestor.obtener_componente(
-        [cid for cid in gestor.entidades_con(Construccion)][0], Construccion
-    ).progreso = 1.0
-    _construccion(gestor, "almacen", 5, 5)
+    cid_refugio = crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
+    gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
 
-    objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)
+    candidatos = candidatos_comunales_pendientes(gestor, mundo, gnomo, config, radio_cluster=10)
 
-    assert objetivo[0] == "salon_comun"
-    assert objetivo[2] == (5, 5)
+    tipos = {tipo for tipo, _cid, _pos in candidatos}
+    assert tipos == {"almacen", "cocina", "salon_comun", "taller"}
 
 
-def test_objetivo_none_cuando_salon_comun_tambien_esta_completo():
+def test_candidatos_vacio_cuando_los_4_estan_completos():
     """Desde cocinas comunes (2026-09-08), salon_comun y cocina son
-    PARALELOS -- None exige ambos completos, no solo salon_comun. Desde
-    taller de artesano (2026-09-16), taller se sumo como tercer paralelo
-    -- None exige los tres completos."""
+    PARALELOS. Desde taller de artesano (2026-09-16), taller se sumó
+    como cuarto paralelo, y almacén se aplanó al MISMO nivel que los
+    otros tres (ya no tiene prioridad mecánica) -- lista vacía exige
+    los 4 completos, ninguno antes que otro."""
     config = _config()
     rng = random.Random(2)
     gestor = GestorEntidades()
@@ -125,18 +134,19 @@ def test_objetivo_none_cuando_salon_comun_tambien_esta_completo():
     gnomo = _gnomo(gestor, config, rng)
     cid_refugio = crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
     gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
-    _construccion(gestor, "almacen", 5, 5)
-    _construccion(gestor, "salon_comun", 5, 5)
-    _construccion(gestor, "cocina", 5, 5)
+    _construccion(gestor, "almacen", 5, 5, asentamiento_id=1)
+    _construccion(gestor, "salon_comun", 5, 5, asentamiento_id=1)
+    _construccion(gestor, "cocina", 5, 5, asentamiento_id=1)
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
 
-    objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)
-    assert objetivo[0] == "taller"
+    candidatos = candidatos_comunales_pendientes(gestor, mundo, gnomo, config, radio_cluster=10)
+    tipos = {tipo for tipo, _cid, _pos in candidatos}
+    assert tipos == {"taller"}
 
-    _construccion(gestor, "taller", 5, 5)
-    objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)
+    _construccion(gestor, "taller", 6, 5, asentamiento_id=1)
+    candidatos = candidatos_comunales_pendientes(gestor, mundo, gnomo, config, radio_cluster=10)
 
-    assert objetivo is None
+    assert candidatos == []
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +191,7 @@ def test_socializar_camina_al_salon_comun_en_vez_del_mas_cercano():
     a = _gnomo(gestor, config, rng, 5, 5, _temp(), _cap())
     # vecino MUY cercano (para probar que NO es el elegido)
     _gnomo(gestor, config, rng, 6, 5, _temp(), _cap())
-    _construccion(gestor, "salon_comun", 5, 0)
+    _construccion(gestor, "salon_comun", 5, 0, asentamiento_id=1)
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({a}))
     sistema = SistemaMovimiento(config, rng)
 
@@ -212,7 +222,7 @@ def test_socializar_ya_en_el_salon_se_queda_esperando():
     gestor = GestorEntidades()
     mundo = Mundo(10, 10, config, random.Random(1))
     a = _gnomo(gestor, config, rng, 5, 0, _temp(), _cap())
-    _construccion(gestor, "salon_comun", 5, 0)
+    _construccion(gestor, "salon_comun", 5, 0, asentamiento_id=1)
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 0), miembros=frozenset({a}))
     sistema = SistemaMovimiento(config, rng)
 
@@ -230,7 +240,7 @@ def test_socializar_contacto_real_ignora_el_salon_comun():
     mundo = Mundo(10, 10, config, random.Random(1))
     a = _gnomo(gestor, config, rng, 0, 0, _temp(), _cap())
     b = _gnomo(gestor, config, rng, 0, 0, _temp(), _cap())
-    _construccion(gestor, "salon_comun", 9, 9)  # lejos, no deberia importar
+    _construccion(gestor, "salon_comun", 9, 9, asentamiento_id=1)  # lejos, no deberia importar
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(0, 0), miembros=frozenset({a, b}))
     sistema = SistemaMovimiento(config, rng)
 

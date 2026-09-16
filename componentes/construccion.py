@@ -81,6 +81,15 @@ class Construccion:
             el individuo porta más de lo que necesita para su objetivo
             de construcción actual. Sin mecanismo de retirada todavía
             (solo depósito) -- pendiente honesto, señalado en el spec.
+        asentamiento_id: id del Asentamiento dueño (tipo comunal:
+            almacen/cocina/salon_comun/taller), o None para refugio
+            individual (2026-09-16, ver docs/superpowers/specs/
+            2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md
+            -- mismo rol que propietario_id pero a nivel de pueblo).
+            Reemplaza resolver "¿de qué asentamiento es este edificio?"
+            por proximidad (radio alrededor de Asentamiento.centro, con
+            riesgo real de confundir dos pueblos vecinos) por un hecho
+            explícito fijado al crearse, nunca reasignado después.
     """
 
     tipo: str
@@ -90,3 +99,4 @@ class Construccion:
     completado_alguna_vez: bool = False
     provisiones: dict[str, float] = field(default_factory=dict)
     almacen: dict[str, float] = field(default_factory=dict)
+    asentamiento_id: int | None = None

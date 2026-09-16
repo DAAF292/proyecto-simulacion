@@ -35,7 +35,7 @@ from componentes.relaciones import Relaciones
 from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.armas import bono_ofensivo_arma, mayor_nivel_arma, nivel_arma, objetos_arma
-from nucleo.asentamiento import almacen_cercano, asentamiento_de
+from nucleo.asentamiento import asentamiento_de
 from nucleo.conflicto import ResultadoDisputa, resolver_disputa
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.indice_espacial import construir_indice_espacial
@@ -44,6 +44,7 @@ from nucleo.inventario import espacio_disponible_kg, espacio_disponible_provisio
 from nucleo.manada import manada_de
 from nucleo.parentesco import es_familia_directa
 from nucleo.construccion import (
+    TIPO_ANCLA,
     construccion_completada_de_asentamiento,
     construccion_propia,
     espacio_disponible_para_construir,
@@ -99,6 +100,15 @@ class SistemaMovimiento:
         self._stats_robos_arma_intentados: int = 0
         self._stats_robos_arma_exitosos: int = 0
         self._stats_compartir_confianza: int = 0
+        # Colocación ancla/satélite de comunales (2026-09-16, ver
+        # docs/superpowers/specs/2026-09-16-pertenencia-colocacion-
+        # necesidad-comunal-design.md): cuántos edificios comunales
+        # nuevos se crearon en el centro exacto del asentamiento
+        # (siempre salon_comun) frente a una celda vecina (almacen/
+        # cocina/taller) -- confirma que la colocación satélite se
+        # ejerce de verdad en juego libre, no solo en tests dirigidos.
+        self._stats_comunal_creado_ancla: int = 0
+        self._stats_comunal_creado_satelite: int = 0
         # Memoria espacial compartida (2026-09-06, ver spec
         # docs/superpowers/specs/2026-09-06-memoria-espacial-compartida-design.md):
         # cuantos recuerdos de verdad se transfirieron entre conscientes y
@@ -517,6 +527,7 @@ class SistemaMovimiento:
                     gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
                     temperamento, pos.zona_idx,
                     construir_motivo_mejora=intencion.construir_motivo_mejora,
+                    tipo_objetivo=intencion.construir_tipo_objetivo,
                 )
             elif accion == Accion.DEAMBULAR:
                 dx, dy = self._calcular_deambular(
@@ -889,18 +900,11 @@ class SistemaMovimiento:
         """Coordenadas del salón común COMPLETADO del asentamiento de
         `entidad_id`, o None si no pertenece a ninguno o su asentamiento
         no tiene uno terminado todavía (2026-09-08, ver
-        docs/superpowers/specs/2026-09-08-salon-comun-design.md)."""
-        asen = asentamiento_de(mundo, entidad_id)
-        if asen is None:
-            return None
-        cid = almacen_cercano(
-            gestor, asen.centro, self.radio_cluster_asentamiento,
-            zona_idx=asen.zona_idx, tipo="salon_comun", indice=self._indice_actual,
-        )
+        docs/superpowers/specs/2026-09-08-salon-comun-design.md;
+        migrado a pertenencia explícita 2026-09-16, ya no busca por
+        proximidad -- ver construccion_completada_de_asentamiento)."""
+        cid = construccion_completada_de_asentamiento(gestor, mundo, entidad_id, "salon_comun")
         if cid is None:
-            return None
-        construccion = gestor.obtener_componente(cid, Construccion)
-        if construccion is None or not construccion.completado_alguna_vez:
             return None
         pos = gestor.obtener_componente(cid, Posicion)
         if pos is None:
@@ -917,10 +921,7 @@ class SistemaMovimiento:
         Devuelve el cid (no la posición como _salon_comun_de) porque los
         dos consumidores reales (imán social de respaldo, alacena de
         _calcular_forrajeo) necesitan cosas distintas del resultado."""
-        return construccion_completada_de_asentamiento(
-            gestor, mundo, entidad_id, self.radio_cluster_asentamiento, "cocina",
-            indice=self._indice_actual,
-        )
+        return construccion_completada_de_asentamiento(gestor, mundo, entidad_id, "cocina")
 
     def _agrupar_conscientes_por_celda(
         self, gestor: GestorEntidades,
@@ -1168,8 +1169,17 @@ class SistemaMovimiento:
         inv_victima = gestor.obtener_componente(victima_id, Inventario)
         if inv_ladron is None or inv_victima is None or not inv_victima.contenidos:
             return
+        # tipo ya decidido por sistema_decision.py este mismo tick (ver
+        # Intencion.construir_tipo_objetivo, 2026-09-16) -- este robo
+        # reacciona a la MISMA necesidad de material que ya activa
+        # RECOLECTAR/CONSTRUIR para el ladrón, con independencia de si
+        # esa fue la acción final elegida.
+        intencion_ladron = gestor.obtener_componente(ladron_id, Intencion)
+        if intencion_ladron is None or intencion_ladron.construir_tipo_objetivo == "":
+            return
         objetivo = objetivo_construccion_actual(
-            gestor, mundo, ladron_id, self.radio_cluster_asentamiento, indice=self._indice_actual
+            gestor, mundo, ladron_id, self.config, self.radio_cluster_asentamiento,
+            intencion_ladron.construir_tipo_objetivo, indice=self._indice_actual,
         )
         if objetivo is None:
             return
@@ -2455,6 +2465,7 @@ class SistemaMovimiento:
         temperamento: Temperamento | None,
         zona_idx: int = 0,
         construir_motivo_mejora: bool = False,
+        tipo_objetivo: str = "",
     ) -> tuple[int, int]:
         """
         REFUGIO/ALMACÉN CONSTRUIDO (ver componentes/construccion.py,
@@ -2512,12 +2523,20 @@ class SistemaMovimiento:
         construir_motivo_mejora (2026-09-14, Pieza D del arco "comodidad"
         -- ver CLAUDE.md): cuando sistema_decision.py marcó CONSTRUIR
         como motivado por mejora de vivienda, se ignora por completo
-        objetivo_construccion_actual (el refugio ya está
-        completado_alguna_vez, ese objetivo YA es None o apunta a la
-        cadena comunal) y se camina directamente hacia el refugio propio
-        ya existente -- mismo _acercarse_a que el resto de esta función,
-        sin ningún sesgo de agrupamiento nuevo (el refugio ya tiene
-        posición fija desde que se creó).
+        tipo_objetivo (el refugio ya está completado_alguna_vez, ese
+        objetivo YA es "" o apunta a la cadena comunal) y se camina
+        directamente hacia el refugio propio ya existente -- mismo
+        _acercarse_a que el resto de esta función, sin ningún sesgo de
+        agrupamiento nuevo (el refugio ya tiene posición fija desde que
+        se creó).
+
+        tipo_objetivo (2026-09-16, ver docs/superpowers/specs/
+        2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md):
+        QUÉ tipo perseguir ya lo decidió sistema_decision.py este mismo
+        tick (Intencion.construir_tipo_objetivo, usando temperamento/
+        necesidades que este sistema no tiene). Esta función solo
+        resuelve DÓNDE/SI ya existe, en vivo (ver el comentario de más
+        abajo sobre por qué indice=None sigue siendo deliberado).
         """
         if construir_motivo_mejora:
             cid_refugio_propio = construccion_propia(gestor, entidad_id, "refugio")
@@ -2528,18 +2547,20 @@ class SistemaMovimiento:
                 return (0, 0)
             return self._acercarse_a(pos_x, pos_y, con_pos_mejora.x, con_pos_mejora.y)
 
+        if tipo_objetivo == "":
+            return (0, 0)
+
         # indice=None deliberado (bug real encontrado en auditoria de
         # codigo, 2026-09-11): el indice congelado al principio del tick
-        # dejaba a almacen_cercano/construccion_completada_de_asentamiento
-        # sin ver una construccion comunal recien creada por OTRO miembro
-        # este mismo tick, permitiendo que dos gnomos llegaran al centro
-        # del asentamiento y crearan cada uno su propio almacen/salon/
-        # cocina duplicado en la misma celda -- justo lo que el propio
-        # docstring de almacen_cercano ("busqueda EN VIVO") decia evitar.
-        # Coste acotado: solo entidades que ejecutan CONSTRUIR este tick.
+        # dejaba a construccion_comunal_de_tipo sin ver una construccion
+        # comunal recien creada por OTRO miembro este mismo tick,
+        # permitiendo que dos gnomos llegaran al mismo sitio y crearan
+        # cada uno su propio almacen/salon/cocina/taller duplicado en la
+        # misma celda -- resolución EN VIVO para evitarlo. Coste
+        # acotado: solo entidades que ejecutan CONSTRUIR este tick.
         objetivo = objetivo_construccion_actual(
-            gestor, mundo, entidad_id, self.radio_cluster_asentamiento,
-            indice=None,
+            gestor, mundo, entidad_id, self.config, self.radio_cluster_asentamiento,
+            tipo_objetivo, indice=None,
         )
         if objetivo is None:
             return (0, 0)
@@ -2579,20 +2600,17 @@ class SistemaMovimiento:
             )
             return (0, 0)
 
-        # Comunal (almacen/salon_comun/cocina), todavia no existe: hay
-        # que llegar al centro del asentamiento antes de poder crearlo.
-        #
-        # BUG REAL (2026-09-09, ver herramientas/harness_calibracion.py):
-        # este bloque creaba SIEMPRE tipo="almacen" hardcodeado, sin
-        # mirar `tipo` -- desde que cocinas comunes (2026-09-08) hizo
-        # que objetivo_construccion_actual pudiera devolver
-        # "salon_comun"/"cocina" con cid=None, cada intento de empezar
-        # cualquiera de los dos creaba en su lugar OTRO almacen
-        # duplicado en la misma celda (nunca registrado como
-        # salon_comun/cocina en ninguna consulta por tipo, y confundiendo
-        # a objetivo_construccion_actual con dos "almacen" a la vez).
-        # Explica por si solo por que salon_comun/cocina nunca llegaban
-        # a acumular ni 1kg de material en ninguna semilla medida.
+        # Comunal (almacen/cocina/salon_comun/taller), todavia no existe:
+        # hay que llegar a su posición de creación ya resuelta (ancla=
+        # centro exacto para salon_comun, satélite=celda vecina con cupo
+        # para el resto -- ver nucleo/construccion.py:
+        # resolver_posicion_comunal) antes de poder crearlo.
+        if pos_creacion is None:
+            # Ninguna celda del radio tiene cupo (ancla sin cupo en el
+            # centro, o satélite sin ninguna celda vecina libre) -- no
+            # resuelto más allá del radio, mismo criterio ya aceptado
+            # desde el 31-08 para el conflicto de capacidad.
+            return (0, 0)
         cx, cy = pos_creacion
         if (cx, cy) != (pos_x, pos_y):
             return self._acercarse_a(pos_x, pos_y, cx, cy)
@@ -2600,7 +2618,16 @@ class SistemaMovimiento:
             gestor, pos_x, pos_y, zona_idx, self.config
         ) < huella_m2_para(tipo, self.config_construccion):
             return (0, 0)
-        crear_construccion(gestor, pos_x, pos_y, tipo, propietario_id=None, zona_idx=zona_idx)
+        asen = asentamiento_de(mundo, entidad_id)
+        asentamiento_id = asen.id if asen is not None else None
+        crear_construccion(
+            gestor, pos_x, pos_y, tipo, propietario_id=None, zona_idx=zona_idx,
+            asentamiento_id=asentamiento_id,
+        )
+        if tipo == TIPO_ANCLA:
+            self._stats_comunal_creado_ancla += 1
+        else:
+            self._stats_comunal_creado_satelite += 1
         return (0, 0)
 
     def _acercarse_a(self, ox: int, oy: int, tx: int, ty: int) -> tuple[int, int]:

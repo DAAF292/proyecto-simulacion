@@ -152,3 +152,19 @@ class Intencion:
     # este valor para saber que receta/catalogo aplicar. NO se persiste,
     # se recalcula cada tick como la propia accion.
     fabricar_categoria: str = ""
+    # Transitorio por tick (2026-09-16, ver docs/superpowers/specs/
+    # 2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md):
+    # qué tipo de construcción decidió perseguir el argmax de este tick
+    # -- "refugio", uno de nucleo.construccion.TIPOS_COMUNALES (almacen/
+    # cocina/salon_comun/taller, los 4 AL MISMO NIVEL desde esta pieza,
+    # sin jerarquía fija), o "" si no hay ninguno pendiente. Sustituye a
+    # la resolución interna que antes hacía
+    # nucleo.construccion.objetivo_construccion_actual (elegía el tipo
+    # ella misma por progreso ya invertido) -- ahora la elección exige
+    # temperamento/necesidades diferenciadas por tipo, que solo
+    # sistema_decision.py tiene a mano. sistema_movimiento.py/
+    # sistema_recursos.py leen este campo y vuelven a resolver cid/
+    # posición EN VIVO para el tipo ya decidido (ver el propio docstring
+    # de objetivo_construccion_actual para el porqué de no cachear
+    # también eso). NO se persiste -- se recalcula cada tick.
+    construir_tipo_objetivo: str = ""

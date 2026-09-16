@@ -946,6 +946,18 @@ def main() -> None:
                 f"{sistemas['recursos']._stats_deposito_almacen_refugio} depositos "
                 "en almacen de refugio"
             )
+            # Verificacion obligatoria de "pertenencia explicita +
+            # colocacion satelite + necesidad diferenciada" (2026-09-16,
+            # ver CLAUDE.md). Solo observacion: confirma que la
+            # colocacion satelite se ejerce de verdad en juego libre
+            # (al menos un comunal fuera del centro exacto), no solo en
+            # tests dirigidos.
+            print(
+                "[BOSQUE_AUTO_TICKS] colocacion comunal: "
+                f"{sistemas['movimiento']._stats_comunal_creado_ancla} creados en el "
+                f"centro (ancla), {sistemas['movimiento']._stats_comunal_creado_satelite} "
+                "creados en celda vecina (satelite)"
+            )
 
     except KeyboardInterrupt:
         pass

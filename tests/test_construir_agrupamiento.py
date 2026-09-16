@@ -60,6 +60,7 @@ def test_con_refugio_recordado_lejos_camina_hacia_el_en_vez_de_construir():
     dx, dy = sistema._calcular_construir(
         gestor, mundo, eid, Especie.GNOMO, 10, 10, radio=5, mem=mem,
         cap_mental=cap_mental, temperamento=None, zona_idx=0,
+        tipo_objetivo="refugio",
     )
     assert (dx, dy) != (0, 0), "deberia caminar hacia el refugio recordado, no quedarse a construir"
 
@@ -85,6 +86,7 @@ def test_sin_refugio_recordado_con_sociabilidad_alta_camina_hacia_conspecifico()
     dx, dy = sistema._calcular_construir(
         gestor, mundo, eid, Especie.GNOMO, 10, 10, radio=5, mem=mem,
         cap_mental=cap_mental, temperamento=temperamento, zona_idx=0,
+        tipo_objetivo="refugio",
     )
     assert (dx, dy) == (1, 0), "deberia caminar hacia el conspecifico (esta al este)"
 
@@ -109,6 +111,7 @@ def test_sin_refugio_recordado_sin_sociabilidad_construye_en_su_posicion():
     dx, dy = sistema._calcular_construir(
         gestor, mundo, eid, Especie.GNOMO, 10, 10, radio=5, mem=mem,
         cap_mental=cap_mental, temperamento=temperamento, zona_idx=0,
+        tipo_objetivo="refugio",
     )
     assert (dx, dy) == (0, 0)
     from nucleo.construccion import construccion_propia
@@ -132,5 +135,6 @@ def test_refugio_recordado_ya_cerca_construye_en_su_posicion():
     dx, dy = sistema._calcular_construir(
         gestor, mundo, eid, Especie.GNOMO, 10, 10, radio=5, mem=mem,
         cap_mental=cap_mental, temperamento=None, zona_idx=0,
+        tipo_objetivo="refugio",
     )
     assert (dx, dy) == (0, 0)

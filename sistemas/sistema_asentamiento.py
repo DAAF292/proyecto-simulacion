@@ -30,7 +30,6 @@ from componentes.relaciones import Relaciones
 from nucleo.asentamiento import (
     Asentamiento,
     agrupar_por_proximidad,
-    almacen_cercano,
     calcular_centro,
     calcular_liderazgo,
     generar_nombre,
@@ -167,10 +166,6 @@ class SistemaAsentamiento:
                 centro=centro,
                 miembros=grupo,
                 lideres=frozenset(lideres),
-                almacen_id=almacen_cercano(
-                    gestor, centro, self.radio_cluster, zona_idx=zona_asentamiento,
-                    indice=self._indice_actual,
-                ),
                 zona_idx=zona_asentamiento,
                 tick_fundacion=tick_fundacion,
             )

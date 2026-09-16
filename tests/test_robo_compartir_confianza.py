@@ -12,6 +12,7 @@ from pathlib import Path
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie
+from componentes.intencion import Intencion
 from componentes.inventario import Inventario
 from componentes.necesidades import Necesidades
 from componentes.relaciones import Relaciones, Vinculo
@@ -287,6 +288,7 @@ def test_ley_ladron_sin_material_suficiente_roba_de_la_victima():
     sistema = SistemaMovimiento(config, rng)
     sistema.rng.random = lambda: 0.0
 
+    gestor.obtener_componente(ladron, Intencion).construir_tipo_objetivo = "refugio"
     sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
 
     assert sistema._stats_robos_material_intentados == 1
@@ -307,6 +309,7 @@ def test_ley_ladron_con_material_suficiente_nunca_roba():
     sistema = SistemaMovimiento(config, rng)
     sistema.rng.random = lambda: 0.0
 
+    gestor.obtener_componente(ladron, Intencion).construir_tipo_objetivo = "refugio"
     sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
 
     assert sistema._stats_robos_material_intentados == 0
@@ -322,6 +325,7 @@ def test_ley_victima_sin_materiales_nunca_se_intenta_robo_material():
     sistema = SistemaMovimiento(config, rng)
     sistema.rng.random = lambda: 0.0
 
+    gestor.obtener_componente(ladron, Intencion).construir_tipo_objetivo = "refugio"
     sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
 
     assert sistema._stats_robos_material_intentados == 0
@@ -339,6 +343,7 @@ def test_ley_robo_material_mismo_asentamiento_nunca_roba():
     sistema = SistemaMovimiento(config, rng)
     sistema.rng.random = lambda: 0.0
 
+    gestor.obtener_componente(ladron, Intencion).construir_tipo_objetivo = "refugio"
     sistema._intentar_robo_material(gestor, mundo, ladron, victima, tick_actual=0, pos_x=0, pos_y=0, zona_idx=0)
 
     assert _inv(gestor, ladron).contenidos == {}

@@ -265,106 +265,169 @@ def espacio_disponible_para_construir(
     return _calcular(gestor, pos_x, pos_y, zona_idx, config)
 
 
-def objetivo_construccion_actual(
-    gestor: Any, mundo: Any, id_entidad: int, radio_cluster: int, indice=None
-):
-    """(tipo, cid_existente_o_None, posicion_de_creacion_o_None) del
-    objetivo de CONSTRUIR/RECOLECTAR de este individuo ahora mismo, o
-    None si no hay ninguno. Cadena de prioridad Maslow: refugio propio
-    (individual) -> almacén de asentamiento (comunal, supervivencia) ->
-    dos comunales de "calidad de vida" EN PARALELO entre sí -- salón
-    común y cocina (2026-09-08, ver docs/superpowers/specs/
-    2026-09-08-cocinas-comunes-design.md; salón común solo,
-    2026-09-08-salon-comun-design.md). None solo cuando TODA la cadena
-    está completa (incluidos AMBOS paralelos), no en el primer eslabón
-    comunal ya resuelto.
+# Catálogo de tipos comunales (2026-09-16, ver docs/superpowers/specs/
+# 2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md) -- los
+# 4 al MISMO nivel (sin jerarquía almacén-antes-que-el-resto, ya
+# retirada). TIPO_ANCLA es el único que siempre construye exactamente
+# en asen.centro (referencia espacial fija del pueblo); el resto son
+# "satélite" -- buscan la celda habitable más próxima con cupo,
+# EXCLUYENDO el propio centro (ver nucleo/espacio.py:
+# celda_satelite_con_cupo para el porqué de esa exclusión).
+# Orden: "almacen" primero por ser cronológicamente el primer tipo
+# comunal (2026-08-31), seguido del orden histórico de tipos_paralelos
+# (salon_comun, cocina, taller) -- decide el desempate en un EMPATE
+# EXACTO de progreso (todos a 0.0, ninguno con gate distinto), mismo
+# criterio de "el primero de la lista gana el empate" ya usado en el
+# resto del proyecto.
+TIPOS_COMUNALES: tuple[str, ...] = ("almacen", "salon_comun", "cocina", "taller")
+TIPO_ANCLA: str = "salon_comun"
 
-    Los dos paralelos no se bloquean entre sí -- se elige el que ya
-    lleve MÁS progreso (ley física: el esfuerzo de la población
-    converge en uno solo sin que nadie lo planifique), empate exacto
-    (ninguno empezado) resuelto por el orden fijo de la lista
-    (salon_comun primero). Generaliza limpio a un tercer paralelo
-    futuro sin tocar la forma de la función.
 
-    posicion_de_creacion es None para refugio (se crea donde ya se está,
-    ver sistema_movimiento.py) y el centro del asentamiento para
-    almacén/paralelos (hay que llegar hasta ahí, no se crea donde a
-    cada gnomo le pille)."""
+def construccion_comunal_de_tipo(gestor: Any, asentamiento_id: int, tipo: str) -> int | None:
+    """Id de la Construccion comunal de este `tipo` perteneciente al
+    asentamiento `asentamiento_id`, o None -- filtro por PERTENENCIA
+    EXPLÍCITA (Construccion.asentamiento_id, 2026-09-16), no por
+    proximidad. Reemplaza el rol de "existe" que hasta hoy cumplía
+    nucleo/asentamiento.py:almacen_cercano (retirada, buscaba por radio
+    alrededor de asen.centro sin comprobar de quién era -- dos
+    asentamientos con centros a menos de radio_cluster_celdas de
+    distancia podían confundir sus edificios entre sí). Escaneo lineal
+    por atributo, mismo límite ya aceptado en construccion_propia."""
     from componentes.construccion import Construccion
-    from nucleo.asentamiento import almacen_cercano, asentamiento_de
 
-    cid_refugio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
-    if cid_refugio is None:
-        return ("refugio", None, None)
-    refugio = gestor.obtener_componente(cid_refugio, Construccion)
-    if refugio is None or refugio.progreso < 1.0:
-        return ("refugio", cid_refugio, None)
-
-    asen = asentamiento_de(mundo, id_entidad)
-    if asen is None:
-        return None
-
-    cid_almacen = almacen_cercano(
-        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, indice=indice
-    )
-    if cid_almacen is None:
-        return ("almacen", None, asen.centro)
-    almacen = gestor.obtener_componente(cid_almacen, Construccion)
-    if almacen is None or almacen.progreso < 1.0:
-        return ("almacen", cid_almacen, asen.centro)
-
-    tipos_paralelos = ["salon_comun", "cocina", "taller"]
-    pendientes: list[tuple[str, Any, float]] = []
-    for tipo in tipos_paralelos:
-        cid = almacen_cercano(
-            gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo=tipo,
-            indice=indice,
-        )
-        if cid is None:
-            pendientes.append((tipo, None, 0.0))
-            continue
+    for cid in gestor.entidades_con(Construccion):
         construccion = gestor.obtener_componente(cid, Construccion)
-        progreso = construccion.progreso if construccion is not None else 0.0
-        if progreso < 1.0:
-            pendientes.append((tipo, cid, progreso))
-
-    if not pendientes:
-        return None
-
-    tipo_elegido, cid_elegido, _ = max(
-        pendientes, key=lambda p: (p[2], -tipos_paralelos.index(p[0]))
-    )
-    return (tipo_elegido, cid_elegido, asen.centro)
+        if (
+            construccion is not None
+            and construccion.asentamiento_id == asentamiento_id
+            and construccion.tipo == tipo
+        ):
+            return cid
+    return None
 
 
 def construccion_completada_de_asentamiento(
-    gestor: Any, mundo: Any, id_entidad: int, radio_cluster: int, tipo: str, indice=None
+    gestor: Any, mundo: Any, id_entidad: int, tipo: str
 ) -> Any:
     """Id de la Construccion `tipo` COMPLETADA del asentamiento de
     id_entidad, o None si no pertenece a ninguno o no tiene una
-    terminada todavía (2026-09-08, cocinas comunes -- ver
-    docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md).
-    Generaliza el patrón que hoy solo vivía duplicado como
-    sistema_movimiento.py:_salon_comun_de -- un único punto de verdad
-    para "¿tiene mi asentamiento un X terminado?", reutilizable por
-    cualquier consumidor futuro del mismo patrón (imán social,
-    alacena...). _salon_comun_de NO se toca -- ya funciona, sin
-    necesidad real de refactorizarlo."""
+    terminada todavía (2026-09-08, cocinas comunes; migrado a
+    pertenencia explícita 2026-09-16). Único punto de verdad para
+    "¿tiene mi asentamiento un X terminado?", reutilizado tanto por el
+    imán social de respaldo (salón_común Y cocina, antes duplicado en
+    sistema_movimiento.py:_salon_comun_de con su propia llamada a
+    almacen_cercano) como por la alacena de forrajeo."""
     from componentes.construccion import Construccion
-    from nucleo.asentamiento import almacen_cercano, asentamiento_de
+    from nucleo.asentamiento import asentamiento_de
 
     asen = asentamiento_de(mundo, id_entidad)
     if asen is None:
         return None
-    cid = almacen_cercano(
-        gestor, asen.centro, radio_cluster, zona_idx=asen.zona_idx, tipo=tipo, indice=indice
-    )
+    cid = construccion_comunal_de_tipo(gestor, asen.id, tipo)
     if cid is None:
         return None
     construccion = gestor.obtener_componente(cid, Construccion)
     if construccion is None or not construccion.completado_alguna_vez:
         return None
     return cid
+
+
+def resolver_posicion_comunal(
+    gestor: Any, mundo: Any, asen: Any, tipo: str, config: dict[str, Any], radio_cluster: int
+) -> tuple[int, int] | None:
+    """Dónde debería crearse un `tipo` comunal nuevo para `asen`, si
+    todavía no existe (2026-09-16). TIPO_ANCLA (salon_comun) siempre
+    apunta a asen.centro exacto, quepa o no -- el caller decide bloquear
+    si no cabe (mismo criterio ya aceptado desde el 31-08, sin búsqueda
+    alternativa: es la referencia espacial fija del pueblo). Cualquier
+    otro tipo ("satélite") busca la celda habitable más próxima con
+    cupo, EXCLUYENDO el centro (ver
+    nucleo/espacio.py:celda_satelite_con_cupo)."""
+    if tipo == TIPO_ANCLA:
+        return asen.centro
+    from nucleo.espacio import celda_satelite_con_cupo
+
+    zona = mundo.territorio.zonas[asen.zona_idx]
+    return celda_satelite_con_cupo(
+        gestor, asen.centro, asen.zona_idx, tipo, config, radio_cluster, zona.ancho, zona.alto,
+    )
+
+
+def candidatos_comunales_pendientes(
+    gestor: Any, mundo: Any, id_entidad: int, config: dict[str, Any], radio_cluster: int
+) -> list[tuple[str, int | None, tuple[int, int] | None]]:
+    """Los tipos comunales (TIPOS_COMUNALES) que el asentamiento de
+    id_entidad aún no tiene completos, cada uno con su cid si ya existe
+    (progreso < 1.0) o su posición de creación ya resuelta si no (ancla/
+    satélite, puede ser None si no hay cupo en ningún sitio dentro del
+    radio). Lista vacía si no pertenece a ningún asentamiento o todo
+    está completo. NO elige ganador -- eso exige temperamento/
+    necesidades, que esta función no recibe (se resuelve en
+    sistema_decision.py, cada tipo con su propia necesidad real)."""
+    from componentes.construccion import Construccion
+    from nucleo.asentamiento import asentamiento_de
+
+    asen = asentamiento_de(mundo, id_entidad)
+    if asen is None:
+        return []
+
+    candidatos: list[tuple[str, int | None, tuple[int, int] | None]] = []
+    for tipo in TIPOS_COMUNALES:
+        cid = construccion_comunal_de_tipo(gestor, asen.id, tipo)
+        if cid is not None:
+            construccion = gestor.obtener_componente(cid, Construccion)
+            progreso = construccion.progreso if construccion is not None else 0.0
+            if progreso >= 1.0:
+                continue
+            candidatos.append((tipo, cid, None))
+        else:
+            pos = resolver_posicion_comunal(gestor, mundo, asen, tipo, config, radio_cluster)
+            candidatos.append((tipo, None, pos))
+    return candidatos
+
+
+def objetivo_construccion_actual(
+    gestor: Any,
+    mundo: Any,
+    id_entidad: int,
+    config: dict[str, Any],
+    radio_cluster: int,
+    tipo: str,
+    indice=None,
+):
+    """(tipo, cid_existente_o_None, posicion_de_creacion_o_None) del
+    objetivo de CONSTRUIR/RECOLECTAR de este individuo ahora mismo, o
+    None si `tipo` es "" (nada pendiente este tick).
+
+    A diferencia de antes de 2026-09-16, esta función YA NO DECIDE qué
+    tipo perseguir -- `tipo` llega ya resuelto por sistema_decision.py
+    (Intencion.construir_tipo_objetivo: "refugio", uno de
+    TIPOS_COMUNALES, o ""), usando temperamento/necesidades que esta
+    función no recibe. Lo que sigue haciendo es la resolución EN VIVO de
+    cid/posición (existe ya? si no, dónde crearlo) -- deliberadamente NO
+    cacheada ni decidida de antemano junto al tipo: sistema_decision.py
+    corre ANTES que sistema_movimiento.py sobre TODAS las entidades, así
+    que congelar aquí "existe/no existe" reabriría el bug real ya
+    corregido el 2026-09-09 (dos miembros creando el mismo comunal
+    duplicado por no ver lo que el otro acababa de crear ese mismo tick)
+    -- por eso sistema_movimiento.py sigue llamando a esta función con
+    indice=None (ver su propio comentario, sin cambios)."""
+    from nucleo.asentamiento import asentamiento_de
+
+    if tipo == "":
+        return None
+    if tipo == "refugio":
+        cid_refugio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
+        return ("refugio", cid_refugio, None)
+
+    asen = asentamiento_de(mundo, id_entidad)
+    if asen is None:
+        return None
+    cid = construccion_comunal_de_tipo(gestor, asen.id, tipo)
+    if cid is not None:
+        return (tipo, cid, asen.centro)
+    pos = resolver_posicion_comunal(gestor, mundo, asen, tipo, config, radio_cluster)
+    return (tipo, None, pos)
 
 
 def transferir_a_construccion(

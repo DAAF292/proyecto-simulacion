@@ -120,3 +120,61 @@ def espacio_disponible(
             ocupado += huella_m2_flora(cfg_esp)
 
     return capacidad - ocupado
+
+
+def _offsets_anillo(radio: int) -> list[tuple[int, int]]:
+    """(dx, dy) de todas las celdas a distancia Manhattan EXACTA `radio`
+    del origen, en un orden determinista (ordenado por (dx, dy)) -- el
+    resultado de «qué celda satélite se elige» no debe depender de qué
+    individuo llegó primero a intentarlo, solo del estado real de
+    ocupación del mundo en ese instante (ver celda_satelite_con_cupo)."""
+    offsets: list[tuple[int, int]] = []
+    for dx in range(-radio, radio + 1):
+        resto = radio - abs(dx)
+        if resto == 0:
+            offsets.append((dx, 0))
+        else:
+            offsets.append((dx, -resto))
+            offsets.append((dx, resto))
+    offsets.sort()
+    return offsets
+
+
+def celda_satelite_con_cupo(
+    gestor: Any,
+    centro: tuple[int, int],
+    zona_idx: int,
+    tipo: str,
+    config: dict[str, Any],
+    radio_maximo: int,
+    ancho_zona: int,
+    alto_zona: int,
+) -> tuple[int, int] | None:
+    """Celda más próxima a `centro` (SIN incluir el propio `centro`, ver
+    docstring más abajo) con cupo suficiente para `tipo`, expandiendo en
+    anillos Manhattan 1..radio_maximo (2026-09-16, ver docs/superpowers/
+    specs/2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md).
+    None si ninguna celda dentro del radio tiene cupo -- mismo criterio
+    de «no resuelto, señalado» ya aceptado para el conflicto de capacidad
+    del centro exacto (sin plan B más allá del radio).
+
+    Excluye deliberadamente el anillo 0 (el propio `centro`): el único
+    tipo comunal «ancla» (salon_comun) se reserva ese exacto, y si un
+    tipo «satélite» pudiera ocuparlo cuando está libre, una carrera de
+    creación (dos satélites llegando antes que el ancla) podría dejarlo
+    sin cupo suficiente para él -- excluir el anillo 0 de esta búsqueda es
+    la forma más simple de proteger esa garantía sin inventar un
+    mecanismo de reserva de espacio. Esta función nunca se llama para el
+    propio ancla (que siempre construye en `centro` sin búsqueda, igual
+    que antes)."""
+    config_construccion = config.get("construccion", {})
+    huella = huella_m2_para(tipo, config_construccion)
+    cx, cy = centro
+    for radio in range(1, radio_maximo + 1):
+        for dx, dy in _offsets_anillo(radio):
+            nx, ny = cx + dx, cy + dy
+            if not (0 <= nx < ancho_zona and 0 <= ny < alto_zona):
+                continue
+            if espacio_disponible(gestor, nx, ny, zona_idx, config) >= huella:
+                return (nx, ny)
+    return None

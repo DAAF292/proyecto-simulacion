@@ -209,7 +209,7 @@ def test_ley_almacen_construido_lleva_asentamiento_id_y_nombre():
     mundo.asentamientos = {
         3: Asentamiento(id=3, centro=(5, 5), miembros=frozenset([eid]), zona_idx=0)
     }
-    cid = crear_construccion(gestor, 5, 5, "almacen", propietario_id=None)
+    cid = crear_construccion(gestor, 5, 5, "almacen", propietario_id=None, asentamiento_id=3)
     construccion = gestor.obtener_componente(cid, Construccion)
     construccion.materiales = {"arcilla": 59.5}  # masa_minima_almacen=60.0, a un tick de completar
 
@@ -219,6 +219,7 @@ def test_ley_almacen_construido_lleva_asentamiento_id_y_nombre():
     bus = BusEventos()
     sistema._resolver_construir(
         gestor, mundo, eid, None, None, inv, 5, 5, tick_actual=1, bus_eventos=bus,
+        tipo_objetivo="almacen",
     )
     eventos = [e for e in bus.eventos_del_tick if e.tipo == "AlmacenConstruido"]
     assert len(eventos) == 1
@@ -246,6 +247,7 @@ def test_ley_construccion_sin_asentamiento_no_lleva_esos_datos():
     bus = BusEventos()
     sistema._resolver_construir(
         gestor, mundo, eid, None, None, inv, 5, 5, tick_actual=1, bus_eventos=bus,
+        tipo_objetivo="refugio",
     )
     eventos = [e for e in bus.eventos_del_tick if e.tipo == "RefugioConstruido"]
     assert len(eventos) == 1

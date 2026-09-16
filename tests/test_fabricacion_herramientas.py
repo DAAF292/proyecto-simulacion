@@ -210,7 +210,8 @@ def test_ley_herramienta_acelera_el_aporte_a_construccion():
         mem = gestor.obtener_componente(eid, MemoriaEspacial)
         cap_mental = gestor.obtener_componente(eid, CapacidadMental)
         sistema._resolver_construir(
-            gestor, mundo, eid, mem, cap_mental, inv, 0, 0, 1, BusEventos()
+            gestor, mundo, eid, mem, cap_mental, inv, 0, 0, 1, BusEventos(),
+            tipo_objetivo="refugio",
         )
         construccion = gestor.obtener_componente(cid, Construccion)
         resultados[con_herramienta] = sum(construccion.materiales.values())
