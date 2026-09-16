@@ -104,6 +104,17 @@
     position: absolute; display: flex; align-items: center; justify-content: center;
     font-weight: normal; font-family: inherit;
   }
+  /* Mosaico 2x2 (subdivision puramente visual, ver itemsCelda en el
+     script) -- misma celda de 100m2 del motor, hasta 4 elementos reales
+     distintos repartidos en cuadrantes en vez de colapsados a uno solo. */
+  .celda-cuadrantes {
+    position: absolute; display: grid;
+    grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  }
+  .cuadrante {
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit; font-weight: normal; overflow: hidden;
+  }
   .btn-mapa {
     font-family: inherit;
     font-size: 11px;
@@ -253,10 +264,10 @@ const CELDA = 32; // px base por celda, antes de aplicar zoom (subido de 26:
 const CATALOGO_GLIFOS = {
   terreno: {
     titulo: 'Terreno',
-    pradera:  { ch: '.', color: '#a3c95a', nombre: 'Pradera' },
-    bosque:   { ch: '.', color: '#3f6b2c', nombre: 'Bosque (suelo)' },
-    desierto: { ch: '.', color: '#d9b566', nombre: 'Desierto' },
-    tundra:   { ch: '.', color: '#b8ccd6', nombre: 'Tundra' },
+    pradera:  { ch: '░', color: '#a3c95a', nombre: 'Pradera' },
+    bosque:   { ch: '░', color: '#3f6b2c', nombre: 'Bosque (suelo)' },
+    desierto: { ch: '░', color: '#d9b566', nombre: 'Desierto' },
+    tundra:   { ch: '░', color: '#b8ccd6', nombre: 'Tundra' },
     montana:  { ch: '^', color: '#9a8264', nombre: 'Montaña' },
     pico:     { ch: '▲', color: '#cdbb8c', nombre: 'Pico (elevación alta)' },
   },
@@ -280,25 +291,42 @@ const CATALOGO_GLIFOS = {
     arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto' },
     arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto' },
     arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto' },
-    hierba_silvestre:  { ch: '▪', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
-    liquen:            { ch: '▪', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
-    musgo:             { ch: '▪', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
-    flor_silvestre:    { ch: '▪', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura' },
-    hierba_desertica:  { ch: '▪', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura' },
-    hierba_artica:     { ch: '▪', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura' },
-    helecho:           { ch: '▪', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura' },
+    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
+    liquen:            { ch: '▒', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
+    musgo:             { ch: '▒', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
+    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura' },
+    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura' },
+    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura' },
+    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura' },
   },
+  // (2026-09-16) Pictogramas reales en vez de letras -- Diego: "podriamos
+  // buscar pictogramas para las criaturas". Emoji nativos del sistema/
+  // navegador (CERO descarga, a diferencia de VGA437/Nerd Fonts): ya
+  // vienen con la fuente de emoji del propio SO, verificados nitidos y
+  // reconocibles a este tamaño antes de adoptarlos. Limitacion real y
+  // aceptada: un emoji ignora `color` CSS -- siempre se ve a todo color
+  // nativo, no se puede teñir de ambar. No es un choque de estilo (el
+  // resto del mapa ya usa muchos colores por categoria, no solo ambar),
+  // pero significa que `color` en esta seccion ya no pinta el glifo --
+  // se conserva solo para el resplandor de "consciente" (text-shadow SI
+  // funciona sobre un caracter aunque sea emoji) y como referencia en la
+  // leyenda. Sin emoji real de "gnomo": se uso 🧙 (figura humanoide con
+  // gorro puntiagudo, la silueta mas cercana disponible, ver
+  // docs/informe_codice_cartografico.md-style de honestidad: aproximacion
+  // documentada, no un hallazgo perfecto). 🐿️ (ardilla) es una secuencia
+  // de 2 codepoints (animal + selector de variacion) -- verificado que
+  // renderiza como un solo glifo, no dos, en Chromium/fuente del sistema.
   fauna: {
     titulo: 'Fauna',
-    gnomo:         { ch: '@', color: '#f0e6c0', nombre: 'Gnomo' },
-    lobo:          { ch: 'w', color: '#e05a3a', nombre: 'Lobo' },
-    conejo:        { ch: 'r', color: '#c9b590', nombre: 'Conejo' },
-    ardilla:       { ch: 's', color: '#d98a2e', nombre: 'Ardilla' },
-    caballo:       { ch: 'H', color: '#c9a06a', nombre: 'Caballo' },
-    venado:        { ch: 'd', color: '#a3703f', nombre: 'Venado' },
-    cabra_montesa: { ch: 'c', color: '#b8c0c4', nombre: 'Cabra montesa' },
-    zorro:         { ch: 'f', color: '#c9622e', nombre: 'Zorro' },
-    necromasa:     { ch: '%', color: '#7a7268', nombre: 'Restos (necromasa)' },
+    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo' },
+    lobo:          { ch: '🐺', color: '#e05a3a', nombre: 'Lobo' },
+    conejo:        { ch: '🐰', color: '#c9b590', nombre: 'Conejo' },
+    ardilla:       { ch: '🐿️', color: '#d98a2e', nombre: 'Ardilla' },
+    caballo:       { ch: '🐴', color: '#c9a06a', nombre: 'Caballo' },
+    venado:        { ch: '🦌', color: '#a3703f', nombre: 'Venado' },
+    cabra_montesa: { ch: '🐐', color: '#b8c0c4', nombre: 'Cabra montesa' },
+    zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro' },
+    necromasa:     { ch: '💀', color: '#7a7268', nombre: 'Restos (necromasa)' },
   },
   construcciones: {
     titulo: 'Construcciones',
@@ -415,8 +443,10 @@ function infoCriatura(ent) {
 // CSS plano no es como lee DF su propio suelo: alli CADA celda imprime un
 // glifo real (el mismo puñado de caracteres repetido, pero con variacion
 // de TONO por celda), lo que se lee como textura "tejida" en vez de un
-// mosaico de rectangulos. contenidoCelda sigue devolviendo {ch,color,fondo}
-// siempre, pero ahora ch NUNCA queda vacio -- ver TEXTURA_TERRENO/
+// mosaico de rectangulos. La funcion que calculaba esto (contenidoCelda,
+// {ch,color,fondo} con un solo glifo) se sustituyo despues por itemsCelda
+// ({items:[...],fondo}, ver mas abajo) al añadir el mosaico 2x2 -- ch ya
+// no queda vacio en ninguna de las dos, ver TEXTURA_TERRENO/
 // TEXTURA_COBERTURA/tonoCelda mas arriba para el mecanismo de variante+tono
 // determinista por celda.
 function fondoBioma(c) {
@@ -428,108 +458,113 @@ function fondoBioma(c) {
   return g ? g.color : '#333333';
 }
 
-function contenidoCelda(c) {
+// MOSAICO 2x2 (2026-09-16, Diego: "y si creamos mas celdas... eso nos
+// permitiria ser mas fieles a mostrar los recursos de una celda"). Cada
+// celda del motor sigue siendo la misma (100 m², config/mundo.yaml:
+// metros_por_celda=10, sin tocar nada de nucleo/) -- esto es subdivision
+// PURAMENTE VISUAL: en vez de colapsar a un unico glifo el contenido de
+// una celda, itemsCelda() junta TODOS los elementos reales y distintos
+// que el motor ya expone (construcciones, planta competidora + coberturas,
+// recursos en el suelo) en una lista, y renderMapa() los reparte en un
+// mosaico de hasta 4 cuadrantes en vez de descartar todo menos el primero.
+// El orden de entrada a la lista es determinista (construcciones por
+// huella, luego planta, luego recursos) -- nunca cambia de un frame a otro
+// para el mismo estado. Agua queda FUERA de este mecanismo a proposito:
+// una celda de agua no tiene una "mitad seca" que el motor modele, mezclar
+// agua con otro icono en el mismo mosaico inventaria una particion que no
+// existe en los datos.
+function itemsCelda(c) {
   const fondoBase = fondoBioma(c);
-  // Prioridad de un solo glifo en PRIMER PLANO por celda (construccion >
-  // agua > planta competidora > recurso suelto); el FONDO se calcula aparte
-  // y siempre esta presente, incluso cuando no hay ningun glifo encima.
-  const construcciones = construccionesPorCelda[c.x + ',' + c.y];
-  if (construcciones && construcciones.length > 0) {
-    const con = [...construcciones].sort((a, b) =>
-      (ORDEN_HUELLA_CONSTRUCCION[b.tipo] || 1) - (ORDEN_HUELLA_CONSTRUCCION[a.tipo] || 1))[0];
-    const g = CATALOGO_GLIFOS.construcciones[con.tipo] || { ch: '#', color: '#8a6a3a' };
-    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
-  }
+
   if (c.tiene_agua) {
     const g = CATALOGO_GLIFOS.agua[c.tipo_agua] || CATALOGO_GLIFOS.agua.lago;
     // Profundidad real (agua permanente o charco efimero segun el tipo) ->
     // mas oscuro/opaco cuanto mas profundo, dato real del motor, no un
-    // degradado inventado. El fondo de agua usa mas opacidad que el de
-    // tierra (0.5 base): es una superficie, no solo un tinte de suelo.
+    // degradado inventado.
     const prof = c.tipo_agua === 'poza' ? c.profundidad_charco : c.profundidad_agua;
     const alfaFondo = Math.max(0.45, Math.min(0.85, 0.5 + (prof || 0) * 0.35));
-    if (c.tipo_agua === 'poza') {
-      // charco efimero: glifo propio de nuevo (antes vacio) con variacion
-      // de tono por celda -- discreto por ser ':' en vez de '~'/'≈', pero
-      // ya no invisible.
-      return { ch: ':', color: tonoCelda(g.color, c.x, c.y, 61, 0.2), fondo: hexARgba(g.color, alfaFondo) };
-    }
-    return { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 63, 0.2), fondo: hexARgba(g.color, alfaFondo) };
+    const item = c.tipo_agua === 'poza'
+      ? { ch: ':', color: tonoCelda(g.color, c.x, c.y, 61, 0.2) }
+      : { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 63, 0.2) };
+    return { items: [item], fondo: hexARgba(g.color, alfaFondo) };
   }
+
+  const items = [];
+
+  const construcciones = construccionesPorCelda[c.x + ',' + c.y] || [];
+  for (const con of [...construcciones].sort((a, b) =>
+      (ORDEN_HUELLA_CONSTRUCCION[b.tipo] || 1) - (ORDEN_HUELLA_CONSTRUCCION[a.tipo] || 1))) {
+    const g = CATALOGO_GLIFOS.construcciones[con.tipo] || { ch: '#', color: '#8a6a3a' };
+    items.push({ ch: g.ch, color: g.color });
+  }
+
+  // Segundo plano combinado (mismo mecanismo que ya existia, ahora dentro
+  // de itemsCelda): si un arbol/arbusto comparte celda con cobertura real,
+  // la cobertura tiñe el fondo en vez de perderse.
+  let fondoColor = fondoBase, fondoAlfa = items.length > 0 ? 0.3 : 0.22;
   if (c.plantas && c.plantas.length > 0) {
-    // dato real del motor (cupo de espacio compartido, 2026-09-03): si hay
-    // mas de una planta, preferimos la especie "competidora" (arbol/
-    // arbusto) sobre una cobertura de suelo simple, mismo criterio que ya
-    // usaba el prototipo hibrido.
     const competidora = c.plantas.find(p => {
       const g = CATALOGO_GLIFOS.flora[p.especie];
       return g && g.categoria !== 'cobertura';
+    });
+    const coberturas = c.plantas.filter(p => {
+      const g = CATALOGO_GLIFOS.flora[p.especie];
+      return g && g.categoria === 'cobertura';
     });
     if (competidora) {
       const g = CATALOGO_GLIFOS.flora[competidora.especie];
       // Etapa de crecimiento real (Planta.etapa 0..1) -> opacidad: un
       // brote se ve tenue, una planta madura llena de color.
       const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
-      // "Varios iconos en una celda" (Diego): un segundo glifo superpuesto
-      // seria ilegible en cualquier grid de caracteres -- ni Dwarf Fortress
-      // lo hace, su densidad viene de muchas celdas pequeñas, no de apilar
-      // simbolos en una. La tecnica real (la misma que ya usa el propio
-      // motor de terminal: primer plano = lo dominante, fondo = lo que hay
-      // debajo) SI estaba disponible y se desperdiciaba -- si ademas hay
-      // cobertura real bajo el arbol/arbusto (cupo de espacio compartido,
-      // dato real del motor), su color tiñe el FONDO en vez de descartarse.
-      const coberturaBajo = c.plantas.find(p => {
-        const gp = CATALOGO_GLIFOS.flora[p.especie];
-        return gp && gp.categoria === 'cobertura';
+      items.push({ ch: g.ch, color: hexARgba(g.color, alfa) });
+      if (coberturas.length > 0) {
+        fondoColor = CATALOGO_GLIFOS.flora[coberturas[0].especie].color;
+        fondoAlfa = 0.4;
+      }
+    } else {
+      // Sin competidora: cada especie de cobertura real (normalmente una,
+      // pero el motor permite mas de una) entra como su propio item --
+      // antes solo se representaba la primera, el resto se descartaba.
+      coberturas.forEach((cob, i) => {
+        const g = CATALOGO_GLIFOS.flora[cob.especie];
+        if (!g) return;
+        const alfa = 0.55 + Math.min(1, cob.etapa ?? 1) * 0.45;
+        const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
+        items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3, alfa) });
       });
-      const gCobertura = coberturaBajo ? CATALOGO_GLIFOS.flora[coberturaBajo.especie] : null;
-      const colorFondo = gCobertura ? gCobertura.color : fondoBase;
-      return { ch: g.ch, color: hexARgba(g.color, alfa), fondo: hexARgba(colorFondo, gCobertura ? 0.4 : 0.25) };
     }
-    // Solo cobertura (hierba/liquen/musgo/flor/helecho): glifo de textura
-    // (de nuevo real, antes vacio) con variante + tono por celda, en vez
-    // de un glifo fijo -- ecologicamente sigue siendo suelo, no un
-    // landmark, pero ahora contribuye a la textura "viva" en vez de
-    // desaparecer en el fondo. Planta.etapa real sigue modulando alfa.
-    const cobertura = c.plantas[0];
-    const g = CATALOGO_GLIFOS.flora[cobertura.especie];
-    if (g) {
-      const alfa = 0.55 + Math.min(1, cobertura.etapa ?? 1) * 0.45;
-      const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67);
-      return { ch, color: tonoCelda(g.color, c.x, c.y, 71, 0.3, alfa), fondo: hexARgba(fondoBase, 0.22) };
-    }
-    const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67);
-    return { ch, color: tonoCelda(fondoBase, c.x, c.y, 71, 0.3, 0.7), fondo: hexARgba(fondoBase, 0.3) };
   }
+
   const recursos = c.recursos || {};
   if ((recursos.piedra_suelta || 0) > 0) {
     const g = CATALOGO_GLIFOS.recursos.piedra_suelta;
-    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
+    items.push({ ch: g.ch, color: g.color });
   }
   if ((recursos.madera || 0) > 0) {
     const g = CATALOGO_GLIFOS.recursos.madera;
-    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
+    items.push({ ch: g.ch, color: g.color });
   }
-  // Terreno base desnudo: SIEMPRE imprime un glifo (ya no vacio) -- variante
-  // de textura + tono elegidos por hash determinista de la celda (ver
-  // TEXTURA_TERRENO/tonoCelda arriba), para que el suelo se lea como
-  // superficie "tejida" en vez de un bloque de color CSS plano. Excepcion
-  // real: montaña distingue pico de ladera por elevacion real (mismo
-  // umbral aproximado que el Codice usaba para su relieve) -- un accidente
-  // de relieve real si merece su propio simbolo, convencion estandar de
-  // todo roguelike, con el mismo jitter de tono para que tampoco quede
-  // plano.
-  if (c.bioma === 'montana' && c.elevacion > 0.72) {
-    const g = CATALOGO_GLIFOS.terreno.pico;
-    return { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 41, 0.2), fondo: hexARgba(fondoBase, 0.3) };
+
+  if (items.length === 0) {
+    // Terreno base desnudo: SIEMPRE imprime un glifo (nunca vacio) --
+    // variante de textura + tono elegidos por hash determinista de la
+    // celda (ver TEXTURA_TERRENO/tonoCelda arriba). Excepcion real:
+    // montaña distingue pico de ladera por elevacion real, convencion
+    // estandar de todo roguelike.
+    if (c.bioma === 'montana' && c.elevacion > 0.72) {
+      const g = CATALOGO_GLIFOS.terreno.pico;
+      items.push({ ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 41, 0.2) });
+    } else if (c.bioma === 'montana') {
+      const g = CATALOGO_GLIFOS.terreno.montana;
+      items.push({ ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 43, 0.2) });
+    } else {
+      const pool = TEXTURA_TERRENO[c.bioma] || ['░'];
+      const ch = glifoTextura(pool, c.x, c.y, 47);
+      items.push({ ch, color: tonoCelda(fondoBase, c.x, c.y, 53, 0.35) });
+    }
   }
-  if (c.bioma === 'montana') {
-    const g = CATALOGO_GLIFOS.terreno.montana;
-    return { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 43, 0.2), fondo: hexARgba(fondoBase, 0.3) };
-  }
-  const pool = TEXTURA_TERRENO[c.bioma] || ['.'];
-  const ch = glifoTextura(pool, c.x, c.y, 47);
-  return { ch, color: tonoCelda(fondoBase, c.x, c.y, 53, 0.35), fondo: hexARgba(fondoBase, 0.22) };
+
+  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa) };
 }
 
 function celdaAPantalla(wx, wy, tam) {
@@ -574,6 +609,31 @@ function crearCeldaTxt(ch, color, cx, cy, glow, fondo) {
   return el;
 }
 
+// Mosaico 2x2 -- solo se usa cuando itemsCelda() devuelve 2 o mas items
+// reales (ver su comentario mas arriba); con 0 o 1 item, crearCeldaTxt
+// sigue dibujando un glifo a tamaño completo, la representacion mas
+// legible para el caso mas comun (suelo desnudo, un unico landmark).
+function crearCeldaCuadrantes(items, cx, cy, fondo) {
+  const cont = document.createElement('div');
+  cont.className = 'celda-cuadrantes';
+  cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
+  cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
+  if (fondo) cont.style.backgroundColor = fondo;
+  const fontSize = Math.round(CELDA * 0.42);
+  for (let i = 0; i < 4; i++) {
+    const cuad = document.createElement('div');
+    cuad.className = 'cuadrante';
+    const item = items[i];
+    if (item) {
+      cuad.textContent = item.ch;
+      cuad.style.color = item.color;
+      cuad.style.fontSize = fontSize + 'px';
+    }
+    cont.appendChild(cuad);
+  }
+  return cont;
+}
+
 function renderMapa() {
   const cont = asegurarCapas();
   capaEstatica.innerHTML = '';
@@ -583,12 +643,14 @@ function renderMapa() {
     for (let x = 0; x < DATA.ancho; x++) {
       const c = DATA.celdas[y][x];
       const { cx, cy } = celdaAPantalla(x, y, CELDA);
-      const info = contenidoCelda(c);
+      const info = itemsCelda(c);
       // z-index bajo (0..alto) para el fondo/suelo -- por debajo de CUALQUIER
       // glifo de la capa de criaturas (que sigue arrancando en 1000+y), asi
       // una criatura de pie sobre una celda de fondo tintado nunca queda
       // tapada por ella.
-      const el = crearCeldaTxt(info.ch, info.color, cx, cy, false, info.fondo);
+      const el = info.items.length > 1
+        ? crearCeldaCuadrantes(info.items, cx, cy, info.fondo)
+        : crearCeldaTxt((info.items[0] || {}).ch || '', (info.items[0] || {}).color || '#000', cx, cy, false, info.fondo);
       el.style.zIndex = String(y);
       capaEstatica.appendChild(el);
     }
