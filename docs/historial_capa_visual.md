@@ -1599,3 +1599,48 @@ camina, puede aparecer/desaparecer detrás de un objeto de forma abrupta
 en vez de gradual. Aceptado como limitación estándar de Y-sorting simple
 en CSS, no se intentó resolver con un mecanismo de interpolación de
 profundidad que no se pidió.
+
+### Sexto círculo, mismo día -- jitter horizontal, "parecen líneas rectas"
+
+Diego, tras el círculo de profundidad: "los assets se sitúan siempre en
+el centro de la celda, eso provoca que no se vea natural, parecen líneas
+rectas". Causa real, confirmada mirando el CSS antes de tocar nada:
+`.construccion-img` (reutilizada por construcción y por flora) fijaba
+`left: 50%` exacto, y `crearCeldaImg` (fauna) posicionaba siempre en
+`cx + CELDA/2` -- el centro geométrico exacto de la celda, sin ninguna
+variación. En un bosque real ningún árbol crece perfectamente centrado
+en su propia parcela de terreno; esa regularidad perfecta es justo lo
+que se lee como cuadrícula/líneas rectas en vez de vegetación natural.
+
+Fix: `jitterPx(seedX, seedY)`, un desplazamiento horizontal determinista
+de hasta ±25% de `CELDA`, reutilizando `hashDet` (el mismo hash ya usado
+para variar tono/textura de terreno) con una sal propia (97) para no
+correlacionar el desplazamiento con ningún otro efecto visual. Aplicado
+en `crearCeldaImgEstatica` (construcción, flora árbol/arbusto, cobertura
+con sprite) sobrescribiendo el `left:50%` fijo vía `calc(50% + Npx)`,
+semilla = la celda real (estable entre refrescos, el mismo árbol no
+"salta" de sitio en cada sondeo).
+
+Para fauna se necesitó una semilla DISTINTA -- no la celda actual (eso
+haría que el sesgo lateral cambiara de golpe cada vez que la criatura
+cruza a una celda nueva, viéndose peor que sin jitter: un "bailoteo"
+lateral en cada paso en vez de un caminar recto). Se usa el ID de la
+entidad (`jitterPxPorId`, estable durante toda su vida) como semilla en
+su lugar -- cada animal camina con su propio sesgo lateral constante,
+como una persona real no camina en línea perfectamente recta pero
+tampoco zigzaguea al azar en cada paso.
+
+Deliberadamente sin jitter: el mosaico de cuadrantes
+(`crearCeldaCuadrantes`) -- ahí el sprite ya vive confinado a un cuarto
+de celda pequeño (`position: static` dentro de un flex centrado, sin
+`left` que ajustar de la misma forma) y es, tras el fix de badges del
+círculo anterior, el caso menos común; el efecto de rejilla es mucho
+menos perceptible a ese tamaño. Tampoco se tocó el fallback de texto de
+fauna sin sprite (emoji/glifo) -- centrado por flex del propio
+contenedor, no por `left` absoluto, y el pedido de Diego ("los assets")
+apunta a los sprites de imagen, no a los glifos.
+
+Verificado en el visor real (Playwright, misma técnica de zoom sobre una
+zona con árboles/arbustos/fauna mezclados): ya no hay ninguna columna de
+elementos perfectamente alineados -- cada árbol, arbusto y animal tiene
+un desplazamiento lateral sutil y distinto, sin errores de consola.

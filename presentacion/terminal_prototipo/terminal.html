@@ -483,6 +483,32 @@ function hashDet(x,y,sal) {
   return h / 4294967296;
 }
 
+// Jitter horizontal (2026-09-16, Diego: "los assets se sitúan siempre en
+// el centro de la celda, parecen lineas rectas") -- un arbol/arbusto/
+// construccion se dibujaba SIEMPRE a left:50% exacto de su celda
+// (.construccion-img, CSS fijo) y fauna SIEMPRE a cx+CELDA/2 (centro
+// exacto) -- en un bosque real ningun arbol crece perfectamente
+// centrado en su propia parcela, esa regularidad es lo que se lee como
+// "cuadricula"/"lineas rectas". Mismo hashDet ya usado para variar tono/
+// textura, sal propia (97) para no correlacionar el desplazamiento con
+// ningun otro efecto visual. Solo horizontal, nunca vertical: el ancla
+// es "pies en el suelo de la celda" (bottom:0/cy+CELDA) -- mover eso en
+// vertical rompería esa lectura, dando la sensacion de flotar o hundirse.
+const SAL_JITTER = 97;
+const JITTER_FRACCION_CELDA = 0.25; // hasta +-25% de CELDA a cada lado
+function jitterPx(seedX, seedY) {
+  return (hashDet(seedX, seedY, SAL_JITTER) - 0.5) * 2 * JITTER_FRACCION_CELDA * CELDA;
+}
+// Fauna usa una semilla distinta -- el ID de la entidad (estable durante
+// toda su vida), NO su celda actual (cambia en cada paso). Con semilla de
+// celda, el sesgo lateral "saltaria" a un valor distinto cada vez que la
+// criatura cruza a una celda nueva, viendose peor que sin jitter -- con
+// semilla de individuo, cada animal camina con un sesgo lateral propio y
+// constante, como una persona real no camina en linea perfectamente recta.
+function jitterPxPorId(id) {
+  return (hashDet(Number(id) || 0, 0, SAL_JITTER) - 0.5) * 2 * JITTER_FRACCION_CELDA * CELDA;
+}
+
 // rgba con alfa variable a partir de un color hex -- usado para atenuar
 // flora joven (Planta.etapa real, 0=brote..1=madura: un brote se ve mas
 // tenue, no un color inventado) y para el desvanecido de agua por
@@ -947,6 +973,11 @@ function crearCeldaImgEstatica(src, cx, cy, fondo, tamano, opacidad) {
   img.className = 'construccion-img';
   img.src = src;
   img.style.height = tamano + 'px';
+  // Jitter horizontal (ver su comentario junto a hashDet/jitterPx) --
+  // sobrescribe el left:50% fijo de .construccion-img. Semilla = celda
+  // real (cx/cy son x*CELDA/y*CELDA exactos, ver celdaAPantalla), estable
+  // entre refrescos: el mismo arbol no "salta" de sitio en cada sondeo.
+  img.style.left = `calc(50% + ${jitterPx(cx / CELDA, cy / CELDA)}px)`;
   if (opacidad != null) img.style.opacity = String(opacidad);
   cont.appendChild(img);
   return cont;
@@ -1098,12 +1129,12 @@ function alturaSpriteCriatura(ent) {
   return escalarPorRaiz(alturaM, ALTURA_REFERENCIA_M, BASE_SPRITE_A_REFERENCIA, ALTURA_SPRITE_MIN, ALTURA_SPRITE_MAX);
 }
 
-function crearCeldaImg(src, cx, cy, altura) {
+function crearCeldaImg(src, cx, cy, altura, jitter) {
   const el = document.createElement('img');
   el.className = 'criatura-img';
   el.src = src;
   el.style.height = altura + 'px';
-  el.style.left = (cx + CELDA / 2) + 'px';
+  el.style.left = (cx + CELDA / 2 + jitter) + 'px';
   el.style.top = (cy + CELDA) + 'px';
   return el;
 }
@@ -1159,8 +1190,12 @@ function renderCriaturas() {
     let mirandoIzquierda = el ? el.dataset.mirandoIzq === '1' : false;
     if (ent.x > xPrevia) mirandoIzquierda = false;
     else if (ent.x < xPrevia) mirandoIzquierda = true;
+    // Jitter (ver comentario junto a jitterPxPorId) -- semilla el ID de
+    // la entidad, no su celda actual, para que el sesgo lateral sea
+    // constante mientras camina en vez de recalcularse en cada paso.
+    const jitter = esImg ? jitterPxPorId(ent.id) : 0;
     if (!el) {
-      el = esImg ? crearCeldaImg(info.img, cx, cy, alturaSpriteCriatura(ent)) : crearCeldaTxt(info.ch, info.color, cx, cy);
+      el = esImg ? crearCeldaImg(info.img, cx, cy, alturaSpriteCriatura(ent), jitter) : crearCeldaTxt(info.ch, info.color, cx, cy);
       el.dataset.esImg = esImg ? '1' : '';
       el.style.transition = `left ${DURACION_PASO_CRIATURA}s ease-in-out, top ${DURACION_PASO_CRIATURA}s ease-in-out`;
       capaCriaturas.appendChild(el);
@@ -1168,7 +1203,7 @@ function renderCriaturas() {
     } else if (esImg) {
       if (!el.src.endsWith(info.img)) el.src = info.img;
       el.style.height = alturaSpriteCriatura(ent) + 'px';
-      el.style.left = (cx + CELDA / 2) + 'px';
+      el.style.left = (cx + CELDA / 2 + jitter) + 'px';
       el.style.top = (cy + CELDA) + 'px';
     } else {
       el.textContent = info.ch;

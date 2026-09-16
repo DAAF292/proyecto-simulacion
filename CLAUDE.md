@@ -595,8 +595,10 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   cualquier sprite servido a través de `ServidorWeb` (no abierto por
   `file://` directamente) que viviera en otra subcarpeta habría
   devuelto 404 sin que nadie lo hubiera notado hasta abrir el visor así.
-- **Profundidad real, dirección y paso natural en el visor (mismo día,
-  círculo final)**: hasta este círculo, fauna tenía un z-index con
+- **Profundidad real, dirección, paso natural y jitter de posición en el
+  visor (mismo día — "círculo final" al escribirse esta entrada, luego
+  corregido: hubo un círculo más justo debajo)**: hasta este círculo,
+  fauna tenía un z-index con
   offset fijo (`1000+y`) que la ponía SIEMPRE por encima de todo el
   suelo/flora/construcción sin importar su posición real — decidido
   así en un círculo anterior del mismo día para resolver un bug real de
@@ -625,6 +627,18 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   mientras camina — aceptado como límite conocido de Y-sorting simple,
   no se abordó un mecanismo de interpolación de profundidad que no se
   pidió.
+  **Añadido justo después, mismo día**: Diego señaló que los sprites
+  "se sitúan siempre en el centro de la celda... parecen líneas rectas"
+  — cierto, `left:50%` fijo (construcción/flora) y `cx+CELDA/2` exacto
+  (fauna) sin ninguna variación. Corregido con `jitterPx`/`jitterPxPorId`
+  (mismo `hashDet` ya usado para variar tono/textura, sal propia):
+  desplazamiento horizontal de hasta ±25% de `CELDA`, determinista por
+  celda para elementos estáticos y por ID de entidad (no por celda
+  actual) para fauna — con semilla de celda el sesgo lateral de un
+  animal "saltaría" en cada cambio de celda, viéndose peor que sin
+  jitter. Sin jitter, deliberadamente: el mosaico de cuadrantes (sprite
+  ya confinado a un cuarto de celda) y el fallback de emoji/glifo de
+  fauna sin sprite (centrado por flex, no por `left` absoluto).
 - **Renombrado `BOSQUE_* -> SIMULACION_*` (2026-09-16)**: Diego, sobre la
   spec de abajo: "lo de que aparezca bosque en todos los comandos de
   test... deberíamos cambiarlo por simulación, que es lo que es, ya no
