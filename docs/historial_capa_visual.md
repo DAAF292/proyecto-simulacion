@@ -1522,3 +1522,80 @@ fallo anterior): el cambio es dramático -- donde antes solo 2 pinos se
 veían a tamaño completo (el resto, miniaturas en cuadrante), ahora
 prácticamente todo el bosque de pinos aparece grande y prominente, con
 los arbustos visiblemente más discretos en proporción.
+
+### Quinto círculo, mismo día -- profundidad real, flip de direccion, paso natural
+
+Diego, satisfecho ya con el tamaño relativo ("me gusta el estado"), pidió
+tres cosas nuevas de una vez: que todo se superponga por profundidad real
+(incluida la fauna, que hasta ahora SIEMPRE quedaba por encima de todo
+sin importar su posición), que el sprite de una criatura se invierta
+según hacia dónde camina, y que el desplazamiento entre celdas se lea
+natural, "que no parezca que salta".
+
+**Profundidad real (Y-sorting)**: el esquema de z-index existente tenía
+un offset FIJO y enorme por tipo de capa -- terreno `0+y`, flora `400+y`,
+construcción `500+y`, fauna SIEMPRE `1000+y` -- decidido en un círculo
+anterior del mismo día para resolver un bug real de desborde de sprite
+(ver más arriba, "las criaturas o construcciones deben quedar por encima
+de todo"), pero como efecto secundario garantizaba que fauna nunca
+pudiera quedar oculta por nada, exactamente lo contrario de lo que Diego
+pide ahora. Sustituido por `zIndexPorFila(y, capa) = y*10 + prioridad`,
+un esquema donde la FILA real decide siempre primero (mayor fila = más
+"cerca"/"abajo" = tapa a lo que esté en una fila menor) y la prioridad
+por tipo (terreno=0, flora=2, construcción=4, fauna=6) solo desempata
+cuando dos elementos comparten la misma fila exacta -- resuelve ambos
+bugs a la vez: el desborde de construcción/flora sigue evitado (siguen
+ganando a terreno en su propia fila) y fauna ahora compite por
+profundidad real contra flora/construcción por su propia posición, no
+por un offset invencible. No hizo falta fusionar `capaEstatica` y
+`capaCriaturas` (dos `<div>` hermanos separados, uno se recrea entero en
+cada `renderMapa()` y el otro mantiene elementos persistentes por id
+para poder animar su desplazamiento) -- ninguno de los dos tiene
+`z-index` propio, así que sus hijos ya compiten en el mismo stacking
+context del ancestro común; verificado empíricamente con Playwright en
+vez de fiarse de la teoría de CSS stacking (notoriamente confusa): un
+zorro en una fila anterior a un árbol grande cercano queda visiblemente
+tapado por su follaje, solo asomando la cabeza por el lateral.
+
+**Flip por dirección**: el motor no expone "dirección" como dato, solo
+posición -- se infiere comparando la X actual contra la última X
+conocida, persistida en el propio elemento DOM (`dataset.ultimaX`,
+`dataset.mirandoIzq`) porque `DATA` se sustituye entero en cada sondeo,
+no hay estado anterior en el que buscarlo. Sin desplazamiento en X
+(movimiento puramente vertical, o quieta) se conserva la orientación
+anterior en vez de resetear a un lado por defecto en cada tick --
+importante porque el visor sondea cada 400ms sin importar si la entidad
+se movió o no. Convención asumida sin poder verificarla contra las 8
+especies reales de fauna: el arte mira hacia la DERECHA de base (sin
+flip); `scaleX(-1)` cuando camina a la izquierda. Si alguna especie
+resulta mirar al revés de lo esperado, es un cambio de signo puntual,
+no un rediseño. Verificado con una simulación directa de movimiento
+(mutar `ent.x` y volver a llamar `renderCriaturas()` dos veces
+seguidas): el `transform` cambia de signo correctamente en cada cambio
+de dirección real.
+
+**Paso natural, no salto**: verificado antes de tocar nada -- el sondeo
+de `estado.json` ocurría cada 1000ms mientras `segundos_por_tick` real
+del motor es 0.4 (`config/visual.yaml`), así que el motor podía avanzar
+~2-3 ticks reales entre dos sondeos consecutivos, y una criatura
+desplazarse el mismo número de celdas de una sola vez. Ninguna curva o
+duración de transición CSS puede hacer que un salto de 2-3 celdas en
+línea recta (el visor solo conoce el punto A y el B, no el camino real
+intermedio) se lea como "caminar" -- el problema no era la curva de
+animación, era la cadencia de muestreo. Corregido bajando el intervalo
+de sondeo de 1000ms a 400ms (igualando el tick real, así cada
+actualización mueve como mucho 1 celda) y la duración de la transición
+de `0.9s linear` a `0.35s ease-in-out` (menor que el intervalo, para que
+siempre termine antes del siguiente sondeo -- si no, un sondeo
+ligeramente adelantado interrumpiría la transición a medias, dando
+tirones; `ease-in-out` en vez de `linear` porque un paso a velocidad
+constante de inicio a fin también se lee mecánico).
+
+Pendiente real, honesto: el z-index se actualiza de golpe al nuevo valor
+de fila en cuanto llega el dato, mientras la posición visual todavía
+está interpolando desde la posición anterior (CSS no anima `z-index`) --
+en el instante en que una criatura cruza el umbral de una fila mientras
+camina, puede aparecer/desaparecer detrás de un objeto de forma abrupta
+en vez de gradual. Aceptado como limitación estándar de Y-sorting simple
+en CSS, no se intentó resolver con un mecanismo de interpolación de
+profundidad que no se pidió.
