@@ -4,11 +4,21 @@ main.py
 Punto de entrada y orquestador del bucle de simulación de "Un mundo vivo".
 Implementa un pipeline trifásico desacoplado por tick y cadencias biológicas diarias:
   - Fase 1: Percepción y Toma de Decisiones (SistemaDecision)
-  - Fase 2: Acción, Cinemática, Fuego y Contacto Físico (SistemaMovimiento, 
+  - Fase 2: Acción, Cinemática, Fuego y Contacto Físico (SistemaMovimiento,
             SistemaDesastres [tick], SistemaDepredacion)
   - Fase 3: Metabolismo, Recursos y Resolución Vital (SistemaRecursos, SistemaNecesidades,
             SistemaCapacidadFisica, SistemaCapacidadMental, SistemaReproduccion)
   - Corte de Día: Descomposición, Clima, Flora, Ciclo Vital y Desastres [ignición]
+
+Modo CLI (esta función `main()`, controlada por variables de entorno
+SIMULACION_MODO_VISUAL/SIMULACION_AUTO_TICKS/SIMULACION_CONTINUAR) frente a
+modo controlado por web (`ejecutar_partida_controlada`, lanzado por
+presentacion/gestor_partidas.py desde servidor.py) -- ver
+docs/superpowers/specs/2026-09-16-servidor-control-remoto-design.md.
+Ambos comparten `preparar_partida`/`avanzar_un_tick` para no duplicar la
+lógica real de arranque y avance de una partida; el modo CLI conserva su
+comportamiento exacto de siempre, no se le ha cambiado una sola línea de
+lo que hace observablemente.
 """
 
 from __future__ import annotations
@@ -17,6 +27,7 @@ import collections
 import os
 import random
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +42,7 @@ from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
 from componentes.vocacion import Vocacion
 from nucleo.bioma import TipoTerreno
+from nucleo.control_partida import ControlPartida
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
 from nucleo.flora import masa_tronco_inicial_kg
 from nucleo.eventos import BusEventos
@@ -61,6 +73,31 @@ from sistemas.sistema_recursos import SistemaRecursos
 from sistemas.sistema_reproduccion import SistemaReproduccion
 
 CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion", "deshidratacion", "ahogamiento", "vejez", "incendio"}
+
+
+@dataclass
+class EstadoPartida:
+    """Agrupa todo lo que antes eran variables locales sueltas al
+    principio de `main()` -- gestor, mundo, reloj, RNGs, sistemas,
+    persistencia -- en un único objeto pasable a `avanzar_un_tick` y
+    reconstruible más de una vez por proceso (una vez por cada partida
+    nueva lanzada desde el servidor de control web, ver
+    `ejecutar_partida_controlada`). Ningún campo aquí es nuevo: son los
+    mismos objetos que `main()` ya construía, solo nombrados como unidad.
+    """
+
+    semilla: int
+    rng_mapa: random.Random
+    rng_juego: random.Random
+    rng_reproduccion: random.Random
+    reloj: Reloj
+    bus_eventos: BusEventos
+    gestor: GestorEntidades
+    persistencia: Persistencia
+    mundo: Mundo
+    sistemas: dict[str, Any]
+    guardar_cada_ticks: int
+    ticks_ejecutados: int = 0
 
 
 def cargar_configuracion(ruta_config: Path) -> dict[str, Any]:
@@ -495,12 +532,13 @@ def ejecutar_tick(
         sistemas["manada"].ejecutar(gestor, mundo, reloj)
 
 
-def main() -> None:
-    """Punto de entrada principal del simulador."""
-    ruta_base = Path(__file__).parent
-    config = cargar_configuracion(ruta_base / "config")
-
-    semilla = config.get("semilla_por_defecto", 42)
+def preparar_partida(semilla: int, config: dict[str, Any], ruta_base: Path) -> EstadoPartida:
+    """Construye un mundo nuevo (o lo restaura desde snapshot si
+    SIMULACION_CONTINUAR=1) y sus sistemas -- mismo código que hasta el
+    2026-09-16 vivía inline al principio de `main()`, extraído sin
+    cambiar su comportamiento para poder invocarlo más de una vez por
+    proceso (una vez por cada partida nueva lanzada desde el servidor de
+    control web, ver `ejecutar_partida_controlada`)."""
     rng_mapa = random.Random(semilla)
     rng_juego = random.Random(semilla)
     # rng_reproduccion: mismo patrón que rng_mapa -- generador
@@ -548,6 +586,127 @@ def main() -> None:
         persistencia_cfg.get("guardar_cada_dias", 5)
     )
 
+    return EstadoPartida(
+        semilla=semilla,
+        rng_mapa=rng_mapa,
+        rng_juego=rng_juego,
+        rng_reproduccion=rng_reproduccion,
+        reloj=reloj,
+        bus_eventos=bus_eventos,
+        gestor=gestor,
+        persistencia=persistencia,
+        mundo=mundo,
+        sistemas=sistemas,
+        guardar_cada_ticks=guardar_cada_ticks,
+    )
+
+
+def avanzar_un_tick(
+    estado: EstadoPartida,
+    cola_cronica: collections.deque,
+    modo_visual: bool,
+    auto_ticks: int,
+) -> list[Any]:
+    """Ejecuta un tick completo y su post-proceso: registro en
+    persistencia, narración, autoguardado periódico. Extraído del cuerpo
+    del `while` que hasta el 2026-09-16 vivía inline en `main()`, sin
+    cambiar su comportamiento.
+
+    Devuelve los eventos del tick (ya extraídos del bus antes de
+    limpiarlo) para que el llamador pueda hacer diagnóstico adicional
+    propio -- p.ej. el conteo de muertes de gnomo por causa que `main()`
+    imprime al cierre de una tanda SIMULACION_AUTO_TICKS -- sin tener que
+    repetir el ciclo de vida del bus de eventos.
+
+    Deliberadamente NO incluye la actualización del servidor web ni el
+    sleep entre ticks: el modo CLI (sleep fijo de config) y el modo
+    controlado por web (sleep según `ControlPartida.velocidad`) resuelven
+    eso a su manera justo después de llamar a esta función.
+    """
+    ejecutar_tick(estado.gestor, estado.mundo, estado.reloj, estado.bus_eventos, estado.sistemas)
+    estado.ticks_ejecutados += 1
+
+    # Procesamiento de eventos en presentación y persistencia
+    eventos_tick = estado.bus_eventos.eventos_del_tick
+    for ev in eventos_tick:
+        if ev.tipo == "Nacimiento":
+            estado.persistencia.registrar_entidad_nueva(ev.entidad_id, ev.datos)
+        elif ev.tipo == "Muerte":
+            estado.persistencia.marcar_entidad_muerta(ev.entidad_id)
+    estado.persistencia.persistir_eventos(eventos_tick)
+
+    lineas_narradas = narrar(eventos_tick, estado.gestor)
+    for linea in lineas_narradas:
+        cola_cronica.append(linea)
+        if not modo_visual and auto_ticks == 0:
+            print(linea)
+
+    estado.bus_eventos.limpiar()
+
+    if estado.guardar_cada_ticks > 0 and estado.reloj.tick_actual % estado.guardar_cada_ticks == 0:
+        estado.persistencia.guardar_snapshot(
+            estado.gestor, estado.mundo, estado.reloj,
+            estado.rng_juego, estado.semilla, estado.rng_reproduccion,
+        )
+
+    return eventos_tick
+
+
+def ejecutar_partida_controlada(
+    semilla: int,
+    control: ControlPartida,
+    servidor_web: ServidorWeb,
+    config: dict[str, Any],
+    ruta_base: Path,
+) -> None:
+    """Bucle de partida controlado por `control` (pausado/detener/
+    velocidad) en vez de por SIMULACION_AUTO_TICKS -- pensado para correr
+    en un hilo de fondo lanzado por presentacion/gestor_partidas.py.
+    Nunca invocado por el modo CLI de `main()`; ver servidor.py para el
+    entrypoint que sí lo usa. No imprime ningún diagnóstico de cierre
+    (los ~25 bloques "[SIMULACION_AUTO_TICKS] ..." de `main()` son
+    exclusivos del modo CLI de testing/calibración)."""
+    estado = preparar_partida(semilla, config, ruta_base)
+    max_lineas_cronica = int(config.get("visual", {}).get("max_lineas_cronica", 200))
+    cola_cronica: collections.deque[str] = collections.deque(maxlen=max_lineas_cronica)
+    segundos_por_tick = float(config.get("visual", {}).get("segundos_por_tick", 0.4))
+
+    try:
+        while not control.detener.is_set():
+            control.esperar_si_pausado()
+            if control.detener.is_set():
+                break
+
+            avanzar_un_tick(estado, cola_cronica, modo_visual=True, auto_ticks=0)
+
+            payload = construir_instantanea(
+                estado.mundo, estado.gestor, estado.reloj, list(cola_cronica), estado.semilla
+            )
+            payload["partida"] = {
+                "activa": True,
+                "pausada": control.pausado.is_set(),
+                "semilla": estado.semilla,
+                "velocidad": control.velocidad,
+            }
+            servidor_web.actualizar_instantanea(payload)
+            time.sleep(segundos_por_tick / control.velocidad)
+    finally:
+        estado.persistencia.guardar_snapshot(
+            estado.gestor, estado.mundo, estado.reloj,
+            estado.rng_juego, estado.semilla, estado.rng_reproduccion,
+        )
+
+
+def main() -> None:
+    """Punto de entrada principal del simulador (modo CLI, controlado por
+    variables de entorno). Ver servidor.py para el modo controlado por
+    web."""
+    ruta_base = Path(__file__).parent
+    config = cargar_configuracion(ruta_base / "config")
+
+    semilla = config.get("semilla_por_defecto", 42)
+    estado = preparar_partida(semilla, config, ruta_base)
+
     modo_visual = os.environ.get("SIMULACION_MODO_VISUAL") == "1"
     auto_ticks = int(os.environ.get("SIMULACION_AUTO_TICKS", "0"))
     max_lineas_cronica = int(config.get("visual", {}).get("max_lineas_cronica", 200))
@@ -560,7 +719,6 @@ def main() -> None:
         servidor_web.iniciar()
 
     try:
-        ticks_ejecutados = 0
         # Verificacion obligatoria de "como cocinar" (2026-09-08, ver
         # docs/superpowers/specs/2026-09-08-como-cocinar-design.md):
         # cuantas muertes de gnomo por cada causa, con enfasis explicito
@@ -569,41 +727,27 @@ def main() -> None:
         # sistema concreto. Solo observacion, no cambia la simulacion.
         muertes_gnomo_por_causa: dict[str, int] = {}
         while True:
-            if auto_ticks > 0 and ticks_ejecutados >= auto_ticks:
+            if auto_ticks > 0 and estado.ticks_ejecutados >= auto_ticks:
                 break
 
-            ejecutar_tick(gestor, mundo, reloj, bus_eventos, sistemas)
-            ticks_ejecutados += 1
+            eventos_tick = avanzar_un_tick(estado, cola_cronica, modo_visual, auto_ticks)
 
-            # Procesamiento de eventos en presentación y persistencia
-            eventos_tick = bus_eventos.eventos_del_tick
             for ev in eventos_tick:
-                if ev.tipo == "Nacimiento":
-                    persistencia.registrar_entidad_nueva(ev.entidad_id, ev.datos)
-                elif ev.tipo == "Muerte":
-                    persistencia.marcar_entidad_muerta(ev.entidad_id)
-                    if ev.datos.get("especie") == "gnomo":
-                        causa = ev.datos.get("causa", "?")
-                        muertes_gnomo_por_causa[causa] = muertes_gnomo_por_causa.get(causa, 0) + 1
-            persistencia.persistir_eventos(eventos_tick)
-
-            lineas_narradas = narrar(eventos_tick, gestor)
-            for linea in lineas_narradas:
-                cola_cronica.append(linea)
-                if not modo_visual and auto_ticks == 0:
-                    print(linea)
+                if ev.tipo == "Muerte" and ev.datos.get("especie") == "gnomo":
+                    causa = ev.datos.get("causa", "?")
+                    muertes_gnomo_por_causa[causa] = muertes_gnomo_por_causa.get(causa, 0) + 1
 
             if modo_visual and servidor_web is not None:
-                instantanea = construir_instantanea(mundo, gestor, reloj, list(cola_cronica))
+                instantanea = construir_instantanea(
+                    estado.mundo, estado.gestor, estado.reloj, list(cola_cronica), estado.semilla
+                )
                 servidor_web.actualizar_instantanea(instantanea)
                 time.sleep(float(config.get("visual", {}).get("segundos_por_tick", 0.4)))
 
-            bus_eventos.limpiar()
-
-            if guardar_cada_ticks > 0 and reloj.tick_actual % guardar_cada_ticks == 0:
-                persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla, rng_reproduccion)
-
         if auto_ticks > 0:
+            gestor = estado.gestor
+            mundo = estado.mundo
+            sistemas = estado.sistemas
             # Verificacion obligatoria contra el motor real (2026-09-06,
             # memoria espacial compartida): reportar cuantas transferencias
             # de memoria ocurrieron de verdad durante la tanda
@@ -707,7 +851,7 @@ def main() -> None:
                 "[SIMULACION_AUTO_TICKS] caza fallback por sonido: "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_usos} usos, "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_caza} caza real, "
-                f"{sistemas['movimiento']._stats_sonido_caza_fallback_carrona} carroñeo real, "
+                f"{sistemas['movimiento']._stats_sonido_caza_fallback_carrona} carroñeo real, "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_nulo} pista falsa"
             )
             # Verificacion obligatoria de cohesion de manada en el fallback
@@ -825,8 +969,7 @@ def main() -> None:
             # Verificacion obligatoria de la llamada de alarma
             # (2026-09-11, tercer uso de nucleo/sonido.py): no tiene
             # contador propio -- se pliega dentro del total ya impreso
-            # arriba ("sonido emitido: N sonidos en total"), junto a
-            # depredacion y conflicto verbal.
+            # arriba ("sonido emitido: N sonidos en total").
             # Verificacion obligatoria del Salon comun (2026-09-08, ver
             # docs/superpowers/specs/2026-09-08-salon-comun-design.md):
             # cuantos salones comunes reales se completan, y si el
@@ -969,7 +1112,10 @@ def main() -> None:
         # guardado, un autoguardado periódico que aún no llegó a su
         # cadencia dejaría la BD desactualizada respecto al último estado
         # real simulado.
-        persistencia.guardar_snapshot(gestor, mundo, reloj, rng_juego, semilla, rng_reproduccion)
+        estado.persistencia.guardar_snapshot(
+            estado.gestor, estado.mundo, estado.reloj,
+            estado.rng_juego, estado.semilla, estado.rng_reproduccion,
+        )
 
 
 if __name__ == "__main__":
