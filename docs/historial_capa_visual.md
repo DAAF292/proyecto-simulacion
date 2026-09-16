@@ -1170,3 +1170,138 @@ que se escribiera la actualización de este documento (`ca77a7e`) --
 inconsistencia real entre dos commits de la misma sesión, encontrada al
 auditar `git log` contra CLAUDE.md antes de añadir la sección siguiente,
 no de memoria.
+
+## 2026-09-16 -- pivote a ASCII, reversión el mismo día a híbrido, flora
+
+Esta entrada llega tarde (escrita retroactivamente, sesión posterior):
+nada de lo ocurrido el 2026-09-16 se había registrado aquí -- el
+documento se quedó parado en la sección anterior (2026-09-04) mientras
+CLAUDE.md sí documentaba el pivote a ASCII de ese día como "Estado
+actual". Auditado contra `git log` antes de escribir esto, no de
+memoria.
+
+**Secuencia real de commits del mismo merge** (`5dd4b87..83c710d`):
+primero `b5b98b3` (retirar Códice Cartográfico, pivote a mapa 100%
+glifos) y `66af797` (segunda pasada de limpieza de assets huérfanos) --
+hasta aquí coincide con lo que CLAUDE.md documentó como cierre. Pero el
+mismo día, más tarde, el mismo merge sigue con `4e867e4`/`dc9481e`
+(legibilidad del catálogo, fondo por celda), `78bdbce` (fuente bitmap
+VGA437 real), `7958ea8`/`2e71680`/`098ee4c`/`0cb4da8` (texturas/mosaico
+2x2/pictogramas), y finalmente **`c6af86b` (sprites reales de fauna,
+generados por IA) y `c939e2e` (sprites de construcciones, escalados por
+`huella_m2`)** -- es decir, la propia sesión que cerró "mapa 100% ASCII
+sin ningún asset de imagen" lo revirtió parcialmente unas horas después,
+sin que ninguna de las dos decisiones quedara registrada como tal en
+CLAUDE.md ni aquí. Resultado: tanto CLAUDE.md como un comentario de
+cabecera de `terminal.html` (líneas 253-260 antes de esta corrección)
+seguían afirmando "CERO imágenes en el mapa" mientras el propio catálogo
+un poco más abajo (`CATALOGO_GLIFOS.fauna`/`.construcciones`) ya tenía
+sprites reales -- contradicción interna real, sin que nadie la señalara
+hasta que Diego preguntó por el último commit en una sesión posterior.
+
+**Decisión de Diego, preguntado explícitamente al señalarle la
+contradicción**: el criterio real nunca fue "100% ASCII" ni "reversión
+completa a sprites" -- es un **híbrido deliberado**: base de glifo+color
+ASCII, sustituido por sprite real donde se vaya encontrando arte
+adecuado, introducido de forma gradual (no una lista cerrada de
+categorías fijada de antemano). Todos los assets usados hasta ahora son
+de uso gratuito según confirmación de Diego -- no se investigó licencia
+individual más allá de esa confirmación (mismo nivel de diligencia que
+ya arrastra el pendiente de créditos PyxelSpace, sin resolver desde la
+migración original).
+
+**Flora (esta sesión, mismo círculo que corrigió la documentación)**:
+Diego aportó 10 iconos JPEG en `iconos/flora/` (2048×2048,
+`ArbustoMontañaTundra.jpg`, `arbustoPraderaBosque.jpg`,
+`arbustoSeco.jpg`, `cactus.jpg`, `flores.jpg`, `helecho.jpg`,
+`hierba.jpg`, `manzano.jpg`, `pino.jpg`, `roble.jpg`) pidiendo
+recortarlos e integrarlos. Mismo formato que los de fauna/construcciones
+ya integrados: fondo de tablero de ajedrez (~51px de periodo, dos
+tonos ~198/~254 de gris neutro) quemado directamente en los píxeles del
+JPEG, sin canal alfa real.
+
+*Procesado* (script puntual en el scratchpad de la sesión, no forma
+parte del repositorio): en vez de un color-key global (que habría
+agujereado brillos internos reales -- el helecho y las flores tienen
+trazos blancos como parte del propio dibujo, no del fondo), flood-fill
+de 4 conectividad sembrado SOLO desde el borde de la imagen sobre una
+máscara de "gris neutro y brillo alto" (banda continua, no dos bandas
+discretas -- una primera versión con dos bandas separadas dejaba huecos
+sin clasificar justo en las costuras antialiased entre casillas del
+tablero, rompiendo la conectividad del flood-fill y produciendo un bbox
+que abarcaba la imagen entera). Recorte al bounding box del resultado +
+reescalado a 200px de alto con LANCZOS. Verificado visualmente cada PNG
+resultante antes de darlo por bueno (roble, helecho, flores, cactus
+inspeccionados en detalle) -- helecho y flores conservan sus brillos
+internos intactos, cactus conserva el hueco real entre brazo y tronco
+como transparencia.
+
+*Mapeo fichero → especie canónica*: los 10 nombres de fichero son
+nombres comunes genéricos, no las 15 claves de `config/flora.yaml` --
+mapeo interpretado con criterio, **marcado explícitamente como
+provisional, pendiente de confirmar con Diego**:
+manzano/roble/pino/cactus 1:1; `arbustoSeco.jpg`→`arbusto_desertico`
+(seco≈clima árido); `arbustoMontañaTundra.jpg`→ reutilizado para
+`arbusto_montano` Y `arbusto_artico` a la vez (mismo arte, ambos climas
+fríos); `arbustoPraderaBosque.jpg`→`arbusto_espinoso` (la única especie
+de arbusto sin calificador climático explícito, tratada como la
+genérica); `helecho.jpg`→`helecho`; `flores.jpg`→`flor_silvestre`;
+`hierba.jpg`→`hierba_silvestre`.
+
+*Alcance real, deliberadamente parcial*: de las 15 especies del
+catálogo, solo se integraron sprite las 8 de categoría árbol/arbusto
+(las que participan en el mecanismo de "planta competidora única por
+celda" ya existente en `itemsCelda`/`terminal.html`). Las 7 de categoría
+cobertura (hierba_silvestre, liquen, musgo, flor_silvestre,
+hierba_desertica, hierba_artica, helecho) se quedan en glifo de textura
+tejida (`TEXTURA_COBERTURA`) a propósito -- esa categoría ya mezcla
+varias especies solapadas en la misma celda para leerse como alfombra
+continua, y sustituir eso por un sprite único por especie exigiría
+decidir primero cómo mezclar varios sprites de cobertura en una sola
+celda, que no se decidió esta sesión. Quedan 3 PNG ya procesados y
+correctos sin usar todavía (`hierba_silvestre.png`, `flor_silvestre.png`,
+`helecho.png`) en `sprites_flora/`, a la espera de esa decisión.
+
+*Integración en `terminal.html`*: campo `img` nuevo en las 8 entradas de
+`CATALOGO_GLIFOS.flora` correspondientes; `itemsCelda()` propaga
+`img`/`especieFlora`/`alfaSprite` en el item de la "planta competidora"
+(antes solo `ch`/`color`); tamaño de sprite nuevo,
+`tamanoSpriteFlora(especie)`, escalado por `huella_m2` real de
+`config/flora.yaml` (mismo dato que ya usa el motor para el cupo de
+espacio compartido por celda) con raíz cuadrada -- no la raíz cúbica que
+usa `tamanoSpriteConstruccion` para masa/volumen, huella_m2 es área,
+mismo razonamiento físico que ya distinguía ambos casos en el comentario
+de `escalarPorRaiz`. Rango de tamaño en pantalla PROVISIONAL, sin
+calibrar contra captura real más allá de la inspección visual de esta
+sesión. `crearCeldaImgEstatica` gana un parámetro de opacidad opcional
+para reutilizar el mismo alfa por etapa de crecimiento (brote tenue,
+madura llena de color) que ya existía para el glifo, sin arte
+diferenciado por etapa. `.construccion-img` (CSS) se reutiliza tal cual
+para flora -- mismo contrato visual de ancla inferior-centro, no hacía
+falta una clase propia.
+
+*Bug real encontrado de paso, preexistente desde que se integraron los
+sprites de fauna/construcciones*: `presentacion/vista_web.py` solo
+servía por HTTP las rutas `/sprites_criaturas/` y
+`/sprites_construcciones/` -- cualquier sprite en otra subcarpeta
+(como la nueva `sprites_flora/`) habría devuelto 404 al abrir el visor
+a través de `ServidorWeb` en vez de con `file://` directo. Corregido
+añadiendo la tercera rama al mismo `do_GET`.
+
+*Verificación contra el motor real*: corrida fresca de
+`generar_datos.py` (2500 ticks) confirmó que las 8 especies con sprite
+nuevo aparecen en el mundo generado, y una captura con Playwright/
+Chromium headless sobre `terminal.html` abierto por `file://` mostró los
+sprites renderizados correctamente (árboles/arbustos con la escala
+relativa esperada, sin overflow visual roto entre celdas vecinas, sin
+icono de imagen rota) -- único error de consola observado fue el fetch
+de `estado.json` bloqueado por CORS bajo `file://`, irrelevante para el
+render inicial via `datos.js` y no reproducible sirviendo con
+`ServidorWeb` real. `datos.json`/`datos.js` de esa corrida de prueba se
+revirtieron después (no forman parte de este cambio).
+
+Pendiente real dejado explícitamente sin resolver: confirmación de
+Diego sobre el mapeo fichero→especie (punto 1 arriba); decisión de
+diseño sobre cómo (o si) dar sprite a la categoría cobertura (punto 2);
+ninguna calibración visual del rango de tamaño de sprite de flora más
+allá de esta inspección puntual.

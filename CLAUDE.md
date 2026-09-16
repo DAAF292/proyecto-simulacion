@@ -42,11 +42,18 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
    complejidad, y se valida antes de sumar la siguiente. Desconfía de
    cualquier propuesta que resuelva varios problemas a la vez sin necesidad.
 3. **El motor primero, la presentación después.** Cómo se muestra el mundo
-   (hoy, visor terminal — estética CRT ámbar, mapa 100% glifos/ASCII sin
-   ningún asset de imagen, único sistema visual desde 2026-09-16 tras
-   retirar el Códice Cartográfico, ver
+   (hoy, visor terminal — estética CRT ámbar, único sistema visual desde
+   2026-09-16 tras retirar el Códice Cartográfico, ver
    `docs/informe_codice_cartografico.md`) es una capa desacoplada y
    sustituible. No acoples la lógica de simulación a cómo se presenta.
+   **CORREGIDO 2026-09-16, mismo día**: el pivote a "100% glifos/ASCII sin
+   ningún asset de imagen" quedó desmentido por el propio código antes
+   incluso de escribirse este párrafo (los commits del mismo merge ya
+   añadían sprites reales de fauna y construcciones) — Diego confirmó
+   después explícitamente que la decisión es un **híbrido**: base ASCII,
+   con assets reales sustituyendo al glifo donde se vayan encontrando
+   adecuados, introducidos gradualmente. Ver la entrada del "Estado
+   actual" más abajo para el criterio real y su alcance actual.
 4. **Honestidad sobre lo pendiente.** Ningún sistema se da por cerrado sin
    una necesidad real que lo reclame. Si algo no está resuelto, dilo con
    claridad — nunca improvises una respuesta que aparente más solidez de la
@@ -444,14 +451,18 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   desarrollo del motor. `presentacion/vista_web.py` quedó reducido a
   servidor + contrato JSON (`construir_instantanea`, sin tocar); el
   visor terminal (`presentacion/terminal_prototipo/`) pasa a ser el
-  ÚNICO sistema visual, ahora sin ningún asset de imagen — todo
-  (terreno, agua, relieve, flora por categoría árbol/arbusto/cobertura,
-  fauna, construcciones, recursos en el suelo) se representa con
-  glifo+color de texto desde un catálogo único (`CATALOGO_GLIFOS` en
-  `terminal.html`), con leyenda desplegable generada desde ese mismo
-  catálogo, zoom centrado en el cursor y paneo por arrastre. Los ~83MB
-  de sprites del prototipo anterior se retiraron del repositorio
-  (recuperables por git history si algún día se retoma una vía gráfica).
+  ÚNICO sistema visual — en el momento de escribir este párrafo, sin
+  ningún asset de imagen: todo (terreno, agua, relieve, flora por
+  categoría árbol/arbusto/cobertura, fauna, construcciones, recursos en
+  el suelo) se representa con glifo+color de texto desde un catálogo
+  único (`CATALOGO_GLIFOS` en `terminal.html`), con leyenda desplegable
+  generada desde ese mismo catálogo, zoom centrado en el cursor y paneo
+  por arrastre. Los ~83MB de sprites del prototipo anterior se retiraron
+  del repositorio (recuperables por git history si algún día se retoma
+  una vía gráfica). **Esta afirmación de "sin ningún asset de imagen"
+  quedó desmentida el mismo día, ver la entrada "Híbrido ASCII+sprite"
+  más abajo** — se documenta aquí tal cual porque fue la decisión real
+  en ese momento del día, no se reescribe con retroactividad.
   **Segunda pasada de limpieza el mismo día, a raíz de que Diego preguntó
   explícitamente "¿has eliminado todo el código muerto y los assets que
   no se usan?"** (la primera pasada solo tocó lo directamente enredado
@@ -473,6 +484,57 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   glifos/colores concreta — es una primera propuesta razonada, no una
   calibración cerrada; catálogo de eventos filtrable (panel
   "EVENTOS://LOG") sigue con el placeholder de siempre, sin implementar.
+- **Híbrido ASCII+sprite (2026-09-16, mismo día que la retirada de
+  arriba, decisión de Diego que la corrige)**: el "mapa 100% ASCII sin
+  ningún asset de imagen" de la entrada anterior no llegó a sostenerse
+  ni un día completo — los commits `c6af86b` (fauna) y `c939e2e`
+  (construcciones) del mismo merge ya reintroducían sprites reales antes
+  de que se escribiera esta memoria, dejando tanto este documento como
+  un comentario de cabecera del propio `terminal.html` afirmando "CERO
+  imagenes en el mapa" mientras el código un poco más abajo ya las
+  usaba — contradicción real, encontrada auditando el código, no
+  reportada por nadie hasta entonces. Diego, preguntado explícitamente,
+  confirmó el criterio: **base ASCII, con sprites sustituyendo al glifo
+  donde se vaya encontrando arte adecuado, introducidos gradualmente**
+  (no una lista cerrada de categorías) — todos los assets ya
+  disponibles son de uso gratuito según confirmación de Diego (no se
+  investigó licencia individual más allá de eso).
+  Estado real a esta fecha: fauna (8 especies) y las 5 construcciones
+  comunales ya tenían sprite desde antes de esta sesión; en esta sesión
+  se añadió **flora** — 8 de las 15 especies del catálogo (los 3
+  árboles: manzano/roble/pino; los 4 arbustos con `compite_espacio_fisico`
+  real: cactus/arbusto_desertico/arbusto_montano/arbusto_artico, más
+  arbusto_espinoso) a partir de 10 iconos JPEG que Diego añadió en
+  `iconos/flora/` (2048×2048, fondo de tablero de ajedrez "quemado" en
+  el propio JPEG, no alfa real -- se limpiaron con flood-fill desde el
+  borde para no agujerear brillos internos, se recortaron al bounding
+  box y se guardaron como PNG RGBA en
+  `presentacion/terminal_prototipo/sprites_flora/`). Tamaño en pantalla
+  escalado por `huella_m2` real de `config/flora.yaml` (mismo dato que
+  ya usa el motor para el cupo de espacio compartido, raíz cuadrada por
+  ser área — no la raíz cúbica de construcción, que escala masa/volumen),
+  mismo mecanismo `escalarPorRaiz` ya existente, rango MIN/MAX
+  PROVISIONAL sin calibrar contra captura real.
+  **Dos huecos reales, no completados por iniciativa propia**:
+  (1) el mapeo de fichero→especie es una interpretación razonada de
+  nombres de icono genéricos que NO coinciden 1:1 con las claves
+  canónicas (`arbustoMontañaTundra.jpg` cubre montano Y ártico con el
+  mismo arte; `arbustoSeco.jpg`→desértico; `arbustoPraderaBosque.jpg`
+  →espinoso) — sin confirmar con Diego todavía. (2) las 7 especies de
+  categoría "cobertura" (hierba_silvestre, liquen, musgo, flor_silvestre,
+  hierba_desertica, hierba_artica, helecho) siguen sin sprite a
+  propósito: se dibujan mezclando varias especies solapadas por celda
+  como textura tejida (`TEXTURA_COBERTURA`), y un sprite único por
+  especie no tiene todavía un mecanismo de mezcla equivalente definido
+  — quedan 3 PNG ya procesados y listos pero sin usar
+  (`hierba_silvestre.png`, `flor_silvestre.png`, `helecho.png`) a la
+  espera de esa decisión de diseño. De paso se encontró y corrigió un
+  bug real preexistente (desde que se añadieron sprites de fauna/
+  construcciones): `presentacion/vista_web.py` solo servía
+  `/sprites_criaturas/` y `/sprites_construcciones/` por HTTP — cualquier
+  sprite servido a través de `ServidorWeb` (no abierto por `file://`
+  directamente) que viviera en otra subcarpeta habría devuelto 404 sin
+  que nadie lo hubiera notado hasta abrir el visor así.
 - Selector de zona real en el visor web: nunca añadido, el visor solo
   dibuja superficie (`zona_idx == 0`).
 - Créditos de licencia de los paquetes PyxelSpace: pendiente desde la

@@ -252,12 +252,18 @@
 <script>
 // PIVOTE A MAPA 100% ASCII (2026-09-16, decision de Diego): se retira el
 // Codice Cartografico (presentacion/vista_web.py, ver
-// docs/informe_codice_cartografico.md) y este prototipo deja de ser un
-// hibrido ASCII+sprite -- CERO imagenes en el mapa a partir de ahora, todo
-// se representa con glifo+color de texto. El CATALOGO de mas abajo
+// docs/informe_codice_cartografico.md). El CATALOGO de mas abajo
 // (CATALOGO_GLIFOS) es la UNICA fuente de verdad tanto para lo que se
 // dibuja en el mapa como para la leyenda desplegable: anadir una especie o
 // categoria nueva es una entrada aqui, nunca una tabla duplicada.
+// CORREGIDO el mismo dia (ver CLAUDE.md, "Hibrido ASCII+sprite"): el
+// parrafo original decia aqui que este prototipo dejaba de ser un hibrido
+// ASCII+sprite y quedaba en "CERO imagenes en el mapa" -- afirmacion que
+// el propio codigo desmintio unas horas despues, cuando se añadieron
+// sprites reales de fauna y construcciones (mismo dia, ver CATALOGO_GLIFOS.
+// fauna/construcciones mas abajo) y despues flora (arbol/arbusto). Diego
+// confirmo el criterio real: base ASCII, sprite donde se encuentre arte
+// adecuado, introducido gradualmente -- nunca "cero imagenes".
 let DATA = window.__DATOS__ || null;
 const CELDA = 32; // px base por celda, antes de aplicar zoom (subido de 26:
 // a ese tamano el glifo mas grande posible seguia leyendose pequeno en un
@@ -313,14 +319,28 @@ const CATALOGO_GLIFOS = {
     // conifera frente a la copa redondeada de un arbol de hoja ancha --
     // shape real, no una eleccion arbitraria (auditada contra la fuente
     // VGA437 antes de decidir, ambos glifos existen y renderizan nitidos).
-    manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol' },
-    roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol' },
-    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol' },
-    cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto' },
-    arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto' },
-    arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto' },
-    arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto' },
-    arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto' },
+    // img (2026-09-16, assets aportados por Diego -- ver
+    // docs/historial_capa_visual.md, entrada del mismo dia): SOLO arbol y
+    // arbusto (la unica "planta competidora" por celda, ver competidora en
+    // itemsCelda) tienen sprite real por ahora. cobertura sigue en glifo de
+    // textura tejida (TEXTURA_COBERTURA/tonoCelda) a proposito -- esa
+    // categoria se dibuja mezclando varias especies solapadas en la misma
+    // celda para leerse como una alfombra continua, y un sprite unico por
+    // especie no tiene todavia un mecanismo de mezcla equivalente. Quedan 3
+    // PNG ya procesados y sin usar en sprites_flora/ (hierba_silvestre,
+    // flor_silvestre, helecho) a la espera de esa decision de diseño.
+    // Mapeo icono->especie es una interpretacion razonada de nombres de
+    // fichero genericos (arbustoMontañaTundra.jpg cubre montano Y artico
+    // con el mismo arte, arbustoSeco.jpg->desertico,
+    // arbustoPraderaBosque.jpg->espinoso) -- PROVISIONAL, sin confirmar.
+    manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol', img: 'sprites_flora/manzano.png' },
+    roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol', img: 'sprites_flora/roble.png' },
+    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol', img: 'sprites_flora/pino.png' },
+    cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto', img: 'sprites_flora/cactus.png' },
+    arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto', img: 'sprites_flora/arbusto_espinoso.png' },
+    arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto', img: 'sprites_flora/arbusto_desertico.png' },
+    arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
+    arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
     hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
     liquen:            { ch: '▒', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
     musgo:             { ch: '▒', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
@@ -561,9 +581,12 @@ function itemsCelda(c) {
     if (competidora) {
       const g = CATALOGO_GLIFOS.flora[competidora.especie];
       // Etapa de crecimiento real (Planta.etapa 0..1) -> opacidad: un
-      // brote se ve tenue, una planta madura llena de color.
+      // brote se ve tenue, una planta madura llena de color. Mismo alfa
+      // reutilizado como opacity del <img> cuando la especie tiene sprite
+      // (ver crearCeldaImgEstatica) -- no hay arte diferenciado por etapa,
+      // pero la opacidad ya transmite la misma idea sin inventar variantes.
       const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
-      items.push({ ch: g.ch, color: hexARgba(g.color, alfa) });
+      items.push({ ch: g.ch, color: hexARgba(g.color, alfa), img: g.img || null, especieFlora: competidora.especie, alfaSprite: alfa });
       if (coberturas.length > 0) {
         fondoColor = CATALOGO_GLIFOS.flora[coberturas[0].especie].color;
         fondoAlfa = 0.4;
@@ -721,6 +744,29 @@ function tamanoSpriteConstruccion(tipo) {
   return escalarPorRaiz(masa, MASA_REFERENCIA_KG, SPRITE_CONSTRUCCION_REFERENCIA, SPRITE_CONSTRUCCION_MIN, SPRITE_CONSTRUCCION_MAX, 1 / 3);
 }
 
+// Tamaño de sprite de flora (arbol/arbusto, 2026-09-16) -- huella_m2 real
+// de config/flora.yaml (misma fuente que ya usa el motor para el cupo de
+// espacio compartido por celda, no un numero inventado para el visor).
+// exponente=0.5 (raiz cuadrada), no 1/3 como construccion: huella_m2 es
+// AREA, no masa/volumen -- mismo razonamiento fisico que ya distingue
+// ambos casos en el comentario de escalarPorRaiz mas arriba.
+// Rango MIN/MAX PROVISIONAL, sin calibrar contra captura real: pensado
+// para quedar por encima de la fauna mas grande (caballo, CELDA*1.5) pero
+// por debajo del techo de construccion (CELDA*3.0) -- un arbol maduro
+// deberia leerse mas prominente que un animal, nunca que un edificio.
+const HUELLA_FLORA_M2 = {
+  manzano: 4.0, roble: 5.0, pino: 4.5, cactus: 1.5,
+  arbusto_espinoso: 2.0, arbusto_desertico: 1.8, arbusto_montano: 2.2, arbusto_artico: 1.0,
+};
+const HUELLA_REFERENCIA_FLORA_M2 = 1.0; // arbusto_artico, la especie con sprite mas pequeña
+const SPRITE_FLORA_REFERENCIA = CELDA * 1.0;
+const SPRITE_FLORA_MIN = CELDA * 0.9;
+const SPRITE_FLORA_MAX = CELDA * 2.6;
+function tamanoSpriteFlora(especie) {
+  const huella = HUELLA_FLORA_M2[especie] || HUELLA_REFERENCIA_FLORA_M2;
+  return escalarPorRaiz(huella, HUELLA_REFERENCIA_FLORA_M2, SPRITE_FLORA_REFERENCIA, SPRITE_FLORA_MIN, SPRITE_FLORA_MAX, 0.5);
+}
+
 function crearCeldaTxt(ch, color, cx, cy, fondo) {
   const el = document.createElement('div');
   el.className = 'celda-txt';
@@ -742,16 +788,20 @@ function crearCeldaTxt(ch, color, cx, cy, fondo) {
 // ya calculaba itemsCelda); el <img> se ancla abajo-centro dentro de el,
 // igual que .criatura-img, escalado por huella_m2 real
 // (tamanoSpriteConstruccion) en vez de un tamaño fijo.
-function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
+function crearCeldaImgEstatica(src, cx, cy, fondo, tamano, opacidad) {
   const cont = document.createElement('div');
   cont.className = 'celda-txt';
   cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
   cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
   if (fondo) cont.style.backgroundColor = fondo;
   const img = document.createElement('img');
+  // .construccion-img (ancla inferior-centro, pixelated) se reutiliza tal
+  // cual para flora (2026-09-16) -- mismo contrato visual, "raices en el
+  // suelo de la celda", no hacia falta una clase CSS propia.
   img.className = 'construccion-img';
   img.src = src;
   img.style.height = tamano + 'px';
+  if (opacidad != null) img.style.opacity = String(opacidad);
   cont.appendChild(img);
   return cont;
 }
@@ -772,15 +822,18 @@ function crearCeldaCuadrantes(items, cx, cy, fondo) {
     cuad.className = 'cuadrante';
     const item = items[i];
     if (item && item.img) {
-      // Construccion compartiendo celda con otro elemento real (recurso,
-      // planta) -- caso raro pero posible dentro del presupuesto de
-      // huella_m2 del motor. El sprite se reduce al tamaño del propio
-      // cuadrante en vez de al de celda completa (tamanoSpriteConstruccion
-      // asume celda completa), para no desbordar sobre los demas.
+      // Construccion O flora (arbol/arbusto, 2026-09-16) compartiendo
+      // celda con otro elemento real (recurso, planta) -- caso raro pero
+      // posible dentro del presupuesto de huella_m2 del motor. Generico a
+      // proposito (solo mira item.img, no el tipo): el sprite se reduce al
+      // tamaño del propio cuadrante en vez de al de celda completa
+      // (tamanoSpriteConstruccion/tamanoSpriteFlora asumen celda completa),
+      // para no desbordar sobre los demas.
       const img = document.createElement('img');
       img.className = 'construccion-img construccion-img-cuadrante';
       img.src = item.img;
       img.style.height = Math.round(CELDA * 0.42) + 'px';
+      if (item.alfaSprite != null) img.style.opacity = String(item.alfaSprite);
       cuad.appendChild(img);
     } else if (item) {
       cuad.textContent = item.ch;
@@ -830,14 +883,27 @@ function renderMapa() {
       // misma fila podrian seguir solapandose entre si por el mismo
       // motivo -- no observado en juego libre, no se resuelve sin abrir
       // un mecanismo de profundidad real por eje Y+X que no se pidio.
+      // esFloraUnica (2026-09-16, mismo criterio que construccion): un
+      // arbol/arbusto con sprite (ver especieFlora en itemsCelda) usa su
+      // propio nivel de z-index (400+y) -- por debajo de construccion
+      // (500+y, que puede compartir presupuesto de huella_m2 con flora y
+      // deberia tapar un arbol si coinciden) pero por encima del suelo
+      // (0+y), por la misma razon de desborde de sprite entre celdas
+      // vecinas ya documentada arriba para construccion.
       const unico = info.items[0] || {};
-      const esConstruccionUnica = !!unico.img;
-      const el = info.items.length > 1
-        ? crearCeldaCuadrantes(info.items, cx, cy, info.fondo)
-        : esConstruccionUnica
-          ? crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion))
-          : crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
-      el.style.zIndex = String((esConstruccionUnica ? 500 : 0) + y);
+      const esConstruccionUnica = !!unico.tipoConstruccion;
+      const esFloraUnica = !esConstruccionUnica && !!unico.img;
+      let el;
+      if (info.items.length > 1) {
+        el = crearCeldaCuadrantes(info.items, cx, cy, info.fondo);
+      } else if (esConstruccionUnica) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion));
+      } else if (esFloraUnica) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora), unico.alfaSprite);
+      } else {
+        el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
+      }
+      el.style.zIndex = String((esConstruccionUnica ? 500 : esFloraUnica ? 400 : 0) + y);
       capaEstatica.appendChild(el);
     }
   }

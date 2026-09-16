@@ -84,6 +84,8 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self._servir_sprite("sprites_criaturas", self.path[len("/sprites_criaturas/"):])
         elif self.path.startswith("/sprites_construcciones/"):
             self._servir_sprite("sprites_construcciones", self.path[len("/sprites_construcciones/"):])
+        elif self.path.startswith("/sprites_flora/"):
+            self._servir_sprite("sprites_flora", self.path[len("/sprites_flora/"):])
         else:
             self.send_response(404)
             self.end_headers()
@@ -101,12 +103,14 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
         self.wfile.write(destino.read_bytes())
 
     def _servir_sprite(self, subcarpeta: str, ruta_relativa: str) -> None:
-        """Sprites reales de fauna y construcciones (2026-09-16, ver
-        presentacion/terminal_prototipo/sprites_criaturas/ y
-        sprites_construcciones/) -- unica excepcion deliberada a "mapa 100%
-        glifos": Diego pidio pictogramas con estilo propio despues de que ni
-        CP437 ni los emoji nativos convencieran del todo. Mismo guardia anti
-        path-traversal que el resto de rutas de disco de este archivo."""
+        """Sprites reales de fauna, construcciones y flora (arbol/arbusto,
+        2026-09-16, ver presentacion/terminal_prototipo/sprites_criaturas/,
+        sprites_construcciones/ y sprites_flora/) -- excepcion deliberada al
+        "mapa 100% glifos" original del mismo dia: decision de Diego de usar
+        un estilo hibrido ASCII+sprite, introduciendo assets solo donde se
+        vayan encontrando los adecuados (ver CLAUDE.md, "Estado actual").
+        Mismo guardia anti path-traversal que el resto de rutas de disco de
+        este archivo."""
         from urllib.parse import unquote
 
         carpeta_sprites = (RUTA_TERMINAL / subcarpeta).resolve()
