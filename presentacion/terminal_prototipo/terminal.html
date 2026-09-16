@@ -327,6 +327,41 @@ function hexARgba(hex, alfa) {
   return `rgba(${r},${g},${b},${alfa})`;
 }
 
+// TEXTURA "TEJIDA" (2026-09-16, tercer feedback de Diego comparando contra
+// capturas reales de Dwarf Fortress: "necesitamos que quede lo mas vivo
+// posible"). Diagnostico: DF nunca deja una celda de suelo sin tinta --
+// imprime el MISMO puñado de glifos base en todas las celdas de un
+// material, pero con variacion real de tono celda a celda, lo que se lee
+// como superficie "tejida" en vez de un bloque de color CSS plano (lo que
+// habiamos hecho en el circulo anterior). tonoCelda varia el tono +-rango
+// de forma DETERMINISTA por celda (mismo hash de siempre -- nunca cambia
+// de un frame a otro); glifoTextura elige entre 2-3 variantes de glifo
+// por el mismo mecanismo. Ambos se usan solo en las capas de "suelo"
+// (terreno desnudo, agua, cobertura) -- los landmarks reales (arbol,
+// arbusto, fauna, construccion, recurso) se quedan con un color fijo y
+// consistente a proposito, para que sigan destacando sobre el ruido de
+// textura del suelo en vez de mezclarse con el.
+function tonoCelda(hex, x, y, sal, rango, alfa = 1) {
+  const t = (hashDet(x, y, sal) - 0.5) * 2 * rango;
+  const n = parseInt(hex.slice(1), 16);
+  const ajustar = (canal) => Math.max(0, Math.min(255, Math.round(canal * (1 + t))));
+  const r = ajustar((n >> 16) & 255), g = ajustar((n >> 8) & 255), b = ajustar(n & 255);
+  return `rgba(${r},${g},${b},${alfa})`;
+}
+function glifoTextura(pool, x, y, sal) {
+  return pool[Math.floor(hashDet(x, y, sal) * pool.length) % pool.length];
+}
+// Pools de glifo base por bioma (montaña queda fuera: conserva su propio
+// simbolo '^'/'▲' de relieve, ya establecido). Todos caracteres ASCII
+// basicos, garantizados en cualquier fuente (incluida la bitmap VGA437).
+const TEXTURA_TERRENO = {
+  pradera:  ['.', "'", ','],
+  bosque:   ['"', "'", '.'],
+  desierto: ['.', ':', "'"],
+  tundra:   ['.', '·', "'"],
+};
+const TEXTURA_COBERTURA = [',', "'", '`'];
+
 let construccionesPorCelda = {};
 function recalcularDerivados() {
   // Construcciones (DATA.construcciones): una celda podria en teoria tener
@@ -355,21 +390,20 @@ function infoCriatura(ent) {
   return { ch: g.ch, color: g.color, glow: !!ent.consciente };
 }
 
-// REDISEÑADO 2026-09-16 (segundo feedback de Diego: "demasiado espaciado,
-// no se detecta que es un mapa, parece un conjunto de simbolos"). Correcto:
-// un glifo de un solo caracter por celda, por grande que sea, deja huecos
-// de negro puro entre celdas sin contenido -- Dwarf Fortress/CDDA leen
-// como mapa porque cada celda tiene COLOR DE FONDO (el suelo es una
-// superficie continua), y el glifo es solo "lo que hay encima" de ese
-// suelo, no el suelo en si. contenidoCelda devuelve ahora {ch,color,fondo}
-// siempre -- fondo cubre el 100% de las celdas (terreno o agua, en rgba de
-// baja opacidad para no tapar el negro de fondo del terminal), ch queda
-// VACIO en suelo desnudo (el fondo ya dice de que bioma es, no hace falta
-// un caracter ademas). Cobertura de suelo (hierba/liquen/musgo/flor/
-// helecho) deja de dibujar un glifo propio compitiendo con arbol/fauna/
-// construccion -- ecologicamente es textura de suelo, no un punto de
-// referencia, asi que solo enriquece el color de fondo con el tono de la
-// especie (dato real: Planta.etapa sigue modulando la intensidad).
+// REDISEÑADO 2026-09-16, dos veces seguidas. Primero (feedback: "demasiado
+// espaciado, no se detecta que es un mapa"): un glifo suelto por celda deja
+// huecos de negro puro entre celdas sin contenido -- se añadió COLOR DE
+// FONDO a cada celda (terreno/agua) y se vacio el glifo del suelo desnudo,
+// confiando solo en el fondo CSS. Segunda vuelta (feedback comparando
+// contra capturas reales de Dwarf Fortress: "necesitamos que quede lo mas
+// vivo posible") corrigio el resultado de la primera -- un bloque de color
+// CSS plano no es como lee DF su propio suelo: alli CADA celda imprime un
+// glifo real (el mismo puñado de caracteres repetido, pero con variacion
+// de TONO por celda), lo que se lee como textura "tejida" en vez de un
+// mosaico de rectangulos. contenidoCelda sigue devolviendo {ch,color,fondo}
+// siempre, pero ahora ch NUNCA queda vacio -- ver TEXTURA_TERRENO/
+// TEXTURA_COBERTURA/tonoCelda mas arriba para el mecanismo de variante+tono
+// determinista por celda.
 function fondoBioma(c) {
   if (c.tiene_agua) {
     const g = CATALOGO_GLIFOS.agua[c.tipo_agua] || CATALOGO_GLIFOS.agua.lago;
@@ -400,11 +434,12 @@ function contenidoCelda(c) {
     const prof = c.tipo_agua === 'poza' ? c.profundidad_charco : c.profundidad_agua;
     const alfaFondo = Math.max(0.45, Math.min(0.85, 0.5 + (prof || 0) * 0.35));
     if (c.tipo_agua === 'poza') {
-      // charco efimero: discreto a proposito, sin glifo propio -- solo el
-      // fondo azulado lo diferencia de tierra seca.
-      return { ch: '', color: g.color, fondo: hexARgba(g.color, alfaFondo) };
+      // charco efimero: glifo propio de nuevo (antes vacio) con variacion
+      // de tono por celda -- discreto por ser ':' en vez de '~'/'≈', pero
+      // ya no invisible.
+      return { ch: ':', color: tonoCelda(g.color, c.x, c.y, 61, 0.2), fondo: hexARgba(g.color, alfaFondo) };
     }
-    return { ch: g.ch, color: g.color, fondo: hexARgba(g.color, alfaFondo) };
+    return { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 63, 0.2), fondo: hexARgba(g.color, alfaFondo) };
   }
   if (c.plantas && c.plantas.length > 0) {
     // dato real del motor (cupo de espacio compartido, 2026-09-03): si hay
@@ -422,17 +457,20 @@ function contenidoCelda(c) {
       const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
       return { ch: g.ch, color: hexARgba(g.color, alfa), fondo: hexARgba(fondoBase, 0.25) };
     }
-    // Solo cobertura (hierba/liquen/musgo/flor/helecho): sin glifo propio,
-    // enriquece el color de fondo hacia el tono de la especie -- sigue
-    // siendo dato real (Planta.etapa module la fuerza del tinte), pero se
-    // representa como textura de suelo, no como objeto sobre el suelo.
+    // Solo cobertura (hierba/liquen/musgo/flor/helecho): glifo de textura
+    // (de nuevo real, antes vacio) con variante + tono por celda, en vez
+    // de un glifo fijo -- ecologicamente sigue siendo suelo, no un
+    // landmark, pero ahora contribuye a la textura "viva" en vez de
+    // desaparecer en el fondo. Planta.etapa real sigue modulando alfa.
     const cobertura = c.plantas[0];
     const g = CATALOGO_GLIFOS.flora[cobertura.especie];
     if (g) {
-      const alfa = 0.3 + Math.min(1, cobertura.etapa ?? 1) * 0.35;
-      return { ch: '', color: g.color, fondo: hexARgba(g.color, alfa) };
+      const alfa = 0.55 + Math.min(1, cobertura.etapa ?? 1) * 0.45;
+      const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67);
+      return { ch, color: tonoCelda(g.color, c.x, c.y, 71, 0.3, alfa), fondo: hexARgba(fondoBase, 0.22) };
     }
-    return { ch: '', color: fondoBase, fondo: hexARgba(fondoBase, 0.3) };
+    const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67);
+    return { ch, color: tonoCelda(fondoBase, c.x, c.y, 71, 0.3, 0.7), fondo: hexARgba(fondoBase, 0.3) };
   }
   const recursos = c.recursos || {};
   if ((recursos.piedra_suelta || 0) > 0) {
@@ -443,20 +481,26 @@ function contenidoCelda(c) {
     const g = CATALOGO_GLIFOS.recursos.madera;
     return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
   }
-  // Terreno base desnudo: SIN glifo -- el fondo ya dice de que bioma es.
-  // Excepcion real: montaña distingue pico de ladera por elevacion real
-  // (mismo umbral aproximado que el Codice usaba para su relieve) -- un
-  // accidente de relieve real si merece un simbolo encima del fondo,
-  // convencion estandar de todo roguelike.
+  // Terreno base desnudo: SIEMPRE imprime un glifo (ya no vacio) -- variante
+  // de textura + tono elegidos por hash determinista de la celda (ver
+  // TEXTURA_TERRENO/tonoCelda arriba), para que el suelo se lea como
+  // superficie "tejida" en vez de un bloque de color CSS plano. Excepcion
+  // real: montaña distingue pico de ladera por elevacion real (mismo
+  // umbral aproximado que el Codice usaba para su relieve) -- un accidente
+  // de relieve real si merece su propio simbolo, convencion estandar de
+  // todo roguelike, con el mismo jitter de tono para que tampoco quede
+  // plano.
   if (c.bioma === 'montana' && c.elevacion > 0.72) {
     const g = CATALOGO_GLIFOS.terreno.pico;
-    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
+    return { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 41, 0.2), fondo: hexARgba(fondoBase, 0.3) };
   }
   if (c.bioma === 'montana') {
     const g = CATALOGO_GLIFOS.terreno.montana;
-    return { ch: g.ch, color: g.color, fondo: hexARgba(fondoBase, 0.3) };
+    return { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 43, 0.2), fondo: hexARgba(fondoBase, 0.3) };
   }
-  return { ch: '', color: fondoBase, fondo: hexARgba(fondoBase, 0.3) };
+  const pool = TEXTURA_TERRENO[c.bioma] || ['.'];
+  const ch = glifoTextura(pool, c.x, c.y, 47);
+  return { ch, color: tonoCelda(fondoBase, c.x, c.y, 53, 0.35), fondo: hexARgba(fondoBase, 0.22) };
 }
 
 function celdaAPantalla(wx, wy, tam) {
