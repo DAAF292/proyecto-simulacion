@@ -499,51 +499,81 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   (no una lista cerrada de categorías) — todos los assets ya
   disponibles son de uso gratuito según confirmación de Diego (no se
   investigó licencia individual más allá de eso).
-  Estado real a esta fecha: fauna (8 especies) y las 5 construcciones
-  comunales ya tenían sprite desde antes de esta sesión; en esta sesión
-  se añadió **flora** — **CONFIRMADO por Diego tras dos rondas de
-  corrección** (ver `docs/historial_capa_visual.md`, entrada
-  "Corrección real..."), 13 de las 15 especies del catálogo tienen
-  sprite: los 3 árboles (manzano/roble/pino), las 4 de arbusto
-  (cactus/arbusto_desertico/arbusto_montano/arbusto_artico/
-  arbusto_espinoso) y 5 de las 7 de cobertura
-  (hierba_silvestre/hierba_desertica/hierba_artica/flor_silvestre/
-  helecho) — el criterio real, aclarado por Diego dos veces: NO exige
-  que el nombre de fichero coincida 1:1 con la clave de especie, sino
-  que el arte corresponda al `bioma` real de `config/flora.yaml` — un
-  mismo fichero puede cubrir varias especies con clima afín
-  (`arbustoMontañaTundra.jpg`→montano+ártico, `hierba.jpg`→las 3
-  variantes de hierba). Solo quedan sin sprite **liquen y musgo**, las
-  2 especies para las que Diego no aportó ningún icono. Los 10 iconos
-  JPEG viven en `iconos/flora/` (2048×2048, fondo de tablero de ajedrez
-  "quemado" en el propio JPEG, no alfa real), procesados a
-  `presentacion/terminal_prototipo/sprites_flora/` (10 PNG RGBA,
-  resolución proporcional a `huella_m2` real por especie, ver más
-  abajo). Tamaño en pantalla de árbol/arbusto escalado por `huella_m2`
-  real de `config/flora.yaml` (mismo dato que ya usa el motor para el
-  cupo de espacio compartido, raíz cuadrada por ser área — no la raíz
-  cúbica de construcción, que escala masa/volumen), mismo mecanismo
-  `escalarPorRaiz` ya existente; cobertura (sin `huella_m2` real, no
-  compite por espacio físico) usa un tamaño FIJO en vez de inventar un
-  dato que el motor no tiene. Ambos rangos PROVISIONALES, sin calibrar
-  contra captura real.
-  **Dos rondas de corrección real tras el primer resultado, ambas
-  documentadas en detalle en `docs/historial_capa_visual.md`, no solo
-  aquí**: (1) Diego señaló huecos de fondo sin limpiar entre ramas
-  ("el roble no está bn entre las ramas") y pérdida de calidad por un
-  resize demasiado agresivo — corregido con verificación visual manual
-  por icono (una heurística automática de bimodalidad/fase de
+  Estado real a esta fecha (**CORREGIDO, ver los cinco círculos
+  completos en `docs/historial_capa_visual.md`, este párrafo es el
+  resumen final, no la crónica**): fauna (8 especies) y las 5
+  construcciones comunales ya tenían sprite desde antes de esta sesión;
+  en esta sesión se añadió **flora** — 13 de las 15 especies del
+  catálogo tienen sprite, **mapeo CONFIRMADO por Diego tras dos rondas
+  de aclaración** (un primer mapeo interpretado por Claude fue
+  rechazado dos veces antes de llegar al criterio real: no exige que el
+  nombre de fichero coincida 1:1 con la clave de especie, sino que el
+  arte corresponda al `bioma` real de `config/flora.yaml` — un mismo
+  fichero puede cubrir varias especies con clima afín,
+  `arbustoMontañaTundra.jpg`→montano+ártico,
+  `hierba.jpg`→sus 3 variantes). Solo quedan sin sprite **liquen y
+  musgo**, las 2 especies para las que Diego no aportó ningún icono.
+  Los 10 iconos JPEG viven en `iconos/flora/` (2048×2048, fondo de
+  tablero de ajedrez "quemado" en el propio JPEG, no alfa real —
+  limpiado con verificación visual manual por icono, NO con una
+  heurística de color automática: una heurística de bimodalidad/fase de
   cuadrícula estuvo a punto de agujerear pétalos reales de una flor,
-  descartada) y resolución de exportación proporcional a `huella_m2`.
-  (2) El primer mapeo fichero→especie (interpretado sin confirmar) fue
-  rechazado por Diego — el mapeo final de arriba es el que él confirmó
-  explícitamente tras dos aclaraciones, no una interpretación propia.
-  De paso se encontró y corrigió un bug real preexistente (desde que se
-  añadieron sprites de fauna/construcciones): `presentacion/vista_web.py`
-  solo servía `/sprites_criaturas/` y `/sprites_construcciones/` por
-  HTTP — cualquier sprite servido a través de `ServidorWeb` (no abierto
-  por `file://` directamente) que viviera en otra subcarpeta habría
+  descartada), procesados a
+  `presentacion/terminal_prototipo/sprites_flora/` (10 PNG RGBA,
+  resolución proporcional a `huella_m2` real por especie). Tamaño en
+  pantalla de árbol/arbusto escalado por `huella_m2` real de
+  `config/flora.yaml` por ÁREA visual real (no solo altura — un primer
+  intento escalaba solo `img.style.height` dejando el ancho a merced
+  del aspect ratio nativo de cada PNG, y el pino, con el doble de
+  huella que cualquier arbusto pero un arte muy vertical, salía más
+  ESTRECHO que todos ellos; corregido con `ASPECT_FLORA` real medido
+  por especie), más `FACTOR_TAMANO_ARBUSTO=0.72` (reducción adicional
+  solo para arbusto, pedido explícito de Diego, PROVISIONAL); cobertura
+  (sin `huella_m2` real, no compite por espacio físico) usa un tamaño
+  FIJO en vez de inventar un dato que el motor no tiene. Los recursos
+  sueltos del suelo (madera/piedra) ya NO compiten por el mosaico de
+  cuadrantes con el árbol/construcción de su misma celda — pasan a ser
+  un badge pequeño superpuesto; el 94% de las celdas con árbol también
+  tenían madera, así que antes de este fix la inmensa mayoría de los
+  árboles del mapa se veían reducidos a una miniatura de icono
+  compartido en vez del sprite grande calibrado ("por qué hay árboles
+  en las celdas pequeñas", Diego). De paso se encontró y corrigió un
+  bug real preexistente (desde que se añadieron sprites de fauna/
+  construcciones): `presentacion/vista_web.py` solo servía
+  `/sprites_criaturas/` y `/sprites_construcciones/` por HTTP —
+  cualquier sprite servido a través de `ServidorWeb` (no abierto por
+  `file://` directamente) que viviera en otra subcarpeta habría
   devuelto 404 sin que nadie lo hubiera notado hasta abrir el visor así.
+- **Profundidad real, dirección y paso natural en el visor (mismo día,
+  círculo final)**: hasta este círculo, fauna tenía un z-index con
+  offset fijo (`1000+y`) que la ponía SIEMPRE por encima de todo el
+  suelo/flora/construcción sin importar su posición real — decidido
+  así en un círculo anterior del mismo día para resolver un bug real de
+  desborde de sprite entre celdas vecinas, con el efecto secundario de
+  que fauna nunca podía quedar oculta por nada. Diego pidió profundidad
+  real ("si pasan por detrás que queden ocultos, no flotando encima");
+  sustituido por un esquema único `zIndexPorFila(y, capa) = y*10 +
+  prioridad` que aplica por igual a terreno/flora/construcción/fauna —
+  la fila real decide siempre primero, la prioridad por tipo (terreno
+  0, flora 2, construcción 4, fauna 6) solo desempata en la misma fila
+  exacta. Verificado con Playwright: un zorro en una fila anterior a un
+  árbol grande queda visiblemente tapado por su follaje. Además: el
+  sprite de fauna ahora se invierte (`scaleX(-1)`) según la dirección
+  real de desplazamiento (inferida comparando la X actual contra la
+  última conocida, persistida en el propio elemento DOM — el motor no
+  expone "dirección" como dato; convención asumida sin poder
+  verificarla contra las 8 especies reales: el arte mira a la derecha
+  de base); y el sondeo de `estado.json` bajó de 1000ms a 400ms
+  (igualando `segundos_por_tick` real del motor, `config/visual.yaml`)
+  con la transición CSS de `0.9s linear` a `0.35s ease-in-out` — a
+  1000ms el motor podía avanzar 2-3 ticks (y una criatura 2-3 celdas)
+  entre dos sondeos, y ninguna curva de animación arregla que un salto
+  de varias celdas en línea recta se lea como caminar en vez de saltar.
+  Pendiente real: el z-index cambia de golpe (sin transición, CSS no
+  anima esa propiedad) en el instante en que una criatura cruza de fila
+  mientras camina — aceptado como límite conocido de Y-sorting simple,
+  no se abordó un mecanismo de interpolación de profundidad que no se
+  pidió.
 - Selector de zona real en el visor web: nunca añadido, el visor solo
   dibuja superficie (`zona_idx == 0`).
 - Créditos de licencia de los paquetes PyxelSpace: pendiente desde la
