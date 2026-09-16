@@ -769,9 +769,30 @@ const HUELLA_REFERENCIA_FLORA_M2 = 1.0; // arbusto_artico, la especie con sprite
 const SPRITE_FLORA_REFERENCIA = CELDA * 1.0;
 const SPRITE_FLORA_MIN = CELDA * 0.9;
 const SPRITE_FLORA_MAX = CELDA * 2.6;
+// ASPECT_FLORA (2026-09-16, hallazgo real de Diego: "los arbustos no son
+// demasiado grandes? no se ve ni un arbol") -- verificado con numeros
+// antes de tocar nada: tamanoSpriteFlora fijaba SOLO la altura del <img>
+// (width:auto en CSS), dejando el ancho en pantalla a merced del aspect
+// ratio nativo de cada PNG -- que varia por como se compuso el arte
+// original, sin relacion con huella_m2. Resultado real medido: pino
+// (huella=4.5, aspect ancho/alto=0.64, muy vertical) salia con SOLO
+// 43.5px de ancho en pantalla, mas ESTRECHO que cualquiera de los 3
+// arbustos (aspect ~1.18-1.23, huella 1.0-2.2, la mitad o menos) que
+// llegaban a 52-58px de ancho por su propio aspect ancho. Fix: escalar
+// por AREA visual (ancho*alto) proporcional a huella_m2, no solo por
+// altura -- ver tamanoSpriteFlora mas abajo. Valores medidos directo de
+// cada PNG (Image.size), no inventados.
+const ASPECT_FLORA = {
+  manzano: 607 / 700, roble: 702 / 783, pino: 475 / 742, cactus: 261 / 429,
+  arbusto_espinoso: 585 / 495, arbusto_desertico: 579 / 470, arbusto_montano: 639 / 519, arbusto_artico: 639 / 519,
+};
 function tamanoSpriteFlora(especie) {
   const huella = HUELLA_FLORA_M2[especie] || HUELLA_REFERENCIA_FLORA_M2;
-  return escalarPorRaiz(huella, HUELLA_REFERENCIA_FLORA_M2, SPRITE_FLORA_REFERENCIA, SPRITE_FLORA_MIN, SPRITE_FLORA_MAX, 0.5);
+  const ladoEquivalente = escalarPorRaiz(huella, HUELLA_REFERENCIA_FLORA_M2, SPRITE_FLORA_REFERENCIA, SPRITE_FLORA_MIN, SPRITE_FLORA_MAX, 0.5);
+  // altura tal que ancho*altura (area real en pantalla) = ladoEquivalente^2,
+  // independientemente del aspect ratio nativo del sprite.
+  const aspect = ASPECT_FLORA[especie] || 1;
+  return ladoEquivalente / Math.sqrt(aspect);
 }
 
 // Tamaño de sprite de cobertura (hierba/flor_silvestre/helecho, mismo dia)

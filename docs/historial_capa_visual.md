@@ -1441,3 +1441,42 @@ inventarlo. Verificado en el visor real (Playwright): sprites de
 cobertura visibles tanto a celda completa (una sola especie) como en
 cuadrante compartido (mezclada con otro elemento), sin errores de carga
 de ningún PNG.
+
+### Tercer fallo real, mismo día -- escalado por altura ignoraba el ancho
+
+Diego, mirando una captura ya con el mapeo confirmado: "¿los arbustos no
+son demasiado grandes? porque no se ve ni un árbol en la imagen". Antes
+de responder, se midió contra los propios ficheros en vez de opinar:
+`tamanoSpriteFlora()` fijaba SOLO `img.style.height` (con `width: auto`
+en CSS) -- el ancho en pantalla quedaba determinado por el aspect ratio
+NATIVO de cada PNG, que varía según cómo se compuso el arte original y
+no tiene ninguna relación con `huella_m2`. Medido directamente: pino
+(huella=4.5, aspect ancho/alto=0.64 -- silueta vertical/estrecha) salía
+con solo 43.5px de ancho en pantalla, más ESTRECHO que los 3 arbustos
+(aspect 1.18-1.23 -- arte compuesto más "extendido" horizontalmente,
+huella 1.0-2.2, la mitad o menos) que llegaban a 52-58px de ancho por su
+propio aspect. El pino, con más del doble de huella real que cualquier
+arbusto, se veía como un palito delgado a su lado -- la observación de
+Diego era correcta, y el motivo no era el arte en sí ni la calibración
+de huella_m2, sino que el escalado solo controlaba una dimensión.
+
+Fix: `tamanoSpriteFlora()` ahora escala por ÁREA visual (ancho×alto en
+pantalla) proporcional a `huella_m2`, no solo por altura --
+`alturaFinal = ladoEquivalente / sqrt(aspect)`, con `ASPECT_FLORA`
+midiendo el ratio ancho/alto real de cada PNG ya generado (no
+inventado). Efecto: a igualdad de huella, un sprite más "ancho" de
+composición sale proporcionalmente más bajo, y uno más "vertical" sale
+proporcionalmente más alto, igualando el área ocupada en pantalla en
+vez de solo la altura. Verificado en el visor real (Playwright, zoom
+2.5x, ventana del mapa con 21 celdas de árbol y 88 de arbusto
+mezcladas): los pinos se leen ahora como el elemento más grande y
+prominente de la escena, coherente con tener la mayor huella_m2 junto a
+roble/manzano. Mismo mecanismo aplicado solo a árbol/arbusto -- el
+tamaño de cobertura (`tamanoSpriteCobertura`) sigue siendo fijo
+(`CELDA*0.75`), sin este problema porque no varía por especie.
+
+Pendiente real, honesto: no se verificó si `crearCeldaCuadrantes` (el
+sprite reducido dentro de un cuadrante compartido, `CELDA*0.42` fijo de
+altura) tiene el mismo problema de aspect ratio -- ahí el tamaño no
+escala por huella_m2 (es fijo para todas las especies en ese contexto),
+así que el efecto sería más leve, pero no se midió.
