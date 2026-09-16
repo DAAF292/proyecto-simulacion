@@ -6,6 +6,24 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
+  /* Fuente bitmap real de VGA (2026-09-16, paquete de Diego -- ver
+     oldschool_pc_font_pack_v2.2_web/LICENSE.TXT, CC BY-SA 4.0, atribucion
+     pendiente en el mismo lugar que las de PyxelSpace). Reproduccion fiel
+     de la ROM de fuente de una tarjeta VGA de IBM real -- la referencia
+     autentica del aspecto "terminal DOS/roguelike clasico" que pidio
+     Diego, verificada glifo a glifo contra el catalogo completo de
+     CATALOGO_GLIFOS antes de adoptarla (los 27 caracteres usados, incluidos
+     los menos comunes como ⚒/♨/▣, renderizan nitidos). JetBrains Mono
+     queda como fallback si el .woff no carga por lo que sea.
+     Fuente pixel: sin antialiasing, se sirve a su tamano nativo (16px,
+     multiplo entero del 9x16 real) y se escala con transform, no con
+     font-size directo, para no perder la nitidez del pixel -- ver
+     CELDA/escala mas abajo en el script. */
+  @font-face {
+    font-family: 'VGA437';
+    src: url('fonts/Web437_IBM_VGA_9x16.woff') format('woff');
+    font-display: swap;
+  }
   :root {
     --ambar: #ffb000;
     --ambar-tenue: #8a5a10;
@@ -15,7 +33,7 @@
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; background: #000;
-    font-family: 'JetBrains Mono', "Courier New", ui-monospace, monospace;
+    font-family: 'VGA437', 'JetBrains Mono', "Courier New", ui-monospace, monospace;
     color: var(--ambar);
     height: 100%;
   }
@@ -76,9 +94,15 @@
   }
   #mapa-viewport.arrastrando { cursor: grabbing; }
   #mapa-contenido { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  /* VGA437 es una fuente de bitmap de un solo peso -- "bold" sobre ella
+     fuerza una negrita sintetica del navegador que emborrona el pixel
+     nitido (confirmado visualmente, no una suposicion), asi que estos dos
+     elementos (glifos del mapa y de la leyenda) se quedan en peso normal
+     -- el resto de la interfaz (titulos, stats) sigue en negrita/CSS
+     normal, no se ve afectado. */
   .celda-txt {
     position: absolute; display: flex; align-items: center; justify-content: center;
-    font-weight: bold; font-family: inherit;
+    font-weight: normal; font-family: inherit;
   }
   .btn-mapa {
     font-family: inherit;
@@ -122,7 +146,7 @@
   .leyenda-fila { display: flex; align-items: center; gap: 8px; padding: 1px 0; }
   .leyenda-glifo {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 16px; font-weight: bold; text-shadow: 0 0 4px currentColor;
+    width: 16px; font-weight: normal; text-shadow: 0 0 4px currentColor;
   }
   .leyenda-nombre { color: #d8c8a0; }
 
