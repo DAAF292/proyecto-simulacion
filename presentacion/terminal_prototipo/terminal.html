@@ -675,7 +675,7 @@ function itemsCelda(c) {
       // (ver crearCeldaImgEstatica) -- no hay arte diferenciado por etapa,
       // pero la opacidad ya transmite la misma idea sin inventar variantes.
       const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
-      items.push({ ch: g.ch, color: hexARgba(g.color, alfa), img: g.img || null, especieFlora: competidora.especie, alfaSprite: alfa });
+      items.push({ ch: g.ch, color: hexARgba(g.color, alfa), img: g.img || null, especieFlora: competidora.especie, alfaSprite: alfa, etapaCrecimiento: competidora.etapa ?? 1 });
       if (coberturas.length > 0) {
         fondoColor = CATALOGO_GLIFOS.flora[coberturas[0].especie].color;
         fondoAlfa = 0.4;
@@ -694,7 +694,7 @@ function itemsCelda(c) {
           // especieFlora (arbol/arbusto) en renderMapa, porque el tamaño
           // se calcula distinto (tamanoSpriteCobertura, fijo, sin
           // huella_m2 real para esta categoria).
-          items.push({ ch: g.ch, color: g.color, img: g.img, especieCobertura: cob.especie, alfaSprite: alfa });
+          items.push({ ch: g.ch, color: g.color, img: g.img, especieCobertura: cob.especie, alfaSprite: alfa, etapaCrecimiento: cob.etapa ?? 1 });
         } else {
           const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
           items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3, alfa) });
@@ -897,7 +897,39 @@ const ASPECT_FLORA = {
 // 4.0-5.0), pero el resultado seguia leyendose grande. PROVISIONAL, sin
 // mas criterio que el propio pedido -- valor de partida, ajustable.
 const FACTOR_TAMANO_ARBUSTO = 0.72;
-function tamanoSpriteFlora(especie) {
+
+// Crecimiento real por etapa + variacion de madurez (2026-09-16, Diego:
+// "¿todos los arbustos son del mismo tamaño? no todos los arboles crecen
+// igual de grande"). Verificado antes de tocar nada: SI, eran todos
+// identicos -- Planta.etapa (0..1, crecimiento real, ya expuesta por el
+// DTO) solo se usaba para opacidad, nunca para tamaño, asi que un brote
+// recien plantado se veia del mismo tamaño GRANDE que un arbol centenario,
+// solo mas transparente. Dos fuentes de variacion, de naturaleza distinta
+// -- no confundirlas:
+// 1. FACTOR_ETAPA_MIN: dato REAL del motor (Planta.etapa). Curva lineal
+//    de 0.35 (recien brotada) a 1.0 (madura) sobre el tamaño ya calculado
+//    por huella_m2 -- PROVISIONAL el propio 0.35 (sin curva de
+//    crecimiento real del motor de la que derivarlo, es una eleccion de
+//    presentacion razonada, no un dato).
+// 2. RANGO_JITTER_ESCALA: el motor NO modela ninguna variacion de tamaño
+//    MAXIMO entre dos plantas maduras de la misma especie (a diferencia
+//    de fauna, que si sortea DimensionesFisicas.altura_m real por
+//    individuo con rango racial) -- sin ese dato, dos robles maduros
+//    serian pixel-perfect identicos. Relleno puramente visual, mismo
+//    mecanismo ya usado para el jitter de posicion (hashDet, sal propia,
+//    determinista por celda para que no "respire" entre refrescos) --
+//    declarado como tal, no se inventa un dato de motor que no existe.
+const FACTOR_ETAPA_MIN = 0.35;
+const SAL_JITTER_ESCALA = 113;
+const RANGO_JITTER_ESCALA = 0.15; // +-15% sobre el tamaño ya calculado
+function factorCrecimiento(etapa) {
+  return FACTOR_ETAPA_MIN + Math.max(0, Math.min(1, etapa)) * (1 - FACTOR_ETAPA_MIN);
+}
+function factorJitterEscala(seedX, seedY) {
+  return 1 + (hashDet(seedX, seedY, SAL_JITTER_ESCALA) - 0.5) * 2 * RANGO_JITTER_ESCALA;
+}
+
+function tamanoSpriteFlora(especie, etapa, seedX, seedY) {
   const huella = HUELLA_FLORA_M2[especie] || HUELLA_REFERENCIA_FLORA_M2;
   const ladoEquivalente = escalarPorRaiz(huella, HUELLA_REFERENCIA_FLORA_M2, SPRITE_FLORA_REFERENCIA, SPRITE_FLORA_MIN, SPRITE_FLORA_MAX, 0.5);
   // altura tal que ancho*altura (area real en pantalla) = ladoEquivalente^2,
@@ -906,6 +938,7 @@ function tamanoSpriteFlora(especie) {
   let altura = ladoEquivalente / Math.sqrt(aspect);
   const g = CATALOGO_GLIFOS.flora[especie];
   if (g && g.categoria === 'arbusto') altura *= FACTOR_TAMANO_ARBUSTO;
+  altura *= factorCrecimiento(etapa ?? 1) * factorJitterEscala(seedX, seedY);
   return altura;
 }
 
@@ -913,13 +946,15 @@ function tamanoSpriteFlora(especie) {
 // -- a diferencia de arbol/arbusto, estas especies NO compiten por
 // espacio fisico (compite_espacio_fisico: false en config/flora.yaml,
 // sin huella_m2 real) -- no hay ningun dato del motor del que derivar un
-// tamaño proporcional sin inventarlo. Tamaño FIJO, mas pequeño que el
-// arbusto mas pequeño (arbusto_artico, CELDA*1.0), consistente con que
-// cobertura ya se describe en este mismo catalogo como "mas discreta que
-// un arbusto/arbol". PROVISIONAL, sin calibrar contra captura real.
+// tamaño proporcional sin inventarlo. Tamaño base FIJO, mas pequeño que
+// el arbusto mas pequeño (arbusto_artico, CELDA*1.0), consistente con
+// que cobertura ya se describe en este mismo catalogo como "mas discreta
+// que un arbusto/arbol". Mismo crecimiento por etapa + jitter de escala
+// que arbol/arbusto (ver su comentario) aplicado tambien aqui. Rango
+// base PROVISIONAL, sin calibrar contra captura real.
 const SPRITE_COBERTURA_ALTURA = CELDA * 0.75;
-function tamanoSpriteCobertura() {
-  return SPRITE_COBERTURA_ALTURA;
+function tamanoSpriteCobertura(etapa, seedX, seedY) {
+  return SPRITE_COBERTURA_ALTURA * factorCrecimiento(etapa ?? 1) * factorJitterEscala(seedX, seedY);
 }
 
 function crearCeldaTxt(ch, color, cx, cy, fondo) {
@@ -1088,9 +1123,9 @@ function renderMapa() {
       } else if (esConstruccionUnica) {
         el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion));
       } else if (esFloraUnica) {
-        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora), unico.alfaSprite);
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora, unico.etapaCrecimiento, x, y), unico.alfaSprite);
       } else if (esCoberturaUnica) {
-        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(), unico.alfaSprite);
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(unico.etapaCrecimiento, x, y), unico.alfaSprite);
       } else {
         el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
       }

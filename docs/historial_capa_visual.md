@@ -1644,3 +1644,58 @@ Verificado en el visor real (Playwright, misma técnica de zoom sobre una
 zona con árboles/arbustos/fauna mezclados): ya no hay ninguna columna de
 elementos perfectamente alineados -- cada árbol, arbusto y animal tiene
 un desplazamiento lateral sutil y distinto, sin errores de consola.
+
+### Séptimo círculo, mismo día -- todas las plantas de una especie eran idénticas
+
+Diego, dos preguntas seguidas: si el jitter del círculo anterior le daba
+a la fauna "cierta animación de estar andando" (respuesta honesta: NO,
+es un sesgo lateral CONSTANTE por individuo -- no oscila, no hay ninguna
+animación de zancada real todavía; lo que sí contribuye a la sensación
+de movimiento natural es la combinación ya existente de easing + sondeo
+a 400ms + Y-sorting, pero eso es fluidez, no una animación de paso en
+sí), y si todos los assets de un mismo tipo tienen las mismas
+dimensiones -- "no todos los árboles crecen igual de grande".
+
+Verificado contra el propio modelo de datos antes de responder, no a
+ojo: SÍ, la segunda observación era exacta. `componentes/planta.py`
+declara `Planta.etapa` (0.0 a 1.0, crecimiento real, cae
+tasa_crecimiento_por_dia de la especie, YA expuesta por el DTO de
+`vista_web.py`) pero el visor solo la usaba para la OPACIDAD del
+sprite, nunca para el tamaño -- un brote recién plantado (etapa≈0) se
+veía exactamente del mismo tamaño GRANDE que un árbol centenario
+(etapa=1), solo más transparente. Comparado contra fauna: `fauna` SÍ
+tiene variación individual real en el motor
+(`DimensionesFisicas.altura_m`, sorteada al nacer con rango racial --
+mismo patrón "atributo con rango racial y sorteo individual" que ya
+documenta CLAUDE.md, y que el visor ya usa desde el círculo de
+pictogramas de fauna) -- pero `Planta` NO tiene ningún campo equivalente
+para tamaño máximo individual, solo `etapa` (crecimiento) y
+`masa_tronco_kg` (madera extraíble, fijada una vez, no relacionada con
+altura de copa). El motor simplemente no modela que dos robles maduros
+puedan alcanzar tamaños distintos.
+
+Dos fuentes de variación añadidas a `tamanoSpriteFlora`/
+`tamanoSpriteCobertura`, de naturaleza deliberadamente distinta y
+documentadas como tal en el propio código para no confundir dato real
+con relleno visual:
+1. **`factorCrecimiento(etapa)`** -- dato REAL del motor. Curva lineal
+   de 0.35 (recién brotada) a 1.0 (madura) sobre el tamaño ya calculado
+   por `huella_m2`. El propio 0.35 es PROVISIONAL (elección de
+   presentación razonada, el motor no expone ninguna curva de
+   crecimiento visual de la que derivarlo).
+2. **`factorJitterEscala(seedX, seedY)`** -- relleno puramente visual,
+   NO pretende representar ningún dato del motor (que no existe, ver
+   arriba). Mismo mecanismo que el jitter de posición del círculo
+   anterior: `hashDet` con sal propia (113), determinista por celda
+   (±15%) -- dos robles maduros en celdas distintas ya no son
+   pixel-perfect idénticos, sin inventar un atributo de motor que no
+   está ahí.
+
+Verificado en el visor real (Playwright, misma zona de comparación):
+variación de tamaño claramente visible entre pinos vecinos, donde antes
+todos medían exactamente lo mismo. Pendiente real, mismo alcance que el
+jitter de posición: el mosaico de cuadrantes sigue con tamaño fijo sin
+esta variación (caso ya minoritario tras el fix de badges). Pendiente
+real distinto, explícitamente sin resolver: la animación real de
+"zancada" al caminar que preguntó Diego -- no implementada, ofrecida
+pero no confirmada.

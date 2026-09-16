@@ -639,6 +639,22 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   jitter. Sin jitter, deliberadamente: el mosaico de cuadrantes (sprite
   ya confinado a un cuarto de celda) y el fallback de emoji/glifo de
   fauna sin sprite (centrado por flex, no por `left` absoluto).
+  **Añadido justo después, mismo día**: Diego preguntó si el jitter
+  animaba a la fauna al caminar (NO — es un sesgo lateral constante por
+  individuo, no oscila; ofrecido pero no implementado si lo quiere) y si
+  todos los assets de un tipo miden lo mismo — SÍ, verificado: un brote
+  recién plantado (`Planta.etapa≈0`, dato real ya expuesto por el DTO,
+  hasta entonces solo usado para opacidad) se veía del mismo tamaño
+  GRANDE que un árbol maduro. A diferencia de fauna (que sí sortea
+  `DimensionesFisicas.altura_m` real por individuo), `Planta` no modela
+  ninguna variación de tamaño máximo entre plantas maduras de la misma
+  especie. Añadidas dos fuentes de variación a
+  `tamanoSpriteFlora`/`tamanoSpriteCobertura`, documentadas por
+  separado para no confundir dato real con relleno: `factorCrecimiento`
+  (real, mapea `etapa` 0→1 a escala 0.35→1.0) y `factorJitterEscala`
+  (relleno visual puro, mismo `hashDet` con sal propia, ±15%
+  determinista por celda, porque el motor no modela variación de tamaño
+  máximo entre plantas maduras).
 - **Renombrado `BOSQUE_* -> SIMULACION_*` (2026-09-16)**: Diego, sobre la
   spec de abajo: "lo de que aparezca bosque en todos los comandos de
   test... deberíamos cambiarlo por simulación, que es lo que es, ya no
