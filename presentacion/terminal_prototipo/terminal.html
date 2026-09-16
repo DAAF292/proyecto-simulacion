@@ -145,6 +145,16 @@
     display: flex; align-items: center; justify-content: center;
     font-family: inherit; font-weight: normal; overflow: hidden;
   }
+  /* Badge de recurso en el suelo (2026-09-16, ver añadirBadges/itemsCelda)
+     -- esquina superior-derecha, pequeño y fijo, nunca compite por el
+     espacio del elemento principal de la celda (a diferencia del mosaico
+     de cuadrantes que sustituyo para este caso). */
+  .badge-recurso {
+    position: absolute; right: 1px;
+    font-family: inherit; font-weight: normal;
+    font-size: 11px; line-height: 1;
+    text-shadow: 0 0 2px #000, 0 0 2px #000;
+  }
   .btn-mapa {
     font-family: inherit;
     font-size: 11px;
@@ -612,15 +622,29 @@ function itemsCelda(c) {
     }
   }
 
+  // Recursos en el suelo -- BADGES, no items, cuando ya hay flora/
+  // construccion real en la celda (2026-09-16, hallazgo de Diego: "por
+  // que hay arboles en las celdas pequeñas"). Causa real medida antes de
+  // tocar nada: el 94% de las celdas con arbol tambien tienen madera
+  // caida (recurso propio del arbol) -- al entrar como item igual que el
+  // arbol, items.length pasaba a 2 y renderMapa() forzaba el mosaico de
+  // cuadrantes (CELDA*0.42 fijo) para AMBOS, reduciendo el arbol grande a
+  // una miniatura en la inmensa mayoria de los casos reales, no en el
+  // "caso raro" para el que se diseño el mosaico. Un palo/piedra caida es
+  // un detalle secundario -- no deberia competir en igualdad de espacio
+  // con el elemento principal de la celda. Si NO hay ningun item todavia
+  // (celda de flora/construccion vacia, solo el recurso), se mantiene
+  // como item normal a tamaño completo -- es lo unico que hay que ver.
   const recursos = c.recursos || {};
-  if ((recursos.piedra_suelta || 0) > 0) {
-    const g = CATALOGO_GLIFOS.recursos.piedra_suelta;
-    items.push({ ch: g.ch, color: g.color });
-  }
-  if ((recursos.madera || 0) > 0) {
-    const g = CATALOGO_GLIFOS.recursos.madera;
-    items.push({ ch: g.ch, color: g.color });
-  }
+  const badges = [];
+  const empujarRecurso = (cantidad, tipo) => {
+    if (cantidad <= 0) return;
+    const g = CATALOGO_GLIFOS.recursos[tipo];
+    if (items.length > 0) badges.push({ ch: g.ch, color: g.color });
+    else items.push({ ch: g.ch, color: g.color });
+  };
+  empujarRecurso(recursos.piedra_suelta || 0, 'piedra_suelta');
+  empujarRecurso(recursos.madera || 0, 'madera');
 
   if (items.length === 0) {
     // Terreno base desnudo: SIEMPRE imprime un glifo (nunca vacio) --
@@ -641,7 +665,7 @@ function itemsCelda(c) {
     }
   }
 
-  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa) };
+  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa), badges };
 }
 
 function celdaAPantalla(wx, wy, tam) {
@@ -786,13 +810,22 @@ const ASPECT_FLORA = {
   manzano: 607 / 700, roble: 702 / 783, pino: 475 / 742, cactus: 261 / 429,
   arbusto_espinoso: 585 / 495, arbusto_desertico: 579 / 470, arbusto_montano: 639 / 519, arbusto_artico: 639 / 519,
 };
+// FACTOR_TAMANO_ARBUSTO (2026-09-16, Diego: "los arbustos deberian ser
+// incluso mas pequeños") -- reduccion adicional SOLO para categoria
+// arbusto, no arbol: huella_m2 real ya los diferencia (1.0-2.2 frente a
+// 4.0-5.0), pero el resultado seguia leyendose grande. PROVISIONAL, sin
+// mas criterio que el propio pedido -- valor de partida, ajustable.
+const FACTOR_TAMANO_ARBUSTO = 0.72;
 function tamanoSpriteFlora(especie) {
   const huella = HUELLA_FLORA_M2[especie] || HUELLA_REFERENCIA_FLORA_M2;
   const ladoEquivalente = escalarPorRaiz(huella, HUELLA_REFERENCIA_FLORA_M2, SPRITE_FLORA_REFERENCIA, SPRITE_FLORA_MIN, SPRITE_FLORA_MAX, 0.5);
   // altura tal que ancho*altura (area real en pantalla) = ladoEquivalente^2,
   // independientemente del aspect ratio nativo del sprite.
   const aspect = ASPECT_FLORA[especie] || 1;
-  return ladoEquivalente / Math.sqrt(aspect);
+  let altura = ladoEquivalente / Math.sqrt(aspect);
+  const g = CATALOGO_GLIFOS.flora[especie];
+  if (g && g.categoria === 'arbusto') altura *= FACTOR_TAMANO_ARBUSTO;
+  return altura;
 }
 
 // Tamaño de sprite de cobertura (hierba/flor_silvestre/helecho, mismo dia)
@@ -818,6 +851,23 @@ function crearCeldaTxt(ch, color, cx, cy, fondo) {
   if (fondo) el.style.backgroundColor = fondo;
   el.style.left = cx + 'px'; el.style.top = cy + 'px';
   return el;
+}
+
+// Badges de recurso en el suelo (2026-09-16, ver itemsCelda -- por que
+// dejaron de ser items que competian por el mosaico de cuadrantes).
+// Esquina superior-derecha, apilados si hay mas de uno (piedra_suelta Y
+// madera a la vez, raro pero posible); tamaño pequeño fijo, nunca
+// desplaza ni reescala el elemento principal de la celda.
+function añadirBadges(el, badges) {
+  if (!badges || badges.length === 0) return;
+  badges.forEach((b, i) => {
+    const badge = document.createElement('div');
+    badge.className = 'badge-recurso';
+    badge.textContent = b.ch;
+    badge.style.color = b.color;
+    badge.style.top = (i * Math.round(CELDA * 0.32)) + 'px';
+    el.appendChild(badge);
+  });
 }
 
 // Construcciones con sprite real (2026-09-16, mismo criterio ya aplicado a
@@ -948,6 +998,7 @@ function renderMapa() {
         el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
       }
       el.style.zIndex = String((esConstruccionUnica ? 500 : (esFloraUnica || esCoberturaUnica) ? 400 : 0) + y);
+      añadirBadges(el, info.badges);
       capaEstatica.appendChild(el);
     }
   }

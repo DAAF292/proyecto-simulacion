@@ -1480,3 +1480,45 @@ sprite reducido dentro de un cuadrante compartido, `CELDA*0.42` fijo de
 altura) tiene el mismo problema de aspect ratio -- ahí el tamaño no
 escala por huella_m2 (es fijo para todas las especies en ese contexto),
 así que el efecto sería más leve, pero no se midió.
+
+### Cuarto fallo real, mismo día -- "por qué hay árboles en las celdas pequeñas"
+
+Diego, en el mismo mensaje que pidió arbustos más pequeños: "¿por qué
+hay árboles en las celdas pequeñas?". Verificado contra el propio
+`datos.json` antes de responder (no se opinó a ciegas): **94 de las 100
+celdas con árbol del mapa generado tenían también el recurso `madera`**
+(el propio árbol lo produce/deja caer en su misma celda -- dato real
+del motor, no un caso raro). `itemsCelda()` empujaba ese recurso como un
+`item` más, igual que el árbol -- con `items.length` en 2, `renderMapa()`
+elegía el mosaico de cuadrantes (`crearCeldaCuadrantes`, pensado
+explícitamente para "el caso raro" de compartir celda, según su propio
+comentario de diseño) y reducía AMBOS a `CELDA*0.42` de altura fija. El
+resultado real: el 94% de los árboles del mapa se veían como una
+miniatura diminuta junto a un palito de madera, no como el sprite
+grande recién calibrado -- la observación de Diego era literal y
+correcta, no una impresión.
+
+Fix: los recursos sueltos del suelo (`piedra_suelta`, `madera`) dejan de
+entrar en la lista de `items` que compiten por el mosaico cuando YA hay
+al menos un elemento real en la celda (flora o construcción) -- pasan a
+ser **badges**, un `<div>` pequeño (11px) superpuesto en la esquina
+superior-derecha del sprite principal, que se dibuja siempre a su
+tamaño completo. Si la celda no tiene nada más que el recurso (caso
+`items.length === 0`), se sigue mostrando como antes, a tamaño
+completo -- es lo único que hay que ver ahí. Mismo patrón que ya existía
+para cobertura+competidora (la cobertura tiñe el fondo en vez de
+competir por espacio), aplicado ahora también a los recursos sueltos.
+
+De paso, mismo commit, ajuste directo del pedido de Diego ("los
+arbustos deberían ser incluso más pequeños"): `FACTOR_TAMANO_ARBUSTO =
+0.72`, reducción adicional aplicada SOLO a `categoria === 'arbusto'`
+dentro de `tamanoSpriteFlora()`, sin tocar árbol -- huella_m2 real ya
+los diferencia (1.0-2.2 frente a 4.0-5.0) pero el resultado seguía
+leyéndose grande. PROVISIONAL, valor de partida sin más criterio que el
+propio pedido, ajustable si Diego pide más o menos.
+
+Verificado en el visor real (Playwright, misma ventana del mapa que el
+fallo anterior): el cambio es dramático -- donde antes solo 2 pinos se
+veían a tamaño completo (el resto, miniaturas en cuadrante), ahora
+prácticamente todo el bosque de pinos aparece grande y prominente, con
+los arbustos visiblemente más discretos en proporción.
