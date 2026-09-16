@@ -1305,3 +1305,80 @@ Diego sobre el mapeo fichero→especie (punto 1 arriba); decisión de
 diseño sobre cómo (o si) dar sprite a la categoría cobertura (punto 2);
 ninguna calibración visual del rango de tamaño de sprite de flora más
 allá de esta inspección puntual.
+
+### Corrección real del círculo anterior, mismo día -- limpieza y resolución
+
+Diego revisó el resultado y señaló dos fallos reales: "el roble no está
+bn entre las ramas" (huecos de fondo sin limpiar, visibles como manchas
+grises/blancas opacas) y "han perdido mucha calidad, no están
+respetando los tamaños que deberían tener". Verificado contra el propio
+archivo antes de tocar nada -- confirmó ambos:
+
+**Huecos sin limpiar (roble y otras)**: el recorte sin reescalar mostró
+dos manchas blancas OPACAS (no transparentes) entre ramas. Causa real:
+el flood-fill original solo sembraba desde el borde exterior de la
+imagen -- un hueco de fondo que queda COMPLETAMENTE encerrado por
+ramas/hojas (sin ningún camino de 4-vecindad hacia el exterior) nunca se
+alcanza, por diseño, sin importar cuánto se ajuste el umbral de color.
+Dos intentos automáticos se probaron y descartaron antes de dar con la
+causa real:
+1. Bajar el umbral de brillo de "candidata" (el tablero se oscurece por
+   sombra ambiental cerca del dibujo) -- ayudó parcialmente pero dejó
+   miles de píxeles residuales en las costuras antialiased del propio
+   tablero.
+2. Dilatar la máscara candidata +3px antes del flood-fill (para saltar
+   gaps finos de contorno) -- ayudó con costuras delgadas pero NO con
+   huecos genuinamente encerrados por ramas gruesas (seguían sin tocar
+   el borde ni dilatados).
+3. Detectar automáticamente si una isla interior es "tablero real" por
+   bimodalidad de brillo o por correlación de fase con la cuadrícula del
+   tablero (periodo real medido: 2048/40 = 51.2px) -- **descartado tras
+   casi producir un daño real**: las estadísticas de brillo de un hueco
+   de tablero sombreado y las de un highlight pictórico real resultaron
+   indistinguibles. Verificado directamente: dos "islas candidatas"
+   grandes en `flores.jpg` (9619 y 7574 px) que este criterio habría
+   limpiado como fondo eran en realidad los **pétalos blancos de una
+   margarita real** del propio dibujo -- si se hubiera aplicado la regla
+   automática sin verificar, se habría agujereado una flor completa.
+
+Solución real adoptada: **verificación visual manual, una vez por
+icono**, en vez de una heurística de color más agresiva. Para cada uno
+de los 10 iconos se inspeccionaron en detalle (recorte ampliado con
+overlay, no la miniatura del collage completo -- la miniatura sí
+confundió en un primer vistazo el resaltado de diagnóstico con la flor
+roja real ya presente en `flores.jpg`) las islas interiores más grandes
+antes de decidir. Resultado: en roble, arbustoSeco
+(`arbusto_desertico`), arbustoMontañaTundra, arbustoPraderaBosque
+(`arbusto_espinoso`), hierba y helecho, TODAS las islas candidatas
+caían en huecos reales entre ramas/hojas -- se limpian todas sin
+excepción. Solo `flores.jpg` (`flor_silvestre`) se queda con el
+criterio conservador original (solo lo conectado al borde exterior),
+por los dos pétalos reales confirmados -- puede seguir teniendo algún
+hueco pequeño sin limpiar entre el follaje (~1.3% de los píxeles totales
+en la verificación final, disperso y no perceptible como mancha), un
+compromiso consciente en vez de arriesgar agujerear una flor.
+
+**Pérdida de calidad**: el primer intento normalizaba TODAS las especies
+a la misma altura fija (200px) con un único resize LANCZOS desde el
+original de 2048px -- un factor de reducción de ~8-10x que difumina los
+contornos duros característicos del pixel-art, agravado por que el
+navegador vuelve a reescalar esa imagen ya borrosa una segunda vez
+(`image-rendering: pixelated` a un tamaño aún menor, CELDA×0.9–2.6 ≈
+29-83px). Corregido: la resolución de exportación ahora es
+PROPORCIONAL a la `huella_m2` real de cada especie (misma raíz cuadrada
+que ya usa `tamanoSpriteFlora` en tiempo de ejecución, referencia
+huella=1.0 → 350px de alto, escalando hasta ~700-780px para roble/
+manzano/pino) -- un solo downscale de mucha menor magnitud relativa
+desde el original, dejando que el propio navegador haga el último ajuste
+a tamaño de pantalla con `pixelated` sin partir de una imagen ya
+degradada. Verificado visualmente en el visor real (Playwright,
+zoom 3.11x) -- contornos nítidos, sin manchas residuales perceptibles.
+
+Pendiente real sin resolver todavía: el mapeo fichero→especie sigue sin
+confirmar -- Diego, en el mismo mensaje que señaló estos dos fallos,
+añadió "usa las que corresponda que ya tenían su nombre", una
+instrucción con más de una lectura posible (¿usar solo los ficheros con
+nombre 1:1 exacto, dejando sin sprite las especies que exigían
+interpretación? ¿conservar el nombre de fichero original del icono en
+vez de renombrarlo a la clave de especie?) que no se adivinó una tercera
+vez -- se preguntó explícitamente en vez de asumir de nuevo.
