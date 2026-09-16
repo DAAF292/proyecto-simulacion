@@ -511,7 +511,7 @@ def main() -> None:
     reloj = Reloj()
     bus_eventos = BusEventos()
     gestor = GestorEntidades()
-    persistencia = Persistencia(ruta_base / "datos" / "bosque.db")
+    persistencia = Persistencia(ruta_base / "datos" / "simulacion.db")
 
     ancho = int(config.get("mundo", {}).get("grid_ancho", 40))
     alto = int(config.get("mundo", {}).get("grid_alto", 40))
@@ -527,7 +527,7 @@ def main() -> None:
     # arranques: si la semilla guardada no coincide con la actual,
     # cargar_snapshot avisa por stderr en vez de fallar en silencio (ver
     # su propio docstring).
-    continuar_partida = os.environ.get("BOSQUE_CONTINUAR") == "1"
+    continuar_partida = os.environ.get("SIMULACION_CONTINUAR") == "1"
     partida_restaurada = False
     if continuar_partida:
         partida_restaurada = persistencia.cargar_snapshot(gestor, mundo, reloj, rng_juego, semilla, rng_reproduccion)
@@ -548,8 +548,8 @@ def main() -> None:
         persistencia_cfg.get("guardar_cada_dias", 5)
     )
 
-    modo_visual = os.environ.get("BOSQUE_MODO_VISUAL") == "1"
-    auto_ticks = int(os.environ.get("BOSQUE_AUTO_TICKS", "0"))
+    modo_visual = os.environ.get("SIMULACION_MODO_VISUAL") == "1"
+    auto_ticks = int(os.environ.get("SIMULACION_AUTO_TICKS", "0"))
     max_lineas_cronica = int(config.get("visual", {}).get("max_lineas_cronica", 200))
     cola_cronica: collections.deque[str] = collections.deque(maxlen=max_lineas_cronica)
 
@@ -607,9 +607,9 @@ def main() -> None:
             # Verificacion obligatoria contra el motor real (2026-09-06,
             # memoria espacial compartida): reportar cuantas transferencias
             # de memoria ocurrieron de verdad durante la tanda
-            # BOSQUE_AUTO_TICKS. Solo observacion, no cambia la simulacion.
+            # SIMULACION_AUTO_TICKS. Solo observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] memoria compartida: "
+                "[SIMULACION_AUTO_TICKS] memoria compartida: "
                 f"{sistemas['movimiento']._stats_memoria_compartida_transferencias} "
                 "transferencias"
             )
@@ -632,7 +632,7 @@ def main() -> None:
                     if (eid, otro_id) in rumor_terceros_nuevos:
                         rumor_nuevos_confirmados += 1
             print(
-                "[BOSQUE_AUTO_TICKS] rumor social: "
+                "[SIMULACION_AUTO_TICKS] rumor social: "
                 f"{rumores_propagados} rumores propagados, "
                 f"{len(rumor_terceros_nuevos)} opiniones sobre terceros creadas "
                 f"por rumor (receptor nunca las tenia), "
@@ -659,22 +659,22 @@ def main() -> None:
                         if (eid, otro_id) in sistemas["movimiento"]._stats_socializar_afinidad_pares:
                             pares_socializar_positivos += 1
             print(
-                "[BOSQUE_AUTO_TICKS] socializar elegidas: "
+                "[SIMULACION_AUTO_TICKS] socializar elegidas: "
                 f"{sistemas['decision']._stats_socializar_elegidas}"
             )
             # Verificacion obligatoria del requisito de manos libres
             # (2026-09-11): cuantas veces el gate bloqueo de verdad una
             # utilidad que habria sido positiva. Solo observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] gate de manos libres disparado: "
+                "[SIMULACION_AUTO_TICKS] gate de manos libres disparado: "
                 f"{sistemas['decision']._stats_gate_manos_libres_disparado} veces"
             )
             print(
-                "[BOSQUE_AUTO_TICKS] socializar contactos resueltos: "
+                "[SIMULACION_AUTO_TICKS] socializar contactos resueltos: "
                 f"{sistemas['movimiento']._stats_socializar_contacto}"
             )
             print(
-                "[BOSQUE_AUTO_TICKS] Relaciones vinculos dirigidos positivos: "
+                "[SIMULACION_AUTO_TICKS] Relaciones vinculos dirigidos positivos: "
                 f"{pares_positivos_totales} totales, "
                 f"{pares_socializar_positivos} atribuibles a SOCIALIZAR"
             )
@@ -688,11 +688,11 @@ def main() -> None:
             # objetivo central del informe original. Solo observacion, no
             # cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] sonido emitido: "
+                "[SIMULACION_AUTO_TICKS] sonido emitido: "
                 f"{nucleo_sonido.SONIDOS_EMITIDOS_TOTALES} sonidos en total"
             )
             print(
-                "[BOSQUE_AUTO_TICKS] amenaza por sonido: "
+                "[SIMULACION_AUTO_TICKS] amenaza por sonido: "
                 f"{nucleo_amenaza.AMENAZAS_POR_SONIDO} veces la amenaza "
                 "detectada fue especificamente por sonido"
             )
@@ -704,7 +704,7 @@ def main() -> None:
             # una presa real (caza), a una Necromasa comestible (carroneo) o a
             # nada (pista falsa). Solo observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] caza fallback por sonido: "
+                "[SIMULACION_AUTO_TICKS] caza fallback por sonido: "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_usos} usos, "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_caza} caza real, "
                 f"{sistemas['movimiento']._stats_sonido_caza_fallback_carrona} carroñeo real, "
@@ -718,7 +718,7 @@ def main() -> None:
             # que seguir derivo hacia el centro de su Manada. Solo
             # observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] cohesion de manada (fallback de caza): "
+                "[SIMULACION_AUTO_TICKS] cohesion de manada (fallback de caza): "
                 f"{sistemas['movimiento']._stats_manada_cohesion_fallback_caza} veces"
             )
             # Verificacion obligatoria de lealtad y liderazgo (2026-09-06,
@@ -730,11 +730,11 @@ def main() -> None:
             # final respecto a la formula anterior (dominancia+valentia sin
             # reputacion). Solo observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] lealtad diaria aplicada: "
+                "[SIMULACION_AUTO_TICKS] lealtad diaria aplicada: "
                 f"{sistemas['asentamiento']._stats_lealtad_aplicada} aplicaciones miembro->lider"
             )
             print(
-                "[BOSQUE_AUTO_TICKS] reputacion en liderazgo: "
+                "[SIMULACION_AUTO_TICKS] reputacion en liderazgo: "
                 f"{nucleo_asentamiento.STATS_REPUTACION_DESCALIFICADOS} candidatos dominantes "
                 "descalificados, "
                 f"{nucleo_asentamiento.STATS_DESEMPATE_REPUTACION_CAMBIO} desempates finales "
@@ -747,13 +747,13 @@ def main() -> None:
             # coordenada de madriguera que no tenian antes en su propia
             # memoria. Solo observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] manadas por especie (acumulado, dias con "
+                "[SIMULACION_AUTO_TICKS] manadas por especie (acumulado, dias con "
                 "al menos 1 manada sumados sobre toda la corrida, no un "
                 "snapshot del ultimo dia): "
                 f"{sistemas['manada']._stats_manadas_por_especie}"
             )
             print(
-                "[BOSQUE_AUTO_TICKS] madriguera compartida: "
+                "[SIMULACION_AUTO_TICKS] madriguera compartida: "
                 f"{sistemas['manada']._stats_madrigueras_sincronizadas} sincronizaciones, "
                 f"{len(sistemas['manada']._stats_madriguera_miembros_nuevos)} miembros con "
                 "sitio nuevo (no lo tenian antes)"
@@ -770,7 +770,7 @@ def main() -> None:
                 for mid in gestor.entidades_con(Madriguera)
             ]
             print(
-                "[BOSQUE_AUTO_TICKS] madrigueras fisicas: "
+                "[SIMULACION_AUTO_TICKS] madrigueras fisicas: "
                 f"{len(madrigueras_reales)} creadas, capacidades={madrigueras_reales}, "
                 f"{sistemas['manada']._stats_madriguera_excluidos_por_cupo} exclusiones "
                 "por cupo lleno (eventos acumulados)"
@@ -783,7 +783,7 @@ def main() -> None:
             # disparador es deliberadamente estrecho, medir con
             # honestidad. Solo observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] provisiones de alimento: "
+                "[SIMULACION_AUTO_TICKS] provisiones de alimento: "
                 f"{sistemas['recursos']._stats_provisiones_guardadas} veces guardado excedente, "
                 f"{sistemas['recursos']._stats_provisiones_consumidas} veces comido de la despensa"
             )
@@ -794,31 +794,31 @@ def main() -> None:
             # confianza ocurren de verdad en juego libre. Solo
             # observacion, no cambia la simulacion.
             print(
-                "[BOSQUE_AUTO_TICKS] robo: "
+                "[SIMULACION_AUTO_TICKS] robo: "
                 f"{sistemas['movimiento']._stats_robos_intentados} intentos, "
                 f"{sistemas['movimiento']._stats_robos_exitosos} exitosos"
             )
             # Verificacion obligatoria de robo de materiales/armas
             # (2026-09-11, extension mas alla de comida). Solo observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] robo de materiales: "
+                "[SIMULACION_AUTO_TICKS] robo de materiales: "
                 f"{sistemas['movimiento']._stats_robos_material_intentados} intentos, "
                 f"{sistemas['movimiento']._stats_robos_material_exitosos} exitosos"
             )
             print(
-                "[BOSQUE_AUTO_TICKS] robo de armas: "
+                "[SIMULACION_AUTO_TICKS] robo de armas: "
                 f"{sistemas['movimiento']._stats_robos_arma_intentados} intentos, "
                 f"{sistemas['movimiento']._stats_robos_arma_exitosos} exitosos"
             )
             print(
-                "[BOSQUE_AUTO_TICKS] compartir por confianza: "
+                "[SIMULACION_AUTO_TICKS] compartir por confianza: "
                 f"{sistemas['movimiento']._stats_compartir_confianza} veces"
             )
             # Verificacion obligatoria del decaimiento de afinidad
             # (2026-09-11): cuantos vinculos se purgaron por caer bajo el
             # umbral tras decaer. Solo observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] decaimiento de afinidad: "
+                "[SIMULACION_AUTO_TICKS] decaimiento de afinidad: "
                 f"{sistemas['descomposicion']._stats_vinculos_purgados_por_decaimiento} "
                 "vinculos purgados por decaimiento"
             )
@@ -838,7 +838,7 @@ def main() -> None:
                 if gestor.obtener_componente(cid, Construccion).tipo == "salon_comun"
                 and gestor.obtener_componente(cid, Construccion).completado_alguna_vez
             )
-            print(f"[BOSQUE_AUTO_TICKS] salones comunes completados: {salones_completados}")
+            print(f"[SIMULACION_AUTO_TICKS] salones comunes completados: {salones_completados}")
             # Verificacion obligatoria de cocinas comunes (2026-09-08, ver
             # docs/superpowers/specs/2026-09-08-cocinas-comunes-design.md).
             # Solo observacion.
@@ -847,10 +847,10 @@ def main() -> None:
                 if gestor.obtener_componente(cid, Construccion).tipo == "cocina"
                 and gestor.obtener_componente(cid, Construccion).completado_alguna_vez
             )
-            print(f"[BOSQUE_AUTO_TICKS] cocinas comunes completadas: {cocinas_completadas}")
-            print(f"[BOSQUE_AUTO_TICKS] muertes de gnomo por causa: {muertes_gnomo_por_causa}")
+            print(f"[SIMULACION_AUTO_TICKS] cocinas comunes completadas: {cocinas_completadas}")
+            print(f"[SIMULACION_AUTO_TICKS] muertes de gnomo por causa: {muertes_gnomo_por_causa}")
             print(
-                "[BOSQUE_AUTO_TICKS] cocinar: "
+                "[SIMULACION_AUTO_TICKS] cocinar: "
                 f"{sistemas['recursos']._stats_cocinar_resuelto} veces resuelto, "
                 f"{sistemas['recursos']._stats_muertes_intoxicacion} muertes por intoxicacion, "
                 f"{sistemas['recursos']._stats_alacena_consumida} alacena consumida"
@@ -864,28 +864,28 @@ def main() -> None:
                 vocacion_dominante(gestor.obtener_componente(eid, Vocacion))
                 for eid in gestor.entidades_con(Vocacion, Identidad)
             )
-            print(f"[BOSQUE_AUTO_TICKS] vocacion dominante (entre vivos): {dict(distribucion_vocacion)}")
+            print(f"[SIMULACION_AUTO_TICKS] vocacion dominante (entre vivos): {dict(distribucion_vocacion)}")
             # Verificacion obligatoria de fabricacion de herramientas
             # (2026-09-11, circulo 2 del arco "fabricacion y uso de
             # herramientas" -- ver docs/superpowers/specs/
             # 2026-09-11-fabricacion-herramientas-design.md). Solo
             # observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] herramientas fabricadas: "
+                "[SIMULACION_AUTO_TICKS] herramientas fabricadas: "
                 f"{sistemas['recursos']._stats_herramientas_fabricadas}"
             )
             # Verificacion obligatoria de "prioridad consciente" (2026-09-11,
             # ver nucleo/inventario.py:descartar_contenidos_para_liberar).
             # Solo observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] material descartado por prioridad: "
+                "[SIMULACION_AUTO_TICKS] material descartado por prioridad: "
                 f"{sistemas['recursos']._stats_material_descartado_por_prioridad_kg:.2f} kg"
             )
             # Verificacion obligatoria de "mineria real" (2026-09-12, ver
             # docs/superpowers/specs/2026-09-12-mineria-real-design.md).
             # Solo observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] picos fabricados: "
+                "[SIMULACION_AUTO_TICKS] picos fabricados: "
                 f"{sistemas['recursos']._stats_picos_fabricados}, "
                 "vetas bloqueadas sin pico: "
                 f"{sistemas['recursos']._stats_veta_bloqueada_sin_pico}"
@@ -894,7 +894,7 @@ def main() -> None:
             # docs/superpowers/specs/2026-09-14-tala-real-design.md). Solo
             # observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] arboles talados: "
+                "[SIMULACION_AUTO_TICKS] arboles talados: "
                 f"{sistemas['recursos']._stats_arboles_talados}, "
                 "arboles bloqueados sin hacha: "
                 f"{sistemas['recursos']._stats_arbol_bloqueado_sin_hacha}"
@@ -902,14 +902,14 @@ def main() -> None:
             # Verificacion obligatoria de "piedra exige pico" (2026-09-14,
             # ver CLAUDE.md). Solo observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] piedra (sustrato) bloqueada sin pico: "
+                "[SIMULACION_AUTO_TICKS] piedra (sustrato) bloqueada sin pico: "
                 f"{sistemas['recursos']._stats_piedra_sustrato_bloqueada_sin_pico}"
             )
             # Verificacion obligatoria de "mejora de vivienda" (2026-09-14,
             # Pieza D del arco "comodidad" -- ver CLAUDE.md). Solo
             # observacion.
             print(
-                "[BOSQUE_AUTO_TICKS] mejora de vivienda: CONSTRUIR elegido por "
+                "[SIMULACION_AUTO_TICKS] mejora de vivienda: CONSTRUIR elegido por "
                 f"mejora {sistemas['decision']._stats_construir_mejora_elegido} veces, "
                 f"{sistemas['recursos']._stats_mejora_refugio_sustituciones} "
                 "sustituciones reales"
@@ -932,7 +932,7 @@ def main() -> None:
                 default=0.0,
             )
             print(
-                "[BOSQUE_AUTO_TICKS] conocimiento colectivo: "
+                "[SIMULACION_AUTO_TICKS] conocimiento colectivo: "
                 f"{asentamientos_con_conocimiento} asentamientos con algo acumulado, "
                 f"nivel maximo alcanzado {nivel_maximo:.3f}"
             )
@@ -941,7 +941,7 @@ def main() -> None:
             # se ejerce de verdad en juego libre, no solo en tests
             # dirigidos.
             print(
-                "[BOSQUE_AUTO_TICKS] taller de artesano: "
+                "[SIMULACION_AUTO_TICKS] taller de artesano: "
                 f"{sistemas['recursos']._stats_muebles_fabricados} muebles fabricados, "
                 f"{sistemas['recursos']._stats_deposito_almacen_refugio} depositos "
                 "en almacen de refugio"
@@ -953,7 +953,7 @@ def main() -> None:
             # (al menos un comunal fuera del centro exacto), no solo en
             # tests dirigidos.
             print(
-                "[BOSQUE_AUTO_TICKS] colocacion comunal: "
+                "[SIMULACION_AUTO_TICKS] colocacion comunal: "
                 f"{sistemas['movimiento']._stats_comunal_creado_ancla} creados en el "
                 f"centro (ancla), {sistemas['movimiento']._stats_comunal_creado_satelite} "
                 "creados en celda vecina (satelite)"
@@ -965,7 +965,7 @@ def main() -> None:
         if servidor_web is not None:
             servidor_web.detener()
         # Guardado final incondicional: cubre tanto la interrupción manual
-        # (Ctrl+C) como el fin de una tanda BOSQUE_AUTO_TICKS -- sin este
+        # (Ctrl+C) como el fin de una tanda SIMULACION_AUTO_TICKS -- sin este
         # guardado, un autoguardado periódico que aún no llegó a su
         # cadencia dejaría la BD desactualizada respecto al último estado
         # real simulado.

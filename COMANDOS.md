@@ -35,7 +35,7 @@ cd "C:\Users\diego\Desktop\simulación mundo\bosque"
 python main.py
 ```
 
-Si ya existe una partida guardada en `datos/bosque.db`, la continúa donde se
+Si ya existe una partida guardada en `datos/simulacion.db`, la continúa donde se
 quedó (misma semilla, mismo estado del RNG). Si no existe, arranca una nueva.
 
 ## Modo automático (para pruebas largas, sin interacción)
@@ -44,7 +44,7 @@ Corre N ticks seguidos sin esperar a pulsar Enter. Pensado solo para
 verificar comportamiento, no es el modo de juego real.
 
 ```powershell
-$env:BOSQUE_AUTO_TICKS=500
+$env:SIMULACION_AUTO_TICKS=500
 python main.py
 ```
 
@@ -57,7 +57,7 @@ Borra la partida guardada. La próxima ejecución generará un mundo nuevo con
 la misma semilla por defecto (o la que se indique en `config/constantes.yaml`).
 
 ```powershell
-Remove-Item "datos\bosque.db"
+Remove-Item "datos\simulacion.db"
 python main.py
 ```
 

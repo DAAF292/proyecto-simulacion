@@ -54,7 +54,7 @@ from nucleo.percepcion import celda_percibida
 from nucleo.sonido import sonido_mas_cercano
 
 # Contador de observacion para la verificacion obligatoria contra
-# BOSQUE_AUTO_TICKS (spec 4a): cuantas veces la amenaza devuelta por
+# SIMULACION_AUTO_TICKS (spec 4a): cuantas veces la amenaza devuelta por
 # posicion_amenaza_mas_cercana fue ESPECIFICAMENTE por sonido (no por
 # criatura ni ambiental) -- evidencia directa de "deteccion sin linea de
 # vision". Solo observacion, ningun camino de juego lo lee -- mismo

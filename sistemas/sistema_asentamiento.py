@@ -77,7 +77,7 @@ class SistemaAsentamiento:
             self.config_asentamiento.get("probabilidad_nombre_tematico", 0.6)
         )
         self._indice_actual = None
-        # Observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b -- ver
+        # Observación para SIMULACION_AUTO_TICKS (2026-09-06, círculo 5b -- ver
         # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md):
         # cuántas aplicaciones reales de lealtad diaria miembro->líder se
         # escribieron durante la tanda. Solo observación, no cambia la
@@ -335,7 +335,7 @@ class SistemaAsentamiento:
         Devuelve True si la afinidad se escribió de verdad (el autor es
         consciente y tiene Relaciones), False si el gate de consciencia u
         otro motivo impidió la escritura -- solo se usa para los stats de
-        observación de BOSQUE_AUTO_TICKS; los llamadores de convivencia
+        observación de SIMULACION_AUTO_TICKS; los llamadores de convivencia
         ignoran el retorno."""
         cap_mental = gestor.obtener_componente(autor_id, CapacidadMental)
         if (

@@ -81,7 +81,7 @@ class SistemaMovimiento:
         # tests aislados sin pasar por ejecutar() primero.
         self._indice_actual = None
         # Contadores de actividad para la verificacion contra el motor real
-        # (BOSQUE_AUTO_TICKS) y los tests dirigidos: cuantas veces este
+        # (SIMULACION_AUTO_TICKS) y los tests dirigidos: cuantas veces este
         # sistema resolvio un roce social y cuantas un CRISIS_VIOLENTA con
         # contacto real (2026-09-06, conflicto verbal). Solo observacion,
         # ningun camino de decision los lee.
@@ -122,7 +122,7 @@ class SistemaMovimiento:
         # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
         # cuantas resoluciones de contacto a distancia 0 aplico esta pieza, y
         # que pares DIRIGIDOS (autor -> otro) recibieron afinidad positiva por
-        # ella -- para la verificacion obligatoria contra BOSQUE_AUTO_TICKS:
+        # ella -- para la verificacion obligatoria contra SIMULACION_AUTO_TICKS:
         # confirmar que Relaciones muestra ganancias positivas atribuibles a
         # SOCIALIZAR, distintas de amistad por convivencia / afinidad por
         # concepcion. Solo observacion, ningun camino de decision los lee.
@@ -133,7 +133,7 @@ class SistemaMovimiento:
         # cuantas veces el fallback de sonido dentro de _calcular_caza dirigio
         # el movimiento, y de esas cuantas apuntaban a una presa real (caza),
         # a una Necromasa comestible (carroña) o a nada (pista falsa) -- para
-        # la verificacion obligatoria contra BOSQUE_AUTO_TICKS. Solo
+        # la verificacion obligatoria contra SIMULACION_AUTO_TICKS. Solo
         # observacion, ningun camino de decision los lee.
         self._stats_sonido_caza_fallback_usos: int = 0
         self._stats_sonido_caza_fallback_caza: int = 0
@@ -146,7 +146,7 @@ class SistemaMovimiento:
         # veces un cazador sin presa valida propia se dejo llevar hacia el
         # centro de su Manada en vez de caer directo a sonido/paso
         # aleatorio -- para la verificacion obligatoria contra
-        # BOSQUE_AUTO_TICKS. Solo observacion, ningun camino de decision
+        # SIMULACION_AUTO_TICKS. Solo observacion, ningun camino de decision
         # lo lee.
         self._stats_manada_cohesion_fallback_caza: int = 0
         # Rumor social (2026-09-06, circulo 5a -- ver spec
@@ -156,7 +156,7 @@ class SistemaMovimiento:
         # y que pares (receptor, tercero) recibieron una opinion sobre un tercero
         # que el receptor NO tenia antes (evidencia de "opinion de segunda mano"
         # pura, nunca formada directamente) -- para la verificacion obligatoria
-        # contra BOSQUE_AUTO_TICKS. Solo observacion, ningun camino de decision
+        # contra SIMULACION_AUTO_TICKS. Solo observacion, ningun camino de decision
         # los lee.
         self._stats_rumores_propagados: int = 0
         self._stats_rumor_terceros_nuevos: set[tuple[int, int]] = set()
@@ -1671,7 +1671,7 @@ class SistemaMovimiento:
     ) -> str:
         """Clasifica que encontraria el cazador en la celda del sonido --
         solo observacion para la verificacion obligatoria contra
-        BOSQUE_AUTO_TICKS (spec 4b): "caza" si hay una presa valida (mismos
+        SIMULACION_AUTO_TICKS (spec 4b): "caza" si hay una presa valida (mismos
         filtros de peso y zona que _calcular_caza) dentro del radio de
         percepcion efectivo del destino, "carrona" si hay una Necromasa
         comestible dentro del radio, "nada" si no hay ninguna. Ningun camino

@@ -23,8 +23,8 @@ directamente en la sesión, no se suelta como encargo.
 
 ## Estado actual (verificado contra el código real antes de diseñar)
 
-- `main.py:main()` lee `BOSQUE_MODO_VISUAL`/`BOSQUE_AUTO_TICKS`/
-  `BOSQUE_CONTINUAR` **una sola vez al arrancar** el proceso. No existe
+- `main.py:main()` lee `SIMULACION_MODO_VISUAL`/`SIMULACION_AUTO_TICKS`/
+  `SIMULACION_CONTINUAR` **una sola vez al arrancar** el proceso. No existe
   ningún mecanismo para pausar, acelerar ni finalizar sin matar el
   proceso (Ctrl+C, que además solo funciona en local).
 - La semilla es siempre `config.get("semilla_por_defecto", 42)` -- fija,
@@ -91,9 +91,9 @@ a funciones nombradas):
 
 `main()` sigue exactamente igual en comportamiento observable: llama a
 estas dos funciones donde antes tenía el código inline, conserva su
-propio `while True` con `auto_ticks`/`BOSQUE_MODO_VISUAL` y todo el
+propio `while True` con `auto_ticks`/`SIMULACION_MODO_VISUAL` y todo el
 bloque de estadísticas de cierre intacto. **Los 658 tests actuales y
-cualquier harness de calibración (`BOSQUE_AUTO_TICKS`) deben seguir
+cualquier harness de calibración (`SIMULACION_AUTO_TICKS`) deben seguir
 pasando sin cambios** -- es la condición de aceptación de este paso.
 
 Nueva función, exclusiva del modo controlado:
@@ -224,7 +224,7 @@ construir ambos objetos, para no invertir la dependencia).
 | POST | `/partida/finalizar` | (vacío) | `{"ok": true}` | Idempotente: finalizar sin partida activa responde `{"ok": true}` igualmente (no es un error querer asegurarse de que no hay nada corriendo) |
 
 Si `servidor_ref.gestor_partidas is None` (caso: el servidor lo arrancó
-`main.py` en modo `BOSQUE_MODO_VISUAL=1` de toda la vida, no el nuevo
+`main.py` en modo `SIMULACION_MODO_VISUAL=1` de toda la vida, no el nuevo
 `servidor.py`) -> **501 Not Implemented** para cualquier ruta
 `/partida/*`. Así el modo CLI de debug local sigue funcionando exactamente
 igual que hoy, sin saber nada de control remoto ni verse afectado por
@@ -328,14 +328,14 @@ es el nuevo entrypoint para el caso de uso remoto de Diego.
   aislamiento de sesiones ni multi-usuario -- exactamente lo que Diego
   pidió para "de momento".
 - **Sin histórico de partidas anteriores.** Cada "nueva partida" corre
-  sobre `datos/bosque.db` sin archivar la anterior -- mismo
-  comportamiento que ya tiene `main()` sin `BOSQUE_CONTINUAR` hoy (mundo
+  sobre `datos/simulacion.db` sin archivar la anterior -- mismo
+  comportamiento que ya tiene `main()` sin `SIMULACION_CONTINUAR` hoy (mundo
   fresco cada vez, la BD se sobreescribe en el primer autoguardado). No
   se resuelve un mecanismo de guardado múltiple en este círculo.
 - **Sin reanudar una partida finalizada.** "Finalizar" siempre implica
   que la siguiente partida es nueva (semilla nueva o indicada), nunca
   una continuación de snapshot -- si se quiere retomar la última partida
-  guardada, seguiría siendo `BOSQUE_CONTINUAR=1` por el camino CLI
+  guardada, seguiría siendo `SIMULACION_CONTINUAR=1` por el camino CLI
   (`main.py`), no por el camino web (fuera de alcance salvo que Diego lo
   pida explícitamente después).
 - **Límites de velocidad (`[0.25, 8.0]`) sin calibrar** contra coste real

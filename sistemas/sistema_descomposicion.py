@@ -45,7 +45,7 @@ class SistemaDescomposicion:
         self.config = config
         self.rng = rng
         self._cachear_configuracion()
-        # Observacion para BOSQUE_AUTO_TICKS (2026-09-11, decaimiento de
+        # Observacion para SIMULACION_AUTO_TICKS (2026-09-11, decaimiento de
         # afinidad): cuantos vinculos se purgaron por caer bajo el
         # umbral. Solo observacion, ningun camino de juego lo lee.
         self._stats_vinculos_purgados_por_decaimiento: int = 0

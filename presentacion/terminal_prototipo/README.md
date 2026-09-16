@@ -23,7 +23,7 @@ categoría nueva es una entrada en un catálogo, no un recorte de sprite.
 Servido por el mismo servidor que la simulación real:
 
 ```
-BOSQUE_MODO_VISUAL=1 python main.py
+SIMULACION_MODO_VISUAL=1 python main.py
 # abrir http://localhost:8765/  (o el puerto de config/visual.yaml)
 ```
 
