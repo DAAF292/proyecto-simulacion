@@ -59,6 +59,15 @@ class Especie(Enum):
     # Renombrada de "cabra_montes" a "cabra_montesa" el 2026-09-10 (ver
     # CLAUDE.md) -- mismo individuo, solo corrige el identificador.
     CABRA_MONTESA = "cabra_montesa"
+    # ZORRO: mesodepredador de conejo/ardilla, ver docs/superpowers/specs/
+    # 2026-09-14-especie-zorro-design.md. Peso [5,9]kg deliberadamente
+    # fiel al zorro real -- caza ardilla siempre (ratio de peso >8x) pero
+    # conejo solo en una fraccion de individuos, control real pero
+    # PARCIAL, no garantizado (decision explicita de Diego, mismo patron
+    # ya aceptado con lobo/cabra_montesa). Nace en bosque Y pradera a la
+    # vez -- generalista real, sin manada (sociabilidad baja, cazador
+    # territorial en solitario).
+    ZORRO = "zorro"
 
 
 @dataclass

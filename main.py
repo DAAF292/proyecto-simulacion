@@ -32,6 +32,7 @@ from componentes.relaciones import Relaciones
 from componentes.vocacion import Vocacion
 from nucleo.bioma import TipoTerreno
 from nucleo.entidad import GestorEntidades, crear_criatura, crear_planta
+from nucleo.flora import masa_tronco_inicial_kg
 from nucleo.eventos import BusEventos
 from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.mundo import Mundo
@@ -197,6 +198,16 @@ def sembrar_poblacion_inicial(
             poblacion_cfg.get("cabras_montesas_iniciales", 8),
             celdas_montana,
         ),
+        # ZORRO (2026-09-14, ver docs/superpowers/specs/
+        # 2026-09-14-especie-zorro-design.md): generalista real, nace en
+        # bosque Y pradera a la vez -- pool combinado, sin forzar reparto
+        # 50/50 entre biomas, el sorteo decide (mismo criterio que el
+        # resto de esta lista).
+        (
+            Especie.ZORRO,
+            poblacion_cfg.get("zorros_iniciales", 8),
+            candidatas_bosque + celdas_pradera,
+        ),
     ]
 
     # Edad inicial variable de la población fundadora (ver
@@ -361,7 +372,10 @@ def sembrar_flora_inicial(
         n_semillas = max(1, round(len(celdas) * fraccion))
         elegidas = rng_juego.sample(celdas, min(n_semillas, len(celdas)))
         for pos_x, pos_y in elegidas:
-            crear_planta(gestor, especie_key, pos_x, pos_y, etapa=1.0)
+            crear_planta(
+                gestor, especie_key, pos_x, pos_y, etapa=1.0,
+                masa_tronco_kg=masa_tronco_inicial_kg(especie_cfg),
+            )
 
     # Pista COMPETIDORA (pieza 3, 2026-09-03 -- cupo de espacio compartido
     # por celda): a diferencia de la pista no-competidora, la fuente de
@@ -405,7 +419,10 @@ def sembrar_flora_inicial(
         n_semillas = max(1, round(len(celdas) * fraccion))
         elegidas = rng_juego.sample(celdas, min(n_semillas, len(celdas)))
         for pos_x, pos_y in elegidas:
-            crear_planta(gestor, especie_key, pos_x, pos_y, etapa=1.0)
+            crear_planta(
+                gestor, especie_key, pos_x, pos_y, etapa=1.0,
+                masa_tronco_kg=masa_tronco_inicial_kg(especie_cfg),
+            )
 
 
 def ejecutar_tick(
@@ -863,6 +880,83 @@ def main() -> None:
             print(
                 "[BOSQUE_AUTO_TICKS] material descartado por prioridad: "
                 f"{sistemas['recursos']._stats_material_descartado_por_prioridad_kg:.2f} kg"
+            )
+            # Verificacion obligatoria de "mineria real" (2026-09-12, ver
+            # docs/superpowers/specs/2026-09-12-mineria-real-design.md).
+            # Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] picos fabricados: "
+                f"{sistemas['recursos']._stats_picos_fabricados}, "
+                "vetas bloqueadas sin pico: "
+                f"{sistemas['recursos']._stats_veta_bloqueada_sin_pico}"
+            )
+            # Verificacion obligatoria de "tala real" (2026-09-14, ver
+            # docs/superpowers/specs/2026-09-14-tala-real-design.md). Solo
+            # observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] arboles talados: "
+                f"{sistemas['recursos']._stats_arboles_talados}, "
+                "arboles bloqueados sin hacha: "
+                f"{sistemas['recursos']._stats_arbol_bloqueado_sin_hacha}"
+            )
+            # Verificacion obligatoria de "piedra exige pico" (2026-09-14,
+            # ver CLAUDE.md). Solo observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] piedra (sustrato) bloqueada sin pico: "
+                f"{sistemas['recursos']._stats_piedra_sustrato_bloqueada_sin_pico}"
+            )
+            # Verificacion obligatoria de "mejora de vivienda" (2026-09-14,
+            # Pieza D del arco "comodidad" -- ver CLAUDE.md). Solo
+            # observacion.
+            print(
+                "[BOSQUE_AUTO_TICKS] mejora de vivienda: CONSTRUIR elegido por "
+                f"mejora {sistemas['decision']._stats_construir_mejora_elegido} veces, "
+                f"{sistemas['recursos']._stats_mejora_refugio_sustituciones} "
+                "sustituciones reales"
+            )
+            # Verificacion obligatoria de "conocimiento colectivo
+            # transmisible" (2026-09-15, ver CLAUDE.md). Solo
+            # observacion: cuantos asentamientos acumularon algo, y el
+            # nivel [0,1] mas alto alcanzado en cualquier cubeta.
+            from nucleo.conocimiento import nivel_conocimiento as _nivel_conocimiento
+            escala_conoc = sistemas["recursos"].escala_saturacion_conocimiento
+            asentamientos_con_conocimiento = sum(
+                1 for c in mundo.asentamiento_conocimiento.values() if c
+            )
+            nivel_maximo = max(
+                (
+                    _nivel_conocimiento(c, cubeta, escala_conoc)
+                    for c in mundo.asentamiento_conocimiento.values()
+                    for cubeta in c
+                ),
+                default=0.0,
+            )
+            print(
+                "[BOSQUE_AUTO_TICKS] conocimiento colectivo: "
+                f"{asentamientos_con_conocimiento} asentamientos con algo acumulado, "
+                f"nivel maximo alcanzado {nivel_maximo:.3f}"
+            )
+            # Verificacion obligatoria de "taller de artesano" (2026-09-16,
+            # ver CLAUDE.md). Solo observacion: confirma que el mecanismo
+            # se ejerce de verdad en juego libre, no solo en tests
+            # dirigidos.
+            print(
+                "[BOSQUE_AUTO_TICKS] taller de artesano: "
+                f"{sistemas['recursos']._stats_muebles_fabricados} muebles fabricados, "
+                f"{sistemas['recursos']._stats_deposito_almacen_refugio} depositos "
+                "en almacen de refugio"
+            )
+            # Verificacion obligatoria de "pertenencia explicita +
+            # colocacion satelite + necesidad diferenciada" (2026-09-16,
+            # ver CLAUDE.md). Solo observacion: confirma que la
+            # colocacion satelite se ejerce de verdad en juego libre
+            # (al menos un comunal fuera del centro exacto), no solo en
+            # tests dirigidos.
+            print(
+                "[BOSQUE_AUTO_TICKS] colocacion comunal: "
+                f"{sistemas['movimiento']._stats_comunal_creado_ancla} creados en el "
+                f"centro (ancla), {sistemas['movimiento']._stats_comunal_creado_satelite} "
+                "creados en celda vecina (satelite)"
             )
 
     except KeyboardInterrupt:

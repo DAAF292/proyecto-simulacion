@@ -72,7 +72,12 @@ from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, procesar_deceso
 from nucleo.eventos import BusEventos
 from nucleo.indice_espacial import construir_indice_espacial
-from nucleo.construccion import hay_construccion_de_tipo_en
+from nucleo.construccion import (
+    calidad_media_construccion,
+    construccion_propia,
+    hay_construccion_de_tipo_en,
+)
+from componentes.construccion import Construccion
 from nucleo.fuego import fogata_en, hay_refugio_en
 from nucleo.madriguera import madriguera_en
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
@@ -119,6 +124,13 @@ class SistemaNecesidades:
         self.tasa_deriva_termica: float = float(
             self.defecto.get("tasa_deriva_confort_termico", 0.03)
         )
+        # Necesidades.comodidad (2026-09-14, Pieza C del arco "comodidad"
+        # -- ver CLAUDE.md): mismo patron de deriva hacia un objetivo que
+        # confort_termico, ver el bloque 4b en ejecutar().
+        self.tasa_deriva_comodidad: float = float(
+            self.defecto.get("tasa_deriva_comodidad", 0.02)
+        )
+        self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
         # Refugio/Fogata como fuentes de calor (ver nucleo/fuego.py y
         # config/fisiologia.yaml -- suman al objetivo ambiental, no lo
         # sustituyen).
@@ -461,6 +473,36 @@ class SistemaNecesidades:
                 nec.confort_termico = max(
                     obj_termico, nec.confort_termico - self.tasa_deriva_termica
                 )
+
+            # 4b. Deriva de Comodidad (2026-09-14, Pieza C del arco
+            # "comodidad" -- ver CLAUDE.md). Solo CONSCIENTE: fauna nunca
+            # construye Construccion tipo="refugio" con propietario_id
+            # propio, así que su objetivo sería siempre 0.0 -- gatear
+            # evita un escaneo de construcciones por individuo sin
+            # necesidad real. Sin refugio propio completado_alguna_vez,
+            # el objetivo es 0.0 -- sin nada construido, no hay
+            # comodidad que sentir. Sin ningún consumidor todavía (ni
+            # utilidad, ni mortalidad) -- este círculo solo hace que el
+            # valor derive correctamente, la Pieza D es quien lo leerá.
+            if cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia:
+                obj_comodidad = 0.0
+                cid_refugio_propio = construccion_propia(
+                    gestor, eid, "refugio", indice=self._indice_actual
+                )
+                if cid_refugio_propio is not None:
+                    refugio_propio = gestor.obtener_componente(cid_refugio_propio, Construccion)
+                    if refugio_propio is not None and refugio_propio.completado_alguna_vez:
+                        obj_comodidad = calidad_media_construccion(
+                            refugio_propio.materiales, self.catalogo_materiales
+                        )
+                if nec.comodidad < obj_comodidad:
+                    nec.comodidad = min(
+                        obj_comodidad, nec.comodidad + self.tasa_deriva_comodidad
+                    )
+                elif nec.comodidad > obj_comodidad:
+                    nec.comodidad = max(
+                        obj_comodidad, nec.comodidad - self.tasa_deriva_comodidad
+                    )
 
             # 5. Seguridad: drena si hay amenaza percibida, se recupera si
             #    no (ver DRENAJE REAL DE SEGURIDAD POR AMENAZA en el

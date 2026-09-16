@@ -80,7 +80,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.37-fase0"
+VERSION_ESQUEMA = "0.41-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -251,7 +251,14 @@ class Persistencia:
                     -- criterio que agarre/semillas/relaciones -- perderlos
                     -- al recargar borraria la unica observabilidad real de
                     -- este circulo.
-                    vocacion TEXT
+                    vocacion TEXT,
+                    -- comodidad (2026-09-14, Necesidades.comodidad, Pieza C
+                    -- del arco "comodidad" -- ver CLAUDE.md): AL FINAL de
+                    -- la tabla a proposito, para no renumerar los indices
+                    -- posicionales fila[N] ya usados por el resto de este
+                    -- modulo al cargar -- un campo nuevo intercalado habria
+                    -- desplazado docenas de indices sin necesidad real.
+                    comodidad REAL NOT NULL DEFAULT 0.0
                 )
                 """
             )
@@ -265,7 +272,8 @@ class Persistencia:
                     y INTEGER NOT NULL,
                     especie TEXT NOT NULL,
                     etapa REAL NOT NULL,
-                    zona_idx INTEGER NOT NULL DEFAULT 0
+                    zona_idx INTEGER NOT NULL DEFAULT 0,
+                    masa_tronco_kg REAL NOT NULL DEFAULT 0.0
                 )
                 """
             )
@@ -303,7 +311,9 @@ class Persistencia:
                     progreso REAL NOT NULL,
                     completado_alguna_vez BOOLEAN NOT NULL,
                     zona_idx INTEGER NOT NULL DEFAULT 0,
-                    provisiones TEXT NOT NULL DEFAULT '{}'
+                    provisiones TEXT NOT NULL DEFAULT '{}',
+                    almacen TEXT NOT NULL DEFAULT '{}',
+                    asentamiento_id INTEGER
                 )
                 """
             )
@@ -488,6 +498,41 @@ class Persistencia:
             for tick, tipo, severidad, eid, datos in filas
         ]
 
+    def cronica_de_asentamiento(self, asentamiento_id: int) -> list[Evento]:
+        """Crónica de UN asentamiento (2026-09-15, ver docs/superpowers/
+        specs/2026-09-15-nombre-cronica-asentamiento-design.md) -- mismo
+        molde que biografia_de, pero `cronica_eventos` no tiene columna
+        `asentamiento_id` (evita bump de esquema): filtra en Python
+        sobre `datos["asentamiento_id"]`, poblado solo en los eventos
+        inherentemente comunitarios (AsentamientoFundado,
+        RefugioConstruido/AlmacenConstruido) -- no es hot path, se
+        consulta bajo demanda."""
+        with self._conectar() as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                SELECT tick, tipo, severidad, entidad_id, datos
+                FROM cronica_eventos
+                ORDER BY tick, id
+                """
+            )
+            filas = cur.fetchall()
+        eventos = []
+        for tick, tipo, severidad, eid, datos in filas:
+            datos_dict = json.loads(datos) if datos else {}
+            if datos_dict.get("asentamiento_id") != asentamiento_id:
+                continue
+            eventos.append(
+                Evento(
+                    tipo=tipo,
+                    severidad=Severidad(severidad),
+                    tick=tick,
+                    entidad_id=eid,
+                    datos=datos_dict,
+                )
+            )
+        return eventos
+
     def guardar_snapshot(
         self,
         gestor: GestorEntidades,
@@ -605,6 +650,7 @@ class Persistencia:
                                     "conteo_cocinero": vocacion.conteo_cocinero,
                                 }
                             ) if vocacion else None,
+                            nec.comodidad,
                         )
                     )
             cur.executemany(
@@ -612,7 +658,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -626,9 +672,12 @@ class Persistencia:
                 pos_p = gestor.obtener_componente(pid, Posicion)
                 if planta and pos_p:
                     filas_flora.append(
-                        (pid, pos_p.x, pos_p.y, planta.especie, planta.etapa, pos_p.zona_idx)
+                        (
+                            pid, pos_p.x, pos_p.y, planta.especie, planta.etapa, pos_p.zona_idx,
+                            planta.masa_tronco_kg,
+                        )
                     )
-            cur.executemany("INSERT INTO plantas_estado VALUES (?, ?, ?, ?, ?, ?)", filas_flora)
+            cur.executemany("INSERT INTO plantas_estado VALUES (?, ?, ?, ?, ?, ?, ?)", filas_flora)
 
             # C. Necromasa
             cur.execute("DELETE FROM necromasa_estado")
@@ -670,10 +719,12 @@ class Persistencia:
                             con_comp.completado_alguna_vez,
                             pos_c.zona_idx,
                             json.dumps(con_comp.provisiones),
+                            json.dumps(con_comp.almacen),
+                            con_comp.asentamiento_id,
                         )
                     )
             cur.executemany(
-                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
+                "INSERT INTO construccion_estado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", filas_construccion
             )
 
             # C3. Fogatas (ver componentes/fogata.py)
@@ -740,6 +791,49 @@ class Persistencia:
                 (pickle.dumps(rng_reproduccion.getstate()),),
             )
 
+            # Identidad persistente de asentamiento (2026-09-15, ver
+            # nucleo/asentamiento.py:resolver_identidades_persistentes) --
+            # la única memoria real de Mundo.asentamientos entre días,
+            # reutiliza configuracion_ejecucion (clave/valor genérica, sin
+            # tabla nueva) en vez de pickle -- son solo ids de entidad.
+            registro_json = json.dumps(
+                {str(k): sorted(v) for k, v in mundo.asentamiento_registro_identidad.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_registro_identidad', ?)",
+                (registro_json,),
+            )
+            tick_fundacion_json = json.dumps(
+                {str(k): v for k, v in mundo.asentamiento_tick_fundacion.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_tick_fundacion', ?)",
+                (tick_fundacion_json,),
+            )
+
+            # Conocimiento colectivo transmisible (2026-09-15, ver
+            # nucleo/conocimiento.py) -- sobrevive a la muerte de
+            # cualquier miembro, mismo criterio de persistencia que el
+            # registro de identidad de arriba.
+            conocimiento_json = json.dumps(
+                {str(k): v for k, v in mundo.asentamiento_conocimiento.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_conocimiento', ?)",
+                (conocimiento_json,),
+            )
+
+            # Nombre propio de asentamiento (2026-09-15, ver
+            # nucleo/asentamiento.py:generar_nombre) -- sorteado una
+            # sola vez al fundarse, mismo criterio de persistencia.
+            nombre_json = json.dumps(
+                {str(k): v for k, v in mundo.asentamiento_nombre.items()}
+            )
+            cur.execute(
+                "REPLACE INTO configuracion_ejecucion VALUES ('asentamiento_nombre', ?)",
+                (nombre_json,),
+            )
+
             con.commit()
 
     def cargar_snapshot(
@@ -803,6 +897,50 @@ class Persistencia:
             if fila_rng_reproduccion:
                 rng_reproduccion.setstate(pickle.loads(fila_rng_reproduccion[0]))
 
+            # Identidad persistente de asentamiento (2026-09-15) -- una
+            # partida guardada antes de esta pieza simplemente no tiene
+            # estas claves, `mundo.asentamiento_registro_identidad`/
+            # `asentamiento_tick_fundacion` quedan vacíos (comportamiento
+            # idéntico a un mundo recién creado, ningún crash).
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_registro_identidad'"
+            )
+            fila_registro = cur.fetchone()
+            if fila_registro:
+                mundo.asentamiento_registro_identidad = {
+                    int(k): frozenset(v) for k, v in json.loads(fila_registro[0]).items()
+                }
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_tick_fundacion'"
+            )
+            fila_tick_fundacion = cur.fetchone()
+            if fila_tick_fundacion:
+                mundo.asentamiento_tick_fundacion = {
+                    int(k): v for k, v in json.loads(fila_tick_fundacion[0]).items()
+                }
+
+            # Conocimiento colectivo transmisible (2026-09-15) -- misma
+            # tolerancia a ausencia que las dos claves de arriba.
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_conocimiento'"
+            )
+            fila_conocimiento = cur.fetchone()
+            if fila_conocimiento:
+                mundo.asentamiento_conocimiento = {
+                    int(k): v for k, v in json.loads(fila_conocimiento[0]).items()
+                }
+
+            # Nombre propio de asentamiento (2026-09-15) -- misma
+            # tolerancia a ausencia.
+            cur.execute(
+                "SELECT valor FROM configuracion_ejecucion WHERE clave = 'asentamiento_nombre'"
+            )
+            fila_nombre = cur.fetchone()
+            if fila_nombre:
+                mundo.asentamiento_nombre = {
+                    int(k): v for k, v in json.loads(fila_nombre[0]).items()
+                }
+
             # Limpiar gestor en memoria
             for eid in list(gestor.entidades_con(Posicion)):
                 gestor.eliminar_entidad(eid)
@@ -861,7 +999,10 @@ class Persistencia:
             # añadió después de semillas, como fila[50], y desplaza en
             # +1 esos índices otra vez más (fila[51]..fila[55]); vocacion
             # (2026-09-11) se añadió después de relaciones, como fila[51],
-            # y desplaza en +1 esos índices otra vez más (fila[52]..fila[56]).
+            # y desplaza en +1 esos índices otra vez más (fila[52]..fila[56]);
+            # comodidad (2026-09-14, Pieza C del arco "comodidad") se
+            # añadió DESPUÉS de vocacion, como fila[52], y desplaza en +1
+            # esos índices una última vez (fila[53]..fila[57]).
             # La columna inventario (fila[46]) guarda un JSON único con
             # {"contenidos": ..., "objetos": ...} desde armas primitivas v2
             # (2026-09-03) -- ver carga de Inventario más abajo. Ninguno
@@ -888,6 +1029,7 @@ class Persistencia:
                         oxigenacion=fila[8],
                         confort_termico=fila[9],
                         impulso_reproductivo=fila[10],
+                        comodidad=fila[52],
                     ),
                 )
                 dims = DimensionesFisicas(
@@ -1005,19 +1147,25 @@ class Persistencia:
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[52]),
-                        nombre=fila[53],
-                        tick_nacimiento=fila[54],
-                        id_madre=fila[55],
-                        id_padre=fila[56],
+                        especie=Especie(fila[53]),
+                        nombre=fila[54],
+                        tick_nacimiento=fila[55],
+                        id_madre=fila[56],
+                        id_padre=fila[57],
                     ),
                 )
 
             # 3. Cargar Flora
-            cur.execute("SELECT entidad_id, x, y, especie, etapa, zona_idx FROM plantas_estado")
-            for pid, px, py, esp, etapa, zidx in cur.fetchall():
+            cur.execute(
+                "SELECT entidad_id, x, y, especie, etapa, zona_idx, masa_tronco_kg "
+                "FROM plantas_estado"
+            )
+            for pid, px, py, esp, etapa, zidx, masa_tronco in cur.fetchall():
                 gestor.anadir_componente(pid, Posicion(x=px, y=py, zona_idx=zidx))
-                gestor.anadir_componente(pid, Planta(especie=esp, etapa=float(etapa)))
+                gestor.anadir_componente(
+                    pid,
+                    Planta(especie=esp, etapa=float(etapa), masa_tronco_kg=float(masa_tronco)),
+                )
 
             # 4. Cargar Necromasa
             cur.execute(
@@ -1039,11 +1187,12 @@ class Persistencia:
             # 4b. Cargar Construcciones
             cur.execute(
                 "SELECT entidad_id, x, y, tipo, materiales, propietario_id, progreso, "
-                "completado_alguna_vez, zona_idx, provisiones FROM construccion_estado"
+                "completado_alguna_vez, zona_idx, provisiones, almacen, asentamiento_id "
+                "FROM construccion_estado"
             )
             for (
                 coid, cx, cy, tipo, mats_json, propietario_id, progreso, completado, zidx,
-                provisiones_json,
+                provisiones_json, almacen_json, asentamiento_id,
             ) in cur.fetchall():
                 gestor.anadir_componente(coid, Posicion(x=cx, y=cy, zona_idx=zidx))
                 gestor.anadir_componente(
@@ -1055,6 +1204,8 @@ class Persistencia:
                         progreso=float(progreso),
                         completado_alguna_vez=bool(completado),
                         provisiones=json.loads(provisiones_json),
+                        almacen=json.loads(almacen_json) if almacen_json else {},
+                        asentamiento_id=asentamiento_id,
                     ),
                 )
 

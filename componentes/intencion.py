@@ -82,7 +82,7 @@ class Accion(Enum):
     # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
     # accion nueva e INDEPENDIENTE del sesgo gregario de DEAMBULAR (que se
     # queda exactamente igual). Compite por el tiempo de ocio cuando ninguna
-    # necesidad fisica esta bajo decision.umbral_atencion_pareja; utilidad
+    # necesidad fisica esta bajo decision.umbral_necesidades_superiores; utilidad
     # modulada por Temperamento.sociabilidad/curiosidad (primer consumidor
     # real de curiosidad). Exclusiva de conscientes
     # (consciencia >= decision.umbral_consciencia_agencia). Busca a
@@ -128,6 +128,23 @@ class Intencion:
     # RECOLECTAR de este tick, no siempre que haya hueco en Agarre. NO
     # se persiste -- se recalcula cada tick.
     recolectar_motivo_fuego: bool = False
+    # Transitorio por tick (2026-09-12, "minería real" -- ver
+    # docs/superpowers/specs/2026-09-12-mineria-real-design.md): mismo
+    # mecanismo que recolectar_motivo_arma/herramienta, cuarto eslabón
+    # heredado (RECOLECTAR elevado porque falta material crudo para un
+    # pico, junto a una veta sin explotar). NO se persiste -- se
+    # recalcula cada tick.
+    recolectar_motivo_mineria: bool = False
+    # Transitorio por tick (2026-09-14, Pieza D del arco "comodidad" --
+    # ver CLAUDE.md): cuando el argmax de este tick elige CONSTRUIR con
+    # la MEJORA del refugio propio como motivo real (ya completado_
+    # alguna_vez, se sustituye material de peor calidad por uno mejor ya
+    # portado, en vez de la acumulación normal hacia masa_minima), el
+    # reflejo cae aquí para que sistema_recursos.py/sistema_movimiento.py
+    # sepan que deben apuntar al refugio propio en modo sustitución, no
+    # al objetivo normal de objetivo_construccion_actual. NO se
+    # persiste -- se recalcula cada tick, como la propia acción.
+    construir_motivo_mejora: bool = False
     # Transitorio por tick (2026-09-11, rename FABRICAR_ARMA -> FABRICAR):
     # que categoria gano el resolutor interno de FABRICAR este tick --
     # "arma" (unica categoria real hoy) o "" si Accion.FABRICAR no fue
@@ -135,3 +152,19 @@ class Intencion:
     # este valor para saber que receta/catalogo aplicar. NO se persiste,
     # se recalcula cada tick como la propia accion.
     fabricar_categoria: str = ""
+    # Transitorio por tick (2026-09-16, ver docs/superpowers/specs/
+    # 2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md):
+    # qué tipo de construcción decidió perseguir el argmax de este tick
+    # -- "refugio", uno de nucleo.construccion.TIPOS_COMUNALES (almacen/
+    # cocina/salon_comun/taller, los 4 AL MISMO NIVEL desde esta pieza,
+    # sin jerarquía fija), o "" si no hay ninguno pendiente. Sustituye a
+    # la resolución interna que antes hacía
+    # nucleo.construccion.objetivo_construccion_actual (elegía el tipo
+    # ella misma por progreso ya invertido) -- ahora la elección exige
+    # temperamento/necesidades diferenciadas por tipo, que solo
+    # sistema_decision.py tiene a mano. sistema_movimiento.py/
+    # sistema_recursos.py leen este campo y vuelven a resolver cid/
+    # posición EN VIVO para el tipo ya decidido (ver el propio docstring
+    # de objetivo_construccion_actual para el porqué de no cachear
+    # también eso). NO se persiste -- se recalcula cada tick.
+    construir_tipo_objetivo: str = ""

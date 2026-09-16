@@ -107,6 +107,17 @@ materiales:
     capacidad_retencion: 0.05
     combustibilidad: 0.0
     apto_construccion: true
+    # calidad_construccion [0,1] (2026-09-14, arco "asentamientos/
+    # profesiones" -- diseño en curso con Diego, sin consumidor mecánico
+    # todavía, mismo patrón "catálogo antes que mecanismo" ya usado con
+    # toxico_crudo antes de "cómo cocinar"): qué tan buena resulta una
+    # construcción hecha con este material, EJE DISTINTO de dureza (que
+    # mide cuánto cuesta trabajarlo, no el resultado) -- correlacionado
+    # a grandes rasgos pero no idéntico. Roca tallada, el material de
+    # construcción más sólido del catálogo sin llegar a metal trabajado.
+    # PROVISIONAL en TODAS las entradas de esta propiedad, razonado, sin
+    # calibrar contra el motor en marcha.
+    calidad_construccion: 0.85
     # apto_arma (2026-09-03, armas primitivas v2 -- ver
     # docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md): una
     # piedra suelta empunada en crudo ya es un arma de nivel 1; fabricar
@@ -125,6 +136,10 @@ materiales:
     capacidad_retencion: 0.8
     combustibilidad: 0.0
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): adobe real -- barro
+    # secado, material de construcción histórico de verdad, pero muy por
+    # debajo de piedra tallada o madera trabajada.
+    calidad_construccion: 0.3
     # fertilidad_base: vega fértil de bosque/pradera -- ya lo era
     # conceptualmente antes de este campo, ahora es un número real.
     fertilidad_base: 0.5
@@ -157,6 +172,9 @@ materiales:
     capacidad_retencion: 0.35
     combustibilidad: 0.0
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): tierra suelta sin cocer,
+    # el material menos consistente del catálogo apto para construir.
+    calidad_construccion: 0.15
     # fertilidad_base: suelo pobre y suelto de tundra -- por encima de
     # arena, muy por debajo de una vega real.
     fertilidad_base: 0.15
@@ -176,6 +194,9 @@ materiales:
     capacidad_retencion: 0.6
     combustibilidad: 0.0
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): mantillo suelto, tan
+    # pobre para construir como es rico para cultivar.
+    calidad_construccion: 0.15
     # Mantillo acumulado -- el sustrato más fértil del catálogo,
     # candidato de bosque/pradera en celdas de mucha lluvia.
     fertilidad_base: 0.7
@@ -188,6 +209,9 @@ materiales:
     capacidad_retencion: 0.5
     combustibilidad: 0.0
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): intermedia entre
+    # tierra_negra y arcilla, mismo criterio que su propia fertilidad.
+    calidad_construccion: 0.22
     # Intermedia entre arcilla y tierra_negra -- candidata de pradera en
     # celdas de lluvia moderada.
     fertilidad_base: 0.35
@@ -200,6 +224,10 @@ materiales:
     capacidad_retencion: 0.1
     combustibilidad: 0.0
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): grava suelta, mejor que
+    # tierra por ser mineral duro (dureza 0.5) pero sin cohesión real sin
+    # trabajarla -- muy por debajo de piedra tallada.
+    calidad_construccion: 0.35
     # Transición piedra-tierra -- casi tan estéril como piedra pero
     # suelta, candidata de montaña/desierto en celdas menos extremas que
     # el resto del bioma.
@@ -218,6 +246,10 @@ materiales:
     combustibilidad: 0.55
     tasa_descomposicion_dia: 0.01
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): madera trabajada, un
+    # material de construcción real y sólido -- por debajo de piedra
+    # tallada o metal, por encima de cualquier tierra/adobe.
+    calidad_construccion: 0.55
     # apto_arma (2026-09-03, armas primitivas v2 -- ver
     # docs/superpowers/specs/2026-09-03-armas-primitivas-v2-design.md): un
     # palo empunado en crudo ya es un arma de nivel 1 (lanza); fabricar lo
@@ -231,6 +263,9 @@ materiales:
     combustibilidad: 0.5
     tasa_descomposicion_dia: 0.015
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): fibra vegetal trenzada,
+    # apenas mejor que tierra suelta -- sin cohesión estructural real.
+    calidad_construccion: 0.2
   hierba_seca:
     categoria: organico_vegetal
     forma_en_mundo: deposito
@@ -243,6 +278,9 @@ materiales:
     # el propio ejemplo de Diego para un refugio primitivo -- "algo como
     # un habitáculo de madera con un techo de paja".
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): techo de paja -- funcional
+    # pero el material más precario del catálogo de construcción.
+    calidad_construccion: 0.15
   hueso:
     categoria: organico_animal
     forma_en_mundo: deposito
@@ -285,6 +323,9 @@ materiales:
     combustibilidad: 0.0
     abundancia: 0.6
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): metal estructural real --
+    # el material de mayor calidad del catálogo de construcción.
+    calidad_construccion: 0.95
     # fertilidad_base (2026-09-01, fix tras el fallo real del plan 1/5 de
     # la distribución causal de flora -- el test original solo cubría
     # piedra/arcilla/arena/tierra/tierra_negra/marga/grava y se olvidó de
@@ -299,6 +340,39 @@ materiales:
     combustibilidad: 0.0
     abundancia: 0.35
     apto_construccion: true
+    # calidad_construccion (ver piedra arriba): metal trabajado, algo más
+    # blando que hierro -- históricamente más decorativo/utilitario que
+    # estructural.
+    calidad_construccion: 0.75
+    fertilidad_base: 0.0
+
+  # --- Mobiliario (2026-09-16, taller de artesano -- ver docs/superpowers/
+  # specs/2026-09-16-taller-mobiliario-almacen-refugio-design.md) ---------
+  # A diferencia del resto de este catálogo, estos dos NUNCA aparecen en
+  # Celda.recursos/tipo_sustrato -- solo se originan vía
+  # Accion.FABRICAR (categoría "mobiliario", config/herramientas.yaml:
+  # recetas_mobiliario), producidos como cantidad en kg añadida
+  # directamente a Inventario.contenidos (no como objeto discreto, a
+  # diferencia de arma/herramienta). Al llevar apto_construccion+
+  # calidad_construccion, el mecanismo YA CONSTRUIDO de mejora de
+  # vivienda (CONSTRUIR-mejora) los reconoce sin ningún cambio de
+  # código -- son "material" más para ese mecanismo.
+  utensilios_domesticos:
+    categoria: manufacturado
+    apto_construccion: true
+    # calidad_construccion (ver piedra arriba): oficio doméstico
+    # básico -- mejor que madera cruda (0.55), peor que piedra tallada
+    # de cantera (0.85). PROVISIONAL, razonado, sin calibrar.
+    calidad_construccion: 0.65
+    fertilidad_base: 0.0
+  mueble_tallado:
+    categoria: manufacturado
+    apto_construccion: true
+    # calidad_construccion: oficio de artesano con más materiales --
+    # por encima de piedra tallada (0.85), deliberadamente por DEBAJO
+    # de hierro (0.95): un mueble de madera no debería superar al
+    # metal estructural real como techo del catálogo. PROVISIONAL.
+    calidad_construccion: 0.9
     fertilidad_base: 0.0
 
 # --- Sustrato por bioma (círculo 1) ---------------------------------------
@@ -477,6 +551,27 @@ construccion:
   # edificio de trabajo, no de reunion. PROVISIONAL, sin calibrar.
   masa_minima_cocina: 50.0
   huella_m2_cocina: 35.0
+  # masa_minima_taller/huella_m2_taller (2026-09-16, ver docs/superpowers/
+  # specs/2026-09-16-taller-mobiliario-almacen-refugio-design.md):
+  # CUARTO paralelo en la cadena, junto a salon_comun/cocina -- un
+  # taller primitivo es un cobertizo de trabajo, más pequeño que los
+  # otros dos (huella deliberadamente baja, igual que un refugio
+  # individual).
+  #
+  # HALLAZGO REAL, no resuelto aquí: almacen(40) + salon_comun(35) +
+  # cocina(35) + taller(15) = 125 > capacidad_construccion_celda_m2
+  # (80.0) -- con CUATRO paralelos, la suma ya excede lo que cabe en una
+  # sola celda centro incluso con el taller reducido al mínimo. En la
+  # práctica, como mucho 2 de los 4 edificios comunales llegarán a
+  # coexistir completados de forma permanente en el centro exacto del
+  # asentamiento antes de agotar el espacio -- mismo límite conocido ya
+  # señalado para almacén desde el 31-08 ("sin búsqueda de celda vecina
+  # de respaldo"), ahora más visible con más paralelos. No se toca
+  # huella_m2_salon_comun/cocina (ya calibrados, ajustarlos sin
+  # necesidad real violaría el criterio de no tocar a ciegas) ni se
+  # añade selección de celda vecina (fuera de alcance de este círculo).
+  masa_minima_taller: 50.0
+  huella_m2_taller: 15.0
   capacidad_construccion_celda_m2: 80.0
   # Cuánta masa apta transfiere Accion.CONSTRUIR del Inventario a la
   # Construccion por tick, estando en su misma celda -- PROVISIONAL, sin
@@ -485,6 +580,14 @@ construccion:
   # completar su propio refugio, más si tiene que volver a recolectar
   # entre medias -- orden de magnitud razonado, no medido.
   tasa_aporte_construccion_kg_tick: 1.0
+  # Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" -- ver
+  # CLAUDE.md, "Comodidad -- diseño del arco completo"): kg de material
+  # de PEOR calidad ya invertido en el refugio propio que se sustituyen
+  # por kg de material de MEJOR calidad ya portado, por tick -- masa
+  # total constante (huella_m2 no crece), a diferencia de
+  # tasa_aporte_construccion_kg_tick (acumulación). PROVISIONAL, mismo
+  # orden de magnitud por partida de la tasa de aporte normal.
+  tasa_mejora_refugio_kg_tick: 1.0
   # Círculo C (2026-08-30, Accion.RECOLECTAR -- ver nucleo/construccion.py
   # y sistema_recursos.py:_resolver_recolectar): cuánto tipo_sustrato de
   # la celda actual (piedra/arcilla/tierra, siempre presente, no

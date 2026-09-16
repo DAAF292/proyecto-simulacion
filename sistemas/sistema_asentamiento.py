@@ -6,14 +6,14 @@ terminados) y cálculo de liderazgo (ver nucleo/asentamiento.py). Cadencia
 diaria, mismo corte que clima/descomposición/flora/ciclo_vital/desastres
 (main.py:ejecutar_tick).
 
-Recalcula mundo.asentamientos ÍNTEGRO cada día -- sin identidad
-persistida entre recálculos (ver docstring de nucleo/asentamiento.py).
-El evento "AsentamientoFundado" se emite solo cuando la composición exacta
-de miembros de un clúster no existía el día anterior (deduplicación en
-memoria, self._miembros_vistos_ayer -- no persistida, un reinicio de
-partida puede reemitir el evento de un asentamiento ya existente, coste
-aceptado por ahora frente a la complejidad de rastrear identidad estable
-entre días).
+Recalcula mundo.asentamientos ÍNTEGRO cada día, pero el ID de cada
+asentamiento SÍ es estable entre días (2026-09-15, ver
+nucleo/asentamiento.py:resolver_identidades_persistentes y
+docs/superpowers/specs/2026-09-15-identidad-persistente-asentamiento-design.md)
+-- continuidad por solape de miembros, no por coincidencia exacta, así
+que perder o ganar un miembro no "refunda" el pueblo. El evento
+"AsentamientoFundado" se emite solo cuando el id resuelto es
+genuinamente nuevo (no existía ayer).
 """
 
 from __future__ import annotations
@@ -30,10 +30,13 @@ from componentes.relaciones import Relaciones
 from nucleo.asentamiento import (
     Asentamiento,
     agrupar_por_proximidad,
-    almacen_cercano,
     calcular_centro,
     calcular_liderazgo,
+    generar_nombre,
+    rasgo_geografico_notable,
+    resolver_identidades_persistentes,
 )
+from nucleo.conocimiento import erosionar
 from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.indice_espacial import construir_indice_espacial
@@ -55,7 +58,24 @@ class SistemaAsentamiento:
         self.umbral_consciencia_agencia: float = float(
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
         )
-        self._miembros_vistos_ayer: set[frozenset[int]] = set()
+        self.umbral_continuidad_identidad: float = float(
+            self.config_asentamiento.get("umbral_continuidad_identidad", 0.5)
+        )
+        self.tasa_erosion_conocimiento: float = float(
+            self.config_asentamiento.get("tasa_erosion_conocimiento_dia", 0.005)
+        )
+        # Nombre propio (2026-09-15, ver nucleo/asentamiento.py:
+        # generar_nombre y config/nombres.yaml:nombres_asentamiento).
+        self.catalogo_nombres_asentamiento: dict[str, Any] = self.config.get(
+            "nombres_asentamiento", {}
+        )
+        # Mix geográfico (2026-09-15, corrección tras feedback de Diego):
+        # probabilidad de usar el catálogo temático (agua/montaña) en
+        # vez del genérico cuando la celda de fundación tiene un rasgo
+        # notable. PROVISIONAL.
+        self.probabilidad_nombre_tematico: float = float(
+            self.config_asentamiento.get("probabilidad_nombre_tematico", 0.6)
+        )
         self._indice_actual = None
         # Observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b -- ver
         # docs/superpowers/specs/2026-09-06-lealtad-liderazgo-design.md):
@@ -96,7 +116,9 @@ class SistemaAsentamiento:
 
         if not refugios:
             mundo.asentamientos = {}
-            self._miembros_vistos_ayer = set()
+            mundo.asentamiento_registro_identidad = {}
+            mundo.asentamiento_tick_fundacion = {}
+            self._erosionar_conocimiento_diario(mundo)
             return
 
         # Un asentamiento no puede tener miembros que no comparten
@@ -113,32 +135,41 @@ class SistemaAsentamiento:
             }
             grupos.extend(agrupar_por_proximidad(refugios_de_zona, self.radio_cluster))
 
-        nuevos: dict[int, Asentamiento] = {}
-        miembros_hoy: set[frozenset[int]] = set()
-        siguiente_id = 1
-        for grupo in grupos:
-            if len(grupo) < self.poblacion_minima:
-                continue
+        grupos_validos = [
+            frozenset(grupo) for grupo in grupos if len(grupo) >= self.poblacion_minima
+        ]
 
-            clave = frozenset(grupo)
-            miembros_hoy.add(clave)
+        # Identidad persistente (2026-09-15, ver docs/superpowers/specs/
+        # 2026-09-15-identidad-persistente-asentamiento-design.md):
+        # reutiliza el id de ayer por solape en vez de reasignar 1..N
+        # desde cero -- así un asentamiento que pierde o gana un miembro
+        # sigue siendo "el mismo" de un día para otro.
+        registro_anterior = mundo.asentamiento_registro_identidad
+        miembros_por_id = resolver_identidades_persistentes(
+            grupos_validos, registro_anterior, self.umbral_continuidad_identidad,
+        )
+
+        nuevos: dict[int, Asentamiento] = {}
+        tick_fundacion_hoy: dict[int, int] = {}
+        for id_resuelto, grupo in miembros_por_id.items():
+            es_nuevo = id_resuelto not in registro_anterior
+            tick_fundacion = reloj.tick_actual if es_nuevo else mundo.asentamiento_tick_fundacion.get(
+                id_resuelto, reloj.tick_actual
+            )
+            tick_fundacion_hoy[id_resuelto] = tick_fundacion
 
             zona_asentamiento = zona_por_refugio[next(iter(grupo))]
             centro = calcular_centro(refugios, grupo)
             lideres = calcular_liderazgo(gestor, grupo, self.config_asentamiento)
             asentamiento = Asentamiento(
-                id=siguiente_id,
+                id=id_resuelto,
                 centro=centro,
-                miembros=clave,
+                miembros=grupo,
                 lideres=frozenset(lideres),
-                almacen_id=almacen_cercano(
-                    gestor, centro, self.radio_cluster, zona_idx=zona_asentamiento,
-                    indice=self._indice_actual,
-                ),
                 zona_idx=zona_asentamiento,
+                tick_fundacion=tick_fundacion,
             )
-            nuevos[siguiente_id] = asentamiento
-            siguiente_id += 1
+            nuevos[id_resuelto] = asentamiento
 
             # Memoria comunitaria: cada miembro registra la posición del
             # asentamiento -- mismo mecanismo genérico que refugio, tipo
@@ -150,20 +181,39 @@ class SistemaAsentamiento:
                     capacidad = capacidad_memoria(cap_mental, self.config)
                     registrar_recuerdo(mem, "asentamiento", centro[0], centro[1], capacidad)
 
-            if clave not in self._miembros_vistos_ayer:
+            if es_nuevo:
+                # Nombre propio (2026-09-15): sorteado UNA sola vez,
+                # exactamente aquí -- nunca se vuelve a tocar mientras
+                # este id persista (ver Mundo.asentamiento_nombre).
+                # Mix geográfico: rasgo real de la celda de fundación
+                # (agua/montaña/None), ver nucleo/asentamiento.py:
+                # rasgo_geografico_notable.
+                celda_centro = mundo.territorio.zonas[zona_asentamiento].obtener_celda(
+                    centro[0], centro[1]
+                )
+                rasgo = rasgo_geografico_notable(celda_centro)
+                nombre_asentamiento = generar_nombre(
+                    self.rng, self.catalogo_nombres_asentamiento,
+                    rasgo, self.probabilidad_nombre_tematico,
+                )
+                if nombre_asentamiento is not None:
+                    mundo.asentamiento_nombre[id_resuelto] = nombre_asentamiento
                 datos_evento: dict[str, Any] = {
                     "x": centro[0],
                     "y": centro[1],
                     "poblacion": len(grupo),
                     "lideres": sorted(lideres),
+                    "asentamiento_id": id_resuelto,
                 }
-                nombres = []
+                if nombre_asentamiento is not None:
+                    datos_evento["nombre_asentamiento"] = nombre_asentamiento
+                nombres_lideres = []
                 for lid in lideres:
                     ident = gestor.obtener_componente(lid, Identidad)
                     if ident is not None and ident.nombre:
-                        nombres.append(ident.nombre)
-                if nombres:
-                    datos_evento["nombres_lideres"] = nombres
+                        nombres_lideres.append(ident.nombre)
+                if nombres_lideres:
+                    datos_evento["nombres_lideres"] = nombres_lideres
                 bus_eventos.emitir(
                     Evento(
                         tipo="AsentamientoFundado",
@@ -174,7 +224,8 @@ class SistemaAsentamiento:
                 )
 
         mundo.asentamientos = nuevos
-        self._miembros_vistos_ayer = miembros_hoy
+        mundo.asentamiento_registro_identidad = miembros_por_id
+        mundo.asentamiento_tick_fundacion = tick_fundacion_hoy
 
         # Acreción diaria de amistad por convivencia (2026-09-04,
         # nucleo/relaciones.py): justo después de recalcular
@@ -188,6 +239,18 @@ class SistemaAsentamiento:
         # específicamente miembro->líder: los seguidores admiran al líder,
         # no necesariamente al revés (no se autora reciprocidad).
         self._acrecion_lealtad_liderazgo(gestor, mundo, reloj)
+        self._erosionar_conocimiento_diario(mundo)
+
+    def _erosionar_conocimiento_diario(self, mundo: Mundo) -> None:
+        """Decaimiento diario de conocimiento colectivo (2026-09-15, ver
+        nucleo/conocimiento.py) -- se aplica con independencia de si hoy
+        existe algún asentamiento vivo (entradas de un id ya retirado
+        del registro simplemente siguen ahí, inertes, sin que nada las
+        lea de nuevo -- no se purgan por id muerto, mismo criterio de
+        laissez-faire que Relaciones.vinculos apuntando a un id ya
+        muerto)."""
+        for conocimiento_asen in mundo.asentamiento_conocimiento.values():
+            erosionar(conocimiento_asen, self.tasa_erosion_conocimiento)
 
     def _acrecion_amistad_convivencia(
         self,

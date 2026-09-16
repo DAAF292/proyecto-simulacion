@@ -19,10 +19,9 @@ from main import cargar_configuracion
 from nucleo.asentamiento import Asentamiento
 from nucleo.celda import Celda, TipoTerreno
 from nucleo.construccion import (
-    construccion_completada_de_asentamiento,
+    candidatos_comunales_pendientes,
     construccion_de_tipo_en,
     hay_construccion_de_tipo_en,
-    objetivo_construccion_actual,
 )
 from nucleo.entidad import GestorEntidades, crear_construccion, crear_criatura, crear_fogata
 from nucleo.mundo import Mundo
@@ -42,8 +41,12 @@ def _config() -> dict:
     return cargar_configuracion(RUTA_CONFIG)
 
 
-def _construccion(gestor, tipo, x, y, progreso=1.0, completado=True, propietario_id=None):
-    cid = crear_construccion(gestor, x, y, tipo, propietario_id=propietario_id)
+def _construccion(
+    gestor, tipo, x, y, progreso=1.0, completado=True, propietario_id=None, asentamiento_id=None,
+):
+    cid = crear_construccion(
+        gestor, x, y, tipo, propietario_id=propietario_id, asentamiento_id=asentamiento_id,
+    )
     c = gestor.obtener_componente(cid, Construccion)
     c.progreso = progreso
     c.completado_alguna_vez = completado
@@ -84,10 +87,15 @@ def test_cocinar_habilitado_en_cocina_sin_fogata_real():
 
 
 # ---------------------------------------------------------------------------
-# nucleo/construccion.py:objetivo_construccion_actual -- paralelo, no cadena
+# nucleo/construccion.py:candidatos_comunales_pendientes -- los 4 tipos AL
+# MISMO NIVEL (2026-09-16), sin jerarquía ni cascada -- quién "gana" cada
+# tick ahora lo decide sistema_decision.py (necesidad diferenciada por
+# tipo + desempate por progreso entre quienes pasan su propio gate), no
+# esta función (que solo lista pendientes). Ver
+# docs/superpowers/specs/2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md.
 # ---------------------------------------------------------------------------
 
-def test_objetivo_elige_el_paralelo_con_mas_progreso():
+def test_candidatos_incluye_cocina_y_salon_comun_no_almacen_completo():
     config = _config()
     rng = random.Random(2)
     gestor = GestorEntidades()
@@ -95,34 +103,70 @@ def test_objetivo_elige_el_paralelo_con_mas_progreso():
     gnomo = _gnomo_neutralizado(gestor, config, rng)
     cid_refugio = crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
     gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
-    _construccion(gestor, "almacen", 5, 5)
-    _construccion(gestor, "salon_comun", 5, 5, progreso=0.2, completado=False)
-    _construccion(gestor, "cocina", 5, 5, progreso=0.6, completado=False)
+    _construccion(gestor, "almacen", 5, 5, asentamiento_id=1)
+    _construccion(gestor, "salon_comun", 5, 5, progreso=0.2, completado=False, asentamiento_id=1)
+    _construccion(gestor, "cocina", 5, 5, progreso=0.6, completado=False, asentamiento_id=1)
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
 
-    objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)
+    candidatos = {
+        tipo: cid for tipo, cid, _pos in
+        candidatos_comunales_pendientes(gestor, mundo, gnomo, config, radio_cluster=10)
+    }
 
-    assert objetivo[0] == "cocina"
+    assert "almacen" not in candidatos  # ya completo
+    assert set(candidatos) == {"salon_comun", "cocina", "taller"}
 
 
-def test_objetivo_empate_exacto_prefiere_salon_comun():
+def test_decision_elige_cocina_por_llevar_mas_progreso_con_gates_abiertos():
+    """Ley: entre los tipos cuyo gate propio pasa (aquí, los 4: excedente
+    de saciedad/hidratación al máximo, sociabilidad+curiosidad altas,
+    comodidad sin saturar), gana quien ya lleve MÁS progreso invertido --
+    misma ley física de convergencia ya validada antes de esta pieza,
+    ahora aplicada solo dentro del subconjunto que de verdad interesa a
+    este individuo."""
+    config = _config()
+    rng = random.Random(2)
+    gestor = GestorEntidades()
+    mundo = Mundo(10, 10, config, random.Random(1))
+    gnomo = _gnomo_neutralizado(gestor, config, rng)
+    gestor.obtener_componente(gnomo, Temperamento).sociabilidad = 1.0
+    gestor.obtener_componente(gnomo, Temperamento).curiosidad = 1.0
+    cid_refugio = crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
+    gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
+    _construccion(gestor, "almacen", 5, 5, asentamiento_id=1)  # completo, no candidato
+    _construccion(gestor, "salon_comun", 5, 5, progreso=0.2, completado=False, asentamiento_id=1)
+    _construccion(gestor, "cocina", 5, 5, progreso=0.6, completado=False, asentamiento_id=1)
+    mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
+
+    actualizar(gestor, mundo, config, BusEventos(), 1)
+
+    assert gestor.obtener_componente(gnomo, Intencion).construir_tipo_objetivo == "cocina"
+
+
+def test_decision_empate_exacto_prefiere_salon_comun():
+    """Empate exacto (ninguno de los 3 candidatos restantes empezado,
+    todos a progreso 0.0) se resuelve por el orden fijo de
+    TIPOS_COMUNALES -- salon_comun antes que cocina, mismo criterio
+    heredado de tipos_paralelos."""
     config = _config()
     rng = random.Random(3)
     gestor = GestorEntidades()
     mundo = Mundo(10, 10, config, random.Random(1))
     gnomo = _gnomo_neutralizado(gestor, config, rng)
+    gestor.obtener_componente(gnomo, Temperamento).sociabilidad = 1.0
+    gestor.obtener_componente(gnomo, Temperamento).curiosidad = 1.0
     cid_refugio = crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
     gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
-    _construccion(gestor, "almacen", 5, 5)
-    # ni salon_comun ni cocina existen todavia -- empate a progreso 0.0
+    _construccion(gestor, "almacen", 5, 5, asentamiento_id=1)
+    # ni salon_comun ni cocina ni taller existen todavia -- empate a 0.0
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
 
-    objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)
+    actualizar(gestor, mundo, config, BusEventos(), 1)
 
-    assert objetivo[0] == "salon_comun"
+    assert gestor.obtener_componente(gnomo, Intencion).construir_tipo_objetivo == "salon_comun"
 
 
-def test_objetivo_none_solo_cuando_ambos_paralelos_completos():
+def test_candidatos_vacio_solo_cuando_los_4_estan_completos():
     config = _config()
     rng = random.Random(4)
     gestor = GestorEntidades()
@@ -130,16 +174,20 @@ def test_objetivo_none_solo_cuando_ambos_paralelos_completos():
     gnomo = _gnomo_neutralizado(gestor, config, rng)
     cid_refugio = crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
     gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
-    _construccion(gestor, "almacen", 5, 5)
-    _construccion(gestor, "salon_comun", 5, 5)  # completo
+    _construccion(gestor, "almacen", 5, 5, asentamiento_id=1)
+    _construccion(gestor, "salon_comun", 5, 5, asentamiento_id=1)  # completo
     # cocina NO existe todavia
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(5, 5), miembros=frozenset({gnomo}))
 
-    objetivo = objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10)
-    assert objetivo[0] == "cocina"
+    candidatos = candidatos_comunales_pendientes(gestor, mundo, gnomo, config, radio_cluster=10)
+    assert {tipo for tipo, _cid, _pos in candidatos} == {"cocina", "taller"}
 
-    _construccion(gestor, "cocina", 5, 5)  # ahora tambien completa
-    assert objetivo_construccion_actual(gestor, mundo, gnomo, radio_cluster=10) is None
+    _construccion(gestor, "cocina", 5, 5, asentamiento_id=1)  # ahora tambien completa
+    candidatos = candidatos_comunales_pendientes(gestor, mundo, gnomo, config, radio_cluster=10)
+    assert {tipo for tipo, _cid, _pos in candidatos} == {"taller"}
+
+    _construccion(gestor, "taller", 5, 5, asentamiento_id=1)  # ahora tambien completa
+    assert candidatos_comunales_pendientes(gestor, mundo, gnomo, config, radio_cluster=10) == []
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +301,7 @@ def test_forrajeo_va_a_la_alacena_si_esta_mas_cerca_que_el_forraje_local():
     zona.obtener_celda(15, 0).recursos = {"manzanas": 1.0}  # lejos (dist 15)
     eid = crear_criatura(gestor, Especie.GNOMO, 0, 0, config, rng)
     gestor.obtener_componente(eid, CapacidadMental).consciencia = 0.8
-    cid_cocina = _construccion(gestor, "cocina", 3, 0)  # cerca (dist 3)
+    cid_cocina = _construccion(gestor, "cocina", 3, 0, asentamiento_id=1)  # cerca (dist 3)
     gestor.obtener_componente(cid_cocina, Construccion).provisiones["manzanas_elaborada"] = 1.0
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(3, 0), miembros=frozenset({eid}))
 
@@ -278,7 +326,7 @@ def test_forrajeo_prefiere_forraje_local_si_esta_mas_cerca_que_la_alacena():
     zona.obtener_celda(1, 0).recursos = {"manzanas": 1.0}  # cerca (dist 1)
     eid = crear_criatura(gestor, Especie.GNOMO, 0, 0, config, rng)
     gestor.obtener_componente(eid, CapacidadMental).consciencia = 0.8
-    cid_cocina = _construccion(gestor, "cocina", 10, 0)  # lejos (dist 10)
+    cid_cocina = _construccion(gestor, "cocina", 10, 0, asentamiento_id=1)  # lejos (dist 10)
     gestor.obtener_componente(cid_cocina, Construccion).provisiones["manzanas_elaborada"] = 1.0
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(10, 0), miembros=frozenset({eid}))
 
@@ -302,7 +350,7 @@ def test_socializar_va_a_la_cocina_solo_sin_salon_comun():
     mundo = Mundo(20, 20, config, random.Random(1))
     eid = crear_criatura(gestor, Especie.GNOMO, 0, 0, config, rng)
     gestor.obtener_componente(eid, CapacidadMental).consciencia = 0.8
-    cid_cocina = _construccion(gestor, "cocina", 3, 0)
+    cid_cocina = _construccion(gestor, "cocina", 3, 0, asentamiento_id=1)
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(3, 0), miembros=frozenset({eid}))
 
     sistema = SistemaMovimiento(config, rng)
@@ -312,7 +360,7 @@ def test_socializar_va_a_la_cocina_solo_sin_salon_comun():
     )
     assert (dx, dy) == (1, 0)  # hacia la cocina
 
-    _construccion(gestor, "salon_comun", -3, 0)  # ahora SI hay salon comun
+    _construccion(gestor, "salon_comun", -3, 0, asentamiento_id=1)  # ahora SI hay salon comun
     dx2, dy2 = sistema._calcular_socializar(
         gestor, mundo, eid, 0, 0, radio=1, tick_actual=1,
     )
@@ -377,18 +425,20 @@ def test_persistencia_roundtrip_provisiones_construccion(tmp_path):
 # cocina nunca acumularan ni 1kg de material en ninguna semilla medida.
 # ---------------------------------------------------------------------------
 
-def _asentamiento_listo_para_paralelos(gestor, config, rng, centro=(5, 5)):
+def _asentamiento_listo_para_paralelos(gestor, config, rng, centro=(5, 5), asentamiento_id=1):
     """Gnomo con refugio (en una celda DISTINTA del centro -- el refugio
     individual no tiene por qué coincidir con el centroide del cluster)
     y almacen ya completos (el almacen SI vive siempre en el centro),
     miembro de un asentamiento en `centro` -- listo para que
-    objetivo_construccion_actual devuelva salon_comun o cocina."""
+    candidatos_comunales_pendientes devuelva salon_comun/cocina/taller."""
     refugio_x, refugio_y = centro[0] + 2, centro[1] + 2
     gnomo = crear_criatura(gestor, Especie.GNOMO, *centro, config, rng)
     cid_refugio = crear_construccion(gestor, refugio_x, refugio_y, "refugio", propietario_id=gnomo)
     gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
     gestor.obtener_componente(cid_refugio, Construccion).completado_alguna_vez = True
-    cid_almacen = crear_construccion(gestor, *centro, "almacen", propietario_id=None)
+    cid_almacen = crear_construccion(
+        gestor, *centro, "almacen", propietario_id=None, asentamiento_id=asentamiento_id,
+    )
     gestor.obtener_componente(cid_almacen, Construccion).progreso = 1.0
     gestor.obtener_componente(cid_almacen, Construccion).completado_alguna_vez = True
     return gnomo
@@ -397,8 +447,9 @@ def _asentamiento_listo_para_paralelos(gestor, config, rng, centro=(5, 5)):
 def test_calcular_construir_crea_salon_comun_no_almacen_duplicado():
     """Ley: al llegar al centro del asentamiento con almacen ya completo
     y ningun paralelo empezado, _calcular_construir crea una
-    Construccion del TIPO REAL pedido (salon_comun, por orden fijo de
-    empate) -- no un segundo "almacen" duplicado."""
+    Construccion del TIPO REAL pedido (salon_comun, ya decidido por
+    sistema_decision.py y pasado aquí como tipo_objetivo) -- no un
+    segundo "almacen" duplicado."""
     config = _config()
     rng = random.Random(50)
     gestor = GestorEntidades()
@@ -411,6 +462,7 @@ def test_calcular_construir_crea_salon_comun_no_almacen_duplicado():
         gestor, mundo, gnomo, Especie.GNOMO, 5, 5, radio=5, mem=None,
         cap_mental=gestor.obtener_componente(gnomo, CapacidadMental),
         temperamento=gestor.obtener_componente(gnomo, Temperamento),
+        tipo_objetivo="salon_comun",
     )
 
     tipos = Counter(
@@ -422,15 +474,17 @@ def test_calcular_construir_crea_salon_comun_no_almacen_duplicado():
     assert tipos["cocina"] == 0
 
 
-def test_calcular_construir_crea_cocina_cuando_lleva_mas_progreso():
-    """Ley: si la cocina ya lleva mas progreso que el salon comun, el
-    tipo creado es cocina, no almacen ni salon_comun."""
+def test_calcular_construir_crea_cocina_cuando_es_el_tipo_pedido():
+    """Ley: _calcular_construir crea exactamente el tipo que
+    sistema_decision.py ya decidió (tipo_objetivo="cocina" aquí), no
+    almacén ni salón_común -- la elección de CUÁL tipo perseguir ya no
+    es responsabilidad de este método (2026-09-16)."""
     config = _config()
     rng = random.Random(51)
     gestor = GestorEntidades()
     mundo = Mundo(10, 10, config, random.Random(1))
     gnomo = _asentamiento_listo_para_paralelos(gestor, config, rng, centro=(3, 3))
-    _construccion(gestor, "cocina", 3, 3, progreso=0.3, completado=False)
+    _construccion(gestor, "cocina", 3, 3, progreso=0.3, completado=False, asentamiento_id=1)
     mundo.asentamientos[1] = Asentamiento(id=1, centro=(3, 3), miembros=frozenset({gnomo}))
 
     sistema = SistemaMovimiento(config, rng)
@@ -440,6 +494,7 @@ def test_calcular_construir_crea_cocina_cuando_lleva_mas_progreso():
         gestor, mundo, gnomo, Especie.GNOMO, 3, 3, radio=5, mem=None,
         cap_mental=gestor.obtener_componente(gnomo, CapacidadMental),
         temperamento=gestor.obtener_componente(gnomo, Temperamento),
+        tipo_objetivo="cocina",
     )
 
     tipos = Counter(

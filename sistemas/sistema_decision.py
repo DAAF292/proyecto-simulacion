@@ -172,8 +172,10 @@ intentar codificar la elegibilidad dentro de la formula de utilidad:
      Gestacion solo se anade a la hembra (ver sistema_reproduccion.py).
   3. cualquier necesidad fisica con accion de satisfaccion (saciedad,
      energia, hidratacion, aliviado -- el mismo universo del compromiso)
-     por debajo de decision.umbral_atencion_pareja (PROVISIONAL 0.5): sin
-     este gate, la formula 1.0 - impulso_reproductivo deja ganar a
+     por debajo de decision.umbral_necesidades_superiores (PROVISIONAL
+     0.5, renombrado 2026-09-14 -- gate Maslow generico, ya no
+     especifico de pareja, ver config/fisiologia.yaml): sin este gate,
+     la formula 1.0 - impulso_reproductivo deja ganar a
      buscar pareja con impulso decaido a 0.0 (utilidad maxima) SOBRE
      cualquier necesidad fisica no en crisis exacta, incluso con
      saciedad/energia muy bajas (ver docs/historial_sistemas.md para el
@@ -202,8 +204,9 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
-from nucleo.asentamiento import disposicion_a_aportar
+from nucleo.asentamiento import asentamiento_de, disposicion_a_aportar
 from nucleo.amenaza import posicion_amenaza_mas_cercana
+from nucleo.conocimiento import nivel_conocimiento
 from nucleo.armas import (
     celda_ofrece_material_arma,
     manos_libres,
@@ -214,10 +217,13 @@ from nucleo.armas import (
 )
 from nucleo.ciclo_vital import edad_ticks, es_adulto
 from nucleo.construccion import (
+    calidad_media_construccion,
+    candidatos_comunales_pendientes,
+    construccion_propia,
     hay_construccion_de_tipo_en,
     masa_apta_construccion,
+    material_mejora_disponible_en,
     material_suficiente_para,
-    objetivo_construccion_actual,
 )
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
@@ -313,14 +319,20 @@ def _compromiso_construir_mantiene(
     Intencion.accion = CONSTRUIR para siempre (progreso < 1.0 sigue
     siendo cierto), sin volver nunca a RECOLECTAR.
 
-    Para ALMACÉN, el compromiso también re-verifica la disposición a
-    aportar (nucleo/asentamiento.py:disposicion_a_aportar) en cada tick,
-    no solo en el instante en que se eligió la acción -- sin esto, un
-    individuo fundamentalmente egoísta (agresividad alta, empatía/lealtad
-    bajas, necesidades sin excedente real) podría terminar de construir
-    TODO un almacén él solo con solo un pico momentáneo de saciedad. El
-    refugio propio NO exige esta re-verificación (nunca exigió
-    disposición para empezar, tampoco debe exigirla para continuar).
+    Para ALMACÉN y COCINA (2026-09-16: cocina gana el mismo tipo de gate
+    por excedente que almacén ya tenía, ver docs/superpowers/specs/
+    2026-09-16-pertenencia-colocacion-necesidad-comunal-design.md), el
+    compromiso también re-verifica la disposición a aportar
+    (nucleo/asentamiento.py:disposicion_a_aportar) en cada tick, no solo
+    en el instante en que se eligió la acción -- sin esto, un individuo
+    fundamentalmente egoísta (agresividad alta, empatía/lealtad bajas,
+    necesidades sin excedente real) podría terminar de construir TODO un
+    almacén o cocina él solo con solo un pico momentáneo de
+    saciedad/hidratación. salón_común y taller NO exigen esta
+    re-verificación -- su gate (sociabilidad+curiosidad, deficit de
+    comodidad) no es un excedente que pueda desaparecer del mismo modo, y
+    el refugio propio tampoco (nunca exigió disposición para empezar,
+    tampoco debe exigirla para continuar).
 
     Mismo principio que el techo efectivo del compromiso de satisfacción
     (_compromiso_mantiene): se libera en cuanto ya no hay nada más que
@@ -341,6 +353,9 @@ def _compromiso_construir_mantiene(
     if construccion.tipo == "almacen":
         excedente = min(necesidades.saciedad, necesidades.hidratacion)
         if excedente < disposicion_a_aportar(temperamento, config_asentamiento):
+            return False
+    elif construccion.tipo == "cocina":
+        if necesidades.saciedad < disposicion_a_aportar(temperamento, config_asentamiento):
             return False
     return True
 
@@ -426,6 +441,11 @@ class SistemaDecision:
         # bloqueo una utilidad que de otro modo habria sido positiva (no
         # cuenta los casos triviales donde ya era 0 por otro motivo).
         self._stats_gate_manos_libres_disparado: int = 0
+        # Contador de observacion (2026-09-14, Pieza D del arco
+        # "comodidad" -- ver CLAUDE.md): cuantas veces CONSTRUIR se
+        # eligio de verdad por mejora de vivienda (no acumulacion normal)
+        # en la accion FINAL, mismo criterio que _stats_socializar_elegidas.
+        self._stats_construir_mejora_elegido: int = 0
         # Sonido fisico (2026-09-06, circulo 4a -- ver
         # docs/superpowers/specs/2026-09-06-sonido-fisico-amenaza-design.md):
         # techo de escaneo (no el alcance real) para la tercera fuente de
@@ -458,9 +478,11 @@ def actualizar(
     # Umbral de crisis interrumpible del compromiso (ver docstring del
     # modulo), PROVISIONAL.
     umbral_crisis_interrupcion = float(config["decision"]["umbral_crisis_interrupcion"])
-    # Tercer gate de BUSCAR_PAREJA: ninguna busqueda de pareja con una
-    # necesidad fisica por debajo de este valor, PROVISIONAL.
-    umbral_atencion_pareja = float(config["decision"]["umbral_atencion_pareja"])
+    # Gate Maslow generico (renombrado 2026-09-14, ya no especifico de
+    # pareja -- BUSCAR_PAREJA/SOCIALIZAR lo consumen hoy): ninguna
+    # necesidad de nivel superior compite con una necesidad fisica por
+    # debajo de este valor, PROVISIONAL.
+    umbral_necesidades_superiores = float(config["decision"]["umbral_necesidades_superiores"])
     # CONSTRUIR (ver docstring del modulo y nucleo/construccion.py): mismo
     # umbral de agencia que ya exime del sesgo de territorio -- construir
     # es agencia consciente, no instinto.
@@ -504,6 +526,12 @@ def actualizar(
     # combinacion de materiales crudos apto_arma reutilizados.
     config_herramientas = config.get("herramientas", {})
     recetas_herramientas = config_herramientas.get("recetas", [])
+    # Minería real (2026-09-12, ver docs/superpowers/specs/
+    # 2026-09-12-mineria-real-design.md): catálogo SEPARADO de
+    # recetas_herramientas -- ver el comentario en config/herramientas.yaml
+    # para el porqué (evita ambigüedad en mejor_receta_completable entre
+    # pico y hacha_primitiva).
+    recetas_mineria = config_herramientas.get("recetas_mineria", [])
     # Percepcion para el reflejo empunyar/guardar: reutiliza la MISMA señal
     # de amenaza que ya usa HUIR (posicion_amenaza_mas_cercana) con el
     # mismo radio por agudeza sensorial y el mismo umbral de disposicion
@@ -553,6 +581,34 @@ def actualizar(
     peso_aptitud_vocacional = float(
         config.get("vocacion", {}).get("peso_aptitud_vocacional", 0.3)
     )
+    # Mejora de vivienda (2026-09-14, Pieza D del arco "comodidad" -- ver
+    # CLAUDE.md y nucleo/construccion.py:material_mejora_disponible_en).
+    # especies_flora_cfg: mismo dict que sistema_recursos.py:
+    # self.especies_flora, necesario para el peek de "qué recolectaría
+    # RECOLECTAR aquí mismo" (tala real exige saber qué Planta cuenta
+    # como competidora).
+    especies_flora_cfg = config.get("flora", {}).get("especies", {})
+    # umbral_prosocial_comunal: sesgo mínimo (empatía+sociabilidad)/2
+    # para que un individuo siga priorizando la cadena comunal pendiente
+    # (almacén/salón/cocina) en vez de su propia comodidad cuando ambas
+    # compiten el mismo tick -- mismo eje de fondo que ya usa
+    # disposicion_a_aportar (nucleo/asentamiento.py) para la disposición
+    # a aportar al almacén, aplicado aquí a una decisión distinta ("qué
+    # construyo primero", no "cuánto excedente aportar"). PROVISIONAL.
+    umbral_prosocial_comunal = float(
+        config.get("decision", {}).get("umbral_prosocial_comunal", 0.5)
+    )
+    # Taller de artesano (2026-09-16, ver docs/superpowers/specs/
+    # 2026-09-16-taller-mobiliario-almacen-refugio-design.md):
+    # config compartida por el bloque de FABRICAR-mobiliario más abajo.
+    cfg_asentamiento_taller = config.get("asentamiento", {})
+    umbral_conocimiento_taller = float(
+        cfg_asentamiento_taller.get("umbral_conocimiento_taller", 0.3)
+    )
+    escala_saturacion_conocimiento = float(
+        cfg_asentamiento_taller.get("escala_saturacion_conocimiento", 2000.0)
+    )
+    recetas_mobiliario = config.get("herramientas", {}).get("recetas_mobiliario", [])
 
     # Techo efectivo de plenitud por especie (PLENITUD EFECTIVA, ver
     # docstring del modulo): cache local por llamada -- cuatro especies x
@@ -637,13 +693,14 @@ def actualizar(
         # es adulto o si ya gestando (solo la hembra puede gestar) --
         # fraccion_madurez es por especie (rangos_raciales). Tercer gate:
         # ninguna busqueda de pareja con una necesidad fisica por debajo
-        # de decision.umbral_atencion_pareja.
+        # de decision.umbral_necesidades_superiores (gate Maslow generico,
+        # renombrado 2026-09-14, no especifico de pareja).
         edad = edad_ticks(identidad.tick_nacimiento, tick_actual)
         fraccion_madurez = rangos_raciales[identidad.especie.value]["fraccion_madurez"]
         adulto = es_adulto(edad, identidad.especie.value, rangos_raciales, fraccion_madurez)
         gestando = gestor.obtener_componente(id_entidad, Gestacion) is not None
         fisica_bajo_umbral = any(
-            getattr(necesidades, n) < umbral_atencion_pareja
+            getattr(necesidades, n) < umbral_necesidades_superiores
             for n in _NECESIDADES_FISICAS
         )
         utilidad_buscar_pareja = (
@@ -656,11 +713,11 @@ def actualizar(
         # las necesidades estan cubiertas. Utilidad =
         # utilidad_socializar_base * (sociabilidad + curiosidad) / 2, gateada
         # a 0.0 si no es consciente o si CUALQUIER necesidad fisica esta bajo
-        # umbral_atencion_pareja (mismo gate que BUSCAR_PAREJA, reutilizando
-        # la variable fisica_bajo_umbral ya calculada). Primer consumidor real
-        # de Temperamento.curiosidad, modulando en pie de igualdad con
-        # sociabilidad. Sin drive dinamico nuevo: usa directamente los rasgos
-        # fijos de Temperamento.
+        # umbral_necesidades_superiores (mismo gate Maslow generico que
+        # BUSCAR_PAREJA, reutilizando la variable fisica_bajo_umbral ya
+        # calculada). Primer consumidor real de Temperamento.curiosidad,
+        # modulando en pie de igualdad con sociabilidad. Sin drive dinamico
+        # nuevo: usa directamente los rasgos fijos de Temperamento.
         utilidad_socializar = (
             0.0
             if (cap_mental.consciencia < umbral_consciencia_agencia or fisica_bajo_umbral)
@@ -686,32 +743,72 @@ def actualizar(
         utilidad_construir = 0.0
         utilidad_recolectar = 0.0
         cid_objetivo = None
+        tipo_objetivo = ""
         if cap_mental.consciencia >= umbral_consciencia_agencia:
-            objetivo = objetivo_construccion_actual(
-                gestor, mundo, id_entidad, radio_cluster_asentamiento, indice=indice
-            )
-            if objetivo is not None:
-                tipo_objetivo, cid_objetivo, _ = objetivo
-                dispuesto = True
-                if tipo_objetivo == "almacen":
-                    excedente = min(necesidades.saciedad, necesidades.hidratacion)
-                    umbral_individual = disposicion_a_aportar(temperamento, config_asentamiento)
-                    dispuesto = excedente >= umbral_individual
-                if dispuesto:
-                    suficiente = material_suficiente_para(
-                        gestor,
-                        cid_objetivo,
-                        tipo_objetivo,
-                        inventario.contenidos,
-                        catalogo_materiales,
-                        config_construccion,
-                    )
-                    if not suficiente and espacio_disponible_kg(
-                        inventario.contenidos, dims.peso, fraccion_carga_maxima
-                    ) > 0.0:
-                        utilidad_recolectar = utilidad_recolectar_base
-                    if masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0:
-                        utilidad_construir = utilidad_construir_base
+            cid_refugio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
+            refugio_pendiente = cid_refugio is None
+            if not refugio_pendiente:
+                refugio_comp = gestor.obtener_componente(cid_refugio, Construccion)
+                refugio_pendiente = refugio_comp is None or refugio_comp.progreso < 1.0
+            if refugio_pendiente:
+                tipo_objetivo, cid_objetivo = "refugio", cid_refugio
+            else:
+                # Necesidad diferenciada por tipo comunal (2026-09-16,
+                # ver docs/superpowers/specs/2026-09-16-pertenencia-
+                # colocacion-necesidad-comunal-design.md): los 4 tipos
+                # (almacen/cocina/salon_comun/taller) compiten AL MISMO
+                # NIVEL, sin jerarquía -- cada uno gana solo si SU
+                # propio gate real pasa; entre los que pasan, gana quien
+                # ya lleve más progreso invertido (mismo criterio de
+                # convergencia ya validado, ahora aplicado solo dentro
+                # del subconjunto de candidatos que de verdad interesan
+                # a este individuo).
+                mejor_progreso = -1.0
+                for tipo_c, cid_c, _pos_c in candidatos_comunales_pendientes(
+                    gestor, mundo, id_entidad, config, radio_cluster_asentamiento
+                ):
+                    if tipo_c == "almacen":
+                        gate = min(necesidades.saciedad, necesidades.hidratacion) >= (
+                            disposicion_a_aportar(temperamento, config_asentamiento)
+                        )
+                    elif tipo_c == "cocina":
+                        # PROVISIONAL (2026-09-16): solo saciedad, no
+                        # hidratación -- cocinar es sobre comida, no
+                        # agua. Mismo umbral de carácter que almacén.
+                        gate = necesidades.saciedad >= disposicion_a_aportar(
+                            temperamento, config_asentamiento
+                        )
+                    elif tipo_c == "salon_comun":
+                        gate = (
+                            temperamento.sociabilidad + temperamento.curiosidad
+                        ) / 2.0 >= umbral_prosocial_comunal
+                    else:  # taller
+                        gate = necesidades.comodidad < 1.0
+                    if not gate:
+                        continue
+                    progreso_c = 0.0
+                    if cid_c is not None:
+                        construccion_c = gestor.obtener_componente(cid_c, Construccion)
+                        progreso_c = construccion_c.progreso if construccion_c is not None else 0.0
+                    if progreso_c > mejor_progreso:
+                        mejor_progreso = progreso_c
+                        tipo_objetivo, cid_objetivo = tipo_c, cid_c
+
+            if tipo_objetivo != "":
+                suficiente = material_suficiente_para(
+                    gestor,
+                    cid_objetivo,
+                    tipo_objetivo,
+                    inventario.contenidos,
+                    catalogo_materiales,
+                    config_construccion,
+                )
+                if not suficiente and espacio_disponible_kg(
+                    inventario.contenidos, dims.peso, fraccion_carga_maxima
+                ) > 0.0:
+                    utilidad_recolectar = utilidad_recolectar_base
+                if masa_apta_construccion(inventario.contenidos, catalogo_materiales) > 0.0:
+                    utilidad_construir = utilidad_construir_base
 
         # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/
         # fogata.py y nucleo/fuego.py). Misma compuerta de consciencia
@@ -904,21 +1001,189 @@ def actualizar(
                         valor_heredado_herramienta = necesidad_trabajo
                         utilidad_recolectar = max(utilidad_recolectar, valor_heredado_herramienta)
 
-        # Resuelve CUÁL de los tres eslabones heredados de arriba (fuego,
-        # arma, herramienta) es el motivo REAL que explica el valor FINAL
-        # de utilidad_recolectar -- comparación contra el resultado ya
-        # cerrado de la cascada, no contra el valor "hasta ese punto"
-        # (2026-09-12, "prioridad consciente" -- ver CLAUDE.md). Sin
-        # esto, un eslabón temprano (p.ej. fuego) podía quedar marcado
-        # como motivo ganador aunque uno posterior (arma/herramienta) lo
-        # hubiera superado después en la misma cascada -- dos motivos
-        # simultáneamente `True` para el mismo RECOLECTAR, sin sentido
-        # físico (un individuo no puede recolectar por dos razones
-        # incompatibles a la vez). En empate exacto entre dos eslabones
-        # elegibles, se resuelve arbitrariamente por el primero
-        # comprobado (fuego > arma > herramienta) -- mismo criterio de
-        # "el primero que se comprueba gana el empate" ya usado en el
-        # resto de este módulo (ver `candidatas` más abajo).
+        # FABRICAR, categoria "mineria" (2026-09-12, "minería real" -- ver
+        # docs/superpowers/specs/2026-09-12-mineria-real-design.md). Mismo
+        # patrón EXACTO que "herramienta" arriba (utilidad heredada de
+        # necesidad_trabajo, sin descuento, mismos materiales crudos
+        # reutilizados) -- pero con un disparador MÁS ESPECÍFICO: solo se
+        # activa si la celda actual tiene de verdad una veta de mineral
+        # sin explotar (celda.deposito_mineral con masa restante), no
+        # "necesito trabajar" en abstracto. Un individuo que nunca ha
+        # estado junto a una veta sin pico nunca desarrolla interés en
+        # fabricar uno (principio 5, leyes neutras). Recetas en un
+        # catálogo SEPARADO (recetas_mineria) del de "herramienta" -- ver
+        # el comentario de config/herramientas.yaml.
+        utilidad_categoria_mineria = 0.0
+        valor_heredado_mineria: float | None = None
+        if cap_mental.consciencia >= umbral_consciencia_agencia:
+            objetos_totales_m = list(inventario.objetos)
+            if agarre is not None:
+                objetos_totales_m.extend(agarre.objetos)
+            zona_m = mundo.territorio.zonas[pos.zona_idx]
+            celda_m = zona_m.obtener_celda(pos.x, pos.y)
+            hay_veta_sin_explotar = (
+                bool(celda_m.deposito_mineral) and celda_m.masa_mineral_restante > 0.0
+            )
+            if hay_veta_sin_explotar and not tiene_herramienta(
+                objetos_totales_m, recetas_mineria
+            ):
+                necesidad_trabajo_mineria = max(utilidad_recolectar, utilidad_construir)
+                if necesidad_trabajo_mineria > 0.0:
+                    receta_m = mejor_receta_completable(objetos_totales_m, recetas_mineria)
+                    if receta_m is not None:
+                        utilidad_categoria_mineria = necesidad_trabajo_mineria
+                    elif celda_ofrece_material_arma(celda_m, catalogo_materiales):
+                        valor_heredado_mineria = necesidad_trabajo_mineria
+                        utilidad_recolectar = max(utilidad_recolectar, valor_heredado_mineria)
+
+        # MEJORA DE VIVIENDA (2026-09-14, Pieza D del arco "comodidad" --
+        # ver CLAUDE.md, "Comodidad -- diseño del arco completo"). Una vez
+        # el refugio propio está completado_alguna_vez (huella_m2 fija,
+        # ya no admite más masa por el camino normal de CONSTRUIR/
+        # objetivo_construccion_actual), la comodidad puede seguir
+        # empujando a RECOLECTAR/CONSTRUIR -- pero en modo SUSTITUCIÓN
+        # (cambiar material de peor calidad por uno mejor, masa total
+        # constante), no acumulación.
+        #
+        # PRIORIDAD DE CARÁCTER: si la cadena comunal del asentamiento
+        # (almacén/salón/cocina, ya calculada arriba en cid_objetivo)
+        # sigue pendiente, (empatía+sociabilidad)/2 decide si el
+        # individuo antepone lo comunal (sigue con la utilidad ya
+        # calculada arriba, sin tocar nada aquí) o su propia comodidad
+        # -- un individuo poco prosocial puede anteponerse a sí mismo
+        # incluso con el pueblo a medio construir.
+        #
+        # AUTOLIMITADA por COMPARACIÓN LOCAL REAL, no un déficit puro
+        # como fuego/arma/herramienta/mineria: RECOLECTAR-mejora solo
+        # gana si el material que ESTA celda ofrecería ahora mismo
+        # (material_mejora_disponible_en) es de mejor calidad que la ya
+        # invertida en el refugio; CONSTRUIR-mejora solo si el Inventario
+        # YA porta algo mejor que lo peor invertido. Sin techo autorado
+        # en ningún sitio -- se satura sola en cuanto ya no hay nada
+        # mejor cerca / que portar.
+        construir_con_motivo_mejora = False
+        utilidad_categoria_mobiliario = 0.0
+        if cap_mental.consciencia >= umbral_consciencia_agencia and not fisica_bajo_umbral:
+            cid_refugio_propio = construccion_propia(gestor, id_entidad, "refugio", indice=indice)
+            if cid_refugio_propio is not None:
+                refugio_propio = gestor.obtener_componente(cid_refugio_propio, Construccion)
+                if refugio_propio is not None and refugio_propio.completado_alguna_vez:
+                    sesgo_prosocial = (temperamento.empatia + temperamento.sociabilidad) / 2.0
+                    # tipo_objetivo (no cid_objetivo): ya resuelto más
+                    # arriba en esta misma iteración (bloque CONSTRUIR/
+                    # RECOLECTAR) -- puede ser "" (ningún comunal supera
+                    # su propio gate para este individuo ahora mismo) o
+                    # uno de TIPOS_COMUNALES, aunque NO exista todavía
+                    # Construccion creada (cid_objetivo=None, pendiente
+                    # de fundarse). Al llegar aquí ya se confirmó
+                    # refugio_propio.completado_alguna_vez, así que
+                    # tipo_objetivo NUNCA puede ser "refugio" en este
+                    # punto (ver objetivo_construccion_actual: refugio
+                    # solo se elige mientras no está terminado).
+                    cadena_comunal_pendiente = tipo_objetivo != ""
+                    prioriza_comunal = (
+                        cadena_comunal_pendiente and sesgo_prosocial >= umbral_prosocial_comunal
+                    )
+                    if not prioriza_comunal:
+                        calidad_actual_refugio = calidad_media_construccion(
+                            refugio_propio.materiales, catalogo_materiales
+                        )
+                        deficit_comodidad = 1.0 - necesidades.comodidad
+
+                        objetos_para_mejora = list(inventario.objetos)
+                        if agarre is not None:
+                            objetos_para_mejora.extend(agarre.objetos)
+                        zona_mejora = mundo.territorio.zonas[pos.zona_idx]
+                        celda_mejora = zona_mejora.obtener_celda(pos.x, pos.y)
+                        material_local = material_mejora_disponible_en(
+                            gestor, celda_mejora, pos.x, pos.y, pos.zona_idx,
+                            objetos_para_mejora, catalogo_materiales, recetas_mineria,
+                            especies_flora_cfg,
+                        )
+                        mejora_recolectar_posible = (
+                            material_local is not None
+                            and float(
+                                catalogo_materiales.get(material_local, {}).get(
+                                    "calidad_construccion", 0.0
+                                )
+                            ) > calidad_actual_refugio
+                        )
+
+                        peor_calidad_refugio = min(
+                            (
+                                catalogo_materiales.get(clave, {}).get("calidad_construccion", 0.0)
+                                for clave, cant in refugio_propio.materiales.items()
+                                if cant > 0.0
+                            ),
+                            default=1.0,
+                        )
+                        mejora_construir_posible = any(
+                            cant > 0.0
+                            and catalogo_materiales.get(clave, {}).get("calidad_construccion", 0.0)
+                            > peor_calidad_refugio
+                            for clave, cant in inventario.contenidos.items()
+                        )
+
+                        if mejora_recolectar_posible and deficit_comodidad > utilidad_recolectar:
+                            utilidad_recolectar = deficit_comodidad
+                            if cadena_comunal_pendiente:
+                                # este tick prioriza comodidad -- el
+                                # objetivo comunal no gana el argmax
+                                # aunque siga pendiente
+                                utilidad_construir = 0.0
+                        if mejora_construir_posible and deficit_comodidad > utilidad_construir:
+                            utilidad_construir = deficit_comodidad
+                            construir_con_motivo_mejora = True
+
+                        # Taller de artesano (2026-09-16, ver docs/
+                        # superpowers/specs/2026-09-16-taller-mobiliario-
+                        # almacen-refugio-design.md): TERCERA vía de
+                        # mejora de vivienda, junto a RECOLECTAR-mejora y
+                        # CONSTRUIR-mejora -- hereda el MISMO
+                        # deficit_comodidad, sin valor propio (mismo
+                        # criterio que herramienta/mineria heredan de
+                        # necesidad_trabajo). Gateada por estar en un
+                        # taller completado del propio asentamiento Y
+                        # que su conocimiento colectivo "artesano" supere
+                        # el umbral -- primer efecto real de esa cubeta.
+                        if utilidad_categoria_mobiliario == 0.0 and hay_construccion_de_tipo_en(
+                            gestor, pos.x, pos.y, pos.zona_idx, "taller", indice=indice,
+                        ):
+                            asen_taller = asentamiento_de(mundo, id_entidad)
+                            if asen_taller is not None:
+                                nivel_artesano = nivel_conocimiento(
+                                    mundo.asentamiento_conocimiento.get(asen_taller.id),
+                                    "artesano", escala_saturacion_conocimiento,
+                                )
+                                if nivel_artesano >= umbral_conocimiento_taller:
+                                    receta_mobiliario = mejor_receta_completable(
+                                        objetos_para_mejora, recetas_mobiliario
+                                    )
+                                    if receta_mobiliario is not None:
+                                        nombre_mueble = str(receta_mobiliario.get("nombre", ""))
+                                        calidad_mueble = float(
+                                            catalogo_materiales.get(nombre_mueble, {}).get(
+                                                "calidad_construccion", 0.0
+                                            )
+                                        )
+                                        if calidad_mueble > calidad_actual_refugio:
+                                            utilidad_categoria_mobiliario = deficit_comodidad
+
+        # Resuelve CUÁL de los cuatro eslabones heredados de arriba (fuego,
+        # arma, herramienta, mineria) es el motivo REAL que explica el
+        # valor FINAL de utilidad_recolectar -- comparación contra el
+        # resultado ya cerrado de la cascada, no contra el valor "hasta
+        # ese punto" (2026-09-12, "prioridad consciente" -- ver CLAUDE.md).
+        # Sin esto, un eslabón temprano (p.ej. fuego) podía quedar marcado
+        # como motivo ganador aunque uno posterior (arma/herramienta/
+        # mineria) lo hubiera superado después en la misma cascada -- dos
+        # motivos simultáneamente `True` para el mismo RECOLECTAR, sin
+        # sentido físico (un individuo no puede recolectar por dos
+        # razones incompatibles a la vez). En empate exacto entre dos
+        # eslabones elegibles, se resuelve arbitrariamente por el primero
+        # comprobado (fuego > arma > herramienta > mineria) -- mismo
+        # criterio de "el primero que se comprueba gana el empate" ya
+        # usado en el resto de este módulo (ver `candidatas` más abajo).
         recolectar_con_motivo_fuego = (
             valor_heredado_fuego is not None and valor_heredado_fuego == utilidad_recolectar
         )
@@ -933,13 +1198,23 @@ def actualizar(
             and valor_heredado_herramienta is not None
             and valor_heredado_herramienta == utilidad_recolectar
         )
+        recolectar_con_motivo_mineria = (
+            not recolectar_con_motivo_fuego
+            and not recolectar_con_motivo_arma
+            and not recolectar_con_motivo_herramienta
+            and valor_heredado_mineria is not None
+            and valor_heredado_mineria == utilidad_recolectar
+        )
 
-        # Resolutor interno de FABRICAR: dos candidatos ("arma",
-        # "herramienta" -- 2026-09-11, el segundo real desde el rename
-        # FABRICAR_ARMA -> FABRICAR).
+        # Resolutor interno de FABRICAR: cuatro candidatos ("arma",
+        # "herramienta", "mineria" -- 2026-09-12, el tercero real desde el
+        # rename FABRICAR_ARMA -> FABRICAR; "mobiliario" -- 2026-09-16,
+        # taller de artesano).
         candidatos_fabricar: list[tuple[str, float]] = [
             ("arma", utilidad_categoria_arma),
             ("herramienta", utilidad_categoria_herramienta),
+            ("mineria", utilidad_categoria_mineria),
+            ("mobiliario", utilidad_categoria_mobiliario),
         ]
         categoria_fabricar_ganadora, utilidad_fabricar = max(
             candidatos_fabricar, key=lambda c: c[1]
@@ -1107,6 +1382,11 @@ def actualizar(
         intencion.recolectar_motivo_fuego = (
             intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_fuego
         )
+        # Mismo criterio, cuarto eslabón, para la categoría "mineria"
+        # (2026-09-12, "minería real").
+        intencion.recolectar_motivo_mineria = (
+            intencion.accion == Accion.RECOLECTAR and recolectar_con_motivo_mineria
+        )
         # Vuelca a Intencion que categoria gano el resolutor interno de
         # FABRICAR (2026-09-11), solo si FABRICAR es de verdad la accion
         # FINAL tras el compromiso de satisfaccion -- mismo criterio que
@@ -1115,6 +1395,30 @@ def actualizar(
         intencion.fabricar_categoria = (
             categoria_fabricar_ganadora if intencion.accion == Accion.FABRICAR else ""
         )
+        # Vuelca a Intencion la causalidad de CONSTRUIR-mejora (2026-09-14,
+        # Pieza D del arco "comodidad"): solo si CONSTRUIR es de verdad la
+        # acción FINAL tras el compromiso de satisfacción -- mismo criterio
+        # que recolectar_motivo_arma/fabricar_categoria arriba.
+        # sistema_movimiento.py/sistema_recursos.py ramifican por este
+        # valor para apuntar al refugio propio en modo sustitución en vez
+        # del objetivo normal de objetivo_construccion_actual.
+        intencion.construir_motivo_mejora = (
+            intencion.accion == Accion.CONSTRUIR and construir_con_motivo_mejora
+        )
+        if sistema_decision is not None and intencion.construir_motivo_mejora:
+            sistema_decision._stats_construir_mejora_elegido += 1
+        # Vuelca a Intencion el tipo de construcción resuelto este tick
+        # (2026-09-16, ver docs/superpowers/specs/2026-09-16-pertenencia-
+        # colocacion-necesidad-comunal-design.md) -- a diferencia de
+        # fabricar_categoria/construir_motivo_mejora, NO se gatea por cuál
+        # acción ganó el argmax final: el robo de materiales
+        # (sistema_movimiento.py) necesita saber "cuál es mi objetivo de
+        # construcción actual" con independencia de si HUIR/CAZAR/etc.
+        # terminó ganando este tick concreto (mismo criterio que ya tenía
+        # el robo antes de esta pieza, cuando recalculaba
+        # objetivo_construccion_actual por su cuenta sin mirar
+        # intencion.accion).
+        intencion.construir_tipo_objetivo = tipo_objetivo
 
         # Empunyar/guardar (armas primitivas v2, ver config/armas.yaml):
         # ajuste automatico recalculado cada tick junto a la Accion

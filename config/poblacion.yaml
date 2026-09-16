@@ -17,6 +17,7 @@ poblacion:
   caballos_iniciales: 9  # PROVISIONAL -- ver 2026-09-05-especie-caballo-design.md
   venados_iniciales: 10  # PROVISIONAL -- ver 2026-09-09-especie-venado-design.md
   cabras_montesas_iniciales: 8  # PROVISIONAL -- ver 2026-09-09-especie-cabra-montes-design.md (renombrada de cabra_montes a cabra_montesa el 2026-09-10)
+  zorros_iniciales: 8  # PROVISIONAL -- ver 2026-09-14-especie-zorro-design.md
   techo_fraccion_edad_inicial_longevidad: 0.7
 
 rangos_raciales:
@@ -529,3 +530,59 @@ rangos_raciales:
     resiliencia: [0.3, 0.6]
     estabilidad_mental_maxima: [0.4, 0.6]
     consciencia: [0.0, 0.1]
+
+  # ZORRO (2026-09-14, ver docs/superpowers/specs/
+  # 2026-09-14-especie-zorro-design.md): mesodepredador de conejo/ardilla
+  # -- lobo (60-90kg) es demasiado pesado para nutrirse bien de presas
+  # tan pequeñas (ver CLAUDE.md, "Por que lobo se muere de hambre pese a
+  # cazar mas que nadie"). Peso [5,9] elegido por FIDELIDAD al zorro real
+  # (decision explicita de Diego, 2026-09-14) en vez de garantizar caza
+  # de conejo al 100%: contra ardilla (0.3-0.6kg) el ratio de peso
+  # siempre supera el umbral de disposicion de caza (0.5, exige ratio~e
+  # -- ver combate.umbral_disposicion_caza); contra conejo (1.5-3.0kg)
+  # solo una fraccion de individuos (los mas pesados contra conejos mas
+  # ligeros) supera ese ratio -- control real pero PARCIAL, mismo patron
+  # ya aceptado con lobo/cabra_montesa, no un fallo. Nace en bosque Y
+  # pradera a la vez (pool combinado en main.py:sembrar_poblacion_inicial,
+  # sin forzar reparto 50/50) -- generalista real, coherente con el zorro
+  # real y con el hecho de que ambos biomas ya son contiguos en el motor.
+  # Sociabilidad baja a proposito -- territorial/solitario, caza en
+  # SOLITARIO por diseño (ratio de peso ya se lo permite sin depender de
+  # aliados, mismo criterio que venado). Sin entrada propia en
+  # fisiologia.yaml:necesidades todavia -- mismo criterio ya usado con
+  # caballo/venado/cabra_montesa, no calibrar a ciegas antes de medir
+  # fragilidad real contra el motor. Todo PROVISIONAL, sin calibrar
+  # contra el harness completo.
+  zorro:
+    medio_alimentacion: cazar
+    peso: [5, 9]
+    altura: [0.35, 0.55]
+    longevidad: [4, 8]
+    duracion_gestacion_dias: [45, 60]
+    camada: [2, 4]
+    fraccion_madurez: 0.2
+    factor_base_concepcion: 0.015
+    puntos_agarre: 1  # boca
+    fuerza: [0.25, 0.45]
+    agilidad: [0.5, 0.85]
+    velocidad: [0.5, 0.85]
+    resistencia_enfermedad: [0.3, 0.6]
+    agudeza_sensorial: [0.6, 0.9]
+    vitalidad_maxima: [0.35, 0.6]
+    resistencia_maxima: [0.35, 0.6]
+    curacion: [0.01, 0.02]
+    recuperacion: [0.08, 0.15]
+    valentia: [0.3, 0.6]
+    sociabilidad: [0.2, 0.45]
+    agresividad: [0.2, 0.5]
+    dominancia: [0.15, 0.4]
+    empatia: [0.2, 0.5]
+    lealtad: [0.3, 0.6]
+    fe: [0.0, 0.2]
+    curiosidad: [0.3, 0.6]
+    inteligencia: [0.3, 0.6]
+    memoria: [0.3, 0.6]
+    voluntad: [0.2, 0.5]
+    resiliencia: [0.3, 0.6]
+    estabilidad_mental_maxima: [0.4, 0.7]
+    consciencia: [0.0, 0.15]

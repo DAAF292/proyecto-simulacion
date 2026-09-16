@@ -172,6 +172,46 @@ asentamiento:
   excedente_base_para_aportar: 0.3
   reduccion_umbral_por_empatia_lealtad: 0.15
   aumento_umbral_por_agresividad: 0.2
+  # Identidad persistente (2026-09-15, ver
+  # nucleo/asentamiento.py:resolver_identidades_persistentes): solape
+  # mínimo (Jaccard, intersección/unión de miembros) entre el clúster de
+  # hoy y uno de ayer para que se considere "el mismo" asentamiento en
+  # vez de refundarlo con un id nuevo. PROVISIONAL, sin calibrar contra
+  # el motor en marcha.
+  umbral_continuidad_identidad: 0.5
+  # Conocimiento colectivo transmisible (2026-09-15, ver
+  # nucleo/conocimiento.py): decaimiento diario multiplicativo de la
+  # cuenta bruta acumulada por cubeta -- 4x más lento que
+  # relaciones.tasa_decaimiento_dia_afinidad (0.02) porque el oficio de
+  # un pueblo no se olvida a la misma velocidad que un vínculo emocional
+  # individual. PROVISIONAL, sin calibrar.
+  tasa_erosion_conocimiento_dia: 0.005
+  # Cuenta bruta (ticks de trabajo real acumulados por el pueblo) que
+  # corresponde a nivel=1.0 (saturado) -- saturación lineal simple,
+  # PROVISIONAL, sin curva más sofisticada.
+  escala_saturacion_conocimiento: 2000.0
+  # Peso del multiplicador de tasa por conocimiento colectivo
+  # (factor = 1.0 + peso*nivel, sin penalización por debajo de 1.0 --
+  # ver nucleo/conocimiento.py:factor_conocimiento_colectivo). Mismo
+  # orden que decision.peso_aptitud_vocacional. PROVISIONAL.
+  peso_conocimiento_colectivo: 0.3
+  # Nombre propio, mix geográfico (2026-09-15, corrección tras feedback
+  # de Diego -- ver nucleo/asentamiento.py:generar_nombre/
+  # rasgo_geografico_notable): probabilidad de que, SI la celda de
+  # fundación tiene un rasgo geográfico notable (agua o montaña), el
+  # nombre use el catálogo temático de ese rasgo en vez del genérico de
+  # sílabas -- deliberadamente no determinista (0.6, no 1.0): un
+  # asentamiento junto a un río no siempre se llama por el río.
+  # PROVISIONAL.
+  probabilidad_nombre_tematico: 0.6
+  # Taller de artesano (2026-09-16, ver docs/superpowers/specs/
+  # 2026-09-16-taller-mobiliario-almacen-refugio-design.md): nivel [0,1]
+  # de conocimiento colectivo "artesano" que el asentamiento necesita
+  # para que FABRICAR-mobiliario esté disponible en su taller -- primer
+  # efecto real de esa cubeta. PROVISIONAL, razonado a mitad de escala
+  # (ni recién fundado ni saturado), sin calibrar contra el motor en
+  # marcha.
+  umbral_conocimiento_taller: 0.3
 
 # --- Conflicto (2026-08-30, resolutor genérico de disputas) --------------
 # nucleo/conflicto.py:resolver_disputa. Primer consumidor: refugio

@@ -9,24 +9,34 @@ Territorio: cada refugio sigue siendo propiedad individual de su gnomo
 asentamiento es solo el CLÚSTER que emerge cuando el instinto gregario
 ya construido agrupa varios refugios cerca unos de otros.
 
-Recalculado ÍNTEGRO cada día (sistemas/sistema_asentamiento.py), sin
-identidad persistida entre recálculos -- mismo criterio que
-nucleo/agua.py:pendiente_local (dato derivado, más barato de recalcular
-que de mantener sincronizado). No se guarda en SQLite por el mismo
-motivo: es 100% derivable de Construccion + Temperamento, y el recálculo
-diario lo repone en menos de un día de partida tras cargar una partida
-guardada.
+Recalculado ÍNTEGRO cada día (sistemas/sistema_asentamiento.py) -- la
+mayoría de sus campos (centro, líderes) siguen siendo 100% derivables
+de Construccion + Temperamento, mismo criterio que
+nucleo/agua.py:pendiente_local. Qué edificios comunales pertenecen a
+este asentamiento vive en Construccion.asentamiento_id (2026-09-16,
+pertenencia explícita), no cacheado aquí -- el campo almacen_id que
+existió hasta esa fecha nunca se leía en ningún consumidor real,
+cache muerta desde que se introdujo. El `id` en sí, en cambio, SÍ es estable
+entre días desde el 2026-09-15 (ver
+resolver_identidades_persistentes más abajo y docs/superpowers/specs/
+2026-09-15-identidad-persistente-asentamiento-design.md) -- reutilizado
+por solape de miembros, no reasignado 1..N desde cero. El registro que
+sostiene esa continuidad (`Mundo.asentamiento_registro_identidad`/
+`asentamiento_tick_fundacion`) SÍ se persiste en SQLite (tabla
+`configuracion_ejecucion`), a diferencia del resto de este dataclass.
 
 Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from typing import Any
 
 from componentes.relaciones import Relaciones
 from nucleo.agrupacion import agrupar_por_proximidad, calcular_centro
+from nucleo.celda import Celda, TipoTerreno
 
 __all__ = [
     "Asentamiento",
@@ -34,9 +44,66 @@ __all__ = [
     "calcular_centro",
     "calcular_liderazgo",
     "asentamiento_de",
-    "almacen_cercano",
     "disposicion_a_aportar",
+    "resolver_identidades_persistentes",
+    "generar_nombre",
+    "rasgo_geografico_notable",
 ]
+
+
+def rasgo_geografico_notable(celda: Celda) -> str | None:
+    """Rasgo geográfico real (2026-09-15, corrección tras feedback de
+    Diego: "eso no se diferencia mucho de una generación de nombres
+    común... podemos hacer un mix" con el terreno) que puede dar nombre
+    TEMÁTICO a un asentamiento fundado sobre esta celda -- 'agua' si
+    tiene agua real (río/lago/poza, ya generada causalmente por
+    nucleo/agua.py), 'montana' si el bioma es MONTANA sin agua, `None`
+    en cualquier otro caso (pradera/bosque/desierto/tundra sin agua
+    cerca -- estos siguen usando solo el catálogo genérico de sílabas,
+    sin ningún tema). Agua tiene prioridad sobre montaña si ambos
+    coinciden (un río de montaña, caso raro) -- el agua es el rasgo más
+    determinante para dónde se funda un asentamiento de verdad."""
+    if celda.tipo_agua != "":
+        return "agua"
+    if celda.tipo_terreno == TipoTerreno.MONTANA:
+        return "montana"
+    return None
+
+
+def generar_nombre(
+    rng: random.Random,
+    catalogo: dict[str, Any],
+    rasgo: str | None = None,
+    probabilidad_tematico: float = 0.0,
+) -> str | None:
+    """Nombre propio de asentamiento (2026-09-15, ver docs/superpowers/
+    specs/2026-09-15-nombre-cronica-asentamiento-design.md) -- mismo
+    patrón prefijo+sufijo que nucleo/entidad.py:_generar_nombre (nombre
+    individual), pero sin distinción de sexo (un lugar no tiene sexo) y
+    sin generalizar esa función -- pequeña duplicación deliberada, más
+    simple que acoplar ambos conceptos.
+
+    Mix geográfico (2026-09-15): si `rasgo` no es None y la tirada de
+    probabilidad lo confirma, sustituye `catalogo["prefijos"]` por
+    `catalogo[f"prefijos_{rasgo}"]` -- los SUFIJOS siguen siendo
+    siempre los mismos, solo el prefijo cambia de catálogo. Sin rasgo
+    (o sin catálogo temático para él, o sin que la tirada lo confirme),
+    cae al catálogo genérico de siempre -- deliberadamente NO
+    determinista: un asentamiento junto a un río no siempre se llama
+    por el río.
+
+    `None` si el catálogo genérico resultante está vacío. Se llama UNA
+    sola vez, al fundarse el asentamiento -- nunca se vuelve a sortear
+    mientras el id persista."""
+    prefijos = catalogo.get("prefijos") or []
+    if rasgo is not None and rng.random() < probabilidad_tematico:
+        prefijos_tematicos = catalogo.get(f"prefijos_{rasgo}") or []
+        if prefijos_tematicos:
+            prefijos = prefijos_tematicos
+    sufijos = catalogo.get("sufijos") or []
+    if not prefijos or not sufijos:
+        return None
+    return rng.choice(prefijos) + rng.choice(sufijos)
 
 
 # Contadores de observación para BOSQUE_AUTO_TICKS (2026-09-06, círculo 5b
@@ -56,7 +123,6 @@ class Asentamiento:
     centro: tuple[int, int]
     miembros: frozenset[int]
     lideres: frozenset[int] = field(default_factory=frozenset)
-    almacen_id: int | None = None
     zona_idx: int = 0
     """Un asentamiento no puede tener miembros en zonas distintas -- sus
     refugios no comparten espacio real (ver
@@ -65,6 +131,70 @@ class Asentamiento:
     separado. Este campo es la zona de TODOS sus miembros (garantizado
     por esa partición previa, no algo que este dataclass verifique por
     sí solo)."""
+    tick_fundacion: int = 0
+    """Primer tick en que este id existió (2026-09-15, identidad
+    persistente -- ver docs/superpowers/specs/
+    2026-09-15-identidad-persistente-asentamiento-design.md). A
+    diferencia del resto de este dataclass (recalculado íntegro cada
+    día), este valor SÍ persiste entre días -- viene de
+    Mundo.asentamiento_tick_fundacion, no se recalcula desde cero."""
+
+
+def resolver_identidades_persistentes(
+    grupos: list[frozenset[int]],
+    registro_anterior: dict[int, frozenset[int]],
+    umbral_continuidad: float,
+) -> dict[int, frozenset[int]]:
+    """Asigna a cada grupo de HOY un id estable, reutilizando el de ayer
+    cuando el solape de miembros lo justifica -- en vez de reasignar
+    1..N desde cero cada día (lo que hacía `Asentamiento.id` antes de
+    esta pieza, ver historial). Devuelve {id_resuelto: miembros_de_hoy}.
+
+    Continuidad por coeficiente de Jaccard (|intersección| / |unión|)
+    contra cada id de `registro_anterior`: si el mejor solape de un
+    grupo supera `umbral_continuidad`, reutiliza ese id -- así un
+    asentamiento que pierde o gana un miembro sigue siendo "el mismo"
+    en vez de refundarse. Resolución determinista, no depende del orden
+    de iteración de ningún dict/set: candidatos ordenados por solape
+    descendente, empate por id_anterior más bajo, segundo empate por
+    orden de `grupos`; cada id anterior y cada grupo de hoy se usan como
+    máximo una vez (greedy). Un grupo sin ningún candidato por encima
+    del umbral recibe un id nuevo, consecutivo al mayor id ya visto
+    (anterior o ya asignado hoy).
+
+    Simplificación deliberada: si dos clústeres de hoy compiten por el
+    mismo id de ayer (fusión de dos asentamientos, o un asentamiento que
+    se escinde en dos), gana el de mayor solape y el otro recibe un id
+    nuevo -- sin tracking explícito de fusión/escisión, caso raro dado
+    que los refugios no se mueven una vez construidos."""
+    candidatos: list[tuple[float, int, int]] = []
+    for idx, grupo in enumerate(grupos):
+        for id_anterior, miembros_anterior in registro_anterior.items():
+            interseccion = grupo & miembros_anterior
+            if not interseccion:
+                continue
+            union_total = len(grupo | miembros_anterior)
+            solape = len(interseccion) / union_total if union_total else 0.0
+            if solape >= umbral_continuidad:
+                candidatos.append((solape, id_anterior, idx))
+
+    candidatos.sort(key=lambda c: (-c[0], c[1], c[2]))
+
+    id_resuelto_por_idx: dict[int, int] = {}
+    ids_anteriores_usados: set[int] = set()
+    for solape, id_anterior, idx in candidatos:
+        if idx in id_resuelto_por_idx or id_anterior in ids_anteriores_usados:
+            continue
+        id_resuelto_por_idx[idx] = id_anterior
+        ids_anteriores_usados.add(id_anterior)
+
+    siguiente_id_libre = max([0, *registro_anterior.keys(), *id_resuelto_por_idx.values()]) + 1
+    for idx in range(len(grupos)):
+        if idx not in id_resuelto_por_idx:
+            id_resuelto_por_idx[idx] = siguiente_id_libre
+            siguiente_id_libre += 1
+
+    return {id_resuelto_por_idx[idx]: grupos[idx] for idx in range(len(grupos))}
 
 
 # agrupar_por_proximidad / calcular_centro: extraídas a
@@ -180,55 +310,6 @@ def asentamiento_de(mundo: Any, id_entidad: int) -> Asentamiento | None:
             return asen
     return None
 
-
-def almacen_cercano(
-    gestor: Any, centro: tuple[int, int], radio: int, zona_idx: int = 0,
-    tipo: str = "almacen", indice=None,
-):
-    """Id de la Construccion de tipo `tipo` más cercana a `centro` dentro
-    de `radio`, o None -- búsqueda EN VIVO (no el almacen_id cacheado a
-    diario en Asentamiento) para no perder una construcción arrancada por
-    otro miembro este mismo día, antes del próximo recálculo diario.
-
-    `tipo` (2026-09-08, salón común -- ver docs/superpowers/specs/
-    2026-09-08-salon-comun-design.md): generaliza la función más allá de
-    "almacen" para su segundo consumidor real, sin romper a los dos
-    consumidores existentes (no lo pasan, comportamiento idéntico). El
-    nombre `almacen_cercano` se conserva -- mismo criterio ya aceptado en
-    `espacio_disponible_para_construir`, que también conserva un nombre
-    histórico por los consumidores que ya lo importan.
-
-    zona_idx: sin este filtro, un almacén en una cueva y otro en
-    superficie (o en otra cueva) con coordenadas numéricamente cercanas
-    se confundirían entre sí -- caso real con varias cuevas por mundo
-    compartiendo rangos de coordenadas pequeños.
-
-    indice (2026-09-08, nucleo/indice_espacial.py): IndiceEspacial ya
-    construido, opcional -- si se pasa, se consulta indice.en_radio en
-    vez del escaneo lineal O(N) sobre todas las construcciones del
-    mundo. Sin indice, comportamiento identico a antes."""
-    from componentes.construccion import Construccion
-    from componentes.posicion import Posicion
-
-    mejor = None
-    mejor_dist = None
-    fuente = (
-        indice.en_radio(centro[0], centro[1], zona_idx, radio)
-        if indice is not None
-        else gestor.entidades_con(Construccion, Posicion)
-    )
-    for cid in fuente:
-        construccion = gestor.obtener_componente(cid, Construccion)
-        if construccion is None or construccion.tipo != tipo:
-            continue
-        pos = gestor.obtener_componente(cid, Posicion)
-        if pos is None or pos.zona_idx != zona_idx:
-            continue
-        dist = abs(pos.x - centro[0]) + abs(pos.y - centro[1])
-        if dist <= radio and (mejor_dist is None or dist < mejor_dist):
-            mejor = cid
-            mejor_dist = dist
-    return mejor
 
 
 def disposicion_a_aportar(temperamento: Any, config_asentamiento: dict[str, Any]) -> float:

@@ -60,6 +60,7 @@ from nucleo.vocacion import vocacion_dominante
 RUTA_CONFIG = Path(__file__).resolve().parent.parent / "config"
 ESPECIES = [
     "gnomo", "lobo", "conejo", "ardilla", "caballo", "venado", "cabra_montesa",
+    "zorro",
 ]
 # Criterio maestro original de Diego (2026-09-06): las 5 especies del
 # catálogo de entonces vivas a la vez. Se mantiene para comparar contra
