@@ -648,24 +648,82 @@ function asegurarCapas() {
   return cont;
 }
 
-// Escala de sprite de construccion por huella_m2 REAL (2026-09-16, mismo
-// principio que alturaSpriteCriatura aplicado a edificios: el dato real
-// del motor manda sobre cuanto margen dejo el recorte del PNG generado).
-// Reutiliza ORDEN_HUELLA_CONSTRUCCION (huella_m2 real de
-// config/materiales.yaml, ya definida mas arriba para desempatar sello) en
-// vez de duplicar los mismos numeros en una tabla aparte. Referencia:
-// refugio/taller (15 m², los mas pequeños reales) -- almacen (40 m², el
-// mayor) sale ~1.6x mas grande en pantalla, no 2.7x lineal, mismo criterio
-// de compresion por raiz cuadrada que ya se aplico a fauna para no llegar
-// a tamaños absurdos a esta escala de celda.
-const HUELLA_REFERENCIA_M2 = 15;
-const BASE_SPRITE_CONSTRUCCION_A_REFERENCIA = CELDA * 0.95;
-const SPRITE_CONSTRUCCION_MIN = CELDA * 0.75;
-const SPRITE_CONSTRUCCION_MAX = CELDA * 1.7;
+// Escala generica por raiz N-esima de una razon contra una referencia
+// propia -- MISMO metodo de compresion para fauna y construcciones (evita
+// que un rango real amplio se dispare de forma absurda en pantalla), pero
+// SIN forzar que compartan la misma unidad, el mismo punto de anclaje NI
+// el mismo exponente: metros (altura real de un individuo) y kg (masa
+// minima de material de un edificio) no son la misma magnitud fisica y
+// cruzarlas como si lo fueran fue precisamente el bug de un circulo
+// anterior (ver comentario de tamanoSpriteConstruccion mas abajo).
+// exponente=0.5 (raiz cuadrada) por defecto -- el que ya usaba fauna.
+function escalarPorRaiz(valor, valorReferencia, pxReferencia, minPx, maxPx, exponente = 0.5) {
+  const escala = Math.pow(Math.max(0.0001, valor) / valorReferencia, exponente);
+  return Math.max(minPx, Math.min(maxPx, pxReferencia * escala));
+}
+
+// RECALIBRADO 2026-09-16 (Diego, tercera vuelta sobre este mismo
+// mecanismo): "tampoco hagas gigantes las construcciones, igual lo que
+// hay que hacer es las criaturas mas pequeñas, porque al final tambien
+// estan los arboles y flora" -- la flora (arbol/arbusto/cobertura) sigue
+// siendo un unico glifo confinado a su celda (CELDA=32px, nunca
+// reescalado), asi que criaturas/construcciones demasiado grandes frente
+// a ese ancla rompen la coherencia visual del mapa completo, no solo la
+// proporcion entre ellas dos. Referencia de gnomo bajada de CELDA*1.4 a
+// CELDA*1.0 (una persona ~del ancho de una celda, no 1.4x) y el tope de
+// fauna de CELDA*2.2 a CELDA*1.5 (un caballo ya no supera 1.5 celdas).
+const ALTURA_REFERENCIA_M = 0.9; // ~altura media de gnomo (rango 0.9-1.2m)
+const BASE_SPRITE_A_REFERENCIA = CELDA * 1.0;
+const ALTURA_SPRITE_MIN = CELDA * 0.5;
+const ALTURA_SPRITE_MAX = CELDA * 1.5;
+
+// Tamaño de sprite de construccion -- REESCRITO 2026-09-16, tres veces en
+// el mismo circulo. 1er intento: huella_m2 (area) cruzada con la
+// referencia de metros de fauna -- Diego: "ese gnomo es enorme en
+// comparacion a la construccion" (un refugio salia mas pequeño en
+// pantalla que una persona). 2o intento: huella_m2 ya cruzada
+// correctamente, pero seguia siendo la metrica EQUIVOCADA para decidir
+// cual es "el mas grande" -- Diego: "el mas grande deberia ser el salon
+// comun", y por huella_m2 NO lo es (almacen=40 > salon_comun=35).
+// Investigado contra el propio config antes de tocar nada mas:
+// huella_m2_salon_comun se bajo de 45 a 35 el 2026-09-09 por una razon
+// puramente aritmetica (que cupiera junto al almacen dentro de
+// capacidad_construccion_celda_m2=80), NO porque el edificio sea mas
+// pequeño -- el comentario original de salon_comun ya decia
+// explicitamente "Algo mas grande que el almacen (masa)", y
+// masa_minima_salon_comun (70) SI es mayor que masa_minima_almacen (60).
+// La masa de material -- no la huella en el suelo -- es el eje que
+// realmente codifica la jerarquia de importancia constructiva que Diego
+// ya habia fijado en su propio config. huella_m2 sigue siendo la
+// metrica CORRECTA para ORDEN_HUELLA_CONSTRUCCION (desempatar que sello
+// dibujar cuando 2 construcciones compiten por la misma celda -- ese
+// mecanismo es literalmente sobre area de suelo), asi que se queda
+// intacta; el tamaño VISUAL usa una tabla separada.
+//
+// 3er intento (este): con masa arreglando el orden, el resultado
+// (refugio 81px, salon_comun 175px sin zoom) volvia a ser "gigante" --
+// Diego lo señalo de nuevo, pidiendo ademas reducir fauna (ver arriba).
+// Cambio de exponente de 0.5 (raiz cuadrada) a 1/3 (raiz CUBICA) para
+// las construcciones, no un ajuste arbitrario de constantes: masa ~
+// volumen ~ lado³ es la relacion fisicamente correcta entre una MASA
+// (kg) y un tamaño LINEAL, a diferencia de huella_m2 (area, donde raiz
+// cuadrada si es lo correcto) -- de paso, al ser un exponente menor,
+// comprime mas el rango real (70/15=4.67x en masa queda en 1.67x en
+// pantalla, antes 2.16x con raiz cuadrada), exactamente lo que Diego
+// pedia sin inventar un factor de ajuste sin justificar.
+const MASA_MINIMA_CONSTRUCCION = { salon_comun: 70, almacen: 60, cocina: 50, taller: 50, refugio: 15 };
+const MASA_REFERENCIA_KG = 15; // masa_minima_refugio
+// Referencia propia (no cruzada con metros): el edificio mas pequeño real
+// (refugio) se ancla apenas por encima del sprite de la criatura mas
+// grande posible (caballo, tope ALTURA_SPRITE_MAX) -- un edificio, por
+// modesto que sea, nunca deberia caber "dentro" de una persona, pero
+// tampoco desbordar varias celdas de flora vecinas.
+const SPRITE_CONSTRUCCION_REFERENCIA = ALTURA_SPRITE_MAX * 1.1;
+const SPRITE_CONSTRUCCION_MIN = CELDA * 1.0;
+const SPRITE_CONSTRUCCION_MAX = CELDA * 3.0;
 function tamanoSpriteConstruccion(tipo) {
-  const huella = ORDEN_HUELLA_CONSTRUCCION[tipo] || HUELLA_REFERENCIA_M2;
-  const escala = Math.sqrt(huella / HUELLA_REFERENCIA_M2);
-  return Math.max(SPRITE_CONSTRUCCION_MIN, Math.min(SPRITE_CONSTRUCCION_MAX, BASE_SPRITE_CONSTRUCCION_A_REFERENCIA * escala));
+  const masa = MASA_MINIMA_CONSTRUCCION[tipo] || MASA_REFERENCIA_KG;
+  return escalarPorRaiz(masa, MASA_REFERENCIA_KG, SPRITE_CONSTRUCCION_REFERENCIA, SPRITE_CONSTRUCCION_MIN, SPRITE_CONSTRUCCION_MAX, 1 / 3);
 }
 
 function crearCeldaTxt(ch, color, cx, cy, glow, fondo) {
@@ -809,14 +867,13 @@ function renderMapa() {
 // en absoluto. Ancho en 'auto': el navegador preserva la proporcion real
 // de cada PNG (todas distintas -- un conejo sentado es alto y estrecho,
 // un zorro de perfil es ancho y bajo).
-const ALTURA_REFERENCIA_M = 0.9; // ~altura media de gnomo (rango 0.9-1.2m), unidad de referencia
-const BASE_SPRITE_A_REFERENCIA = CELDA * 1.4;
-const ALTURA_SPRITE_MIN = CELDA * 0.55;
-const ALTURA_SPRITE_MAX = CELDA * 2.2;
+// ALTURA_REFERENCIA_M / BASE_SPRITE_A_REFERENCIA / ALTURA_SPRITE_MIN/MAX /
+// escalarPorRaiz ya definidos mas arriba (ver su comentario -- el mismo
+// METODO de compresion se reutiliza para tamanoSpriteConstruccion, pero
+// cada una con su propia unidad y referencia, nunca cruzadas entre si).
 function alturaSpriteCriatura(ent) {
   const alturaM = (ent.dimensiones && ent.dimensiones.altura_m) || ALTURA_REFERENCIA_M;
-  const escala = Math.sqrt(alturaM / ALTURA_REFERENCIA_M);
-  return Math.max(ALTURA_SPRITE_MIN, Math.min(ALTURA_SPRITE_MAX, BASE_SPRITE_A_REFERENCIA * escala));
+  return escalarPorRaiz(alturaM, ALTURA_REFERENCIA_M, BASE_SPRITE_A_REFERENCIA, ALTURA_SPRITE_MIN, ALTURA_SPRITE_MAX);
 }
 
 function crearCeldaImg(src, cx, cy, glow, altura) {
