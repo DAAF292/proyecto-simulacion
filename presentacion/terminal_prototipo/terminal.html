@@ -338,9 +338,8 @@ const CATALOGO_GLIFOS = {
   // nativo, no se puede teñir de ambar. No es un choque de estilo (el
   // resto del mapa ya usa muchos colores por categoria, no solo ambar),
   // pero significa que `color` en esta seccion ya no pinta el glifo --
-  // se conserva solo para el resplandor de "consciente" (text-shadow SI
-  // funciona sobre un caracter aunque sea emoji) y como referencia en la
-  // leyenda. Sin emoji real de "gnomo": se uso 🧙 (figura humanoide con
+  // se conserva solo como referencia en la leyenda. Sin emoji real de
+  // "gnomo": se uso 🧙 (figura humanoide con
   // gorro puntiagudo, la silueta mas cercana disponible, ver
   // docs/informe_codice_cartografico.md-style de honestidad: aproximacion
   // documentada, no un hallazgo perfecto). 🐿️ (ardilla) es una secuencia
@@ -478,11 +477,7 @@ const ORDEN_HUELLA_CONSTRUCCION = { almacen: 40, salon_comun: 35, cocina: 35, re
 
 function infoCriatura(ent) {
   const g = CATALOGO_GLIFOS.fauna[ent.tipo] || { ch: '?', color: '#ffffff', nombre: ent.tipo };
-  // Criaturas conscientes (mismo umbral de agencia que usa el motor,
-  // dato real via capacidad_mental.consciente) destacan con resplandor --
-  // mismo criterio que el Codice retirado reservaba para runas de
-  // criaturas conscientes, aqui sin necesitar ningun asset.
-  return { ch: g.ch, color: g.color, img: g.img || null, glow: !!ent.consciente };
+  return { ch: g.ch, color: g.color, img: g.img || null };
 }
 
 // REDISEÑADO 2026-09-16, dos veces seguidas. Primero (feedback: "demasiado
@@ -726,7 +721,7 @@ function tamanoSpriteConstruccion(tipo) {
   return escalarPorRaiz(masa, MASA_REFERENCIA_KG, SPRITE_CONSTRUCCION_REFERENCIA, SPRITE_CONSTRUCCION_MIN, SPRITE_CONSTRUCCION_MAX, 1 / 3);
 }
 
-function crearCeldaTxt(ch, color, cx, cy, glow, fondo) {
+function crearCeldaTxt(ch, color, cx, cy, fondo) {
   const el = document.createElement('div');
   el.className = 'celda-txt';
   el.textContent = ch;
@@ -734,7 +729,6 @@ function crearCeldaTxt(ch, color, cx, cy, glow, fondo) {
   el.style.fontSize = Math.round(CELDA * 0.8) + 'px';
   el.style.color = color;
   if (fondo) el.style.backgroundColor = fondo;
-  if (glow) el.style.textShadow = `0 0 6px ${color}`;
   el.style.left = cx + 'px'; el.style.top = cy + 'px';
   return el;
 }
@@ -842,7 +836,7 @@ function renderMapa() {
         ? crearCeldaCuadrantes(info.items, cx, cy, info.fondo)
         : esConstruccionUnica
           ? crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion))
-          : crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, false, info.fondo);
+          : crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
       el.style.zIndex = String((esConstruccionUnica ? 500 : 0) + y);
       capaEstatica.appendChild(el);
     }
@@ -876,14 +870,13 @@ function alturaSpriteCriatura(ent) {
   return escalarPorRaiz(alturaM, ALTURA_REFERENCIA_M, BASE_SPRITE_A_REFERENCIA, ALTURA_SPRITE_MIN, ALTURA_SPRITE_MAX);
 }
 
-function crearCeldaImg(src, cx, cy, glow, altura) {
+function crearCeldaImg(src, cx, cy, altura) {
   const el = document.createElement('img');
   el.className = 'criatura-img';
   el.src = src;
   el.style.height = altura + 'px';
   el.style.left = (cx + CELDA / 2) + 'px';
   el.style.top = (cy + CELDA) + 'px';
-  if (glow) el.style.filter = 'drop-shadow(0 0 4px rgba(255,255,255,0.9))';
   return el;
 }
 
@@ -903,7 +896,7 @@ function renderCriaturas() {
     // recrea en vez de intentar mutar un <img> en un <div> de texto.
     if (el && !!el.dataset.esImg !== esImg) { el.remove(); el = null; }
     if (!el) {
-      el = esImg ? crearCeldaImg(info.img, cx, cy, info.glow, alturaSpriteCriatura(ent)) : crearCeldaTxt(info.ch, info.color, cx, cy, info.glow);
+      el = esImg ? crearCeldaImg(info.img, cx, cy, alturaSpriteCriatura(ent)) : crearCeldaTxt(info.ch, info.color, cx, cy);
       el.dataset.esImg = esImg ? '1' : '';
       el.style.transition = esImg ? 'left 0.9s linear, top 0.9s linear' : 'left 0.9s linear, top 0.9s linear';
       capaCriaturas.appendChild(el);
@@ -911,13 +904,11 @@ function renderCriaturas() {
     } else if (esImg) {
       if (!el.src.endsWith(info.img)) el.src = info.img;
       el.style.height = alturaSpriteCriatura(ent) + 'px';
-      el.style.filter = info.glow ? 'drop-shadow(0 0 4px rgba(255,255,255,0.9))' : '';
       el.style.left = (cx + CELDA / 2) + 'px';
       el.style.top = (cy + CELDA) + 'px';
     } else {
       el.textContent = info.ch;
       el.style.color = info.color;
-      el.style.textShadow = info.glow ? `0 0 6px ${info.color}` : '';
       el.style.left = cx + 'px';
       el.style.top = cy + 'px';
     }
