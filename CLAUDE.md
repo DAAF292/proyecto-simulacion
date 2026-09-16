@@ -452,6 +452,23 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   catálogo, zoom centrado en el cursor y paneo por arrastre. Los ~83MB
   de sprites del prototipo anterior se retiraron del repositorio
   (recuperables por git history si algún día se retoma una vía gráfica).
+  **Segunda pasada de limpieza el mismo día, a raíz de que Diego preguntó
+  explícitamente "¿has eliminado todo el código muerto y los assets que
+  no se usan?"** (la primera pasada solo tocó lo directamente enredado
+  con el cambio, no fue una auditoría completa): `inspiracion/` (127MB,
+  fotos de referencia + su versión procesada, sin ningún consumidor ya
+  que el pipeline de sprites que las usaba desapareció entero) y los 6
+  scripts de un solo uso en `presentacion/arnes/` que la generaban o la
+  consumían (`extraer_sprites_definitivos.py`,
+  `adaptar_especies_faltantes.py`, `quitar_fondo_inspiracion.py`,
+  `integrar_inspiracion_terminal.py`, más `arreglar_utf8.py`/
+  `empalmar_marco.py`/`empalmar_marco_v2.py`, ligados al HTML del
+  Códice ya retirado); y la dependencia `rich>=13.0` de
+  `requirements.txt`, declarada sin un solo `import rich` en todo el
+  repositorio (hallazgo que ya constaba en una auditoría previa sin que
+  nadie lo hubiera corregido). Lección honesta: la primera pasada de
+  limpieza de este mismo círculo no fue exhaustiva por defecto — hizo
+  falta que Diego preguntase explícitamente para completarla.
   Pendiente real: confirmación visual de Diego sobre la elección de
   glifos/colores concreta — es una primera propuesta razonada, no una
   calibración cerrada; catálogo de eventos filtrable (panel
