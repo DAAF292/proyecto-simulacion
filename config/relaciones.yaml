@@ -58,6 +58,15 @@ relaciones:
   # (consumidor: sistema_asentamiento.py). PROVISIONAL, sin calibrar:
   # con 0.05/dia, dos convivientes llegan al tope 1.0 en 20 dias.
   delta_amistad_convivencia_dia: 0.05
+  # Bono de parentesco en la convivencia (2026-09-17, ver docs/
+  # superpowers/specs/2026-09-17-convivencia-familiar-design.md, Circulo
+  # A del arco "vida familiar" -- sistema_asentamiento.py:
+  # _acrecion_amistad_convivencia): un par que es_familia_directa()
+  # (hermanos, o padre/madre-hijo) gana afinidad diaria multiplicada por
+  # este factor en vez del mismo trato plano que un vecino cualquiera.
+  # PROVISIONAL: 2.0 (el doble) es una hipotesis de partida razonada,
+  # sin calibrar contra el motor en marcha.
+  factor_amistad_convivencia_familia: 2.0
   # Magnitud (POSITIVA) de la afinidad que ganan mutuamente LOS DOS
   # progenitores en el instante de una concepcion exitosa (consumidor:
   # sistema_reproduccion.py, circulo 4a -- "afinidad por concepcion").

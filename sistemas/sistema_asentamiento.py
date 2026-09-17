@@ -40,6 +40,7 @@ from nucleo.asentamiento import (
 )
 from nucleo.conocimiento import erosionar
 from nucleo.entidad import GestorEntidades
+from nucleo.parentesco import es_familia_directa
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.memoria import capacidad_memoria, registrar_recuerdo
@@ -272,12 +273,27 @@ class SistemaAsentamiento:
         :_ajustar_afinidad_rencor): un individuo NO consciente no
         escribe ni recibe nada; cada parte usa su propia
         capacidad_vinculos.
+
+        Bono de parentesco (2026-09-17, ver docs/superpowers/specs/
+        2026-09-17-convivencia-familiar-design.md, Circulo A del arco
+        "vida familiar"): un par que es_familia_directa() (hermanos, o
+        padre/madre-hijo) gana afinidad diaria multiplicada por
+        factor_amistad_convivencia_familia -- los lazos de sangre hacen
+        mas estrecha la convivencia, no solo pertenecer al mismo
+        asentamiento por igual que un vecino cualquiera. Reutiliza
+        nucleo.parentesco.es_familia_directa (Identidad.id_madre/id_padre
+        en vivo) sin ningun componente nuevo.
         """
         delta = float(
             self.config.get("relaciones", {}).get("delta_amistad_convivencia_dia", 0.05)
         )
         if delta <= 0.0:
             return
+        factor_familia = float(
+            self.config.get("relaciones", {}).get(
+                "factor_amistad_convivencia_familia", 2.0
+            )
+        )
         for asentamiento in mundo.asentamientos.values():
             conscientes: list[int] = []
             for mid in asentamiento.miembros:
@@ -290,11 +306,14 @@ class SistemaAsentamiento:
             # Cada PAR distinto, una sola vez; ambas direcciones.
             for i in range(len(conscientes)):
                 for j in range(i + 1, len(conscientes)):
+                    delta_par = delta
+                    if es_familia_directa(conscientes[i], conscientes[j], gestor):
+                        delta_par = delta * factor_familia
                     self._ajustar_amistad(
-                        gestor, conscientes[i], conscientes[j], delta, reloj.tick_actual
+                        gestor, conscientes[i], conscientes[j], delta_par, reloj.tick_actual
                     )
                     self._ajustar_amistad(
-                        gestor, conscientes[j], conscientes[i], delta, reloj.tick_actual
+                        gestor, conscientes[j], conscientes[i], delta_par, reloj.tick_actual
                     )
 
     def _acrecion_lealtad_liderazgo(
