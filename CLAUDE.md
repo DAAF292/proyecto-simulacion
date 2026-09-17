@@ -60,7 +60,7 @@ Verificado consumidor por consumidor antes de tocar nada, no por bulto:
   consumidor posible para ninguna de las dos razones por separado.
 - `docs/superpowers/encargos/pendientes/2026-09-02-propagacion-05-zoocoria.md`
   retirado — encargo que sí se recogió en su momento (cabecera idéntica al
-  plan real en `docs/plans/in_review/2026-09-02-propagacion-05-zoocoria.md`,
+  plan real, hoy en `docs/plans/done/2026-09-02-propagacion-05-zoocoria.md`,
   que sí siguió el flujo completo), pero al que nunca se le aplicó el paso
   4 del flujo de implementación ("retirar plan X de la cola tras ser
   recogido") — quince días de cola muerta sin que nadie lo notara.
@@ -75,12 +75,21 @@ Verificado consumidor por consumidor antes de tocar nada, no por bulto:
 **Deliberadamente NO tocado en esta ronda, con motivo**: `docs/plans/failed/`
 (evidencia histórica real, dos de sus casos —armas primitivas v2, madriguera
 física A— ya citados en la Bitácora completa de este documento como ejemplos
-concretos de auditoría tras disyuntor de 3 intentos); `docs/plans/in_review/`
-(14 ficheros, varios de más de dos semanas — varias de las piezas que
-describen constan como cerradas en `docs/historial_*.md`, pero mover cada
-uno a `done/` exige verificar pieza por pieza contra su historial
-correspondiente, no un movimiento en bloque); `docs/superpowers/specs/` (52
-ficheros — son el entregable real de diseño de cada pieza, no un residuo).
+concretos de auditoría tras disyuntor de 3 intentos); `docs/superpowers/specs/`
+(52 ficheros — son el entregable real de diseño de cada pieza, no un residuo).
+
+**`docs/plans/in_review/` reclasificado el 2026-09-17** (los mismos 14
+ficheros de arriba): verificado pieza por pieza contra su historial
+correspondiente, no en bloque — las piezas de flora (`flora-01` a
+`flora-05`, `fix-flora-sobre-agua`, `propagacion-03-caida-dispatch`,
+`propagacion-05-zoocoria`) confirman en `docs/historial_flora_mundo.md`;
+las de hilo individual (`cimiento-relaciones`, `amistad-convivencia`,
+`afinidad-concepcion`, `nombre-propio`, `pareja-estable`) confirman en
+`docs/historial_hilo_individual.md`; `parejas-fundadoras` confirma en
+`docs/historial_estabilidad_poblacion.md`. Las 14 estaban implementadas
+de verdad, solo les faltaba el movimiento `in_review→done` que el propio
+pipeline debía hacer y nunca hizo — movidas a `docs/plans/done/`,
+carpeta `in_review/` ahora vacía.
 
 - `docs/historial_capa_visual.md` — historial archivado de la primera
   exploración de arte real (24 a 26-08-2026, PyxelSpace → Urizen → Mini
