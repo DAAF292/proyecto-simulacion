@@ -188,6 +188,13 @@ class SistemaDepredacion:
         intencion = gestor.obtener_componente(entidad_id, Intencion)
         return intencion is not None and intencion.accion == Accion.CAZAR
 
+    def _vuela(self, especie: str) -> bool:
+        """Rasgo racial 'vuela' (rangos_raciales), mismo patron de
+        lectura que sistema_movimiento.py -- False para cualquier
+        especie que no lo declare, comportamiento identico al de antes
+        de este circulo."""
+        return bool(self.config.get("rangos_raciales", {}).get(especie, {}).get("vuela", False))
+
     def _es_presa_valida(
         self, gestor: GestorEntidades, cazador_id: int, presa_id: int,
         pos_x: int, pos_y: int, zona_idx: int = 0,
@@ -325,6 +332,20 @@ class SistemaDepredacion:
         agresividad_presa = temp_presa.agresividad if temp_presa else 0.0
         if nivel_arma_presa > 0:
             prob_exito -= bono_defensivo_arma(nivel_arma_presa, agresividad_presa, self.config_armas)
+
+        # Evasion por vuelo (2026-09-17, ver docs/superpowers/specs/
+        # 2026-09-17-evasion-vuelo-depredacion-design.md): una presa que
+        # vuela remonta el vuelo frente a un depredador que no vuela --
+        # ningun bono de agresividad, manada o arma deberia compensar
+        # eso, el cuello de botella es fisico (no puede perseguirla), no
+        # de fuerza. Se fuerza el suelo ya existente (captura_prob_min)
+        # en vez de sumar una constante nueva -- modela "rara vez, por
+        # oportunismo" (presa en tierra comiendo, durmiendo, herida) sin
+        # inventar un segundo concepto de suelo. Solo aplica en esta
+        # direccion -- un depredador que SI vuela (aguila) no gana ni
+        # pierde nada aqui, su caza normal ya cubre presa terrestre.
+        if self._vuela(ident_presa.especie.value) and not self._vuela(ident_cazador.especie.value):
+            prob_exito = self.captura_prob_min
 
         prob_exito = max(self.captura_prob_min, min(self.captura_prob_max, prob_exito))
 
