@@ -10,7 +10,7 @@ from pathlib import Path
 
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
-from componentes.identidad import Especie
+from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.necesidades import Necesidades
 from componentes.temperamento import Temperamento
@@ -148,6 +148,11 @@ def test_ley_vocacion_dominante_empate_es_deterministico():
 
 def _gnomo_neutralizado(gestor, config, rng, x=0, y=0) -> int:
     eid = crear_criatura(gestor, Especie.GNOMO, x, y, config, rng)
+    # Adulto de sobra (2026-09-17, gate de emancipacion en CONSTRUIR-
+    # refugio-propio, ver docs/superpowers/specs/2026-09-17-vida-
+    # familiar-refugio-parto-design.md) -- ver mismo comentario en
+    # test_fabricacion_herramientas.py.
+    gestor.obtener_componente(eid, Identidad).tick_nacimiento = -10_000_000
     nec = gestor.obtener_componente(eid, Necesidades)
     nec.saciedad = nec.energia = nec.seguridad = nec.hidratacion = nec.aliviado = 1.0
     nec.confort_termico = 1.0

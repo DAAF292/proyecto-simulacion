@@ -540,6 +540,15 @@ decision:
   # relevo con lo que se lleve. PROVISIONAL, sin calibrar contra el motor
   # en marcha.
   utilidad_recolectar_base: 0.35
+  # utilidad_buscar_refugio_parto (2026-09-17, ver docs/superpowers/specs/
+  # 2026-09-17-vida-familiar-refugio-parto-design.md): utilidad FIJA ALTA
+  # de Accion.BUSCAR_REFUGIO_PARTO, NO graduada por ningun deficit --
+  # busqueda de seguridad para parir, activa de golpe en el tramo final
+  # de la gestacion. Por encima de construir/recolectar/socializar para
+  # que gane en la practica salvo amenaza real (Accion.HUIR) o una
+  # necesidad fisica ya en nivel critico. PROVISIONAL, sin calibrar
+  # contra el motor en marcha.
+  utilidad_buscar_refugio_parto: 0.9
 
 capacidad_fisica:
   tasa_perdida_resistencia_por_esfuerzo: 0.05
@@ -596,3 +605,9 @@ ciclo_vital:
 
 reproduccion:
   mutacion_fraccion: 0.1
+  # fraccion_gestacion_buscar_refugio (2026-09-17, ver docs/superpowers/
+  # specs/2026-09-17-vida-familiar-refugio-parto-design.md): fraccion de
+  # Reproduccion.duracion_gestacion_dias transcurrida a partir de la cual
+  # se activa Accion.BUSCAR_REFUGIO_PARTO (ultimo cuarto de la gestacion).
+  # PROVISIONAL, sin calibrar contra el motor en marcha.
+  fraccion_gestacion_buscar_refugio: 0.75

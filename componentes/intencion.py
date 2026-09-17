@@ -24,6 +24,18 @@ class Accion(Enum):
     # conspecifico elegido (a diferencia del sesgo gregario de DEAMBULAR,
     # que se detiene a distancia 1) -- ver sistema_movimiento.py.
     BUSCAR_PAREJA = "buscar_pareja"
+    # BUSCAR_REFUGIO_PARTO (2026-09-17, ver docs/superpowers/specs/
+    # 2026-09-17-vida-familiar-refugio-parto-design.md): se activa en el
+    # tramo final de una Gestacion si existe un refugio de pertenencia
+    # (nucleo.construccion.refugio_de_pertenencia -- propio, de la
+    # pareja, o de un progenitor) distinto de la celda actual. Utilidad
+    # ALTA NO GRADUADA (config, no derivada de un déficit), sin el gate
+    # Maslow que sí aplica a BUSCAR_PAREJA/SOCIALIZAR -- búsqueda de
+    # seguridad para parir, no una necesidad "superior" que espera. No
+    # garantiza el parto en el refugio: duracion_gestacion_dias sigue
+    # fija, sistema_reproduccion.py sigue resolviendo el nacimiento donde
+    # la madre esté en ese tick.
+    BUSCAR_REFUGIO_PARTO = "buscar_refugio_parto"
     # CONSTRUIR: exclusiva de quien supera decision.umbral_consciencia_agencia
     # (gnomo hoy), mismo umbral que ya exime del sesgo de territorio y
     # gatea el uso real de Inventario -- construir es agencia consciente,
