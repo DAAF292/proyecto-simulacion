@@ -80,6 +80,14 @@ class SistemaDepredacion:
         self.fraccion_minima_peso_presa: float = float(
             cfg_dep.get("fraccion_minima_peso_presa", 0.001)
         )
+        # Nivel trofico (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+        # nivel-trofico-design.md): penalizacion a prob_exito cuando
+        # cazador y presa comparten el mismo nivel_trofico (pares
+        # ecologicos, no jerarquia de alimento) -- PROVISIONAL, sin
+        # calibrar contra el harness completo.
+        self.penalizacion_disposicion_mismo_nivel_trofico: float = float(
+            cfg_dep.get("penalizacion_disposicion_mismo_nivel_trofico", 0.35)
+        )
         # Techo de presa por manada (2026-09-05) -- ver
         # sistema_movimiento.py:_calcular_caza para el razonamiento
         # completo. Mismo valor, misma clave de config, un solo criterio
@@ -195,6 +203,14 @@ class SistemaDepredacion:
         de este circulo."""
         return bool(self.config.get("rangos_raciales", {}).get(especie, {}).get("vuela", False))
 
+    def _nivel_trofico(self, especie: str) -> int:
+        """Rasgo racial 'nivel_trofico' (2026-09-17, ver docs/superpowers/
+        specs/2026-09-17-nivel-trofico-design.md) -- entero fijo por
+        especie, mismo patron de lectura que 'vuela'. 0 (herbivoro) por
+        defecto para cualquier especie que no lo declare -- solo lobo/
+        zorro/aguila lo declaran hoy (1, pares ecologicos entre si)."""
+        return int(self.config.get("rangos_raciales", {}).get(especie, {}).get("nivel_trofico", 0))
+
     def _es_presa_valida(
         self, gestor: GestorEntidades, cazador_id: int, presa_id: int,
         pos_x: int, pos_y: int, zona_idx: int = 0,
@@ -207,12 +223,24 @@ class SistemaDepredacion:
         presas más ligeras que él mismo; con aliados cazando cerca, el
         techo sube. Este chequeo resuelve el caso de contacto directo
         (misma celda); _calcular_caza ya filtra el mismo techo al decidir
-        hacia dónde caminar."""
+        hacia dónde caminar.
+
+        Nivel trofico (2026-09-17): una presa de nivel trofico MAYOR que
+        el del cazador nunca es presa valida, con independencia del
+        peso -- un depredador nunca caza a algo por encima de su propio
+        nivel ecologico (p.ej. un futuro super-depredador que sí cace
+        depredadores actuales). Nivel IGUAL no se gatea aqui -- sigue
+        siendo presa valida, pero penalizada en _resolver_ataque (ver
+        ese metodo): la caza intragremial es rara, no imposible."""
         dims_cazador = gestor.obtener_componente(cazador_id, DimensionesFisicas)
         dims_presa = gestor.obtener_componente(presa_id, DimensionesFisicas)
         ident_cazador = gestor.obtener_componente(cazador_id, Identidad)
+        ident_presa = gestor.obtener_componente(presa_id, Identidad)
 
-        if dims_cazador is None or dims_presa is None or ident_cazador is None:
+        if dims_cazador is None or dims_presa is None or ident_cazador is None or ident_presa is None:
+            return False
+
+        if self._nivel_trofico(ident_presa.especie.value) > self._nivel_trofico(ident_cazador.especie.value):
             return False
 
         aliados_cazando = contar_conspecificos_cercanos(
@@ -332,6 +360,18 @@ class SistemaDepredacion:
         agresividad_presa = temp_presa.agresividad if temp_presa else 0.0
         if nivel_arma_presa > 0:
             prob_exito -= bono_defensivo_arma(nivel_arma_presa, agresividad_presa, self.config_armas)
+
+        # Nivel trofico (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+        # nivel-trofico-design.md): presa del MISMO nivel trofico que el
+        # cazador (pares ecologicos -- hoy, lobo/zorro/aguila entre si)
+        # se penaliza, no se anula del todo -- la caza intragremial es
+        # rara en la naturaleza, no imposible (a diferencia de la
+        # evasion por vuelo de abajo, que SI fuerza el suelo total
+        # porque ahi el obstaculo es fisico, no de comportamiento).
+        # Nivel MAYOR ya se descarto en _es_presa_valida, nunca llega
+        # aqui.
+        if self._nivel_trofico(ident_presa.especie.value) == self._nivel_trofico(ident_cazador.especie.value):
+            prob_exito -= self.penalizacion_disposicion_mismo_nivel_trofico
 
         # Evasion por vuelo (2026-09-17, ver docs/superpowers/specs/
         # 2026-09-17-evasion-vuelo-depredacion-design.md): una presa que

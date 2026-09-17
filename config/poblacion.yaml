@@ -119,6 +119,16 @@ rangos_raciales:
 
   lobo:
     medio_alimentacion: cazar
+    # nivel_trofico (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+    # nivel-trofico-design.md): entero fijo por especie, 0 (herbivoro)
+    # por defecto sin declarar -- lobo/zorro/aguila comparten nivel 1
+    # (pares ecologicos entre si, los tres cazan herbivoros, ninguno
+    # tiene rol narrativo de cazarse mutuamente). Un nivel MAYOR nunca
+    # es presa valida (sistema_depredacion.py:_es_presa_valida); nivel
+    # IGUAL sigue siendo presa valida pero penalizada (_resolver_ataque)
+    # -- caza intragremial rara, no imposible. Deja sitio a futura fauna
+    # de nivel 2+ (un super-depredador que sí cace depredadores de hoy).
+    nivel_trofico: 1
     peso: [60, 90]
     altura: [0.6, 0.9]
     longevidad: [8, 14]
@@ -556,6 +566,9 @@ rangos_raciales:
   # contra el harness completo.
   zorro:
     medio_alimentacion: cazar
+    # nivel_trofico: 1 -- ver comentario completo en el bloque de lobo
+    # mas arriba (2026-09-17).
+    nivel_trofico: 1
     peso: [5, 9]
     altura: [0.35, 0.55]
     longevidad: [4, 8]
@@ -607,6 +620,9 @@ rangos_raciales:
   aguila:
     medio_alimentacion: cazar
     vuela: true
+    # nivel_trofico: 1 -- ver comentario completo en el bloque de lobo
+    # mas arriba (2026-09-17).
+    nivel_trofico: 1
     peso: [3.5, 6.5]
     altura: [0.6, 0.9]
     longevidad: [12, 20]

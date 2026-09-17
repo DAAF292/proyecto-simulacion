@@ -162,6 +162,22 @@ depredacion:
   fraccion_minima_peso_presa: 0.001
   peso_referencia_deteccion_plena: 0.1
 
+  # Nivel trofico (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+  # nivel-trofico-design.md): origen -- el harness completo mostro a
+  # zorro (93%) y aguila (100%) practicamente extintos en 15 semillas,
+  # y se confirmo que lobo trata a ambos como presa GARANTIZADA por
+  # ratio de peso pese a ser pares ecologicos (los tres cazan
+  # herbivoros, ninguno tiene un rol narrativo de cazarse entre si).
+  # penalizacion_disposicion_mismo_nivel_trofico se resta de prob_exito
+  # cuando cazador y presa comparten rangos_raciales.<especie>.
+  # nivel_trofico -- la caza intragremial es rara en la naturaleza, no
+  # imposible (a diferencia de la evasion por vuelo, que fuerza el
+  # suelo total porque ahi el obstaculo es fisico). PROVISIONAL, sin
+  # calibrar contra el harness completo -- elegido para que lobo (peor
+  # caso de disposicion ~0.65-0.69 contra zorro/aguila) quede cerca del
+  # suelo de captura sin forzarlo del todo, a diferencia de vuelo.
+  penalizacion_disposicion_mismo_nivel_trofico: 0.35
+
   # Techo de presa por manada (2026-09-05, ver
   # docs/superpowers/specs/2026-09-05-especie-caballo-design.md y
   # CLAUDE.md "Por qué lobo se muere de hambre pese a cazar más que
