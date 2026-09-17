@@ -13,7 +13,7 @@ from componentes.agarre import Agarre
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
-from componentes.identidad import Especie
+from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
@@ -50,6 +50,13 @@ def _celda_con_madera() -> Celda:
 
 def _gnomo_neutralizado(gestor, config, rng, x=0, y=0) -> int:
     eid = crear_criatura(gestor, Especie.GNOMO, x, y, config, rng)
+    # Adulto de sobra (2026-09-17, gate de emancipacion en CONSTRUIR-
+    # refugio-propio, ver docs/superpowers/specs/2026-09-17-vida-
+    # familiar-refugio-parto-design.md): estos tests no prueban nada de
+    # edad, y un gnomo recien creado (tick_nacimiento=0) quedaria
+    # tratado como no-adulto, distorsionando tipo_objetivo/utilidad_
+    # recolectar sin relacion con lo que se esta probando aqui.
+    gestor.obtener_componente(eid, Identidad).tick_nacimiento = -10_000_000
     nec = gestor.obtener_componente(eid, Necesidades)
     nec.saciedad = nec.energia = nec.seguridad = nec.hidratacion = nec.aliviado = 1.0
     nec.confort_termico = 1.0

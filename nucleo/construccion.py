@@ -44,6 +44,56 @@ def construccion_propia(gestor: Any, id_propietario: int, tipo: str, indice=None
     return None
 
 
+def refugio_de_pertenencia(gestor: Any, id_entidad: int, umbral_pareja: float) -> int | None:
+    """cid del refugio (tipo="refugio") al que pertenece id_entidad como
+    lugar de residencia, o None si no tiene ninguno accesible (2026-09-17,
+    ver docs/superpowers/specs/2026-09-17-vida-familiar-refugio-parto-
+    design.md). Función puramente relacional, sin estado propio -- mismo
+    criterio que nucleo/parentesco.py.
+
+    Orden de prioridad:
+    1. Su propio refugio.
+    2. El de su pareja actual (son_pareja sobre Relaciones.vinculos, sin
+       imponer monogamia -- el primero que califique y tenga refugio
+       propio, orden de iteración de dict no garantizado, límite
+       conocido y aceptado).
+    3. El de su madre o padre (parentesco directo, madre priorizada en
+       empate por ser el vínculo de gestación real).
+
+    Basta con que el refugio EXISTA (aunque progreso < 1.0) -- un
+    individuo pertenece a un sitio en obras igual que a uno terminado.
+    """
+    from componentes.identidad import Identidad
+    from componentes.relaciones import Relaciones
+    from nucleo.relaciones import son_pareja
+
+    cid = construccion_propia(gestor, id_entidad, "refugio")
+    if cid is not None:
+        return cid
+
+    relaciones = gestor.obtener_componente(id_entidad, Relaciones)
+    if relaciones is not None:
+        for otro_id in relaciones.vinculos:
+            rel_otro = gestor.obtener_componente(otro_id, Relaciones)
+            if rel_otro is None:
+                continue
+            if son_pareja(relaciones, rel_otro, id_entidad, otro_id, umbral_pareja):
+                cid_pareja = construccion_propia(gestor, otro_id, "refugio")
+                if cid_pareja is not None:
+                    return cid_pareja
+
+    identidad = gestor.obtener_componente(id_entidad, Identidad)
+    if identidad is not None:
+        for id_progenitor in (identidad.id_madre, identidad.id_padre):
+            if id_progenitor is None:
+                continue
+            cid_progenitor = construccion_propia(gestor, id_progenitor, "refugio")
+            if cid_progenitor is not None:
+                return cid_progenitor
+
+    return None
+
+
 def construccion_de_tipo_en(
     gestor: Any, pos_x: int, pos_y: int, zona_idx: int, tipo: str, indice=None
 ) -> int | None:

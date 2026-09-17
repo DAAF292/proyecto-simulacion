@@ -64,6 +64,7 @@ from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
+from componentes.satisfaccion import Satisfaccion
 from componentes.temperamento import Temperamento
 from nucleo.agua import profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
@@ -129,6 +130,22 @@ class SistemaNecesidades:
         # confort_termico, ver el bloque 4b en ejecutar().
         self.tasa_deriva_comodidad: float = float(
             self.defecto.get("tasa_deriva_comodidad", 0.02)
+        )
+        # Satisfaccion.vivienda (2026-09-17, ver docs/superpowers/specs/
+        # 2026-09-17-satisfaccion-vivienda-design.md): modula el objetivo
+        # de comodidad, decae con el tiempo de exposicion al mismo nivel
+        # de calidad, se repone a 1.0 con una mejora real. Tasa modulada
+        # por temperamento (curiosidad+valentia aceleran la habituacion),
+        # ver el bloque 4b en ejecutar(). PROVISIONAL los tres, sin
+        # calibrar contra el motor en marcha.
+        self.tasa_decaimiento_satisfaccion_base: float = float(
+            self.defecto.get("tasa_decaimiento_satisfaccion_base", 0.005)
+        )
+        self.peso_temperamento_satisfaccion: float = float(
+            self.defecto.get("peso_temperamento_satisfaccion", 1.0)
+        )
+        self.piso_satisfaccion_vivienda: float = float(
+            self.defecto.get("piso_satisfaccion_vivienda", 0.2)
         )
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
         # Refugio/Fogata como fuentes de calor (ver nucleo/fuego.py y
@@ -333,6 +350,7 @@ class SistemaNecesidades:
             mem = gestor.obtener_componente(eid, MemoriaEspacial)
             cap_mental = gestor.obtener_componente(eid, CapacidadMental)
             relaciones = gestor.obtener_componente(eid, Relaciones)
+            satisfaccion = gestor.obtener_componente(eid, Satisfaccion)
 
             if nec is None or pos is None or dims is None or ident is None:
                 continue
@@ -481,20 +499,53 @@ class SistemaNecesidades:
             # evita un escaneo de construcciones por individuo sin
             # necesidad real. Sin refugio propio completado_alguna_vez,
             # el objetivo es 0.0 -- sin nada construido, no hay
-            # comodidad que sentir. Sin ningún consumidor todavía (ni
-            # utilidad, ni mortalidad) -- este círculo solo hace que el
-            # valor derive correctamente, la Pieza D es quien lo leerá.
+            # comodidad que sentir. Consumidor real desde el círculo de
+            # "mejora de vivienda" (Pieza D, ver sistemas/sistema_decision.py):
+            # el déficit (1.0 - comodidad) alimenta esa utilidad.
+            #
+            # Satisfaccion.vivienda (2026-09-17, ver docs/superpowers/
+            # specs/2026-09-17-satisfaccion-vivienda-design.md): modula
+            # calidad_actual antes de fijar el objetivo -- adaptación
+            # hedónica, calidad_media_construccion por sí sola ya no basta
+            # para sentirse pleno indefinidamente con el mismo material.
+            # Solo se mueve mientras hay refugio completo (nada que
+            # habituar sin eso). Reposición a 1.0 si calidad_actual supera
+            # la última observada (mejora real); si no, decae hacia
+            # self.piso_satisfaccion_vivienda a una tasa modulada por
+            # temperamento (curiosidad+valentia altas se acostumbran
+            # antes, mismo patrón de combinar rasgos que ya usa
+            # utilidad_socializar).
             if cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia:
-                obj_comodidad = 0.0
+                calidad_actual = 0.0
+                refugio_completo = False
                 cid_refugio_propio = construccion_propia(
                     gestor, eid, "refugio", indice=self._indice_actual
                 )
                 if cid_refugio_propio is not None:
                     refugio_propio = gestor.obtener_componente(cid_refugio_propio, Construccion)
                     if refugio_propio is not None and refugio_propio.completado_alguna_vez:
-                        obj_comodidad = calidad_media_construccion(
+                        calidad_actual = calidad_media_construccion(
                             refugio_propio.materiales, self.catalogo_materiales
                         )
+                        refugio_completo = True
+
+                if satisfaccion is not None and refugio_completo:
+                    if calidad_actual > satisfaccion.referencia_vivienda:
+                        satisfaccion.vivienda = 1.0
+                    else:
+                        tasa = self.tasa_decaimiento_satisfaccion_base
+                        if temperamento is not None:
+                            tasa *= 1.0 + self.peso_temperamento_satisfaccion * (
+                                (temperamento.curiosidad + temperamento.valentia) / 2.0
+                            )
+                        satisfaccion.vivienda = max(
+                            self.piso_satisfaccion_vivienda, satisfaccion.vivienda - tasa
+                        )
+                    satisfaccion.referencia_vivienda = calidad_actual
+
+                factor_satisfaccion = satisfaccion.vivienda if satisfaccion is not None else 1.0
+                obj_comodidad = calidad_actual * factor_satisfaccion
+
                 if nec.comodidad < obj_comodidad:
                     nec.comodidad = min(
                         obj_comodidad, nec.comodidad + self.tasa_deriva_comodidad

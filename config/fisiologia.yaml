@@ -31,6 +31,26 @@ necesidades:
     # de golpe en un tick, es un ajuste mas gradual que la temperatura
     # del dia. PROVISIONAL, sin calibrar contra el motor en marcha.
     tasa_deriva_comodidad: 0.02
+    # Satisfaccion.vivienda (2026-09-17, ver docs/superpowers/specs/
+    # 2026-09-17-satisfaccion-vivienda-design.md): tres constantes
+    # PROVISIONALES, sin calibrar contra el motor en marcha.
+    # tasa_decaimiento_satisfaccion_base: cuanto cae satisfaccion.vivienda
+    # por tick sin mejora real, antes de modular por temperamento -- muy
+    # por debajo de tasa_deriva_comodidad (0.02) a proposito, la
+    # habituacion es un proceso mucho mas lento que la propia deriva de
+    # confort.
+    tasa_decaimiento_satisfaccion_base: 0.005
+    # peso_temperamento_satisfaccion: cuanto amplifica la tasa base la
+    # combinacion (curiosidad+valentia)/2 del individuo -- 1.0 significa
+    # que un individuo con ambos rasgos en su maximo (1.0) decae al DOBLE
+    # de rapido que la tasa base; uno con ambos en 0.0 decae a la tasa
+    # base sin amplificar (nunca mas lento que la base, solo mas rapido).
+    peso_temperamento_satisfaccion: 1.0
+    # piso_satisfaccion_vivienda: satisfaccion.vivienda nunca cae por
+    # debajo de este valor -- ni con el material mas humilde deja de
+    # haber ALGO de disfrute, no es una afirmacion de "nada satisface
+    # nunca del todo".
+    piso_satisfaccion_vivienda: 0.2
     # bono_confort_refugio/fogata (2026-08-31, ver nucleo/fuego.py y
     # conversacion de diseno con Diego: "otoño 15 grados, estoy a
     # cubierto... invierno 3 grados, ¿es suficiente, o debo encender un
@@ -540,6 +560,15 @@ decision:
   # relevo con lo que se lleve. PROVISIONAL, sin calibrar contra el motor
   # en marcha.
   utilidad_recolectar_base: 0.35
+  # utilidad_buscar_refugio_parto (2026-09-17, ver docs/superpowers/specs/
+  # 2026-09-17-vida-familiar-refugio-parto-design.md): utilidad FIJA ALTA
+  # de Accion.BUSCAR_REFUGIO_PARTO, NO graduada por ningun deficit --
+  # busqueda de seguridad para parir, activa de golpe en el tramo final
+  # de la gestacion. Por encima de construir/recolectar/socializar para
+  # que gane en la practica salvo amenaza real (Accion.HUIR) o una
+  # necesidad fisica ya en nivel critico. PROVISIONAL, sin calibrar
+  # contra el motor en marcha.
+  utilidad_buscar_refugio_parto: 0.9
 
 capacidad_fisica:
   tasa_perdida_resistencia_por_esfuerzo: 0.05
@@ -596,3 +625,9 @@ ciclo_vital:
 
 reproduccion:
   mutacion_fraccion: 0.1
+  # fraccion_gestacion_buscar_refugio (2026-09-17, ver docs/superpowers/
+  # specs/2026-09-17-vida-familiar-refugio-parto-design.md): fraccion de
+  # Reproduccion.duracion_gestacion_dias transcurrida a partir de la cual
+  # se activa Accion.BUSCAR_REFUGIO_PARTO (ultimo cuarto de la gestacion).
+  # PROVISIONAL, sin calibrar contra el motor en marcha.
+  fraccion_gestacion_buscar_refugio: 0.75

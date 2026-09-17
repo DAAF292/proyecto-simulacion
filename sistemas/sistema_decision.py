@@ -224,12 +224,14 @@ from nucleo.construccion import (
     masa_apta_construccion,
     material_mejora_disponible_en,
     material_suficiente_para,
+    refugio_de_pertenencia,
 )
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.herramientas import tiene_herramienta
 from nucleo.inventario import espacio_disponible_kg
 from nucleo.percepcion import radio_individual
+from nucleo.reloj import Reloj
 from nucleo.vocacion import (
     aptitud_artesano,
     aptitud_cocinero,
@@ -488,6 +490,16 @@ def actualizar(
     # es agencia consciente, no instinto.
     umbral_consciencia_agencia = float(config["decision"].get("umbral_consciencia_agencia", 0.3))
     utilidad_construir_base = float(config["decision"].get("utilidad_construir_base", 0.3))
+    # BUSCAR_REFUGIO_PARTO (2026-09-17, ver docs/superpowers/specs/
+    # 2026-09-17-vida-familiar-refugio-parto-design.md): utilidad ALTA
+    # NO GRADUADA, PROVISIONAL, sin calibrar contra el motor en marcha.
+    utilidad_buscar_refugio_parto_base = float(
+        config["decision"].get("utilidad_buscar_refugio_parto", 0.9)
+    )
+    fraccion_gestacion_buscar_refugio = float(
+        config["reproduccion"].get("fraccion_gestacion_buscar_refugio", 0.75)
+    )
+    umbral_pareja = float(config.get("relaciones", {}).get("umbral_pareja", 0.3))
     # utilidad_socializar_base (2026-09-06, ocio consciente -- ver
     # docs/superpowers/specs/2026-09-06-ocio-consciente-socializar-design.md):
     # base FIJA de Accion.SOCIALIZAR antes de modular por sociabilidad/
@@ -707,6 +719,38 @@ def actualizar(
             else (1.0 - necesidades.impulso_reproductivo)
         )
 
+        # BUSCAR_REFUGIO_PARTO (2026-09-17, ver docs/superpowers/specs/
+        # 2026-09-17-vida-familiar-refugio-parto-design.md): tramo final
+        # de la gestacion + refugio de pertenencia accesible distinto de
+        # la celda actual -- utilidad ALTA NO GRADUADA, SIN el gate
+        # Maslow (a diferencia de BUSCAR_PAREJA/SOCIALIZAR): buscar
+        # seguridad para parir no es una necesidad "superior" que espera.
+        utilidad_buscar_refugio_parto = 0.0
+        if gestando:
+            gestacion_actual = gestor.obtener_componente(id_entidad, Gestacion)
+            rep_propia = gestor.obtener_componente(id_entidad, Reproduccion)
+            if gestacion_actual is not None and rep_propia is not None:
+                duracion_ticks_gestacion = (
+                    rep_propia.duracion_gestacion_dias * Reloj.TICKS_POR_DIA
+                )
+                transcurrido = tick_actual - gestacion_actual.tick_inicio
+                fraccion_transcurrida = (
+                    transcurrido / duracion_ticks_gestacion
+                    if duracion_ticks_gestacion > 0 else 1.0
+                )
+                if fraccion_transcurrida >= fraccion_gestacion_buscar_refugio:
+                    cid_refugio_parto = refugio_de_pertenencia(
+                        gestor, id_entidad, umbral_pareja
+                    )
+                    if cid_refugio_parto is not None:
+                        pos_refugio_parto = gestor.obtener_componente(cid_refugio_parto, Posicion)
+                        if pos_refugio_parto is not None and (
+                            pos_refugio_parto.x != pos.x
+                            or pos_refugio_parto.y != pos.y
+                            or pos_refugio_parto.zona_idx != pos.zona_idx
+                        ):
+                            utilidad_buscar_refugio_parto = utilidad_buscar_refugio_parto_base
+
         # SOCIALIZAR (2026-09-06, ocio consciente -- ver spec): compite por
         # el tiempo de ocio (hoy ganado por DEAMBULAR, utilidad fija) cuando
         # las necesidades estan cubiertas. Utilidad =
@@ -749,6 +793,15 @@ def actualizar(
             if not refugio_pendiente:
                 refugio_comp = gestor.obtener_componente(cid_refugio, Construccion)
                 refugio_pendiente = refugio_comp is None or refugio_comp.progreso < 1.0
+            # Emancipación gateada por adultez (2026-09-17, ver docs/
+            # superpowers/specs/2026-09-17-vida-familiar-refugio-parto-
+            # design.md): un individuo no adulto nunca elige "refugio"
+            # como objetivo propio -- cae a la rama de abajo (cadena
+            # comunal), mismo comportamiento que ya tiene hoy un adulto
+            # con refugio ya resuelto. `adulto` ya calculado más arriba
+            # para BUSCAR_PAREJA (misma elegibilidad reproductiva).
+            if not adulto:
+                refugio_pendiente = False
             if refugio_pendiente:
                 tipo_objetivo, cid_objetivo = "refugio", cid_refugio
             else:
@@ -1283,6 +1336,12 @@ def actualizar(
 
         candidatas = (
             (utilidad_huir, Accion.HUIR),
+            # BUSCAR_REFUGIO_PARTO justo despues de HUIR (2026-09-17,
+            # ver docs/superpowers/specs/2026-09-17-vida-familiar-
+            # refugio-parto-design.md): en un empate exacto e improbable,
+            # una amenaza real sigue ganando a la busqueda de refugio
+            # para parir.
+            (utilidad_buscar_refugio_parto, Accion.BUSCAR_REFUGIO_PARTO),
             (utilidad_alimentarse, accion_alimentarse),
             (1.0 - necesidades.hidratacion, Accion.BEBER),
             (1.0 - necesidades.energia, Accion.DORMIR),

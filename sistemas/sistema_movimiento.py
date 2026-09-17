@@ -51,6 +51,7 @@ from nucleo.construccion import (
     huella_m2_para,
     material_suficiente_para,
     objetivo_construccion_actual,
+    refugio_de_pertenencia,
 )
 from nucleo.entidad import GestorEntidades, crear_construccion
 from nucleo.memoria import (
@@ -223,6 +224,12 @@ class SistemaMovimiento:
         )
         self.umbral_consciencia_agencia: float = float(
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
+        )
+        # BUSCAR_REFUGIO_PARTO (2026-09-17, ver docs/superpowers/specs/
+        # 2026-09-17-vida-familiar-refugio-parto-design.md): mismo umbral
+        # de afinidad ya usado en el resto del motor para son_pareja.
+        self.umbral_pareja: float = float(
+            self.config.get("relaciones", {}).get("umbral_pareja", 0.3)
         )
         # Almacén de asentamiento -- ver nucleo/asentamiento.py y
         # nucleo/construccion.py:objetivo_construccion_actual.
@@ -514,6 +521,8 @@ class SistemaMovimiento:
                 dx, dy = self._calcular_pareja(
                     gestor, eid, ident.especie, pos.x, pos.y, radio_pareja, pos.zona_idx
                 )
+            elif accion == Accion.BUSCAR_REFUGIO_PARTO:
+                dx, dy = self._calcular_ir_a_refugio_parto(gestor, eid, pos.x, pos.y, pos.zona_idx)
             elif accion == Accion.CONSTRUIR:
                 dx, dy = self._calcular_construir(
                     gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
@@ -2441,6 +2450,25 @@ class SistemaMovimiento:
             temperamento, temperamento_intruso, tick_actual,
             pos_x, pos_y, zona_idx,
         )
+
+    def _calcular_ir_a_refugio_parto(
+        self, gestor: GestorEntidades, entidad_id: int, pos_x: int, pos_y: int, zona_idx: int
+    ) -> tuple[int, int]:
+        """BUSCAR_REFUGIO_PARTO (2026-09-17, ver docs/superpowers/specs/
+        2026-09-17-vida-familiar-refugio-parto-design.md): resuelve EN
+        VIVO (sin cachear, mismo criterio que objetivo_construccion_actual)
+        el refugio de pertenencia y camina hacia él con _acercarse_a --
+        mismo mecanismo que _calcular_construir usa para el refugio ya
+        existente. Sin refugio de pertenencia o ya en su celda, (0, 0)."""
+        cid_refugio = refugio_de_pertenencia(gestor, entidad_id, self.umbral_pareja)
+        if cid_refugio is None:
+            return (0, 0)
+        pos_refugio = gestor.obtener_componente(cid_refugio, Posicion)
+        if pos_refugio is None or (
+            pos_refugio.x == pos_x and pos_refugio.y == pos_y and pos_refugio.zona_idx == zona_idx
+        ):
+            return (0, 0)
+        return self._acercarse_a(pos_x, pos_y, pos_refugio.x, pos_refugio.y)
 
     def _calcular_construir(
         self,

@@ -29,6 +29,7 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion, Sexo
 from componentes.relaciones import Relaciones
+from componentes.satisfaccion import Satisfaccion
 from componentes.semillas import Semillas
 from componentes.temperamento import Temperamento
 from componentes.vocacion import Vocacion
@@ -498,6 +499,12 @@ def crear_criatura(
     # componente universal, contadores en cero al nacer, solo se
     # incrementa de verdad para individuos conscientes.
     gestor.anadir_componente(entidad_id, Vocacion())
+    # Satisfaccion (2026-09-17, ver componentes/satisfaccion.py) --
+    # mismo criterio que Agarre/Semillas/Relaciones/Vocacion: componente
+    # universal, `vivienda` empieza en 1.0 (nada que habituar todavía),
+    # solo se mueve de verdad para individuos conscientes con refugio
+    # propio completado.
+    gestor.anadir_componente(entidad_id, Satisfaccion())
 
     dur_gest = _sortear_valor(rng, cfg_esp.get("duracion_gestacion_dias", [30.0, 60.0]))
     gestor.anadir_componente(
@@ -721,6 +728,10 @@ def nacer_criatura(
     # que Agarre/Semillas/Relaciones: un recién nacido no hereda la
     # práctica acumulada de sus progenitores, empieza en cero.
     gestor.anadir_componente(entidad_id, Vocacion())
+    # Satisfaccion (2026-09-17, ver componentes/satisfaccion.py) -- mismo
+    # criterio: un recién nacido no hereda la habituación de sus
+    # progenitores, empieza fresco (1.0).
+    gestor.anadir_componente(entidad_id, Satisfaccion())
 
     dur_gestacion = heredar(
         "duracion_gestacion_dias", rep_madre.duracion_gestacion_dias, gestacion.duracion_gestacion_padre

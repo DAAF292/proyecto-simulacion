@@ -49,18 +49,23 @@ CLAUDE.md, "Comodidad -- diseño del arco completo"): necesidad
 SUPERIOR, mismo molde que confort_termico -- deriva hacia un objetivo
 (sistema_necesidades.py), no decae por el mero paso del tiempo. El
 objetivo es `nucleo.construccion.calidad_media_construccion` de los
-materiales del refugio PROPIO ya `completado_alguna_vez` de la entidad
-(0.0 sin refugio propio completado -- sin nada construido, no hay
-comodidad que sentir). Solo se calcula para CONSCIENTE (mismo umbral
+materiales del refugio PROPIO ya `completado_alguna_vez` de la entidad,
+MODULADO por `componentes.satisfaccion.Satisfaccion.vivienda`
+(2026-09-17, ver docs/superpowers/specs/2026-09-17-satisfaccion-
+vivienda-design.md -- adaptación hedónica: el mismo material deja de
+sentirse igual de pleno con el tiempo) -- 0.0 sin refugio propio
+completado, sin nada construido no hay comodidad que sentir ni
+satisfacción que perder. Solo se calcula para CONSCIENTE (mismo umbral
 que ya gatea CONSTRUIR/RECOLECTAR) -- fauna nunca construye
 Construccion tipo="refugio" con propietario_id propio, así que su
 objetivo sería siempre 0.0 de todas formas; gatear explícitamente
 evita un escaneo de construcciones por individuo sin necesidad real.
 Convención estándar del resto del fichero (1.0=satisfecho, 0.0=nada),
-a diferencia de confort_termico (0.5 es el ideal). Sin ningún
-consumidor todavía -- ni utilidad en la Utility AI, ni mortalidad, ni
-drenaje de otro pool depende de su valor (misma fase que tuvo
-confort_termico antes de ganar sus propios bonos). SÍ se persiste.
+a diferencia de confort_termico (0.5 es el ideal). CORREGIDO
+2026-09-17: este docstring seguía diciendo "sin ningún consumidor
+todavía" -- desactualizado desde el círculo de mejora de vivienda
+(Pieza D, sistema_decision.py), que ya lee el déficit (1.0 - comodidad)
+como utilidad real. SÍ se persiste.
 
 **impulso_reproductivo**: misma convención que el resto, 1.0=recién
 satisfecho, decae hacia 0.0 con el tiempo desde la última
