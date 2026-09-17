@@ -27,11 +27,13 @@ from componentes.identidad import Identidad
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
+from componentes.temperamento import Temperamento
 from nucleo.asentamiento import (
     Asentamiento,
     agrupar_por_proximidad,
     calcular_centro,
     calcular_liderazgo,
+    distancia_caracter,
     generar_nombre,
     rasgo_geografico_notable,
     resolver_identidades_persistentes,
@@ -306,17 +308,51 @@ class SistemaAsentamiento:
         mismo patron que _acrecion_amistad_convivencia, dirigido
         especificamente miembro->lider. Es literalmente como se construyen
         "seguidores" -- sin contador de dias en el poder, la propia
-        Relaciones acumulada hace ese papel."""
-        delta = float(self.config.get("relaciones", {}).get("delta_lealtad_liderazgo", 0.0))
-        if delta <= 0.0:
+        Relaciones acumulada hace ese papel.
+
+        Disonancia de caracter (2026-09-17, ver docs/superpowers/specs/
+        2026-09-17-liderazgo-influencia-design.md): el delta diario ya
+        NO es incondicionalmente positivo -- si la distancia de caracter
+        (nucleo.asentamiento.distancia_caracter) entre miembro y lider
+        supera umbral_disonancia_liderazgo, el dia ERODE lealtad en vez
+        de sumarla, proporcional al exceso sobre el umbral. Sostenido en
+        el tiempo, esto es la "rebelion": la reputacion cae bajo
+        umbral_reputacion_descalificante y el lider queda descalificado
+        en el proximo calcular_liderazgo -- mecanismo YA EXISTENTE, sin
+        cambios, solo alimentado por una señal nueva."""
+        delta_base = float(self.config.get("relaciones", {}).get("delta_lealtad_liderazgo", 0.0))
+        if delta_base <= 0.0:
             return
+        umbral_disonancia = float(
+            self.config_asentamiento.get("umbral_disonancia_liderazgo", 0.5)
+        )
+        delta_erosion_base = float(
+            self.config.get("relaciones", {}).get(
+                "delta_erosion_lealtad_liderazgo", delta_base
+            )
+        )
         for asentamiento in mundo.asentamientos.values():
             if not asentamiento.lideres:
                 continue
             for miembro_id in asentamiento.miembros:
                 if miembro_id in asentamiento.lideres:
                     continue
+                temperamento_miembro = gestor.obtener_componente(miembro_id, Temperamento)
                 for lider_id in asentamiento.lideres:
+                    delta = delta_base
+                    temperamento_lider = gestor.obtener_componente(lider_id, Temperamento)
+                    if (
+                        temperamento_miembro is not None
+                        and temperamento_lider is not None
+                        and umbral_disonancia > 0.0
+                    ):
+                        dist = distancia_caracter(temperamento_miembro, temperamento_lider)
+                        if dist >= umbral_disonancia:
+                            exceso = (
+                                (dist - umbral_disonancia) / (1.0 - umbral_disonancia)
+                                if umbral_disonancia < 1.0 else 0.0
+                            )
+                            delta = -delta_erosion_base * exceso
                     if self._ajustar_amistad(
                         gestor, miembro_id, lider_id, delta, reloj.tick_actual,
                     ):

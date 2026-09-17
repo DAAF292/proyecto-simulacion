@@ -204,7 +204,11 @@ from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
 from componentes.reproduccion import Reproduccion
 from componentes.temperamento import Temperamento
-from nucleo.asentamiento import asentamiento_de, disposicion_a_aportar
+from nucleo.asentamiento import (
+    asentamiento_de,
+    disposicion_a_aportar,
+    temperamento_efectivo_por_liderazgo,
+)
 from nucleo.amenaza import posicion_amenaza_mas_cercana
 from nucleo.conocimiento import nivel_conocimiento
 from nucleo.armas import (
@@ -784,6 +788,17 @@ def actualizar(
         # nucleo/asentamiento.py:disposicion_a_aportar): el refugio
         # propio no exige excedente, una necesidad de seguridad
         # individual no espera a que sobre nada.
+        # Influencia de liderazgo (2026-09-17, ver docs/superpowers/specs/
+        # 2026-09-17-liderazgo-influencia-design.md): temperamento_
+        # prosocial es el que de verdad se usa en disposicion_a_aportar
+        # y en sesgo_prosocial más abajo -- NO sustituye `temperamento`
+        # en ningún otro sitio de esta función (crisis, depredación,
+        # SOCIALIZAR siguen leyendo el rasgo fijo real).
+        asen_actual = asentamiento_de(mundo, id_entidad)
+        temperamento_prosocial = temperamento_efectivo_por_liderazgo(
+            gestor, id_entidad, temperamento, asen_actual, config_asentamiento,
+        )
+
         utilidad_construir = 0.0
         utilidad_recolectar = 0.0
         cid_objetivo = None
@@ -822,14 +837,14 @@ def actualizar(
                 ):
                     if tipo_c == "almacen":
                         gate = min(necesidades.saciedad, necesidades.hidratacion) >= (
-                            disposicion_a_aportar(temperamento, config_asentamiento)
+                            disposicion_a_aportar(temperamento_prosocial, config_asentamiento)
                         )
                     elif tipo_c == "cocina":
                         # PROVISIONAL (2026-09-16): solo saciedad, no
                         # hidratación -- cocinar es sobre comida, no
                         # agua. Mismo umbral de carácter que almacén.
                         gate = necesidades.saciedad >= disposicion_a_aportar(
-                            temperamento, config_asentamiento
+                            temperamento_prosocial, config_asentamiento
                         )
                     elif tipo_c == "salon_comun":
                         gate = (
@@ -1121,7 +1136,9 @@ def actualizar(
             if cid_refugio_propio is not None:
                 refugio_propio = gestor.obtener_componente(cid_refugio_propio, Construccion)
                 if refugio_propio is not None and refugio_propio.completado_alguna_vez:
-                    sesgo_prosocial = (temperamento.empatia + temperamento.sociabilidad) / 2.0
+                    sesgo_prosocial = (
+                        temperamento_prosocial.empatia + temperamento.sociabilidad
+                    ) / 2.0
                     # tipo_objetivo (no cid_objetivo): ya resuelto más
                     # arriba en esta misma iteración (bloque CONSTRUIR/
                     # RECOLECTAR) -- puede ser "" (ningún comunal supera
@@ -1401,7 +1418,7 @@ def actualizar(
                 umbral_crisis_interrupcion,
                 inventario,
                 catalogo_materiales,
-                temperamento,
+                temperamento_prosocial,
                 config_asentamiento,
             )
         else:

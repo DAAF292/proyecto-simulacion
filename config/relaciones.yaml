@@ -45,6 +45,14 @@ relaciones:
   # calibrar: algo menor que la amistad de convivencia porque admirar a un
   # lider es mas especifico que la convivencia general del grupo.
   delta_lealtad_liderazgo: 0.03
+  # Magnitud base (POSITIVA, se aplica en NEGATIVO) de la erosion diaria
+  # de lealtad cuando la distancia de caracter miembro-lider supera
+  # asentamiento.umbral_disonancia_liderazgo (2026-09-17, ver docs/
+  # superpowers/specs/2026-09-17-liderazgo-influencia-design.md,
+  # sistema_asentamiento.py:_acrecion_lealtad_liderazgo). Mismo valor que
+  # delta_lealtad_liderazgo por defecto (simetria refuerzo/erosion como
+  # hipotesis de partida) -- PROVISIONAL, sin calibrar.
+  delta_erosion_lealtad_liderazgo: 0.03
   # Magnitud (POSITIVA) de la amistad que gana cada dia un par de
   # miembros CONSCIENTES del mismo asentamiento por convivencia
   # (consumidor: sistema_asentamiento.py). PROVISIONAL, sin calibrar:

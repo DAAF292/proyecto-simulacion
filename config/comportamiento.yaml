@@ -172,6 +172,23 @@ asentamiento:
   excedente_base_para_aportar: 0.3
   reduccion_umbral_por_empatia_lealtad: 0.15
   aumento_umbral_por_agresividad: 0.2
+  # Influencia de liderazgo (2026-09-17, ver docs/superpowers/specs/
+  # 2026-09-17-liderazgo-influencia-design.md, nucleo/asentamiento.py:
+  # temperamento_efectivo_por_liderazgo/distancia_caracter): el
+  # temperamento del lider arrastra la disposicion prosocial de sus
+  # seguidores (empatia/lealtad/agresividad), pero solo mientras la
+  # distancia de caracter con el lider no supere este umbral -- por
+  # encima, el arrastre se anula Y el dia erosiona lealtad en vez de
+  # sumarla (ver _acrecion_lealtad_liderazgo en sistema_asentamiento.py)
+  # en vez de seguir arrastrando sin limite. PROVISIONAL, sin calibrar
+  # contra el motor en marcha.
+  umbral_disonancia_liderazgo: 0.5
+  # peso_max_arrastre_liderazgo: factor maximo de interpolacion hacia el
+  # temperamento del lider (con distancia=0 y lealtad_hacia_lider=1.0) --
+  # 0.5 significa que ni con maxima afinidad y caracter identico el
+  # seguidor llega a adoptar el temperamento del lider al 100%, siempre
+  # queda a medio camino. PROVISIONAL, sin calibrar.
+  peso_max_arrastre_liderazgo: 0.5
   # Identidad persistente (2026-09-15, ver
   # nucleo/asentamiento.py:resolver_identidades_persistentes): solape
   # mínimo (Jaccard, intersección/unión de miembros) entre el clúster de

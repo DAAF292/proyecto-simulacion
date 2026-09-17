@@ -303,6 +303,113 @@ def calcular_liderazgo(gestor: Any, miembros: set[int], config_asentamiento: dic
     return {ganador}
 
 
+def distancia_caracter(t_a: Any, t_b: Any) -> float:
+    """Distancia euclídea normalizada a [0, 1] entre dos temperamentos,
+    sobre los tres ejes de carácter cívico que ya deciden gobierno y
+    disposición a aportar (empatía, lealtad, agresividad -- mismo eje de
+    fondo que calcular_liderazgo/disposicion_a_aportar, dominancia
+    queda fuera por el mismo motivo que ya la excluye
+    disposicion_a_aportar). 0.0 = mismo carácter exacto en los tres
+    ejes, 1.0 = máximamente opuestos en los tres a la vez (2026-09-17,
+    ver docs/superpowers/specs/2026-09-17-liderazgo-influencia-design.md).
+    """
+    import math
+
+    suma_cuadrados = (
+        (t_a.empatia - t_b.empatia) ** 2
+        + (t_a.lealtad - t_b.lealtad) ** 2
+        + (t_a.agresividad - t_b.agresividad) ** 2
+    )
+    return math.sqrt(suma_cuadrados) / math.sqrt(3)
+
+
+def temperamento_efectivo_por_liderazgo(
+    gestor: Any,
+    id_seguidor: int,
+    temperamento_seguidor: Any,
+    asen: Asentamiento | None,
+    config_asentamiento: dict[str, Any],
+) -> Any:
+    """Temperamento que id_seguidor USA de verdad en disposicion_a_aportar
+    y en el sesgo prosocial de mejora-de-vivienda-vs-comunal (2026-09-17,
+    ver docs/superpowers/specs/2026-09-17-liderazgo-influencia-design.md)
+    -- NO sustituye Temperamento.empatia/lealtad/agresividad del
+    individuo en ningún otro sitio (crisis mental, depredación,
+    SOCIALIZAR siguen leyendo el rasgo fijo real), es una lectura
+    MODULADA solo para estos dos consumidores de carácter cívico.
+
+    Sin asentamiento, sin líderes, o si id_seguidor ES uno de los
+    líderes: devuelve temperamento_seguidor tal cual (un líder no se
+    arrastra a sí mismo).
+
+    Con consejo (varios líderes), "el líder" a efectos de esta función
+    es el promedio de temperamento de los miembros del consejo --
+    simplificación razonada, PROVISIONAL.
+
+    Factor de arrastre = peso_max_arrastre_liderazgo * (1 - dist/umbral)
+    * lealtad_hacia_el_lider (afinidad ya acumulada en Relaciones, 0.0
+    sin vínculo -- mismo criterio que la reputación neutra de
+    calcular_liderazgo), interpolando empatía/lealtad/agresividad hacia
+    el líder. Con dist >= umbral_disonancia_liderazgo, factor=0 -- la
+    disonancia es demasiado alta para que el arrastre tenga efecto (ver
+    la erosión de lealtad correspondiente en
+    sistemas/sistema_asentamiento.py:_acrecion_lealtad_liderazgo)."""
+    from dataclasses import replace
+
+    from componentes.temperamento import Temperamento
+
+    if asen is None or not asen.lideres or id_seguidor in asen.lideres:
+        return temperamento_seguidor
+
+    temperamentos_lideres: list[Temperamento] = []
+    for lid in asen.lideres:
+        t = gestor.obtener_componente(lid, Temperamento)
+        if t is not None:
+            temperamentos_lideres.append(t)
+    if not temperamentos_lideres:
+        return temperamento_seguidor
+
+    n = len(temperamentos_lideres)
+    # Solo empatia/lealtad/agresividad importan aqui abajo (distancia_
+    # caracter y la interpolacion final) -- el resto de campos se dejan
+    # a 0.0, sin consecuencia real, nunca se leen.
+    temp_lider_prom = Temperamento(
+        valentia=0.0, sociabilidad=0.0, dominancia=0.0, fe=0.0, curiosidad=0.0,
+        empatia=sum(t.empatia for t in temperamentos_lideres) / n,
+        lealtad=sum(t.lealtad for t in temperamentos_lideres) / n,
+        agresividad=sum(t.agresividad for t in temperamentos_lideres) / n,
+    )
+
+    dist = distancia_caracter(temperamento_seguidor, temp_lider_prom)
+    umbral = float(config_asentamiento.get("umbral_disonancia_liderazgo", 0.5))
+    if umbral <= 0.0 or dist >= umbral:
+        return temperamento_seguidor
+
+    peso_max = float(config_asentamiento.get("peso_max_arrastre_liderazgo", 0.5))
+    relaciones = gestor.obtener_componente(id_seguidor, Relaciones)
+    afinidades = []
+    if relaciones is not None:
+        for lid in asen.lideres:
+            vinculo = relaciones.vinculos.get(lid)
+            if vinculo is not None:
+                afinidades.append(vinculo.afinidad)
+    lealtad_hacia_lider = max(0.0, sum(afinidades) / len(afinidades)) if afinidades else 0.0
+
+    factor = peso_max * (1.0 - dist / umbral) * lealtad_hacia_lider
+    if factor <= 0.0:
+        return temperamento_seguidor
+
+    return replace(
+        temperamento_seguidor,
+        empatia=temperamento_seguidor.empatia
+        + factor * (temp_lider_prom.empatia - temperamento_seguidor.empatia),
+        lealtad=temperamento_seguidor.lealtad
+        + factor * (temp_lider_prom.lealtad - temperamento_seguidor.lealtad),
+        agresividad=temperamento_seguidor.agresividad
+        + factor * (temp_lider_prom.agresividad - temperamento_seguidor.agresividad),
+    )
+
+
 def asentamiento_de(mundo: Any, id_entidad: int) -> Asentamiento | None:
     """El Asentamiento del que id_entidad es miembro hoy, o None."""
     for asen in mundo.asentamientos.values():
