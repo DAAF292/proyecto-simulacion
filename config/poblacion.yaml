@@ -18,6 +18,7 @@ poblacion:
   venados_iniciales: 10  # PROVISIONAL -- ver 2026-09-09-especie-venado-design.md
   cabras_montesas_iniciales: 8  # PROVISIONAL -- ver 2026-09-09-especie-cabra-montes-design.md (renombrada de cabra_montes a cabra_montesa el 2026-09-10)
   zorros_iniciales: 8  # PROVISIONAL -- ver 2026-09-14-especie-zorro-design.md
+  aguilas_iniciales: 4  # PROVISIONAL -- ver 2026-09-17-vuelo-aguila-design.md
   techo_fraccion_edad_inicial_longevidad: 0.7
 
 rangos_raciales:
@@ -583,6 +584,57 @@ rangos_raciales:
     inteligencia: [0.3, 0.6]
     memoria: [0.3, 0.6]
     voluntad: [0.2, 0.5]
+    resiliencia: [0.3, 0.6]
+    estabilidad_mental_maxima: [0.4, 0.7]
+    consciencia: [0.0, 0.15]
+
+  # AGUILA: primera especie voladora, ver docs/superpowers/specs/
+  # 2026-09-17-vuelo-aguila-design.md. "vuela: true" es un rasgo fisico
+  # racial mas -- mismo patron categorico que medio_alimentacion o
+  # tipo_refugio_fauna, leido una vez por sistema_movimiento.py para
+  # activar el mecanismo de vuelo (ignora ahogamiento por agua siempre;
+  # ignora coste/limite de pendiente SOLO en superficie, zona_idx==0 --
+  # sigue bloqueada por paredes de cueva, que reutilizan el mismo campo
+  # de elevacion para roca solida). Depredador aereo real de conejo/
+  # ardilla via el mismo sistema_depredacion.py sin cambios (resuelve por
+  # contacto en la misma celda, agnostico a como se llego). Peso/altura
+  # fieles al aguila real (aguila real, ~3-6.5kg); longevidad mas alta
+  # que el resto del catalogo de depredadores (rapaz longeva de verdad,
+  # frente a zorro 4-8) -- PROVISIONAL, sin calibrar contra el harness
+  # completo. Nace en bosque Y montana (pool combinado en
+  # main.py:sembrar_poblacion_inicial) -- rapaz de territorio amplio, no
+  # ligada a un unico bioma.
+  aguila:
+    medio_alimentacion: cazar
+    vuela: true
+    peso: [3.5, 6.5]
+    altura: [0.6, 0.9]
+    longevidad: [12, 20]
+    duracion_gestacion_dias: [35, 45]
+    camada: [1, 2]
+    fraccion_madurez: 0.25
+    factor_base_concepcion: 0.012
+    puntos_agarre: 2  # garras
+    fuerza: [0.4, 0.7]
+    agilidad: [0.6, 0.9]
+    velocidad: [0.6, 0.95]
+    resistencia_enfermedad: [0.3, 0.6]
+    agudeza_sensorial: [0.8, 1.0]
+    vitalidad_maxima: [0.35, 0.6]
+    resistencia_maxima: [0.35, 0.6]
+    curacion: [0.01, 0.02]
+    recuperacion: [0.08, 0.15]
+    valentia: [0.4, 0.7]
+    sociabilidad: [0.1, 0.3]
+    agresividad: [0.3, 0.6]
+    dominancia: [0.3, 0.6]
+    empatia: [0.1, 0.4]
+    lealtad: [0.2, 0.5]
+    fe: [0.0, 0.2]
+    curiosidad: [0.3, 0.6]
+    inteligencia: [0.3, 0.6]
+    memoria: [0.3, 0.6]
+    voluntad: [0.3, 0.6]
     resiliencia: [0.3, 0.6]
     estabilidad_mental_maxima: [0.4, 0.7]
     consciencia: [0.0, 0.15]

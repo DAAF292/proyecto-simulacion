@@ -501,13 +501,22 @@ class SistemaMovimiento:
 
             radio = radio_individual(dims.agudeza_sensorial, self.radio_min, self.radio_max)
             accion = intencion.accion
+            # vuela (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+            # vuelo-aguila-design.md): propiedad de ESPECIE, calculada
+            # una vez por individuo por tick, reutilizada tanto por el
+            # dispatch de abajo (DORMIR) como por _aplicar_movimiento.
+            vuela = bool(
+                self.config.get("rangos_raciales", {})
+                .get(ident.especie.value, {})
+                .get("vuela", False)
+            )
 
             dx, dy = 0, 0
 
             if accion == Accion.DORMIR:
                 dx, dy = self._calcular_dormir(
                     gestor, mundo, eid, ident.especie, pos.x, pos.y, radio, mem, cap_mental,
-                    temperamento, pos.zona_idx, tick_actual,
+                    temperamento, pos.zona_idx, tick_actual, vuela=vuela,
                 )
             elif accion == Accion.HUIR:
                 dx, dy = self._calcular_huida(
@@ -578,7 +587,9 @@ class SistemaMovimiento:
             # propio.
 
             if dx != 0 or dy != 0:
-                self._aplicar_movimiento(gestor, mundo, zona, eid, pos, dims, pf, dx, dy, accion)
+                self._aplicar_movimiento(
+                    gestor, mundo, zona, eid, pos, dims, pf, dx, dy, accion, vuela=vuela,
+                )
 
     def _aplicar_movimiento(
         self,
@@ -592,8 +603,19 @@ class SistemaMovimiento:
         dx: int,
         dy: int,
         accion: Accion,
+        vuela: bool = False,
     ) -> None:
-        """Valida restricciones de terreno y aplica el gasto metabólico de resistencia."""
+        """Valida restricciones de terreno y aplica el gasto metabólico de
+        resistencia.
+
+        vuela (2026-09-17, ver docs/superpowers/specs/2026-09-17-vuelo-
+        aguila-design.md): propiedad de ESPECIE (rangos_raciales, no de
+        celda ni de componente aparte) -- ignora el chequeo de agua
+        SIEMPRE (volar sobre agua profunda no ahoga), y el de relieve/
+        coste de resistencia por pendiente SOLO en superficie
+        (zona_idx==0): bajo tierra, una elevación alta sigue siendo
+        pared sólida real (nucleo/cueva.py: "PAREDES IMPASABLES SIN
+        CAMPO NUEVO"), ni un ave la atraviesa."""
         nx, ny = pos.x + dx, pos.y + dy
 
         if not (0 <= nx < zona.ancho and 0 <= ny < zona.alto):
@@ -630,16 +652,21 @@ class SistemaMovimiento:
         celda_dest = zona.obtener_celda(nx, ny)
 
         # 1. Chequeo de profundidad de agua frente a la estatura corporal
-        prof_agua = profundidad_agua_potable(celda_dest)
-        if prof_agua > dims.altura and profundidad_agua_potable(celda_orig) <= dims.altura:
-            return
+        if not vuela:
+            prof_agua = profundidad_agua_potable(celda_dest)
+            if prof_agua > dims.altura and profundidad_agua_potable(celda_orig) <= dims.altura:
+                return
 
-        # 2. Chequeo de relieve y pendiente máxima transitable
-        delta_elev = celda_dest.elevacion - celda_orig.elevacion
-        pend_max = pendiente_maxima_transitable(dims.fuerza, self.pend_min, self.pend_max)
-
-        if delta_elev > pend_max:
-            return
+        # 2. Chequeo de relieve y pendiente máxima transitable -- un
+        # volador en superficie no tiene pendiente que escalar, así que
+        # tampoco paga el coste de resistencia del paso 3 (delta_elev
+        # queda en 0.0, sin tocar ese bloque).
+        ignora_relieve = vuela and pos.zona_idx == 0
+        delta_elev = 0.0 if ignora_relieve else celda_dest.elevacion - celda_orig.elevacion
+        if not ignora_relieve:
+            pend_max = pendiente_maxima_transitable(dims.fuerza, self.pend_min, self.pend_max)
+            if delta_elev > pend_max:
+                return
 
         # 3. Drenaje de resistencia física (únicamente en desnivel positivo y sprint)
         if pf is not None:
@@ -2195,6 +2222,37 @@ class SistemaMovimiento:
 
         return self._paso_aleatorio()
 
+    def _arbol_mas_cercano(
+        self, gestor, pos_x: int, pos_y: int, radio: int, zona_idx: int = 0
+    ) -> tuple[int, int] | None:
+        """Celda con un arbol (Planta.masa_tronco_kg > 0) mas cercana
+        dentro del radio -- usado por aves para "posarse" al dormir
+        (2026-09-17, ver docs/superpowers/specs/2026-09-17-vuelo-aguila-
+        design.md). Escaneo directo, sin memoria (mismo patron que
+        _buscar_conspecifico_mas_cercano): el beneficio es puramente
+        conductual, sin bono numerico anadido."""
+        from componentes.planta import Planta
+
+        mejor: tuple[int, int] | None = None
+        mejor_dist = radio + 1
+        fuente = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Planta, Posicion)
+        )
+        for pid in fuente:
+            planta = gestor.obtener_componente(pid, Planta)
+            if planta is None or planta.masa_tronco_kg <= 0.0:
+                continue
+            pos_p = gestor.obtener_componente(pid, Posicion)
+            if pos_p is None or pos_p.zona_idx != zona_idx:
+                continue
+            dist = abs(pos_p.x - pos_x) + abs(pos_p.y - pos_y)
+            if dist <= radio and dist < mejor_dist:
+                mejor = (pos_p.x, pos_p.y)
+                mejor_dist = dist
+        return mejor
+
     def _calcular_dormir(
         self,
         gestor: GestorEntidades,
@@ -2209,13 +2267,23 @@ class SistemaMovimiento:
         temperamento: Temperamento | None,
         zona_idx: int = 0,
         tick_actual: int = 0,
+        vuela: bool = False,
     ) -> tuple[int, int]:
         """
         REFUGIO INSTINTIVO: buscar comodidad, seguridad, un entorno
         seguro con los tuyos -- el mismo impulso que la construcción
         consciente de refugio, pero sin depender de consciencia.
 
-        Dos capas, en este orden, NINGUNA inventa memoria compartida:
+        0. POSARSE (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+           vuelo-aguila-design.md): SOLO si vuela -- un volador prefiere
+           una celda con árbol (Planta.masa_tronco_kg > 0) sobre el
+           refugio recordado o el sesgo gregario de abajo. Sin árbol en
+           rango, cae a las dos capas siguientes sin cambios. No modela
+           "estar por encima" del suelo (el mundo no tiene eje de
+           altura) -- es una preferencia de CELDA, mismo nivel de
+           abstracción que el resto de esta función.
+
+        Dos capas más, en este orden, NINGUNA inventa memoria compartida:
 
         1. REFUGIO RECORDADO (individual): tipo de recuerdo nuevo
            "refugio" en MemoriaEspacial, misma maquinaria genérica que ya
@@ -2242,6 +2310,13 @@ class SistemaMovimiento:
         que volver ahí ya reduce la exposición por definición, sin
         inventar un multiplicador nuevo sobre Necesidades.seguridad.
         """
+        if vuela:
+            arbol = self._arbol_mas_cercano(gestor, pos_x, pos_y, radio, zona_idx)
+            if arbol is not None:
+                if arbol == (pos_x, pos_y):
+                    return (0, 0)
+                return self._acercarse_a(pos_x, pos_y, *arbol)
+
         if mem is not None and cap_mental is not None:
             objetivo_refugio = objetivo_recordado(
                 mem, "refugio", pos_x, pos_y, cap_mental, self.rng, self.config

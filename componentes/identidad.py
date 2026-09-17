@@ -68,6 +68,18 @@ class Especie(Enum):
     # vez -- generalista real, sin manada (sociabilidad baja, cazador
     # territorial en solitario).
     ZORRO = "zorro"
+    # AGUILA: primera especie voladora, ver docs/superpowers/specs/
+    # 2026-09-17-vuelo-aguila-design.md. "vuela: true" en rangos_raciales
+    # (config/poblacion.yaml) es lo unico que la distingue mecanicamente
+    # de fauna terrestre -- sistema_movimiento.py la lee para ignorar el
+    # ahogamiento por profundidad de agua y el coste/limite de pendiente
+    # en superficie (zona_idx == 0); sigue bloqueada por paredes de cueva,
+    # que reutilizan el mismo campo de elevacion para roca solida (ver
+    # nucleo/cueva.py). Depredador aereo de conejo/ardilla: sistema_depre-
+    # dacion.py resuelve por contacto en la misma celda con independencia
+    # de como se llego a ella, asi que "cazar en el aire" no exige ningun
+    # cambio en depredacion, solo que el aguila decida moverse via vuelo.
+    AGUILA = "aguila"
 
 
 @dataclass

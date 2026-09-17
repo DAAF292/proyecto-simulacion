@@ -241,6 +241,19 @@ def sembrar_poblacion_inicial(
             poblacion_cfg.get("zorros_iniciales", 8),
             candidatas_bosque + celdas_pradera,
         ),
+        # AGUILA (2026-09-17, ver docs/superpowers/specs/2026-09-17-vuelo-
+        # aguila-design.md): rapaz de territorio amplio, nace en bosque Y
+        # montana a la vez -- mismo criterio de pool combinado que zorro,
+        # sin forzar reparto entre biomas. El guard de "no nace sumergida"
+        # de arriba es irrelevante para ella en la práctica (vuela=True
+        # ignora el ahogamiento por agua desde el primer tick), pero se
+        # deja pasar por el mismo filtro que el resto por simplicidad --
+        # no hay ningún motivo real para que nazca en agua.
+        (
+            Especie.AGUILA,
+            poblacion_cfg.get("aguilas_iniciales", 4),
+            candidatas_bosque + celdas_montana,
+        ),
     ]
 
     # Edad inicial variable de la población fundadora (ver
