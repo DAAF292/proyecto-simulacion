@@ -60,12 +60,26 @@ from nucleo.vocacion import vocacion_dominante
 RUTA_CONFIG = Path(__file__).resolve().parent.parent / "config"
 ESPECIES = [
     "gnomo", "lobo", "conejo", "ardilla", "caballo", "venado", "cabra_montesa",
-    "zorro",
+    "zorro", "aguila",
 ]
 # Criterio maestro original de Diego (2026-09-06): las 5 especies del
 # catálogo de entonces vivas a la vez. Se mantiene para comparar contra
-# todas las mediciones históricas de CLAUDE.md.
+# todas las mediciones históricas de CLAUDE.md -- retirado como criterio
+# PRINCIPAL el 2026-09-17 (ver docs/superpowers/specs/2026-09-17-
+# criterio-diversidad-sostenida-design.md): exigir que TODAS coexistan
+# a la vez es cada vez menos plausible según crece el catálogo (9
+# especies hoy, más en camino), y es una foto fija del último tick, no
+# una medida de si el ecosistema estuvo vivo la mayor parte de la
+# partida. Se conserva SOLO para comparabilidad con las mediciones
+# históricas ya citadas en CLAUDE.md, no como objetivo a perseguir.
 ESPECIES_CRITERIO_5 = ["gnomo", "lobo", "conejo", "ardilla", "caballo"]
+# TECHO_EXTINCION_AVISO (2026-09-17): umbral por ESPECIE (no conjunto)
+# para el nuevo criterio -- una especie que se extingue en más de esta
+# fracción de semillas se señala como necesitada de calibración,
+# independiente de qué les pase a las demás. PROVISIONAL, sin calibrar
+# -- 0.5 elegido por continuidad con el umbral que ya se discutía de
+# palabra ("la mitad de las semillas") antes de este círculo.
+TECHO_EXTINCION_AVISO = 0.5
 
 
 def _reset_contadores_modulo() -> None:
@@ -185,6 +199,18 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
         1 for esp in ESPECIES_CRITERIO_5 if poblacion_final.get(esp, 0) > 0
     )
 
+    # Diversidad media sostenida (2026-09-17, ver docs/superpowers/specs/
+    # 2026-09-17-criterio-diversidad-sostenida-design.md): en vez de una
+    # foto fija del ultimo tick, el numero MEDIO de especies vivas a lo
+    # largo de TODA la corrida, muestreado en los mismos puntos que ya
+    # usa `trayectoria` (cada 1000 ticks) -- una especie que prospero
+    # 9000 de 10000 ticks y colapso al final puntua mucho mejor que una
+    # que nunca llego a existir de verdad, sin inventar ningun muestreo
+    # nuevo (trayectoria ya existia para otro fin).
+    diversidad_media_temporal = sum(
+        sum(1 for cnt in snapshot.values() if cnt > 0) for snapshot in trayectoria.values()
+    ) / len(trayectoria)
+
     # Vocación dominante por especie (solo gnomo tiene Vocacion real hoy:
     # el contador solo se incrementa para conscientes).
     vocaciones_gnomo: Counter = Counter()
@@ -206,6 +232,7 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
         "trayectoria": trayectoria,
         "poblacion_final": dict(poblacion_final),
         "especies_vivas": especies_vivas,
+        "diversidad_media_temporal": diversidad_media_temporal,
         "muertes_por_especie": {esp: dict(c) for esp, c in muertes_por_especie.items()},
         "concepciones_por_especie": dict(concepciones_por_especie),
         "nacimientos_por_especie": dict(nacimientos_por_especie),
@@ -279,14 +306,43 @@ def _imprimir_resumen(resultados: list[dict]) -> None:
         pct = 100 * extinciones[esp] / len(validos) if validos else 0
         print(f"  {esp}: {extinciones[esp]}/{len(validos)} ({pct:.0f}%)")
 
+    # Criterio de diversidad sostenida (2026-09-17, reemplaza al criterio
+    # de "todas a la vez" como medida PRINCIPAL -- ver docs/superpowers/
+    # specs/2026-09-17-criterio-diversidad-sostenida-design.md):
+    #
+    # B) diversidad media sostenida en el tiempo (no una foto del ultimo
+    #    tick) -- cuantas especies hay vivas, en promedio, a lo largo de
+    #    TODA la corrida.
+    # C) techo de extincion POR ESPECIE, independiente de las demas --
+    #    dice exactamente cual especie necesita calibracion, en vez de
+    #    un aprobado/suspenso agregado que oculta cual es el problema.
+    diversidades = [r["diversidad_media_temporal"] for r in validos]
+    diversidad_prom = sum(diversidades) / len(diversidades) if diversidades else 0.0
+    print(
+        f"\nDiversidad media sostenida (especies vivas en promedio a lo largo "
+        f"de toda la corrida, de {len(ESPECIES)} posibles): "
+        f"{diversidad_prom:.2f} promedio / {min(diversidades) if diversidades else 0:.2f} min "
+        f"/ {max(diversidades) if diversidades else 0:.2f} max"
+    )
+
+    especies_sobre_techo = [
+        esp for esp in ESPECIES
+        if len(validos) and (extinciones[esp] / len(validos)) > TECHO_EXTINCION_AVISO
+    ]
+    print(
+        f"\nEspecies que superan el techo de extincion por especie "
+        f"({TECHO_EXTINCION_AVISO:.0%}): "
+        f"{', '.join(especies_sobre_techo) if especies_sobre_techo else 'ninguna'}"
+    )
+
+    # Criterio de "todas a la vez" original (2026-09-06) -- retirado como
+    # criterio principal, conservado SOLO para comparabilidad con las
+    # mediciones historicas ya citadas en CLAUDE.md.
     cinco_vivas = sum(1 for r in validos if r["especies_vivas_criterio_5"] == 5)
     pct5 = 100 * cinco_vivas / len(validos) if validos else 0
-    siete_vivas = sum(1 for r in validos if r["especies_vivas"] == 7)
-    pct7 = 100 * siete_vivas / len(validos) if validos else 0
-    print(f"\nCriterio maestro de Diego (5 especies originales vivas): "
+    print(f"\n[historico, ya no es el criterio principal] Criterio maestro "
+          f"original de Diego (5 especies originales vivas A LA VEZ): "
           f"{cinco_vivas}/{len(validos)} ({pct5:.0f}%)")
-    print(f"Criterio extendido (7 especies del catalogo vivas): "
-          f"{siete_vivas}/{len(validos)} ({pct7:.0f}%)")
 
     asentamientos_formados = sum(1 for r in validos if r["num_asentamientos"] > 0)
     almacen_completado = sum(1 for r in validos if r["construcciones_completadas"].get("almacen", 0) > 0)
