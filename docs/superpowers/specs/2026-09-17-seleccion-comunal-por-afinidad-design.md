@@ -76,7 +76,21 @@ todo el motor (sin necesidad de reescalar nada):
 | `almacen` | `min(saciedad, hidratacion) >= disposicion_a_aportar(...)` | `min(saciedad, hidratacion) - disposicion_a_aportar(...)` |
 | `cocina` | `saciedad >= disposicion_a_aportar(...)` | `saciedad - disposicion_a_aportar(...)` |
 | `salon_comun` | `(sociabilidad+curiosidad)/2 >= umbral_prosocial_comunal` | `(sociabilidad+curiosidad)/2 - umbral_prosocial_comunal` |
-| `taller` | `comodidad < 1.0` | `1.0 - comodidad` (mismo `deficit_comodidad` ya calculado más abajo en la función) |
+| `taller` | `comodidad < 1.0` (sin cambios) | `(1.0 - comodidad) - umbral_prosocial_comunal` |
+
+**Corrección aplicada durante la implementación (no en el diseño
+original de este documento)**: la primera versión de la afinidad de
+`taller` era `1.0 - comodidad` sin restar ningún umbral -- a diferencia
+de las otras tres, que sí restan uno. Verificado contra la suite real
+(3 tests rotos): esto hacía que `taller` ganase casi siempre por
+ventaja de escala de la fórmula (su techo real era 1.0, el de las
+demás 0.5-0.85), el mismo tipo de sesgo estructural que este círculo
+vino a corregir, solo que invertido. Corregido reutilizando
+`umbral_prosocial_comunal` (ya existente) también como umbral de
+`taller` -- mismo "esto me importa lo suficiente para actuar" que ya
+usa `salon_comun`, sin inventar una constante nueva. El gate de
+`taller` en sí NO cambió (sigue siendo `comodidad < 1.0`), solo la
+magnitud de afinidad usada para desempatar.
 
 Los GATES no cambian -- quién califica para cada tipo sigue siendo
 exactamente lo mismo que hoy. Lo único nuevo es que, entre los que
@@ -112,8 +126,13 @@ def _gate_y_afinidad_comunal(
     if tipo == "salon_comun":
         valor = (temperamento.sociabilidad + temperamento.curiosidad) / 2.0
         return valor >= umbral_prosocial_comunal, valor - umbral_prosocial_comunal
-    # taller
-    return necesidades.comodidad < 1.0, 1.0 - necesidades.comodidad
+    # taller: el gate no cambia, pero la magnitud SI resta
+    # umbral_prosocial_comunal -- ver "Corrección aplicada durante la
+    # implementación" mas arriba.
+    return (
+        necesidades.comodidad < 1.0,
+        (1.0 - necesidades.comodidad) - umbral_prosocial_comunal,
+    )
 ```
 
 ### Selección (reemplaza el bucle de `sistema_decision.py:833-862`)

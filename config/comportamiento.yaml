@@ -203,6 +203,22 @@ asentamiento:
   # seguidor llega a adoptar el temperamento del lider al 100%, siempre
   # queda a medio camino. PROVISIONAL, sin calibrar.
   peso_max_arrastre_liderazgo: 0.5
+  # tolerancia_empate_afinidad_comunal (2026-09-17, ver docs/superpowers/
+  # specs/2026-09-17-seleccion-comunal-por-afinidad-design.md,
+  # sistemas/sistema_decision.py:_gate_y_afinidad_comunal): cuanto de
+  # cerca del maximo de afinidad de caracter (entre los 4 tipos
+  # comunales cuyo gate propio pasa) cuenta como "empate real" antes de
+  # recurrir al progreso ya invertido en el edificio como desempate
+  # secundario -- corrige el sesgo real (verificado contra el motor) de
+  # que taller, ultimo en TIPOS_COMUNALES, perdia sistematicamente
+  # cualquier empate de progreso=0.0 contra los otros tres, con
+  # independencia de cuanto encajara con el caracter de quien decidia.
+  # Un valor mas alto reproduce el sesgo anterior (progreso manda casi
+  # siempre); uno mas bajo (o 0.0) podria dispersar el esfuerzo entre
+  # los 4 tipos con mas frecuencia, retrasando la finalizacion de
+  # cualquiera de ellos -- PROVISIONAL, sin calibrar contra el harness
+  # completo.
+  tolerancia_empate_afinidad_comunal: 0.05
   # Identidad persistente (2026-09-15, ver
   # nucleo/asentamiento.py:resolver_identidades_persistentes): solape
   # mínimo (Jaccard, intersección/unión de miembros) entre el clúster de

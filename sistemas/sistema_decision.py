@@ -466,6 +466,51 @@ class SistemaDecision:
         actualizar(gestor, mundo, self.config, bus_eventos, reloj.tick_actual, self, indice=indice)
 
 
+def _gate_y_afinidad_comunal(
+    tipo: str,
+    temperamento: Temperamento,
+    temperamento_prosocial: Temperamento,
+    necesidades: Necesidades,
+    config_asentamiento: dict,
+    umbral_prosocial_comunal: float,
+) -> tuple[bool, float]:
+    """Gate (identico al que ya existia antes de este circulo, sin
+    cambios de comportamiento -- quien califica para cada tipo comunal
+    no cambia) + magnitud de afinidad de caracter hacia `tipo` (2026-09-
+    17, ver docs/superpowers/specs/2026-09-17-seleccion-comunal-por-
+    afinidad-design.md): cuanto sobra o falta respecto al umbral del
+    propio gate, en la misma escala [0,1] normalizada que ya usa el
+    resto del motor. Usada para desempatar por caracter en vez de por
+    progreso ya invertido en el edificio (una propiedad del edificio
+    compartida por todo el asentamiento, no de quien decide)."""
+    if tipo == "almacen":
+        umbral = disposicion_a_aportar(temperamento_prosocial, config_asentamiento)
+        valor = min(necesidades.saciedad, necesidades.hidratacion)
+        return valor >= umbral, valor - umbral
+    if tipo == "cocina":
+        # PROVISIONAL (2026-09-16): solo saciedad, no hidratacion --
+        # cocinar es sobre comida, no agua. Mismo umbral de caracter
+        # que almacen.
+        umbral = disposicion_a_aportar(temperamento_prosocial, config_asentamiento)
+        valor = necesidades.saciedad
+        return valor >= umbral, valor - umbral
+    if tipo == "salon_comun":
+        valor = (temperamento.sociabilidad + temperamento.curiosidad) / 2.0
+        return valor >= umbral_prosocial_comunal, valor - umbral_prosocial_comunal
+    # taller: el gate en si (comodidad < 1.0) no cambia -- pero la
+    # magnitud de afinidad SI resta umbral_prosocial_comunal, igual que
+    # las otras tres ramas restan su propio umbral de caracter. Sin
+    # este resto, taller (techo de margen 1.0, deficit puro) ganaria
+    # casi siempre frente a almacen/cocina/salon_comun (techo real
+    # 0.5-0.85, ya rebajado por su propio umbral) por una ventaja de
+    # escala de la formula, no por caracter real -- el mismo sesgo
+    # estructural que este circulo vino a corregir, solo que invertido.
+    # Reutiliza umbral_prosocial_comunal (ya existe) en vez de inventar
+    # una constante nueva -- mismo umbral generico de "esto me importa
+    # lo suficiente para actuar" que ya usa salon_comun.
+    return necesidades.comodidad < 1.0, (1.0 - necesidades.comodidad) - umbral_prosocial_comunal
+
+
 def actualizar(
     gestor, mundo, config: dict, bus: BusEventos, tick_actual: int,
     sistema_decision=None, indice=None,
@@ -612,6 +657,15 @@ def actualizar(
     # construyo primero", no "cuánto excedente aportar"). PROVISIONAL.
     umbral_prosocial_comunal = float(
         config.get("decision", {}).get("umbral_prosocial_comunal", 0.5)
+    )
+    # tolerancia_empate_afinidad_comunal (2026-09-17, ver docs/superpowers/
+    # specs/2026-09-17-seleccion-comunal-por-afinidad-design.md): cuanto
+    # de cerca del maximo de afinidad real cuenta como "empate de
+    # caracter" antes de recurrir al progreso ya invertido como
+    # desempate secundario -- ver _gate_y_afinidad_comunal mas abajo.
+    # PROVISIONAL, sin calibrar contra el harness completo.
+    tolerancia_empate_afinidad_comunal = float(
+        config_asentamiento.get("tolerancia_empate_afinidad_comunal", 0.05)
     )
     # Taller de artesano (2026-09-16, ver docs/superpowers/specs/
     # 2026-09-16-taller-mobiliario-almacen-refugio-design.md):
@@ -826,40 +880,44 @@ def actualizar(
                 # (almacen/cocina/salon_comun/taller) compiten AL MISMO
                 # NIVEL, sin jerarquía -- cada uno gana solo si SU
                 # propio gate real pasa; entre los que pasan, gana quien
-                # ya lleve más progreso invertido (mismo criterio de
-                # convergencia ya validado, ahora aplicado solo dentro
-                # del subconjunto de candidatos que de verdad interesan
-                # a este individuo).
-                mejor_progreso = -1.0
+                # tenga mayor AFINIDAD DE CARACTER hacia su tipo
+                # (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+                # seleccion-comunal-por-afinidad-design.md) -- el
+                # progreso ya invertido en el edificio (una propiedad
+                # compartida por todo el asentamiento, no del individuo
+                # que decide) queda degradado a desempate SECUNDARIO,
+                # solo entre finalistas cuya afinidad quede dentro de
+                # tolerancia_empate_afinidad_comunal del maximo real.
+                # Dos pasadas explicitas (en vez de una variable "mejor"
+                # actualizada en una sola pasada) para que el resultado
+                # no dependa del ORDEN de TIPOS_COMUNALES -- causa raiz
+                # del sesgo real que este circulo corrige (taller,
+                # ultimo de los cuatro, perdia sistematicamente contra
+                # cualquier otro tipo con progreso > 0, con independencia
+                # de cuanto encajara con el caracter de quien decidia).
+                candidatos_validos: list[tuple[str, int | None, float, float]] = []
                 for tipo_c, cid_c, _pos_c in candidatos_comunales_pendientes(
                     gestor, mundo, id_entidad, config, radio_cluster_asentamiento
                 ):
-                    if tipo_c == "almacen":
-                        gate = min(necesidades.saciedad, necesidades.hidratacion) >= (
-                            disposicion_a_aportar(temperamento_prosocial, config_asentamiento)
-                        )
-                    elif tipo_c == "cocina":
-                        # PROVISIONAL (2026-09-16): solo saciedad, no
-                        # hidratación -- cocinar es sobre comida, no
-                        # agua. Mismo umbral de carácter que almacén.
-                        gate = necesidades.saciedad >= disposicion_a_aportar(
-                            temperamento_prosocial, config_asentamiento
-                        )
-                    elif tipo_c == "salon_comun":
-                        gate = (
-                            temperamento.sociabilidad + temperamento.curiosidad
-                        ) / 2.0 >= umbral_prosocial_comunal
-                    else:  # taller
-                        gate = necesidades.comodidad < 1.0
+                    gate, afinidad_c = _gate_y_afinidad_comunal(
+                        tipo_c, temperamento, temperamento_prosocial, necesidades,
+                        config_asentamiento, umbral_prosocial_comunal,
+                    )
                     if not gate:
                         continue
                     progreso_c = 0.0
                     if cid_c is not None:
                         construccion_c = gestor.obtener_componente(cid_c, Construccion)
                         progreso_c = construccion_c.progreso if construccion_c is not None else 0.0
-                    if progreso_c > mejor_progreso:
-                        mejor_progreso = progreso_c
-                        tipo_objetivo, cid_objetivo = tipo_c, cid_c
+                    candidatos_validos.append((tipo_c, cid_c, afinidad_c, progreso_c))
+
+                if candidatos_validos:
+                    mejor_afinidad = max(c[2] for c in candidatos_validos)
+                    finalistas = [
+                        c for c in candidatos_validos
+                        if c[2] >= mejor_afinidad - tolerancia_empate_afinidad_comunal
+                    ]
+                    tipo_objetivo, cid_objetivo, _, _ = max(finalistas, key=lambda c: c[3])
 
             if tipo_objetivo != "":
                 suficiente = material_suficiente_para(

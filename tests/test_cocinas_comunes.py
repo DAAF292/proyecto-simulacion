@@ -144,17 +144,30 @@ def test_decision_elige_cocina_por_llevar_mas_progreso_con_gates_abiertos():
 
 
 def test_decision_empate_exacto_prefiere_salon_comun():
-    """Empate exacto (ninguno de los 3 candidatos restantes empezado,
-    todos a progreso 0.0) se resuelve por el orden fijo de
-    TIPOS_COMUNALES -- salon_comun antes que cocina, mismo criterio
-    heredado de tipos_paralelos."""
+    """Empate exacto de AFINIDAD (2026-09-17, ver docs/superpowers/specs/
+    2026-09-17-seleccion-comunal-por-afinidad-design.md -- este test
+    validaba antes un empate de PROGRESO resuelto por el orden fijo de
+    TIPOS_COMUNALES; ese mecanismo ya no es el criterio primario, ver
+    spec) -- con agresividad=1.0/empatia=0.0/lealtad=0.0, el umbral de
+    disposicion_a_aportar sube a 0.5, igualando la afinidad de cocina
+    (saciedad 1.0 - 0.5 = 0.5) con la de salon_comun
+    ((sociabilidad+curiosidad)/2=1.0 - 0.5 = 0.5) y la de taller
+    (comodidad 0.0 -> (1.0-0.0)-0.5 = 0.5). Los tres EMPATAN de verdad
+    en afinidad Y en progreso (ninguno empezado) -- el desempate final
+    cae al orden de TIPOS_COMUNALES, ahora solo como ultimo recurso
+    entre finalistas genuinamente equivalentes, no como criterio
+    principal."""
     config = _config()
     rng = random.Random(3)
     gestor = GestorEntidades()
     mundo = Mundo(10, 10, config, random.Random(1))
     gnomo = _gnomo_neutralizado(gestor, config, rng)
-    gestor.obtener_componente(gnomo, Temperamento).sociabilidad = 1.0
-    gestor.obtener_componente(gnomo, Temperamento).curiosidad = 1.0
+    temp = gestor.obtener_componente(gnomo, Temperamento)
+    temp.sociabilidad = 1.0
+    temp.curiosidad = 1.0
+    temp.agresividad = 1.0
+    temp.empatia = 0.0
+    temp.lealtad = 0.0
     cid_refugio = crear_construccion(gestor, 0, 0, "refugio", propietario_id=gnomo)
     gestor.obtener_componente(cid_refugio, Construccion).progreso = 1.0
     _construccion(gestor, "almacen", 5, 5, asentamiento_id=1)
