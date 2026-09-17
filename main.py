@@ -8,7 +8,8 @@ Implementa un pipeline trifásico desacoplado por tick y cadencias biológicas d
             SistemaDesastres [tick], SistemaDepredacion)
   - Fase 3: Metabolismo, Recursos y Resolución Vital (SistemaRecursos, SistemaNecesidades,
             SistemaCapacidadFisica, SistemaCapacidadMental, SistemaReproduccion)
-  - Corte de Día: Descomposición, Clima, Flora, Ciclo Vital y Desastres [ignición]
+  - Corte de Día: Descomposición, Clima, Flora, Ciclo Vital, Desastres
+            [ignición], Asentamiento, Manada y Colonización espontánea
 
 Modo CLI (esta función `main()`, controlada por variables de entorno
 SIMULACION_MODO_VISUAL/SIMULACION_AUTO_TICKS/SIMULACION_CONTINUAR) frente a
@@ -59,6 +60,7 @@ from sistemas.sistema_capacidad_fisica import SistemaCapacidadFisica
 from sistemas.sistema_capacidad_mental import SistemaCapacidadMental
 from sistemas.sistema_ciclo_vital import SistemaCicloVital
 from sistemas.sistema_clima import SistemaClima
+from sistemas.sistema_colonizacion import SistemaColonizacion
 from sistemas.sistema_decision import SistemaDecision
 from sistemas.sistema_depredacion import SistemaDepredacion
 from sistemas.sistema_desastres import SistemaDesastres
@@ -158,6 +160,7 @@ def instanciar_sistemas(
         "ciclo_vital": SistemaCicloVital(config, rng_juego),
         "asentamiento": SistemaAsentamiento(config, rng_juego),
         "manada": SistemaManada(config, rng_juego),
+        "colonizacion": SistemaColonizacion(config, rng_juego),
     }
 
 
@@ -539,6 +542,7 @@ def ejecutar_tick(
         sistemas["desastres"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["asentamiento"].ejecutar(gestor, mundo, reloj, bus_eventos)
         sistemas["manada"].ejecutar(gestor, mundo, reloj)
+        sistemas["colonizacion"].ejecutar(gestor, mundo, reloj, bus_eventos)
 
 
 def preparar_partida(semilla: int, config: dict[str, Any], ruta_base: Path) -> EstadoPartida:

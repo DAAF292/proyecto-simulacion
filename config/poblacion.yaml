@@ -21,6 +21,25 @@ poblacion:
   aguilas_iniciales: 4  # PROVISIONAL -- ver 2026-09-17-vuelo-aguila-design.md
   techo_fraccion_edad_inicial_longevidad: 0.7
 
+# Colonizacion espontanea (2026-09-17, ver docs/superpowers/specs/
+# 2026-09-17-colonizacion-espontanea-design.md, sistemas/
+# sistema_colonizacion.py): cadencia de dia, ley general -- cualquier
+# especie con poblacion viva por debajo de umbral_poblacion_critica
+# sortea cada dia una probabilidad muy baja de que aparezca una pareja
+# nueva en una celda de bioma compatible. Deliberadamente NO se aplica
+# a especies con poblacion sana -- seria un respawn disfrazado, no una
+# ley de colonizacion real.
+colonizacion:
+  # Sin pareja viable ya (<2 individuos) -- umbral de "en apuros", no de
+  # "no esta en su mejor momento". PROVISIONAL, sin calibrar.
+  umbral_poblacion_critica: 2
+  # ~1 vez cada 200 dias de una especie en apuros, en promedio.
+  # PROVISIONAL, sin calibrar contra el harness completo -- riesgo real
+  # si se sube demasiado: enmascarar problemas de calibracion en vez de
+  # dar una segunda oportunidad legitima (ver spec).
+  probabilidad_colonizacion_diaria: 0.005
+  tamano_pareja_colonizadora: 2
+
 rangos_raciales:
   gnomo:
     medio_alimentacion: recolectar
