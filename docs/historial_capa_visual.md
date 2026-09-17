@@ -1170,3 +1170,696 @@ que se escribiera la actualización de este documento (`ca77a7e`) --
 inconsistencia real entre dos commits de la misma sesión, encontrada al
 auditar `git log` contra CLAUDE.md antes de añadir la sección siguiente,
 no de memoria.
+
+## 2026-09-16 -- pivote a ASCII, reversión el mismo día a híbrido, flora
+
+Esta entrada llega tarde (escrita retroactivamente, sesión posterior):
+nada de lo ocurrido el 2026-09-16 se había registrado aquí -- el
+documento se quedó parado en la sección anterior (2026-09-04) mientras
+CLAUDE.md sí documentaba el pivote a ASCII de ese día como "Estado
+actual". Auditado contra `git log` antes de escribir esto, no de
+memoria.
+
+**Secuencia real de commits del mismo merge** (`5dd4b87..83c710d`):
+primero `b5b98b3` (retirar Códice Cartográfico, pivote a mapa 100%
+glifos) y `66af797` (segunda pasada de limpieza de assets huérfanos) --
+hasta aquí coincide con lo que CLAUDE.md documentó como cierre. Pero el
+mismo día, más tarde, el mismo merge sigue con `4e867e4`/`dc9481e`
+(legibilidad del catálogo, fondo por celda), `78bdbce` (fuente bitmap
+VGA437 real), `7958ea8`/`2e71680`/`098ee4c`/`0cb4da8` (texturas/mosaico
+2x2/pictogramas), y finalmente **`c6af86b` (sprites reales de fauna,
+generados por IA) y `c939e2e` (sprites de construcciones, escalados por
+`huella_m2`)** -- es decir, la propia sesión que cerró "mapa 100% ASCII
+sin ningún asset de imagen" lo revirtió parcialmente unas horas después,
+sin que ninguna de las dos decisiones quedara registrada como tal en
+CLAUDE.md ni aquí. Resultado: tanto CLAUDE.md como un comentario de
+cabecera de `terminal.html` (líneas 253-260 antes de esta corrección)
+seguían afirmando "CERO imágenes en el mapa" mientras el propio catálogo
+un poco más abajo (`CATALOGO_GLIFOS.fauna`/`.construcciones`) ya tenía
+sprites reales -- contradicción interna real, sin que nadie la señalara
+hasta que Diego preguntó por el último commit en una sesión posterior.
+
+**Decisión de Diego, preguntado explícitamente al señalarle la
+contradicción**: el criterio real nunca fue "100% ASCII" ni "reversión
+completa a sprites" -- es un **híbrido deliberado**: base de glifo+color
+ASCII, sustituido por sprite real donde se vaya encontrando arte
+adecuado, introducido de forma gradual (no una lista cerrada de
+categorías fijada de antemano). Todos los assets usados hasta ahora son
+de uso gratuito según confirmación de Diego -- no se investigó licencia
+individual más allá de esa confirmación (mismo nivel de diligencia que
+ya arrastra el pendiente de créditos PyxelSpace, sin resolver desde la
+migración original).
+
+**Flora (esta sesión, mismo círculo que corrigió la documentación)**:
+Diego aportó 10 iconos JPEG en `iconos/flora/` (2048×2048,
+`ArbustoMontañaTundra.jpg`, `arbustoPraderaBosque.jpg`,
+`arbustoSeco.jpg`, `cactus.jpg`, `flores.jpg`, `helecho.jpg`,
+`hierba.jpg`, `manzano.jpg`, `pino.jpg`, `roble.jpg`) pidiendo
+recortarlos e integrarlos. Mismo formato que los de fauna/construcciones
+ya integrados: fondo de tablero de ajedrez (~51px de periodo, dos
+tonos ~198/~254 de gris neutro) quemado directamente en los píxeles del
+JPEG, sin canal alfa real.
+
+*Procesado* (script puntual en el scratchpad de la sesión, no forma
+parte del repositorio): en vez de un color-key global (que habría
+agujereado brillos internos reales -- el helecho y las flores tienen
+trazos blancos como parte del propio dibujo, no del fondo), flood-fill
+de 4 conectividad sembrado SOLO desde el borde de la imagen sobre una
+máscara de "gris neutro y brillo alto" (banda continua, no dos bandas
+discretas -- una primera versión con dos bandas separadas dejaba huecos
+sin clasificar justo en las costuras antialiased entre casillas del
+tablero, rompiendo la conectividad del flood-fill y produciendo un bbox
+que abarcaba la imagen entera). Recorte al bounding box del resultado +
+reescalado a 200px de alto con LANCZOS. Verificado visualmente cada PNG
+resultante antes de darlo por bueno (roble, helecho, flores, cactus
+inspeccionados en detalle) -- helecho y flores conservan sus brillos
+internos intactos, cactus conserva el hueco real entre brazo y tronco
+como transparencia.
+
+*Mapeo fichero → especie canónica*: los 10 nombres de fichero son
+nombres comunes genéricos, no las 15 claves de `config/flora.yaml` --
+mapeo interpretado con criterio, **marcado explícitamente como
+provisional, pendiente de confirmar con Diego**:
+manzano/roble/pino/cactus 1:1; `arbustoSeco.jpg`→`arbusto_desertico`
+(seco≈clima árido); `arbustoMontañaTundra.jpg`→ reutilizado para
+`arbusto_montano` Y `arbusto_artico` a la vez (mismo arte, ambos climas
+fríos); `arbustoPraderaBosque.jpg`→`arbusto_espinoso` (la única especie
+de arbusto sin calificador climático explícito, tratada como la
+genérica); `helecho.jpg`→`helecho`; `flores.jpg`→`flor_silvestre`;
+`hierba.jpg`→`hierba_silvestre`.
+
+*Alcance real, deliberadamente parcial*: de las 15 especies del
+catálogo, solo se integraron sprite las 8 de categoría árbol/arbusto
+(las que participan en el mecanismo de "planta competidora única por
+celda" ya existente en `itemsCelda`/`terminal.html`). Las 7 de categoría
+cobertura (hierba_silvestre, liquen, musgo, flor_silvestre,
+hierba_desertica, hierba_artica, helecho) se quedan en glifo de textura
+tejida (`TEXTURA_COBERTURA`) a propósito -- esa categoría ya mezcla
+varias especies solapadas en la misma celda para leerse como alfombra
+continua, y sustituir eso por un sprite único por especie exigiría
+decidir primero cómo mezclar varios sprites de cobertura en una sola
+celda, que no se decidió esta sesión. Quedan 3 PNG ya procesados y
+correctos sin usar todavía (`hierba_silvestre.png`, `flor_silvestre.png`,
+`helecho.png`) en `sprites_flora/`, a la espera de esa decisión.
+
+*Integración en `terminal.html`*: campo `img` nuevo en las 8 entradas de
+`CATALOGO_GLIFOS.flora` correspondientes; `itemsCelda()` propaga
+`img`/`especieFlora`/`alfaSprite` en el item de la "planta competidora"
+(antes solo `ch`/`color`); tamaño de sprite nuevo,
+`tamanoSpriteFlora(especie)`, escalado por `huella_m2` real de
+`config/flora.yaml` (mismo dato que ya usa el motor para el cupo de
+espacio compartido por celda) con raíz cuadrada -- no la raíz cúbica que
+usa `tamanoSpriteConstruccion` para masa/volumen, huella_m2 es área,
+mismo razonamiento físico que ya distinguía ambos casos en el comentario
+de `escalarPorRaiz`. Rango de tamaño en pantalla PROVISIONAL, sin
+calibrar contra captura real más allá de la inspección visual de esta
+sesión. `crearCeldaImgEstatica` gana un parámetro de opacidad opcional
+para reutilizar el mismo alfa por etapa de crecimiento (brote tenue,
+madura llena de color) que ya existía para el glifo, sin arte
+diferenciado por etapa. `.construccion-img` (CSS) se reutiliza tal cual
+para flora -- mismo contrato visual de ancla inferior-centro, no hacía
+falta una clase propia.
+
+*Bug real encontrado de paso, preexistente desde que se integraron los
+sprites de fauna/construcciones*: `presentacion/vista_web.py` solo
+servía por HTTP las rutas `/sprites_criaturas/` y
+`/sprites_construcciones/` -- cualquier sprite en otra subcarpeta
+(como la nueva `sprites_flora/`) habría devuelto 404 al abrir el visor
+a través de `ServidorWeb` en vez de con `file://` directo. Corregido
+añadiendo la tercera rama al mismo `do_GET`.
+
+*Verificación contra el motor real*: corrida fresca de
+`generar_datos.py` (2500 ticks) confirmó que las 8 especies con sprite
+nuevo aparecen en el mundo generado, y una captura con Playwright/
+Chromium headless sobre `terminal.html` abierto por `file://` mostró los
+sprites renderizados correctamente (árboles/arbustos con la escala
+relativa esperada, sin overflow visual roto entre celdas vecinas, sin
+icono de imagen rota) -- único error de consola observado fue el fetch
+de `estado.json` bloqueado por CORS bajo `file://`, irrelevante para el
+render inicial via `datos.js` y no reproducible sirviendo con
+`ServidorWeb` real. `datos.json`/`datos.js` de esa corrida de prueba se
+revirtieron después (no forman parte de este cambio).
+
+Pendiente real dejado explícitamente sin resolver: confirmación de
+Diego sobre el mapeo fichero→especie (punto 1 arriba); decisión de
+diseño sobre cómo (o si) dar sprite a la categoría cobertura (punto 2);
+ninguna calibración visual del rango de tamaño de sprite de flora más
+allá de esta inspección puntual.
+
+### Corrección real del círculo anterior, mismo día -- limpieza y resolución
+
+Diego revisó el resultado y señaló dos fallos reales: "el roble no está
+bn entre las ramas" (huecos de fondo sin limpiar, visibles como manchas
+grises/blancas opacas) y "han perdido mucha calidad, no están
+respetando los tamaños que deberían tener". Verificado contra el propio
+archivo antes de tocar nada -- confirmó ambos:
+
+**Huecos sin limpiar (roble y otras)**: el recorte sin reescalar mostró
+dos manchas blancas OPACAS (no transparentes) entre ramas. Causa real:
+el flood-fill original solo sembraba desde el borde exterior de la
+imagen -- un hueco de fondo que queda COMPLETAMENTE encerrado por
+ramas/hojas (sin ningún camino de 4-vecindad hacia el exterior) nunca se
+alcanza, por diseño, sin importar cuánto se ajuste el umbral de color.
+Dos intentos automáticos se probaron y descartaron antes de dar con la
+causa real:
+1. Bajar el umbral de brillo de "candidata" (el tablero se oscurece por
+   sombra ambiental cerca del dibujo) -- ayudó parcialmente pero dejó
+   miles de píxeles residuales en las costuras antialiased del propio
+   tablero.
+2. Dilatar la máscara candidata +3px antes del flood-fill (para saltar
+   gaps finos de contorno) -- ayudó con costuras delgadas pero NO con
+   huecos genuinamente encerrados por ramas gruesas (seguían sin tocar
+   el borde ni dilatados).
+3. Detectar automáticamente si una isla interior es "tablero real" por
+   bimodalidad de brillo o por correlación de fase con la cuadrícula del
+   tablero (periodo real medido: 2048/40 = 51.2px) -- **descartado tras
+   casi producir un daño real**: las estadísticas de brillo de un hueco
+   de tablero sombreado y las de un highlight pictórico real resultaron
+   indistinguibles. Verificado directamente: dos "islas candidatas"
+   grandes en `flores.jpg` (9619 y 7574 px) que este criterio habría
+   limpiado como fondo eran en realidad los **pétalos blancos de una
+   margarita real** del propio dibujo -- si se hubiera aplicado la regla
+   automática sin verificar, se habría agujereado una flor completa.
+
+Solución real adoptada: **verificación visual manual, una vez por
+icono**, en vez de una heurística de color más agresiva. Para cada uno
+de los 10 iconos se inspeccionaron en detalle (recorte ampliado con
+overlay, no la miniatura del collage completo -- la miniatura sí
+confundió en un primer vistazo el resaltado de diagnóstico con la flor
+roja real ya presente en `flores.jpg`) las islas interiores más grandes
+antes de decidir. Resultado: en roble, arbustoSeco
+(`arbusto_desertico`), arbustoMontañaTundra, arbustoPraderaBosque
+(`arbusto_espinoso`), hierba y helecho, TODAS las islas candidatas
+caían en huecos reales entre ramas/hojas -- se limpian todas sin
+excepción. Solo `flores.jpg` (`flor_silvestre`) se queda con el
+criterio conservador original (solo lo conectado al borde exterior),
+por los dos pétalos reales confirmados -- puede seguir teniendo algún
+hueco pequeño sin limpiar entre el follaje (~1.3% de los píxeles totales
+en la verificación final, disperso y no perceptible como mancha), un
+compromiso consciente en vez de arriesgar agujerear una flor.
+
+**Pérdida de calidad**: el primer intento normalizaba TODAS las especies
+a la misma altura fija (200px) con un único resize LANCZOS desde el
+original de 2048px -- un factor de reducción de ~8-10x que difumina los
+contornos duros característicos del pixel-art, agravado por que el
+navegador vuelve a reescalar esa imagen ya borrosa una segunda vez
+(`image-rendering: pixelated` a un tamaño aún menor, CELDA×0.9–2.6 ≈
+29-83px). Corregido: la resolución de exportación ahora es
+PROPORCIONAL a la `huella_m2` real de cada especie (misma raíz cuadrada
+que ya usa `tamanoSpriteFlora` en tiempo de ejecución, referencia
+huella=1.0 → 350px de alto, escalando hasta ~700-780px para roble/
+manzano/pino) -- un solo downscale de mucha menor magnitud relativa
+desde el original, dejando que el propio navegador haga el último ajuste
+a tamaño de pantalla con `pixelated` sin partir de una imagen ya
+degradada. Verificado visualmente en el visor real (Playwright,
+zoom 3.11x) -- contornos nítidos, sin manchas residuales perceptibles.
+
+Pendiente real sin resolver todavía: el mapeo fichero→especie sigue sin
+confirmar -- Diego, en el mismo mensaje que señaló estos dos fallos,
+añadió "usa las que corresponda que ya tenían su nombre", una
+instrucción con más de una lectura posible (¿usar solo los ficheros con
+nombre 1:1 exacto, dejando sin sprite las especies que exigían
+interpretación? ¿conservar el nombre de fichero original del icono en
+vez de renombrarlo a la clave de especie?) que no se adivinó una tercera
+vez -- se preguntó explícitamente en vez de asumir de nuevo.
+
+### Mapeo fichero→especie CONFIRMADO por Diego (mismo día, dos rondas)
+
+La pregunta explícita del punto anterior recibió una primera respuesta
+("los árboles están definidos por su nombre, los arbustos también, el
+arbusto seco sería de desierto, helecho para helecho y lo que falte se
+queda sin assets de momento") que se interpretó, de forma demasiado
+literal, como "solo el nombre de fichero exacto cuenta" -- bajo esa
+lectura se retiró sprite a arbusto_espinoso/arbusto_montano/
+arbusto_artico/hierba_silvestre/flor_silvestre, dejando solo 6 especies
+con sprite. Diego corrigió esa lectura de inmediato, aclarando el
+criterio real: "hay un asset para hierba, usa ese para todos los casos
+de hierba, y hay uno para flores silvestres también, los arbustos están
+claramente definidos, uno que se usa en pradera y en bosque, otro para
+montaña y tundra y uno para desierto". El criterio real nunca fue "el
+nombre del fichero debe coincidir con la clave de especie" -- es el
+**bioma real** de cada fichero (mismo campo `biomas` de
+`config/flora.yaml` que ya gobierna dónde crece cada especie en el
+motor), y un solo fichero puede cubrir varias especies con clima afín.
+
+Verificado contra `config/flora.yaml` antes de aplicar (no de memoria):
+`arbusto_espinoso` tiene `biomas: [pradera]` (ninguna especie de
+arbusto tiene `bosque` en su lista -- la descripción de Diego de
+"pradera y bosque" es aproximada, pero pradera es inequívocamente la
+única coincidencia entre los 4 arbustos, confirma la asignación
+original). Mapeo final, 13 de 15 especies con sprite:
+
+- `manzano.jpg`→`manzano`, `roble.jpg`→`roble`, `pino.jpg`→`pino`,
+  `cactus.jpg`→`cactus`, `helecho.jpg`→`helecho` (coincidencia directa).
+- `arbustoSeco.jpg`→`arbusto_desertico`.
+- `arbustoMontañaTundra.jpg`→`arbusto_montano` Y `arbusto_artico`
+  (mismo archivo para ambas especies).
+- `arbustoPraderaBosque.jpg`→`arbusto_espinoso`.
+- `hierba.jpg`→`hierba_silvestre`, `hierba_desertica` Y `hierba_artica`
+  (mismo archivo para las 3 variantes).
+- `flores.jpg`→`flor_silvestre`.
+
+Sin sprite, honesto: `liquen` y `musgo` -- las únicas 2 especies del
+catálogo para las que Diego no aportó ningún icono, no una decisión de
+diseño ni una interpretación descartada.
+
+**Extensión real de mecanismo, no solo de datos**: la ronda anterior de
+este mismo círculo había decidido dejar TODA la categoría "cobertura"
+sin sprite ("no tiene un mecanismo de mezcla equivalente todavía").
+Confirmado que 5 de sus 7 especies SÍ llevan sprite (hierba×3,
+flor_silvestre, helecho), hizo falta extender `itemsCelda()`: la rama
+"sin competidora" (coberturas.forEach) ahora empuja `img` +
+`especieCobertura` cuando la especie tiene sprite, en vez de siempre el
+glifo de textura tejida -- reutilizando SIN CAMBIOS el mecanismo de
+mosaico 2x2 ya existente (`crearCeldaCuadrantes` ya trataba `item.img`
+de forma genérica) para cuando varias coberturas coinciden en la misma
+celda. Tamaño: `tamanoSpriteCobertura()`, FIJO (`CELDA*0.75`) en vez de
+escalado por `huella_m2` como árbol/arbusto -- esta categoría no compite
+por espacio físico en el motor (`compite_espacio_fisico: false`), no
+hay ningún dato real del que derivar un tamaño proporcional sin
+inventarlo. Verificado en el visor real (Playwright): sprites de
+cobertura visibles tanto a celda completa (una sola especie) como en
+cuadrante compartido (mezclada con otro elemento), sin errores de carga
+de ningún PNG.
+
+### Tercer fallo real, mismo día -- escalado por altura ignoraba el ancho
+
+Diego, mirando una captura ya con el mapeo confirmado: "¿los arbustos no
+son demasiado grandes? porque no se ve ni un árbol en la imagen". Antes
+de responder, se midió contra los propios ficheros en vez de opinar:
+`tamanoSpriteFlora()` fijaba SOLO `img.style.height` (con `width: auto`
+en CSS) -- el ancho en pantalla quedaba determinado por el aspect ratio
+NATIVO de cada PNG, que varía según cómo se compuso el arte original y
+no tiene ninguna relación con `huella_m2`. Medido directamente: pino
+(huella=4.5, aspect ancho/alto=0.64 -- silueta vertical/estrecha) salía
+con solo 43.5px de ancho en pantalla, más ESTRECHO que los 3 arbustos
+(aspect 1.18-1.23 -- arte compuesto más "extendido" horizontalmente,
+huella 1.0-2.2, la mitad o menos) que llegaban a 52-58px de ancho por su
+propio aspect. El pino, con más del doble de huella real que cualquier
+arbusto, se veía como un palito delgado a su lado -- la observación de
+Diego era correcta, y el motivo no era el arte en sí ni la calibración
+de huella_m2, sino que el escalado solo controlaba una dimensión.
+
+Fix: `tamanoSpriteFlora()` ahora escala por ÁREA visual (ancho×alto en
+pantalla) proporcional a `huella_m2`, no solo por altura --
+`alturaFinal = ladoEquivalente / sqrt(aspect)`, con `ASPECT_FLORA`
+midiendo el ratio ancho/alto real de cada PNG ya generado (no
+inventado). Efecto: a igualdad de huella, un sprite más "ancho" de
+composición sale proporcionalmente más bajo, y uno más "vertical" sale
+proporcionalmente más alto, igualando el área ocupada en pantalla en
+vez de solo la altura. Verificado en el visor real (Playwright, zoom
+2.5x, ventana del mapa con 21 celdas de árbol y 88 de arbusto
+mezcladas): los pinos se leen ahora como el elemento más grande y
+prominente de la escena, coherente con tener la mayor huella_m2 junto a
+roble/manzano. Mismo mecanismo aplicado solo a árbol/arbusto -- el
+tamaño de cobertura (`tamanoSpriteCobertura`) sigue siendo fijo
+(`CELDA*0.75`), sin este problema porque no varía por especie.
+
+Pendiente real, honesto: no se verificó si `crearCeldaCuadrantes` (el
+sprite reducido dentro de un cuadrante compartido, `CELDA*0.42` fijo de
+altura) tiene el mismo problema de aspect ratio -- ahí el tamaño no
+escala por huella_m2 (es fijo para todas las especies en ese contexto),
+así que el efecto sería más leve, pero no se midió.
+
+### Cuarto fallo real, mismo día -- "por qué hay árboles en las celdas pequeñas"
+
+Diego, en el mismo mensaje que pidió arbustos más pequeños: "¿por qué
+hay árboles en las celdas pequeñas?". Verificado contra el propio
+`datos.json` antes de responder (no se opinó a ciegas): **94 de las 100
+celdas con árbol del mapa generado tenían también el recurso `madera`**
+(el propio árbol lo produce/deja caer en su misma celda -- dato real
+del motor, no un caso raro). `itemsCelda()` empujaba ese recurso como un
+`item` más, igual que el árbol -- con `items.length` en 2, `renderMapa()`
+elegía el mosaico de cuadrantes (`crearCeldaCuadrantes`, pensado
+explícitamente para "el caso raro" de compartir celda, según su propio
+comentario de diseño) y reducía AMBOS a `CELDA*0.42` de altura fija. El
+resultado real: el 94% de los árboles del mapa se veían como una
+miniatura diminuta junto a un palito de madera, no como el sprite
+grande recién calibrado -- la observación de Diego era literal y
+correcta, no una impresión.
+
+Fix: los recursos sueltos del suelo (`piedra_suelta`, `madera`) dejan de
+entrar en la lista de `items` que compiten por el mosaico cuando YA hay
+al menos un elemento real en la celda (flora o construcción) -- pasan a
+ser **badges**, un `<div>` pequeño (11px) superpuesto en la esquina
+superior-derecha del sprite principal, que se dibuja siempre a su
+tamaño completo. Si la celda no tiene nada más que el recurso (caso
+`items.length === 0`), se sigue mostrando como antes, a tamaño
+completo -- es lo único que hay que ver ahí. Mismo patrón que ya existía
+para cobertura+competidora (la cobertura tiñe el fondo en vez de
+competir por espacio), aplicado ahora también a los recursos sueltos.
+
+De paso, mismo commit, ajuste directo del pedido de Diego ("los
+arbustos deberían ser incluso más pequeños"): `FACTOR_TAMANO_ARBUSTO =
+0.72`, reducción adicional aplicada SOLO a `categoria === 'arbusto'`
+dentro de `tamanoSpriteFlora()`, sin tocar árbol -- huella_m2 real ya
+los diferencia (1.0-2.2 frente a 4.0-5.0) pero el resultado seguía
+leyéndose grande. PROVISIONAL, valor de partida sin más criterio que el
+propio pedido, ajustable si Diego pide más o menos.
+
+Verificado en el visor real (Playwright, misma ventana del mapa que el
+fallo anterior): el cambio es dramático -- donde antes solo 2 pinos se
+veían a tamaño completo (el resto, miniaturas en cuadrante), ahora
+prácticamente todo el bosque de pinos aparece grande y prominente, con
+los arbustos visiblemente más discretos en proporción.
+
+### Quinto círculo, mismo día -- profundidad real, flip de direccion, paso natural
+
+Diego, satisfecho ya con el tamaño relativo ("me gusta el estado"), pidió
+tres cosas nuevas de una vez: que todo se superponga por profundidad real
+(incluida la fauna, que hasta ahora SIEMPRE quedaba por encima de todo
+sin importar su posición), que el sprite de una criatura se invierta
+según hacia dónde camina, y que el desplazamiento entre celdas se lea
+natural, "que no parezca que salta".
+
+**Profundidad real (Y-sorting)**: el esquema de z-index existente tenía
+un offset FIJO y enorme por tipo de capa -- terreno `0+y`, flora `400+y`,
+construcción `500+y`, fauna SIEMPRE `1000+y` -- decidido en un círculo
+anterior del mismo día para resolver un bug real de desborde de sprite
+(ver más arriba, "las criaturas o construcciones deben quedar por encima
+de todo"), pero como efecto secundario garantizaba que fauna nunca
+pudiera quedar oculta por nada, exactamente lo contrario de lo que Diego
+pide ahora. Sustituido por `zIndexPorFila(y, capa) = y*10 + prioridad`,
+un esquema donde la FILA real decide siempre primero (mayor fila = más
+"cerca"/"abajo" = tapa a lo que esté en una fila menor) y la prioridad
+por tipo (terreno=0, flora=2, construcción=4, fauna=6) solo desempata
+cuando dos elementos comparten la misma fila exacta -- resuelve ambos
+bugs a la vez: el desborde de construcción/flora sigue evitado (siguen
+ganando a terreno en su propia fila) y fauna ahora compite por
+profundidad real contra flora/construcción por su propia posición, no
+por un offset invencible. No hizo falta fusionar `capaEstatica` y
+`capaCriaturas` (dos `<div>` hermanos separados, uno se recrea entero en
+cada `renderMapa()` y el otro mantiene elementos persistentes por id
+para poder animar su desplazamiento) -- ninguno de los dos tiene
+`z-index` propio, así que sus hijos ya compiten en el mismo stacking
+context del ancestro común; verificado empíricamente con Playwright en
+vez de fiarse de la teoría de CSS stacking (notoriamente confusa): un
+zorro en una fila anterior a un árbol grande cercano queda visiblemente
+tapado por su follaje, solo asomando la cabeza por el lateral.
+
+**Flip por dirección**: el motor no expone "dirección" como dato, solo
+posición -- se infiere comparando la X actual contra la última X
+conocida, persistida en el propio elemento DOM (`dataset.ultimaX`,
+`dataset.mirandoIzq`) porque `DATA` se sustituye entero en cada sondeo,
+no hay estado anterior en el que buscarlo. Sin desplazamiento en X
+(movimiento puramente vertical, o quieta) se conserva la orientación
+anterior en vez de resetear a un lado por defecto en cada tick --
+importante porque el visor sondea cada 400ms sin importar si la entidad
+se movió o no. Convención asumida sin poder verificarla contra las 8
+especies reales de fauna: el arte mira hacia la DERECHA de base (sin
+flip); `scaleX(-1)` cuando camina a la izquierda. Si alguna especie
+resulta mirar al revés de lo esperado, es un cambio de signo puntual,
+no un rediseño. Verificado con una simulación directa de movimiento
+(mutar `ent.x` y volver a llamar `renderCriaturas()` dos veces
+seguidas): el `transform` cambia de signo correctamente en cada cambio
+de dirección real.
+
+**Paso natural, no salto**: verificado antes de tocar nada -- el sondeo
+de `estado.json` ocurría cada 1000ms mientras `segundos_por_tick` real
+del motor es 0.4 (`config/visual.yaml`), así que el motor podía avanzar
+~2-3 ticks reales entre dos sondeos consecutivos, y una criatura
+desplazarse el mismo número de celdas de una sola vez. Ninguna curva o
+duración de transición CSS puede hacer que un salto de 2-3 celdas en
+línea recta (el visor solo conoce el punto A y el B, no el camino real
+intermedio) se lea como "caminar" -- el problema no era la curva de
+animación, era la cadencia de muestreo. Corregido bajando el intervalo
+de sondeo de 1000ms a 400ms (igualando el tick real, así cada
+actualización mueve como mucho 1 celda) y la duración de la transición
+de `0.9s linear` a `0.35s ease-in-out` (menor que el intervalo, para que
+siempre termine antes del siguiente sondeo -- si no, un sondeo
+ligeramente adelantado interrumpiría la transición a medias, dando
+tirones; `ease-in-out` en vez de `linear` porque un paso a velocidad
+constante de inicio a fin también se lee mecánico).
+
+Pendiente real, honesto: el z-index se actualiza de golpe al nuevo valor
+de fila en cuanto llega el dato, mientras la posición visual todavía
+está interpolando desde la posición anterior (CSS no anima `z-index`) --
+en el instante en que una criatura cruza el umbral de una fila mientras
+camina, puede aparecer/desaparecer detrás de un objeto de forma abrupta
+en vez de gradual. Aceptado como limitación estándar de Y-sorting simple
+en CSS, no se intentó resolver con un mecanismo de interpolación de
+profundidad que no se pidió.
+
+### Sexto círculo, mismo día -- jitter horizontal, "parecen líneas rectas"
+
+Diego, tras el círculo de profundidad: "los assets se sitúan siempre en
+el centro de la celda, eso provoca que no se vea natural, parecen líneas
+rectas". Causa real, confirmada mirando el CSS antes de tocar nada:
+`.construccion-img` (reutilizada por construcción y por flora) fijaba
+`left: 50%` exacto, y `crearCeldaImg` (fauna) posicionaba siempre en
+`cx + CELDA/2` -- el centro geométrico exacto de la celda, sin ninguna
+variación. En un bosque real ningún árbol crece perfectamente centrado
+en su propia parcela de terreno; esa regularidad perfecta es justo lo
+que se lee como cuadrícula/líneas rectas en vez de vegetación natural.
+
+Fix: `jitterPx(seedX, seedY)`, un desplazamiento horizontal determinista
+de hasta ±25% de `CELDA`, reutilizando `hashDet` (el mismo hash ya usado
+para variar tono/textura de terreno) con una sal propia (97) para no
+correlacionar el desplazamiento con ningún otro efecto visual. Aplicado
+en `crearCeldaImgEstatica` (construcción, flora árbol/arbusto, cobertura
+con sprite) sobrescribiendo el `left:50%` fijo vía `calc(50% + Npx)`,
+semilla = la celda real (estable entre refrescos, el mismo árbol no
+"salta" de sitio en cada sondeo).
+
+Para fauna se necesitó una semilla DISTINTA -- no la celda actual (eso
+haría que el sesgo lateral cambiara de golpe cada vez que la criatura
+cruza a una celda nueva, viéndose peor que sin jitter: un "bailoteo"
+lateral en cada paso en vez de un caminar recto). Se usa el ID de la
+entidad (`jitterPxPorId`, estable durante toda su vida) como semilla en
+su lugar -- cada animal camina con su propio sesgo lateral constante,
+como una persona real no camina en línea perfectamente recta pero
+tampoco zigzaguea al azar en cada paso.
+
+Deliberadamente sin jitter: el mosaico de cuadrantes
+(`crearCeldaCuadrantes`) -- ahí el sprite ya vive confinado a un cuarto
+de celda pequeño (`position: static` dentro de un flex centrado, sin
+`left` que ajustar de la misma forma) y es, tras el fix de badges del
+círculo anterior, el caso menos común; el efecto de rejilla es mucho
+menos perceptible a ese tamaño. Tampoco se tocó el fallback de texto de
+fauna sin sprite (emoji/glifo) -- centrado por flex del propio
+contenedor, no por `left` absoluto, y el pedido de Diego ("los assets")
+apunta a los sprites de imagen, no a los glifos.
+
+Verificado en el visor real (Playwright, misma técnica de zoom sobre una
+zona con árboles/arbustos/fauna mezclados): ya no hay ninguna columna de
+elementos perfectamente alineados -- cada árbol, arbusto y animal tiene
+un desplazamiento lateral sutil y distinto, sin errores de consola.
+
+### Séptimo círculo, mismo día -- todas las plantas de una especie eran idénticas
+
+Diego, dos preguntas seguidas: si el jitter del círculo anterior le daba
+a la fauna "cierta animación de estar andando" (respuesta honesta: NO,
+es un sesgo lateral CONSTANTE por individuo -- no oscila, no hay ninguna
+animación de zancada real todavía; lo que sí contribuye a la sensación
+de movimiento natural es la combinación ya existente de easing + sondeo
+a 400ms + Y-sorting, pero eso es fluidez, no una animación de paso en
+sí), y si todos los assets de un mismo tipo tienen las mismas
+dimensiones -- "no todos los árboles crecen igual de grande".
+
+Verificado contra el propio modelo de datos antes de responder, no a
+ojo: SÍ, la segunda observación era exacta. `componentes/planta.py`
+declara `Planta.etapa` (0.0 a 1.0, crecimiento real, cae
+tasa_crecimiento_por_dia de la especie, YA expuesta por el DTO de
+`vista_web.py`) pero el visor solo la usaba para la OPACIDAD del
+sprite, nunca para el tamaño -- un brote recién plantado (etapa≈0) se
+veía exactamente del mismo tamaño GRANDE que un árbol centenario
+(etapa=1), solo más transparente. Comparado contra fauna: `fauna` SÍ
+tiene variación individual real en el motor
+(`DimensionesFisicas.altura_m`, sorteada al nacer con rango racial --
+mismo patrón "atributo con rango racial y sorteo individual" que ya
+documenta CLAUDE.md, y que el visor ya usa desde el círculo de
+pictogramas de fauna) -- pero `Planta` NO tiene ningún campo equivalente
+para tamaño máximo individual, solo `etapa` (crecimiento) y
+`masa_tronco_kg` (madera extraíble, fijada una vez, no relacionada con
+altura de copa). El motor simplemente no modela que dos robles maduros
+puedan alcanzar tamaños distintos.
+
+Dos fuentes de variación añadidas a `tamanoSpriteFlora`/
+`tamanoSpriteCobertura`, de naturaleza deliberadamente distinta y
+documentadas como tal en el propio código para no confundir dato real
+con relleno visual:
+1. **`factorCrecimiento(etapa)`** -- dato REAL del motor. Curva lineal
+   de 0.35 (recién brotada) a 1.0 (madura) sobre el tamaño ya calculado
+   por `huella_m2`. El propio 0.35 es PROVISIONAL (elección de
+   presentación razonada, el motor no expone ninguna curva de
+   crecimiento visual de la que derivarlo).
+2. **`factorJitterEscala(seedX, seedY)`** -- relleno puramente visual,
+   NO pretende representar ningún dato del motor (que no existe, ver
+   arriba). Mismo mecanismo que el jitter de posición del círculo
+   anterior: `hashDet` con sal propia (113), determinista por celda
+   (±15%) -- dos robles maduros en celdas distintas ya no son
+   pixel-perfect idénticos, sin inventar un atributo de motor que no
+   está ahí.
+
+Verificado en el visor real (Playwright, misma zona de comparación):
+variación de tamaño claramente visible entre pinos vecinos, donde antes
+todos medían exactamente lo mismo. Pendiente real, mismo alcance que el
+jitter de posición: el mosaico de cuadrantes sigue con tamaño fijo sin
+esta variación (caso ya minoritario tras el fix de badges). Pendiente
+real distinto, explícitamente sin resolver: la animación real de
+"zancada" al caminar que preguntó Diego -- no implementada, ofrecida
+pero no confirmada.
+
+### Octavo círculo, mismo día -- reparto proporcional de cuadrantes, quitar opacidad por edad
+
+Dos pedidos de Diego: cómo funciona el mosaico de cuadrantes, con una
+propuesta concreta ("si un árbol ocupa el 75% de la celda y un helecho
+el 25%, lo lógico es que el sprite del árbol ocupe 3 subceldas y el
+helecho 1, no?"); y quitar la opacidad decreciente por edad de planta
+("eso no tiene sentido").
+
+**Aclaración necesaria antes de tocar nada**: el ejemplo concreto de
+Diego (árbol+helecho) en realidad NO llegaba al mosaico con el código
+tal como estaba -- `itemsCelda()` resuelve "competidora (árbol/arbusto)
++ cobertura (helecho) en la misma celda" tiñendo el FONDO con el color
+de la cobertura, nunca añadiéndola como item independiente; el helecho
+perdía su propio sprite por completo en ese caso, no compartía
+cuadrante con nada. El mosaico de cuadrantes solo entra en juego con 2+
+items REALES simultáneos -- tras el fix de badges de un círculo
+anterior, el caso dominante con diferencia es construcción+flora
+compitiendo por espacio, o dos especies de cobertura compartiendo celda
+SIN competidora (el motor permite más de una).
+
+**Mecanismo anterior**: grid 2x2 fijo, cada item (hasta 4) a
+exactamente 1/4 de la celda y el mismo tamaño de sprite fijo
+(`CELDA*0.42`), sin ninguna relación con el tamaño real de lo que
+representa -- un almacén y un helecho compartiendo celda se veían
+exactamente igual de grandes.
+
+**Fix real**: `pesoItem(item)` reutiliza `huella_m2` real donde existe
+(`ORDEN_HUELLA_CONSTRUCCION` para construcción, `HUELLA_FLORA_M2` para
+árbol/arbusto) -- cobertura, sin huella_m2 real, recibe el peso nominal
+mínimo (`HUELLA_REFERENCIA_FLORA_M2`), no un número inventado aparte.
+Con exactamente 2 items (el caso dominante), el reparto de columnas se
+calcula proporcional a esos pesos, redondeado a un entero de 1 a 3 (para
+que ninguno desaparezca ni se coma la celda entera) -- `Math.round`
+sobre la fracción real, `grid-template-columns` pasa de fijo `1fr 1fr` a
+`<n1>fr <n2>fr` calculado en JS. El sprite de cada uno escala con el
+ANCHO REAL de su propia columna (`CELDA * fraccion * 0.95`, con un piso
+de 0.20 solo para legibilidad, sin techo artificial) en vez del tamaño
+fijo de antes. Con 3 o 4 items (caso raro, sin cambios de esta ronda) se
+mantiene el grid 2x2 igualitario -- un reparto proporcional preciso con
+más de 2 pesos arbitrarios exige un layout bidimensional bastante más
+complejo para un caso que apenas se observa en juego libre.
+
+Verificado con un mapa sintético aislado (3 celdas, sin ruido del resto
+del mundo real que había confundido una primera inspección visual sobre
+un mapa real completo) y midiendo el DOM resultante directamente, no
+solo mirando la captura: almacén (peso 40) + pino (peso 4.5) en la misma
+celda -> `grid-template-columns: "3fr 1fr"`, alturas de sprite 23px y
+8px respectivamente (proporción real 3:1, coincide exacto con el
+ejemplo de Diego); helecho + hierba_silvestre (mismo peso nominal) ->
+reparto 2:2, tamaños iguales.
+
+**Opacidad por edad, retirada por completo**: `competidora.etapa`/
+`cob.etapa` dejan de calcular ningún `alfa` variable -- desde el círculo
+anterior el TAMAÑO ya refleja la etapa real (`factorCrecimiento`), así
+que la opacidad decreciente había quedado no solo redundante sino
+conceptualmente incorrecta (una planta joven es más pequeña, no más
+transparente/fantasmal). Retirado el parámetro `opacidad` de
+`crearCeldaImgEstatica` y el campo `alfaSprite` de los items -- código
+muerto quitado, no solo puesto a un valor fijo de 1. Único hueco
+honesto que deja esta retirada: las 4 especies de cobertura SIN sprite
+(liquen/musgo/hierba_desertica/hierba_artica) se quedan sin NINGUNA
+señal visual de etapa de crecimiento -- no había un tamaño que variar
+en un glifo de textura que ya ocupa la celda completa por diseño, y
+Diego no distinguió sprite de glifo al pedir quitar la opacidad.
+
+### Noveno círculo, mismo día -- de reparto en columnas a superposición con profundidad
+
+Diego, el mismo día del reparto proporcional de cuadrantes de arriba:
+"quedaría mejor si se pudiesen solapar, por ejemplo el refugio y que el
+pino crezca por detrás, le daría una sensación de más profundidad al
+mapa" -- tercer diseño distinto para "qué pasa visualmente cuando 2+
+elementos reales comparten una celda", después del grid 2x2 fijo
+original y del reparto proporcional en columnas de arriba (que no
+llegó ni a un día completo de vida).
+
+**Mecanismo nuevo**: se sustituye por completo `crearCeldaCuadrantes()`
+(y toda su CSS asociada -- `.celda-cuadrantes`/`.cuadrante`/
+`.construccion-img-cuadrante`, retiradas del todo, no dejadas muertas)
+por `crearElementosCompartidos()`. `pesoItem()` se reutiliza tal cual
+(mismo dato, huella_m2 real vía `ORDEN_HUELLA_CONSTRUCCION`/
+`HUELLA_FLORA_M2`, `HUELLA_REFERENCIA_FLORA_M2` para cobertura) pero
+cambia de PROPÓSITO: ya no reparte el ancho de la celda, solo decide
+el ORDEN de profundidad. El item de mayor peso (el "principal") se
+dibuja a su tamaño NORMAL -- exactamente el mismo que si estuviera
+solo en la celda, vía la misma `tamanoItem()` ya existente. Los demás
+("secundarios") se dibujan un 18% más pequeños (`factor=0.82` sobre su
+PROPIO tamaño nativo, ver matiz importante más abajo), desplazados
+hacia arriba dentro de la celda (`offsetVertical = CELDA*(0.22+0.08*i)`,
+más desplazamiento cuantos más secundarios haya, para separarlos entre
+sí en el caso raro de 3-4 items) y con un z-index un punto por debajo
+del que le correspondería por `zIndexPorFila()` -- quedan detrás del
+principal, no flotando delante. Jitter horizontal por índice
+(`indiceJitter = (i+1)*37` para secundarios, `0` para el principal,
+reutilizando `jitterPx`/`hashDet` ya existente) para que dos sprites no
+queden apilados en la misma X exacta. `crearElementosCompartidos()`
+devuelve una LISTA de elementos (un fondo compartido + uno por item),
+no un único contenedor -- `renderMapa()` los añade todos y hace
+`continue` a la siguiente celda.
+
+**Matiz real encontrado al verificar, no asumido**: el factor 0.82 se
+aplica sobre el tamaño NATIVO de cada item, calculado con su propia
+escala de referencia (`tamanoSpriteConstruccion` y `tamanoSpriteFlora`
+usan rangos min/max y exponentes de compresión DISTINTOS y
+deliberadamente independientes, ver el comentario de
+`tamanoSpriteConstruccion` -- no comparten unidad ni punto de anclaje).
+Verificado con almacén(construcción, peso 40)+pino(flora, peso 4.5) en
+una celda sintética aislada: pino (secundario) sale a 79.17px, almacén
+(principal) a 83.81px -- una proporción real de 0.94, NO de 0.82,
+porque el tamaño NATIVO sin comprimir del pino (≈96.5px, antes del
+factor) ya es mayor que el tamaño final del almacén en su propia
+escala. El 0.82 es "un 18% más pequeño que si este item estuviera
+solo", nunca "un 18% del tamaño del principal" -- correcto por diseño
+(cada categoría de sprite mantiene su propia escala de referencia,
+decisión de un círculo anterior), pero vale la pena dejarlo explícito
+para no sorprenderse si dos items de categorías distintas no guardan la
+proporción 0.82:1 esperada a simple vista.
+
+**Incidente real durante la verificación, con hallazgo útil sobre la
+metodología de test, no sobre el motor**: la primera ronda de capturas
+sintéticas (mapa de 3 celdas con almacén+pino en una y
+helecho+hierba_silvestre en otra) produjo una imagen ambigua para la
+celda de cobertura -- una columna de lo que parecían pequeños
+rectángulos verdes discontinuos, sin relación aparente con dos plantas
+solapadas. Investigado a fondo antes de concluir nada: la inyección de
+datos sintéticos vía Playwright usaba `page.evaluate('(mini) => {
+window.DATA = mini; ... }')` -- pero `DATA` está declarado como `let
+DATA = window.__DATOS__ || null;` en el nivel superior del `<script>`
+de `terminal.html`. Un `let` de nivel superior en un script clásico NO
+crea una propiedad en `window` (a diferencia de `var`) -- así que
+`window.DATA = mini` creaba una propiedad nueva y completamente
+desconectada de la variable `DATA` real que usan `renderMapa()`/
+`recalcularDerivados()`, dejando el mapa REAL (cargado de `datos.js` al
+abrir la página) sin sustituir. Lo que la captura mostraba no era un
+bug de solapamiento: era contenido real del mapa de 40x40 completo,
+en una celda real lejana coincidiendo por casualidad con el recorte de
+zoom/pan elegido. Corregido usando la forma que ya habían usado
+círculos anteriores de esta misma sesión y que sí funciona
+(`DATA = mini`, sin `window.`, que sí resuelve al binding léxico
+correcto por ejecutarse en el entorno global de la página) -- con eso,
+una captura aislada y ampliada (zoom=20, una sola celda con SOLO
+helecho+hierba_silvestre) confirma sin ambigüedad dos sprites de planta
+reales y distintos, superpuestos con el helecho detrás/más pequeño y
+la hierba delante/a tamaño completo (desempate de peso nominal
+idéntico resuelto por `Array.sort` estable, que conserva el orden
+original del array -- hierba_silvestre, al ir segunda en `c.plantas`,
+gana el desempate como "principal").
+
+**Caso almacén+pino, verificado por separado con zoom/pan que no
+recortara la parte superior de la celda**: el pino aparece como una
+pequeña copa verde triangular asomando sobre el tejado de musgo del
+almacén -- el efecto de profundidad pedido por Diego ("que el pino
+crezca por detrás") se observa real, aunque bastante sutil (el almacén,
+con huella_m2 muchísimo mayor, ocupa casi todo el encuadre). No se ha
+pedido confirmación explícita de Diego sobre si este grado de
+ocultación es el deseado o si preferiría que el elemento secundario
+asomara más -- queda como ajuste fino pendiente de su criterio, no
+como algo ya cerrado, si al verlo en el visor real le resulta
+demasiado sutil.
+
+Verificado: 675/675 tests (suite sin tocar, cambio acotado a
+presentación); sin contaminación de `datos.js`/`datos.json` (las
+verificaciones usaron objetos `DATA` sintéticos inyectados en memoria
+vía Playwright, nunca `generar_datos.py`).

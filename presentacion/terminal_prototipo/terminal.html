@@ -105,13 +105,15 @@
     font-weight: normal; font-family: inherit;
   }
   /* Sprites de fauna (2026-09-16, ver comentario junto a CATALOGO_GLIFOS.
-     fauna) -- ancla inferior-centro (translate -50%,-100%) para que los
-     "pies" queden en el borde inferior de la celda, igual que el ancla
-     que ya usaban los glifos de texto por su propio centrado flex.
-     pixelated conserva el pixel-art nitido al escalar en el navegador. */
+     fauna) -- ancla inferior-centro, igual que el ancla que ya usaban los
+     glifos de texto por su propio centrado flex. pixelated conserva el
+     pixel-art nitido al escalar en el navegador. transform NO se fija
+     aqui (solo position/width) -- se compone en JS (renderCriaturas,
+     translate(-50%,-100%) + scaleX segun direccion de movimiento) porque
+     un estilo inline pisaria por completo cualquier transform de esta
+     clase, no se pueden combinar CSS+JS en la misma propiedad. */
   .criatura-img {
     position: absolute;
-    transform: translate(-50%, -100%);
     image-rendering: pixelated;
     width: auto;
   }
@@ -127,23 +129,29 @@
     image-rendering: pixelated;
     width: auto;
   }
-  /* Dentro de un cuadrante del mosaico 2x2 (celda compartida con otro
-     elemento real) el propio flex del cuadrante ya centra -- se anula el
-     posicionamiento absoluto para no salirse de su cuarto de celda. */
-  .construccion-img-cuadrante {
-    position: static;
-    transform: none;
+  /* Sprite compartido (2026-09-17, Diego: "quedaria mejor si se
+     pudiesen solapar, por ejemplo el refugio y que el pino crezca por
+     detras, le daria sensacion de mas profundidad") -- sustituye al
+     mosaico de cuadrantes (grid 2x2/columnas proporcionales) que vivio
+     aqui hasta este circulo: en vez de partir la celda en fracciones
+     fijas, cada elemento que comparte celda se dibuja con ancla
+     inferior-centro real (igual contrato que .criatura-img, sin
+     transform fijo -- se compone en JS con el offset vertical de
+     profundidad, ver crearImgCompartida) y se superponen con distinto
+     z-index. */
+  .sprite-compartido {
+    position: absolute;
+    image-rendering: pixelated;
+    width: auto;
   }
-  /* Mosaico 2x2 (subdivision puramente visual, ver itemsCelda en el
-     script) -- misma celda de 100m2 del motor, hasta 4 elementos reales
-     distintos repartidos en cuadrantes en vez de colapsados a uno solo. */
-  .celda-cuadrantes {
-    position: absolute; display: grid;
-    grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
-  }
-  .cuadrante {
-    display: flex; align-items: center; justify-content: center;
-    font-family: inherit; font-weight: normal; overflow: hidden;
+  /* Badge de recurso en el suelo (2026-09-16, ver añadirBadges/itemsCelda)
+     -- esquina superior-derecha, pequeño y fijo, nunca compite por el
+     espacio de ningun elemento real de la celda. */
+  .badge-recurso {
+    position: absolute; right: 1px;
+    font-family: inherit; font-weight: normal;
+    font-size: 11px; line-height: 1;
+    text-shadow: 0 0 2px #000, 0 0 2px #000;
   }
   .btn-mapa {
     font-family: inherit;
@@ -304,12 +312,19 @@
 <script>
 // PIVOTE A MAPA 100% ASCII (2026-09-16, decision de Diego): se retira el
 // Codice Cartografico (presentacion/vista_web.py, ver
-// docs/informe_codice_cartografico.md) y este prototipo deja de ser un
-// hibrido ASCII+sprite -- CERO imagenes en el mapa a partir de ahora, todo
-// se representa con glifo+color de texto. El CATALOGO de mas abajo
+// docs/informe_codice_cartografico.md). El CATALOGO de mas abajo
 // (CATALOGO_GLIFOS) es la UNICA fuente de verdad tanto para lo que se
 // dibuja en el mapa como para la leyenda desplegable: anadir una especie o
 // categoria nueva es una entrada aqui, nunca una tabla duplicada.
+// CORREGIDO el mismo dia (ver CLAUDE.md, "Hibrido ASCII+sprite"): el
+// parrafo original decia aqui que este prototipo dejaba de ser un hibrido
+// ASCII+sprite y quedaba en "CERO imagenes en el mapa" -- afirmacion que
+// el propio codigo desmintio unas horas despues, cuando se añadieron
+// sprites reales de fauna y construcciones (mismo dia, ver CATALOGO_GLIFOS.
+// fauna/construcciones mas abajo) y despues flora (arbol/arbusto y 5 de
+// las 7 especies de cobertura). Diego confirmo el criterio real: base
+// ASCII, sprite donde se encuentre arte adecuado, introducido
+// gradualmente -- nunca "cero imagenes".
 let DATA = window.__DATOS__ || null;
 const CELDA = 32; // px base por celda, antes de aplicar zoom (subido de 26:
 // a ese tamano el glifo mas grande posible seguia leyendose pequeno en un
@@ -365,21 +380,33 @@ const CATALOGO_GLIFOS = {
     // conifera frente a la copa redondeada de un arbol de hoja ancha --
     // shape real, no una eleccion arbitraria (auditada contra la fuente
     // VGA437 antes de decidir, ambos glifos existen y renderizan nitidos).
-    manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol' },
-    roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol' },
-    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol' },
-    cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto' },
-    arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto' },
-    arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto' },
-    arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto' },
-    arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto' },
-    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura' },
+    // img (2026-09-16, assets aportados por Diego -- ver
+    // docs/historial_capa_visual.md, entrada del mismo dia): CRITERIO
+    // CONFIRMADO por Diego, aclarado dos veces tras un primer mapeo que
+    // interprete solo. El nombre de fichero no tiene que ser 1:1 con la
+    // clave de especie -- el criterio real es el BIOMA real de cada
+    // fichero (config/flora.yaml campo `biomas`, mismo dato que ya usa el
+    // motor): un unico arbusto puede compartir arte entre especies con
+    // clima afin (arbustoMontañaTundra.jpg -> montano Y artico) y un
+    // unico fichero generico cubre TODAS las variantes climaticas de una
+    // misma forma (hierba.jpg -> las 3 especies de hierba). Solo quedan
+    // SIN sprite las 2 especies para las que Diego no aporto ningun icono
+    // -- liquen y musgo (categoria cobertura, sin arte disponible).
+    manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol', img: 'sprites_flora/manzano.png' },
+    roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol', img: 'sprites_flora/roble.png' },
+    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol', img: 'sprites_flora/pino.png' },
+    cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto', img: 'sprites_flora/cactus.png' },
+    arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto', img: 'sprites_flora/arbusto_espinoso.png' },
+    arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto', img: 'sprites_flora/arbusto_desertico.png' },
+    arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
+    arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
+    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
     liquen:            { ch: '▒', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
     musgo:             { ch: '▒', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
-    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura' },
-    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura' },
-    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura' },
-    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura' },
+    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura', img: 'sprites_flora/flor_silvestre.png' },
+    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
+    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
+    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura', img: 'sprites_flora/helecho.png' },
   },
   // (2026-09-16) Pictogramas reales en vez de letras -- Diego: "podriamos
   // buscar pictogramas para las criaturas". Emoji nativos del sistema/
@@ -450,6 +477,32 @@ function hashDet(x,y,sal) {
   let h = (x*374761393 + y*668265263 + sal*2654435761) >>> 0;
   h = (h ^ (h>>>13)) >>> 0; h = Math.imul(h, 1274126177) >>> 0; h = (h ^ (h>>>16)) >>> 0;
   return h / 4294967296;
+}
+
+// Jitter horizontal (2026-09-16, Diego: "los assets se sitúan siempre en
+// el centro de la celda, parecen lineas rectas") -- un arbol/arbusto/
+// construccion se dibujaba SIEMPRE a left:50% exacto de su celda
+// (.construccion-img, CSS fijo) y fauna SIEMPRE a cx+CELDA/2 (centro
+// exacto) -- en un bosque real ningun arbol crece perfectamente
+// centrado en su propia parcela, esa regularidad es lo que se lee como
+// "cuadricula"/"lineas rectas". Mismo hashDet ya usado para variar tono/
+// textura, sal propia (97) para no correlacionar el desplazamiento con
+// ningun otro efecto visual. Solo horizontal, nunca vertical: el ancla
+// es "pies en el suelo de la celda" (bottom:0/cy+CELDA) -- mover eso en
+// vertical rompería esa lectura, dando la sensacion de flotar o hundirse.
+const SAL_JITTER = 97;
+const JITTER_FRACCION_CELDA = 0.25; // hasta +-25% de CELDA a cada lado
+function jitterPx(seedX, seedY) {
+  return (hashDet(seedX, seedY, SAL_JITTER) - 0.5) * 2 * JITTER_FRACCION_CELDA * CELDA;
+}
+// Fauna usa una semilla distinta -- el ID de la entidad (estable durante
+// toda su vida), NO su celda actual (cambia en cada paso). Con semilla de
+// celda, el sesgo lateral "saltaria" a un valor distinto cada vez que la
+// criatura cruza a una celda nueva, viendose peor que sin jitter -- con
+// semilla de individuo, cada animal camina con un sesgo lateral propio y
+// constante, como una persona real no camina en linea perfectamente recta.
+function jitterPxPorId(id) {
+  return (hashDet(Number(id) || 0, 0, SAL_JITTER) - 0.5) * 2 * JITTER_FRACCION_CELDA * CELDA;
 }
 
 // rgba con alfa variable a partir de un color hex -- usado para atenuar
@@ -612,10 +665,14 @@ function itemsCelda(c) {
     });
     if (competidora) {
       const g = CATALOGO_GLIFOS.flora[competidora.especie];
-      // Etapa de crecimiento real (Planta.etapa 0..1) -> opacidad: un
-      // brote se ve tenue, una planta madura llena de color.
-      const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
-      items.push({ ch: g.ch, color: hexARgba(g.color, alfa) });
+      // Etapa de crecimiento real (Planta.etapa 0..1) -> TAMAÑO (ver
+      // factorCrecimiento en tamanoSpriteFlora), no opacidad. CORREGIDO
+      // 2026-09-16 (Diego: "lo de la opacidad cuando es mas joven
+      // quitalo, eso no tiene sentido") -- una planta joven es mas
+      // PEQUEÑA, no mas transparente; la opacidad decreciente por etapa
+      // ya quedo redundante/incorrecta en cuanto el tamaño empezo a
+      // reflejar la etapa real (circulo anterior), retirada por completo.
+      items.push({ ch: g.ch, color: g.color, img: g.img || null, especieFlora: competidora.especie, etapaCrecimiento: competidora.etapa ?? 1 });
       if (coberturas.length > 0) {
         fondoColor = CATALOGO_GLIFOS.flora[coberturas[0].especie].color;
         fondoAlfa = 0.4;
@@ -627,22 +684,50 @@ function itemsCelda(c) {
       coberturas.forEach((cob, i) => {
         const g = CATALOGO_GLIFOS.flora[cob.especie];
         if (!g) return;
-        const alfa = 0.55 + Math.min(1, cob.etapa ?? 1) * 0.45;
-        const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
-        items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3, alfa) });
+        // Etapa -> TAMAÑO cuando hay sprite (tamanoSpriteCobertura), ya
+        // no opacidad (ver comentario junto a competidora mas arriba).
+        // Las 4 especies de cobertura SIN sprite (liquen/musgo/hierba_
+        // desertica/hierba_artica) se quedan sin ninguna señal visual de
+        // etapa -- honesto: no hay un tamaño que variar en un glifo de
+        // textura que ya ocupa la celda completa por diseño.
+        if (g.img) {
+          // Cobertura CON sprite (2026-09-16: hierba/flor_silvestre/
+          // helecho) -- especieCobertura distingue este caso de
+          // especieFlora (arbol/arbusto) en renderMapa, porque el tamaño
+          // se calcula distinto (tamanoSpriteCobertura, fijo, sin
+          // huella_m2 real para esta categoria).
+          items.push({ ch: g.ch, color: g.color, img: g.img, especieCobertura: cob.especie, etapaCrecimiento: cob.etapa ?? 1 });
+        } else {
+          const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
+          items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3) });
+        }
       });
     }
   }
 
+  // Recursos en el suelo -- BADGES, no items, cuando ya hay flora/
+  // construccion real en la celda (2026-09-16, hallazgo de Diego: "por
+  // que hay arboles en las celdas pequeñas"). Causa real medida antes de
+  // tocar nada: el 94% de las celdas con arbol tambien tienen madera
+  // caida (recurso propio del arbol) -- al entrar como item igual que el
+  // arbol, items.length pasaba a 2 y renderMapa() forzaba el mosaico de
+  // cuadrantes (CELDA*0.42 fijo) para AMBOS, reduciendo el arbol grande a
+  // una miniatura en la inmensa mayoria de los casos reales, no en el
+  // "caso raro" para el que se diseño el mosaico. Un palo/piedra caida es
+  // un detalle secundario -- no deberia competir en igualdad de espacio
+  // con el elemento principal de la celda. Si NO hay ningun item todavia
+  // (celda de flora/construccion vacia, solo el recurso), se mantiene
+  // como item normal a tamaño completo -- es lo unico que hay que ver.
   const recursos = c.recursos || {};
-  if ((recursos.piedra_suelta || 0) > 0) {
-    const g = CATALOGO_GLIFOS.recursos.piedra_suelta;
-    items.push({ ch: g.ch, color: g.color });
-  }
-  if ((recursos.madera || 0) > 0) {
-    const g = CATALOGO_GLIFOS.recursos.madera;
-    items.push({ ch: g.ch, color: g.color });
-  }
+  const badges = [];
+  const empujarRecurso = (cantidad, tipo) => {
+    if (cantidad <= 0) return;
+    const g = CATALOGO_GLIFOS.recursos[tipo];
+    if (items.length > 0) badges.push({ ch: g.ch, color: g.color });
+    else items.push({ ch: g.ch, color: g.color });
+  };
+  empujarRecurso(recursos.piedra_suelta || 0, 'piedra_suelta');
+  empujarRecurso(recursos.madera || 0, 'madera');
 
   if (items.length === 0) {
     // Terreno base desnudo: SIEMPRE imprime un glifo (nunca vacio) --
@@ -663,7 +748,7 @@ function itemsCelda(c) {
     }
   }
 
-  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa) };
+  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa), badges };
 }
 
 function celdaAPantalla(wx, wy, tam) {
@@ -773,6 +858,107 @@ function tamanoSpriteConstruccion(tipo) {
   return escalarPorRaiz(masa, MASA_REFERENCIA_KG, SPRITE_CONSTRUCCION_REFERENCIA, SPRITE_CONSTRUCCION_MIN, SPRITE_CONSTRUCCION_MAX, 1 / 3);
 }
 
+// Tamaño de sprite de flora (arbol/arbusto, 2026-09-16) -- huella_m2 real
+// de config/flora.yaml (misma fuente que ya usa el motor para el cupo de
+// espacio compartido por celda, no un numero inventado para el visor).
+// exponente=0.5 (raiz cuadrada), no 1/3 como construccion: huella_m2 es
+// AREA, no masa/volumen -- mismo razonamiento fisico que ya distingue
+// ambos casos en el comentario de escalarPorRaiz mas arriba.
+// Rango MIN/MAX PROVISIONAL, sin calibrar contra captura real: pensado
+// para quedar por encima de la fauna mas grande (caballo, CELDA*1.5) pero
+// por debajo del techo de construccion (CELDA*3.0) -- un arbol maduro
+// deberia leerse mas prominente que un animal, nunca que un edificio.
+const HUELLA_FLORA_M2 = {
+  manzano: 4.0, roble: 5.0, pino: 4.5, cactus: 1.5,
+  arbusto_espinoso: 2.0, arbusto_desertico: 1.8, arbusto_montano: 2.2, arbusto_artico: 1.0,
+};
+const HUELLA_REFERENCIA_FLORA_M2 = 1.0; // arbusto_artico, la especie con sprite mas pequeña
+const SPRITE_FLORA_REFERENCIA = CELDA * 1.0;
+const SPRITE_FLORA_MIN = CELDA * 0.9;
+const SPRITE_FLORA_MAX = CELDA * 2.6;
+// ASPECT_FLORA (2026-09-16, hallazgo real de Diego: "los arbustos no son
+// demasiado grandes? no se ve ni un arbol") -- verificado con numeros
+// antes de tocar nada: tamanoSpriteFlora fijaba SOLO la altura del <img>
+// (width:auto en CSS), dejando el ancho en pantalla a merced del aspect
+// ratio nativo de cada PNG -- que varia por como se compuso el arte
+// original, sin relacion con huella_m2. Resultado real medido: pino
+// (huella=4.5, aspect ancho/alto=0.64, muy vertical) salia con SOLO
+// 43.5px de ancho en pantalla, mas ESTRECHO que cualquiera de los 3
+// arbustos (aspect ~1.18-1.23, huella 1.0-2.2, la mitad o menos) que
+// llegaban a 52-58px de ancho por su propio aspect ancho. Fix: escalar
+// por AREA visual (ancho*alto) proporcional a huella_m2, no solo por
+// altura -- ver tamanoSpriteFlora mas abajo. Valores medidos directo de
+// cada PNG (Image.size), no inventados.
+const ASPECT_FLORA = {
+  manzano: 607 / 700, roble: 702 / 783, pino: 475 / 742, cactus: 261 / 429,
+  arbusto_espinoso: 585 / 495, arbusto_desertico: 579 / 470, arbusto_montano: 639 / 519, arbusto_artico: 639 / 519,
+};
+// FACTOR_TAMANO_ARBUSTO (2026-09-16, Diego: "los arbustos deberian ser
+// incluso mas pequeños") -- reduccion adicional SOLO para categoria
+// arbusto, no arbol: huella_m2 real ya los diferencia (1.0-2.2 frente a
+// 4.0-5.0), pero el resultado seguia leyendose grande. PROVISIONAL, sin
+// mas criterio que el propio pedido -- valor de partida, ajustable.
+const FACTOR_TAMANO_ARBUSTO = 0.72;
+
+// Crecimiento real por etapa + variacion de madurez (2026-09-16, Diego:
+// "¿todos los arbustos son del mismo tamaño? no todos los arboles crecen
+// igual de grande"). Verificado antes de tocar nada: SI, eran todos
+// identicos -- Planta.etapa (0..1, crecimiento real, ya expuesta por el
+// DTO) solo se usaba para opacidad, nunca para tamaño, asi que un brote
+// recien plantado se veia del mismo tamaño GRANDE que un arbol centenario,
+// solo mas transparente. Dos fuentes de variacion, de naturaleza distinta
+// -- no confundirlas:
+// 1. FACTOR_ETAPA_MIN: dato REAL del motor (Planta.etapa). Curva lineal
+//    de 0.35 (recien brotada) a 1.0 (madura) sobre el tamaño ya calculado
+//    por huella_m2 -- PROVISIONAL el propio 0.35 (sin curva de
+//    crecimiento real del motor de la que derivarlo, es una eleccion de
+//    presentacion razonada, no un dato).
+// 2. RANGO_JITTER_ESCALA: el motor NO modela ninguna variacion de tamaño
+//    MAXIMO entre dos plantas maduras de la misma especie (a diferencia
+//    de fauna, que si sortea DimensionesFisicas.altura_m real por
+//    individuo con rango racial) -- sin ese dato, dos robles maduros
+//    serian pixel-perfect identicos. Relleno puramente visual, mismo
+//    mecanismo ya usado para el jitter de posicion (hashDet, sal propia,
+//    determinista por celda para que no "respire" entre refrescos) --
+//    declarado como tal, no se inventa un dato de motor que no existe.
+const FACTOR_ETAPA_MIN = 0.35;
+const SAL_JITTER_ESCALA = 113;
+const RANGO_JITTER_ESCALA = 0.15; // +-15% sobre el tamaño ya calculado
+function factorCrecimiento(etapa) {
+  return FACTOR_ETAPA_MIN + Math.max(0, Math.min(1, etapa)) * (1 - FACTOR_ETAPA_MIN);
+}
+function factorJitterEscala(seedX, seedY) {
+  return 1 + (hashDet(seedX, seedY, SAL_JITTER_ESCALA) - 0.5) * 2 * RANGO_JITTER_ESCALA;
+}
+
+function tamanoSpriteFlora(especie, etapa, seedX, seedY) {
+  const huella = HUELLA_FLORA_M2[especie] || HUELLA_REFERENCIA_FLORA_M2;
+  const ladoEquivalente = escalarPorRaiz(huella, HUELLA_REFERENCIA_FLORA_M2, SPRITE_FLORA_REFERENCIA, SPRITE_FLORA_MIN, SPRITE_FLORA_MAX, 0.5);
+  // altura tal que ancho*altura (area real en pantalla) = ladoEquivalente^2,
+  // independientemente del aspect ratio nativo del sprite.
+  const aspect = ASPECT_FLORA[especie] || 1;
+  let altura = ladoEquivalente / Math.sqrt(aspect);
+  const g = CATALOGO_GLIFOS.flora[especie];
+  if (g && g.categoria === 'arbusto') altura *= FACTOR_TAMANO_ARBUSTO;
+  altura *= factorCrecimiento(etapa ?? 1) * factorJitterEscala(seedX, seedY);
+  return altura;
+}
+
+// Tamaño de sprite de cobertura (hierba/flor_silvestre/helecho, mismo dia)
+// -- a diferencia de arbol/arbusto, estas especies NO compiten por
+// espacio fisico (compite_espacio_fisico: false en config/flora.yaml,
+// sin huella_m2 real) -- no hay ningun dato del motor del que derivar un
+// tamaño proporcional sin inventarlo. Tamaño base FIJO, mas pequeño que
+// el arbusto mas pequeño (arbusto_artico, CELDA*1.0), consistente con
+// que cobertura ya se describe en este mismo catalogo como "mas discreta
+// que un arbusto/arbol". Mismo crecimiento por etapa + jitter de escala
+// que arbol/arbusto (ver su comentario) aplicado tambien aqui. Rango
+// base PROVISIONAL, sin calibrar contra captura real.
+const SPRITE_COBERTURA_ALTURA = CELDA * 0.75;
+function tamanoSpriteCobertura(etapa, seedX, seedY) {
+  return SPRITE_COBERTURA_ALTURA * factorCrecimiento(etapa ?? 1) * factorJitterEscala(seedX, seedY);
+}
+
 function crearCeldaTxt(ch, color, cx, cy, fondo) {
   const el = document.createElement('div');
   el.className = 'celda-txt';
@@ -783,6 +969,23 @@ function crearCeldaTxt(ch, color, cx, cy, fondo) {
   if (fondo) el.style.backgroundColor = fondo;
   el.style.left = cx + 'px'; el.style.top = cy + 'px';
   return el;
+}
+
+// Badges de recurso en el suelo (2026-09-16, ver itemsCelda -- por que
+// dejaron de ser items que competian por el mosaico de cuadrantes).
+// Esquina superior-derecha, apilados si hay mas de uno (piedra_suelta Y
+// madera a la vez, raro pero posible); tamaño pequeño fijo, nunca
+// desplaza ni reescala el elemento principal de la celda.
+function añadirBadges(el, badges) {
+  if (!badges || badges.length === 0) return;
+  badges.forEach((b, i) => {
+    const badge = document.createElement('div');
+    badge.className = 'badge-recurso';
+    badge.textContent = b.ch;
+    badge.style.color = b.color;
+    badge.style.top = (i * Math.round(CELDA * 0.32)) + 'px';
+    el.appendChild(badge);
+  });
 }
 
 // Construcciones con sprite real (2026-09-16, mismo criterio ya aplicado a
@@ -801,47 +1004,131 @@ function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
   cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
   if (fondo) cont.style.backgroundColor = fondo;
   const img = document.createElement('img');
+  // .construccion-img (ancla inferior-centro, pixelated) se reutiliza tal
+  // cual para flora (2026-09-16) -- mismo contrato visual, "raices en el
+  // suelo de la celda", no hacia falta una clase CSS propia.
   img.className = 'construccion-img';
   img.src = src;
   img.style.height = tamano + 'px';
+  // Jitter horizontal (ver su comentario junto a hashDet/jitterPx) --
+  // sobrescribe el left:50% fijo de .construccion-img. Semilla = celda
+  // real (cx/cy son x*CELDA/y*CELDA exactos, ver celdaAPantalla), estable
+  // entre refrescos: el mismo arbol no "salta" de sitio en cada sondeo.
+  img.style.left = `calc(50% + ${jitterPx(cx / CELDA, cy / CELDA)}px)`;
   cont.appendChild(img);
   return cont;
 }
 
-// Mosaico 2x2 -- solo se usa cuando itemsCelda() devuelve 2 o mas items
-// reales (ver su comentario mas arriba); con 0 o 1 item, crearCeldaTxt
-// sigue dibujando un glifo a tamaño completo, la representacion mas
-// legible para el caso mas comun (suelo desnudo, un unico landmark).
-function crearCeldaCuadrantes(items, cx, cy, fondo) {
-  const cont = document.createElement('div');
-  cont.className = 'celda-cuadrantes';
-  cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
-  cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
-  if (fondo) cont.style.backgroundColor = fondo;
-  const fontSize = Math.round(CELDA * 0.42);
-  for (let i = 0; i < 4; i++) {
-    const cuad = document.createElement('div');
-    cuad.className = 'cuadrante';
-    const item = items[i];
-    if (item && item.img) {
-      // Construccion compartiendo celda con otro elemento real (recurso,
-      // planta) -- caso raro pero posible dentro del presupuesto de
-      // huella_m2 del motor. El sprite se reduce al tamaño del propio
-      // cuadrante en vez de al de celda completa (tamanoSpriteConstruccion
-      // asume celda completa), para no desbordar sobre los demas.
-      const img = document.createElement('img');
-      img.className = 'construccion-img construccion-img-cuadrante';
-      img.src = item.img;
-      img.style.height = Math.round(CELDA * 0.42) + 'px';
-      cuad.appendChild(img);
-    } else if (item) {
-      cuad.textContent = item.ch;
-      cuad.style.color = item.color;
-      cuad.style.fontSize = fontSize + 'px';
+// Peso real de un item, para decidir el ORDEN de profundidad cuando 2+
+// comparten celda (ver crearElementosCompartidos) -- 2026-09-16/17,
+// historial real en dos circulos: primero se uso para repartir la celda
+// en columnas proporcionales (grid), descartado el 17 (ver mas abajo) a
+// favor de superposicion real. Reutiliza huella_m2 donde existe
+// (construccion/arbol/arbusto, mismo dato que ya decide el tamaño a
+// celda completa) -- cobertura y cualquier otro item sin huella_m2 real
+// recibe el peso nominal minimo (HUELLA_REFERENCIA_FLORA_M2), no un
+// numero inventado aparte.
+function pesoItem(item) {
+  if (item.tipoConstruccion) return ORDEN_HUELLA_CONSTRUCCION[item.tipoConstruccion] || HUELLA_REFERENCIA_FLORA_M2;
+  if (item.especieFlora) return HUELLA_FLORA_M2[item.especieFlora] || HUELLA_REFERENCIA_FLORA_M2;
+  return HUELLA_REFERENCIA_FLORA_M2;
+}
+
+// capa/tamaño reales de un item generico (construccion/flora/cobertura)
+// -- extraidos de renderMapa() para reutilizarlos tanto en el caso de un
+// solo item como en el de varios compartiendo celda.
+function capaItem(item) {
+  return item.tipoConstruccion ? 'construccion' : 'flora';
+}
+function tamanoItem(item, x, y) {
+  if (item.tipoConstruccion) return tamanoSpriteConstruccion(item.tipoConstruccion);
+  if (item.especieFlora) return tamanoSpriteFlora(item.especieFlora, item.etapaCrecimiento, x, y);
+  if (item.especieCobertura) return tamanoSpriteCobertura(item.etapaCrecimiento, x, y);
+  return null; // glifo simple sin sprite (p.ej. cobertura sin arte)
+}
+
+// Sprite de un item que comparte celda con otro(s) -- mismo contrato de
+// ancla (inferior-centro, ver .sprite-compartido) que crearCeldaImgEstatica,
+// pero con jitter horizontal DISTINTO por indice (para no apilar dos
+// sprites exactamente en la misma X) y un offset vertical opcional que
+// simula profundidad (ver crearElementosCompartidos).
+function crearImgCompartida(src, cx, cy, tamano, indiceJitter, offsetVerticalPx) {
+  const img = document.createElement('img');
+  img.className = 'sprite-compartido';
+  img.src = src;
+  img.style.height = tamano + 'px';
+  const jx = jitterPx(cx / CELDA, cy / CELDA + indiceJitter * 37);
+  img.style.left = (cx + CELDA / 2 + jx) + 'px';
+  img.style.top = (cy + CELDA - offsetVerticalPx) + 'px';
+  img.style.transform = 'translate(-50%, -100%)';
+  return img;
+}
+
+function crearFondoCelda(cx, cy, fondo) {
+  const div = document.createElement('div');
+  div.className = 'celda-txt';
+  div.style.width = CELDA + 'px'; div.style.height = CELDA + 'px';
+  div.style.left = cx + 'px'; div.style.top = cy + 'px';
+  if (fondo) div.style.backgroundColor = fondo;
+  return div;
+}
+
+// SUPERPOSICION CON PROFUNDIDAD (2026-09-17, Diego: "quedaria mejor si
+// se pudiesen solapar, por ejemplo el refugio y que el pino crezca por
+// detras, le daria sensacion de mas profundidad al mapa") -- sustituye
+// por completo al mosaico de columnas/grid del circulo anterior (ver
+// docs/historial_capa_visual.md para el porque de aquel diseño y de
+// esta correccion). Antes, CUALQUIER par de items compartiendo celda se
+// repartia el espacio (proporcional a huella_m2, pero siempre partiendo
+// la celda) -- ahora el elemento de MAYOR peso real (pesoItem) se dibuja
+// a su tamaño NORMAL, exactamente igual que si estuviera solo en la
+// celda; los demas (menor peso) se dibujan DETRAS (z-index menor), algo
+// mas pequeños y desplazados hacia arriba dentro de la propia celda
+// (mas "lejos" de la camara) -- el pino creciendo detras del refugio del
+// ejemplo de Diego, no partido en un cuadrante igual de chico que el
+// refugio. Devuelve una LISTA de elementos (uno por item + uno de fondo
+// compartido), no un unico contenedor -- renderMapa() los añade todos.
+function crearElementosCompartidos(items, cx, cy, fondo, x, y) {
+  const elementos = [crearFondoCelda(cx, cy, fondo)];
+  const ordenados = [...items].sort((a, b) => pesoItem(a) - pesoItem(b));
+  ordenados.forEach((item, i) => {
+    const esPrincipal = i === ordenados.length - 1;
+    const tam = tamanoItem(item, x, y);
+    let el;
+    if (tam != null) {
+      // Secundarios: ~18% mas pequeños y desplazados hacia arriba (mas
+      // desplazamiento cuantos mas secundarios haya, para separarlos
+      // entre si en el caso raro de 3-4 items) -- el principal usa
+      // exactamente el mismo tamaño/offset que si estuviera solo.
+      const factor = esPrincipal ? 1 : 0.82;
+      const offsetVertical = esPrincipal ? 0 : CELDA * (0.22 + 0.08 * i);
+      el = crearImgCompartida(item.img, cx, cy, tam * factor, esPrincipal ? 0 : (i + 1) * 37, offsetVertical);
+    } else {
+      // Glifo simple sin sprite (cobertura sin arte, p.ej.) compartiendo
+      // celda -- sin offset de profundidad, caso raro sin refinar mas.
+      el = crearCeldaTxt(item.ch, item.color, cx, cy);
     }
-    cont.appendChild(cuad);
-  }
-  return cont;
+    el.style.zIndex = String(zIndexPorFila(y, capaItem(item)) + (esPrincipal ? 0 : -1));
+    elementos.push(el);
+  });
+  return elementos;
+}
+
+// Profundidad UNIFICADA por fila (2026-09-16, Diego: "los assets deberian
+// superponerse, incluso los animales, si pasan por detras que queden
+// ocultos, no flotando encima"). Hasta ahora cada tipo tenia su propio
+// rango de z-index con un offset fijo enorme (terreno 0+y, flora 400+y,
+// construccion 500+y, fauna SIEMPRE 1000+y) -- eso garantizaba que fauna
+// nunca quedara oculta por NADA, sin importar su fila real, exactamente
+// lo que Diego pide corregir. PRIORIDAD_CAPA*ZI_FILA + prioridad: el
+// factor (10) es mayor que el rango de prioridades (0-6) para que la fila
+// (posicion real "de profundidad") decida siempre primero -- la
+// prioridad solo desempata cuando dos elementos comparten la MISMA fila
+// exacta (una criatura de pie sobre su propia celda de flora, p.ej.).
+const ZI_FILA = 10;
+const PRIORIDAD_CAPA = { terreno: 0, flora: 2, construccion: 4, fauna: 6 };
+function zIndexPorFila(y, capa) {
+  return y * ZI_FILA + PRIORIDAD_CAPA[capa];
 }
 
 function renderMapa() {
@@ -854,42 +1141,64 @@ function renderMapa() {
       const c = DATA.celdas[y][x];
       const { cx, cy } = celdaAPantalla(x, y, CELDA);
       const info = itemsCelda(c);
-      // z-index bajo (0..alto) para el fondo/suelo -- por debajo de CUALQUIER
-      // glifo de la capa de criaturas (que sigue arrancando en 1000+y), asi
-      // una criatura de pie sobre una celda de fondo tintado nunca queda
-      // tapada por ella.
-      //
-      // CORREGIDO 2026-09-16 (Diego, tras ver el almacen: "las criaturas o
-      // construcciones deben quedar por encima de todo, que no se solape
-      // ningun color o simbolo"). Bug real confirmado con un screenshot
-      // antes de tocar nada: un sprite de construccion es mas ANCHO que
-      // una celda (el almacen, p.ej., desborda ~12px a cada lado a esta
-      // escala) y se pinta centrado sobre su propia celda -- con el mismo
-      // z-index que el resto del suelo (=y), la celda VECINA de la derecha
-      // se inserta despues en el DOM en el mismo nivel de apilamiento y
-      // por tanto tapa el borde desbordado del tejado (confirmado con una
-      // captura: corte recto justo en el limite de celda). Los glifos de
-      // texto normales nunca desbordan su propia celda, asi que a ellos
-      // nunca les afectaba -- solo a los sprites de imagen, que son mas
-      // grandes que la celda a proposito (ver tamanoSpriteConstruccion).
-      // Fix: las construcciones van a su PROPIO nivel (500+y) -- por
-      // encima de TODO el suelo/flora/recursos (max real ~grid_alto,
-      // muy por debajo de 500) pero por debajo de las criaturas (1000+y),
-      // que deben seguir tapando un edificio si una camina delante.
-      // Limite conocido y no resuelto aqui (fuera de alcance de este
-      // circulo, mismo mecanismo de desempate por orden de insercion que
-      // ya existia): dos construcciones o dos criaturas ADYACENTES en la
-      // misma fila podrian seguir solapandose entre si por el mismo
-      // motivo -- no observado en juego libre, no se resuelve sin abrir
-      // un mecanismo de profundidad real por eje Y+X que no se pidio.
+      // z-index = zIndexPorFila(y, capa) -- ver su comentario mas arriba.
+      // Historial real de este mecanismo, dos circulos:
+      // (1) CORREGIDO 2026-09-16 (Diego, tras ver el almacen: "las
+      // criaturas o construcciones deben quedar por encima de todo, que
+      // no se solape ningun color o simbolo"). Bug real confirmado con un
+      // screenshot: un sprite de construccion es mas ANCHO que una celda
+      // (el almacen, p.ej., desborda ~12px a cada lado a esta escala) y
+      // se pinta centrado sobre su propia celda -- con el mismo z-index
+      // que el resto del suelo (=y), la celda VECINA de la derecha se
+      // inserta despues en el DOM en el mismo nivel de apilamiento y por
+      // tanto tapa el borde desbordado del tejado. Fix de entonces:
+      // construccion/flora a un nivel fijo muy por encima de TODO el
+      // suelo (400+y/500+y), fauna siempre por encima de eso (1000+y).
+      // (2) REVERTIDO ese offset fijo el mismo dia, circulo siguiente
+      // (Diego: "los assets deberian superponerse, incluso los animales,
+      // si pasan por detras que queden ocultos, no flotando encima") --
+      // el offset fijo de (1) resolvia el desborde pero como efecto
+      // secundario garantizaba que fauna (1000+y) NUNCA quedara oculta
+      // por NADA sin importar su fila real, justo lo contrario de lo que
+      // Diego pide ahora. zIndexPorFila ya resuelve ambos a la vez: el
+      // desborde de (1) sigue evitado porque, DENTRO de la misma fila,
+      // construccion/flora siguen teniendo mayor prioridad que terreno
+      // (ver PRIORIDAD_CAPA), y ahora fauna compite por profundidad real
+      // contra flora/construccion via su propia fila (ent.y en
+      // renderCriaturas), no un offset que la haga invencible. Limite
+      // conocido, sin resolver, mismo que ya existia: dos elementos
+      // ADYACENTES en la misma fila exacta podrian seguir solapandose
+      // entre si por el mismo mecanismo de desempate por orden de
+      // insercion -- no observado en juego libre.
+      if (info.items.length > 1) {
+        // 2+ items reales compartiendo celda -- superpuestos con
+        // profundidad (ver crearElementosCompartidos), no repartidos en
+        // un mosaico. Devuelve [fondo, ...sprites], el fondo ya en el
+        // indice 0 es donde cuelgan los badges (unico elemento comun a
+        // toda la celda compartida).
+        const elementos = crearElementosCompartidos(info.items, cx, cy, info.fondo, x, y);
+        elementos[0].style.zIndex = String(zIndexPorFila(y, 'terreno'));
+        añadirBadges(elementos[0], info.badges);
+        elementos.forEach(el => capaEstatica.appendChild(el));
+        continue;
+      }
       const unico = info.items[0] || {};
-      const esConstruccionUnica = !!unico.img;
-      const el = info.items.length > 1
-        ? crearCeldaCuadrantes(info.items, cx, cy, info.fondo)
-        : esConstruccionUnica
-          ? crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion))
-          : crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
-      el.style.zIndex = String((esConstruccionUnica ? 500 : 0) + y);
+      const esConstruccionUnica = !!unico.tipoConstruccion;
+      const esFloraUnica = !esConstruccionUnica && !!unico.especieFlora;
+      const esCoberturaUnica = !esConstruccionUnica && !esFloraUnica && !!unico.especieCobertura;
+      let el;
+      if (esConstruccionUnica) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion));
+      } else if (esFloraUnica) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora, unico.etapaCrecimiento, x, y));
+      } else if (esCoberturaUnica) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(unico.etapaCrecimiento, x, y));
+      } else {
+        el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
+      }
+      const capaSuelo = esConstruccionUnica ? 'construccion' : (esFloraUnica || esCoberturaUnica) ? 'flora' : 'terreno';
+      el.style.zIndex = String(zIndexPorFila(y, capaSuelo));
+      añadirBadges(el, info.badges);
       capaEstatica.appendChild(el);
     }
   }
@@ -922,15 +1231,36 @@ function alturaSpriteCriatura(ent) {
   return escalarPorRaiz(alturaM, ALTURA_REFERENCIA_M, BASE_SPRITE_A_REFERENCIA, ALTURA_SPRITE_MIN, ALTURA_SPRITE_MAX);
 }
 
-function crearCeldaImg(src, cx, cy, altura) {
+function crearCeldaImg(src, cx, cy, altura, jitter) {
   const el = document.createElement('img');
   el.className = 'criatura-img';
   el.src = src;
   el.style.height = altura + 'px';
-  el.style.left = (cx + CELDA / 2) + 'px';
+  el.style.left = (cx + CELDA / 2 + jitter) + 'px';
   el.style.top = (cy + CELDA) + 'px';
   return el;
 }
+
+// DURACION_PASO_CRIATURA (2026-09-16, Diego: "que quede natural como se
+// desplaza entre celdas, que no parezca que salta") -- verificado antes
+// de tocar nada: el sondeo de estado.json ocurria cada 1000ms mientras
+// segundos_por_tick real del motor es 0.4 (config/visual.yaml, ya citado
+// en el comentario de iniciar() mas abajo) -- entre dos sondeos el motor
+// podia avanzar ~2-3 ticks reales, y una criatura desplazarse igual
+// numero de celdas de una sola vez. La transicion CSS (entonces 0.9s
+// linear) SIEMPRE anima en linea recta desde el punto A al punto B que
+// ve el visor -- si el desplazamiento real fueron 2-3 celdas en un
+// camino no necesariamente recto, cualquier duracion/curva se percibe
+// como deslizamiento rapido o salto, no como caminar. Fix real: sondear
+// al mismo ritmo que el tick real (400ms, ver el setInterval de
+// iniciar()) para que cada actualizacion mueva como mucho 1 celda, y
+// una duracion de paso (350ms) menor a ese intervalo para que la
+// transicion siempre termine antes del siguiente sondeo -- sin esto, un
+// sondeo que llegara ligeramente antes interrumpiria una transicion a
+// medias, dando tirones. 'ease-in-out' en vez de 'linear':
+// aceleracion/desaceleracion suave en cada paso, un paso a velocidad
+// constante de inicio a fin tambien se lee mecanico/como salto.
+const DURACION_PASO_CRIATURA = 0.35;
 
 let elementosCriatura = {};
 function renderCriaturas() {
@@ -947,16 +1277,35 @@ function renderCriaturas() {
     // el catalogo es estatico, pero es una red de seguridad barata) se
     // recrea en vez de intentar mutar un <img> en un <div> de texto.
     if (el && !!el.dataset.esImg !== esImg) { el.remove(); el = null; }
+    // Direccion de movimiento (2026-09-16, Diego: "hacer que la imagen
+    // de la criatura se invierta dependiendo en que direccion va, para
+    // que quede natural"). Comparacion contra la ultima X conocida
+    // (persistida en el propio elemento, no en DATA -- el motor no
+    // expone "direccion", solo posicion) -- sin desplazamiento en X
+    // (movimiento puramente vertical, o quieta) se conserva la
+    // orientacion anterior en vez de resetear a un lado por defecto en
+    // cada tick. Convencion asumida sin poder verificarla contra las 8
+    // especies reales: el arte mira hacia la DERECHA de base (sin flip);
+    // si alguna especie resulta al reves, es un cambio de signo aqui,
+    // no un rediseño.
+    const xPrevia = el ? parseFloat(el.dataset.ultimaX) : ent.x;
+    let mirandoIzquierda = el ? el.dataset.mirandoIzq === '1' : false;
+    if (ent.x > xPrevia) mirandoIzquierda = false;
+    else if (ent.x < xPrevia) mirandoIzquierda = true;
+    // Jitter (ver comentario junto a jitterPxPorId) -- semilla el ID de
+    // la entidad, no su celda actual, para que el sesgo lateral sea
+    // constante mientras camina en vez de recalcularse en cada paso.
+    const jitter = esImg ? jitterPxPorId(ent.id) : 0;
     if (!el) {
-      el = esImg ? crearCeldaImg(info.img, cx, cy, alturaSpriteCriatura(ent)) : crearCeldaTxt(info.ch, info.color, cx, cy);
+      el = esImg ? crearCeldaImg(info.img, cx, cy, alturaSpriteCriatura(ent), jitter) : crearCeldaTxt(info.ch, info.color, cx, cy);
       el.dataset.esImg = esImg ? '1' : '';
-      el.style.transition = esImg ? 'left 0.9s linear, top 0.9s linear' : 'left 0.9s linear, top 0.9s linear';
+      el.style.transition = `left ${DURACION_PASO_CRIATURA}s ease-in-out, top ${DURACION_PASO_CRIATURA}s ease-in-out`;
       capaCriaturas.appendChild(el);
       elementosCriatura[idStr] = el;
     } else if (esImg) {
       if (!el.src.endsWith(info.img)) el.src = info.img;
       el.style.height = alturaSpriteCriatura(ent) + 'px';
-      el.style.left = (cx + CELDA / 2) + 'px';
+      el.style.left = (cx + CELDA / 2 + jitter) + 'px';
       el.style.top = (cy + CELDA) + 'px';
     } else {
       el.textContent = info.ch;
@@ -964,7 +1313,10 @@ function renderCriaturas() {
       el.style.left = cx + 'px';
       el.style.top = cy + 'px';
     }
-    el.style.zIndex = String(1000 + ent.y);
+    if (esImg) el.style.transform = `translate(-50%, -100%) scaleX(${mirandoIzquierda ? -1 : 1})`;
+    el.dataset.ultimaX = String(ent.x);
+    el.dataset.mirandoIzq = mirandoIzquierda ? '1' : '0';
+    el.style.zIndex = String(zIndexPorFila(ent.y, 'fauna'));
     el.dataset.entId = idStr;
   }
   // Entidades que ya no existen (murieron, o salieron de la zona
@@ -1247,14 +1599,21 @@ async function iniciar() {
     // servidor de control aparece en el proximo sondeo.
     actualizarControlPartida({ activa: false });
   }
-  // Sondeo continuo. segundos_por_tick real del motor es 0.4 (config/
-  // visual.yaml) -- 1000ms de por si ya sondea mas lento que cada tick
-  // real, evita recalcular derivados en cada uno.
+  // Sondeo continuo. CORREGIDO 2026-09-16 (Diego: "que quede natural
+  // como se desplaza entre celdas, que no parezca que salta") -- bajado
+  // de 1000ms a 400ms, igualando segundos_por_tick real del motor
+  // (config/visual.yaml). El comentario original de este intervalo decia
+  // "1000ms ya sondea mas lento que cada tick real" como si fuera una
+  // ventaja (menos trabajo de recalcularDerivados) -- pero era
+  // precisamente la causa de que una criatura pudiera desplazarse 2-3
+  // celdas de golpe entre dos sondeos, viendose como salto/deslizamiento
+  // en vez de caminar (ver DURACION_PASO_CRIATURA mas arriba para el
+  // detalle completo). A 400ms cada sondeo mueve como mucho 1 celda.
   setInterval(async () => {
     const nuevo = await cargarEstadoVivo();
     if (!nuevo) return;
     manejarNuevoEstado(nuevo);
-  }, 1000);
+  }, 400);
 }
 iniciar();
 </script>

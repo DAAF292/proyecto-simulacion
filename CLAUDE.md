@@ -42,11 +42,18 @@ de Claude Code parta del mismo entendimiento que las sesiones anteriores
    complejidad, y se valida antes de sumar la siguiente. Desconfía de
    cualquier propuesta que resuelva varios problemas a la vez sin necesidad.
 3. **El motor primero, la presentación después.** Cómo se muestra el mundo
-   (hoy, visor terminal — estética CRT ámbar, mapa 100% glifos/ASCII sin
-   ningún asset de imagen, único sistema visual desde 2026-09-16 tras
-   retirar el Códice Cartográfico, ver
+   (hoy, visor terminal — estética CRT ámbar, único sistema visual desde
+   2026-09-16 tras retirar el Códice Cartográfico, ver
    `docs/informe_codice_cartografico.md`) es una capa desacoplada y
    sustituible. No acoples la lógica de simulación a cómo se presenta.
+   **CORREGIDO 2026-09-16, mismo día**: el pivote a "100% glifos/ASCII sin
+   ningún asset de imagen" quedó desmentido por el propio código antes
+   incluso de escribirse este párrafo (los commits del mismo merge ya
+   añadían sprites reales de fauna y construcciones) — Diego confirmó
+   después explícitamente que la decisión es un **híbrido**: base ASCII,
+   con assets reales sustituyendo al glifo donde se vayan encontrando
+   adecuados, introducidos gradualmente. Ver la entrada del "Estado
+   actual" más abajo para el criterio real y su alcance actual.
 4. **Honestidad sobre lo pendiente.** Ningún sistema se da por cerrado sin
    una necesidad real que lo reclame. Si algo no está resuelto, dilo con
    claridad — nunca improvises una respuesta que aparente más solidez de la
@@ -446,14 +453,18 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   desarrollo del motor. `presentacion/vista_web.py` quedó reducido a
   servidor + contrato JSON (`construir_instantanea`, sin tocar); el
   visor terminal (`presentacion/terminal_prototipo/`) pasa a ser el
-  ÚNICO sistema visual, ahora sin ningún asset de imagen — todo
-  (terreno, agua, relieve, flora por categoría árbol/arbusto/cobertura,
-  fauna, construcciones, recursos en el suelo) se representa con
-  glifo+color de texto desde un catálogo único (`CATALOGO_GLIFOS` en
-  `terminal.html`), con leyenda desplegable generada desde ese mismo
-  catálogo, zoom centrado en el cursor y paneo por arrastre. Los ~83MB
-  de sprites del prototipo anterior se retiraron del repositorio
-  (recuperables por git history si algún día se retoma una vía gráfica).
+  ÚNICO sistema visual — en el momento de escribir este párrafo, sin
+  ningún asset de imagen: todo (terreno, agua, relieve, flora por
+  categoría árbol/arbusto/cobertura, fauna, construcciones, recursos en
+  el suelo) se representa con glifo+color de texto desde un catálogo
+  único (`CATALOGO_GLIFOS` en `terminal.html`), con leyenda desplegable
+  generada desde ese mismo catálogo, zoom centrado en el cursor y paneo
+  por arrastre. Los ~83MB de sprites del prototipo anterior se retiraron
+  del repositorio (recuperables por git history si algún día se retoma
+  una vía gráfica). **Esta afirmación de "sin ningún asset de imagen"
+  quedó desmentida el mismo día, ver la entrada "Híbrido ASCII+sprite"
+  más abajo** — se documenta aquí tal cual porque fue la decisión real
+  en ese momento del día, no se reescribe con retroactividad.
   **Segunda pasada de limpieza el mismo día, a raíz de que Diego preguntó
   explícitamente "¿has eliminado todo el código muerto y los assets que
   no se usan?"** (la primera pasada solo tocó lo directamente enredado
@@ -504,25 +515,190 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   glifos) se retiró por completo a petición de Diego ("por que el gnomo
   tiene un reborde blanco" → "quitalo") — se leía como un borde de
   recorte mal hecho sobre una silueta de pixel-art real, no como señal
-  deliberada. **Tensión de diseño sin resolver, señalada a Diego en esta
-  misma sesión, no cerrada**: con fauna y construcciones ya en sprite,
-  el suelo desnudo (glifo puro) pasa a ser la única excepción — Diego
-  subió además 8 JPGs de flora sin procesar (`iconos/flora/`, commit
-  "nuevas imagenes") que seguirían la misma vía si se integran. Decidir
-  ANTES de integrarlos si el visor sigue siendo "ASCII con excepciones
-  señaladas" o pasa a ser "sprites con el suelo en ASCII por descarte" —
-  ambas coherentes, ninguna decidida todavía por acumulación. **Hallazgo
-  aparte sin corregir**: el `@font-face` de VGA437
-  (`fonts/Web437_IBM_VGA_9x16.woff`) devuelve 404 real al servirse vía
-  `ServidorWeb` — `ManejadorWeb` nunca tuvo una ruta para `/fonts/*`, así
-  que el visor lleva toda la sesión (y probablemente desde que se
-  conectó en vivo) cayendo a la fuente monospace del navegador en vez de
-  la bitmap CRT prevista. Fix trivial (una ruta más, mismo patrón que
-  `/sprites_*`), no aplicado por estar fuera del encargo del momento en
-  que se encontró. La leyenda desplegable tampoco se actualizó tras
-  esto: para fauna/construcciones con sprite real sigue mostrando el
-  glifo/emoji de respaldo del catálogo en vez de una miniatura del
-  sprite, inconsistente con lo que se ve en el mapa.
+  deliberada. **Tensión de diseño señalada en esta sesión, RESUELTA en
+  la sesión siguiente, mismo día — ver "Híbrido ASCII+sprite" justo
+  abajo**: con fauna y construcciones ya en sprite, el suelo desnudo
+  (glifo puro) pasaba a ser la única excepción, y Diego había subido
+  además 8 JPGs de flora sin procesar (`iconos/flora/`) sin decidir
+  todavía si integrarlos. Diego zanjó la disyuntiva: híbrido
+  deliberado, sprite donde se encuentre arte adecuado, introducido
+  gradualmente — flora ya integrada bajo ese criterio, ver más abajo.
+  **Hallazgo aparte sin corregir, sigue vigente**: el `@font-face` de
+  VGA437 (`fonts/Web437_IBM_VGA_9x16.woff`) devuelve 404 real al
+  servirse vía `ServidorWeb` — `ManejadorWeb` nunca tuvo una ruta para
+  `/fonts/*`, así que el visor lleva toda la sesión (y probablemente
+  desde que se conectó en vivo) cayendo a la fuente monospace del
+  navegador en vez de la bitmap CRT prevista. Fix trivial (una ruta más,
+  mismo patrón que `/sprites_*`), no aplicado por estar fuera del
+  encargo del momento en que se encontró. La leyenda desplegable
+  tampoco se actualizó tras esto: para fauna/construcciones con sprite
+  real sigue mostrando el glifo/emoji de respaldo del catálogo en vez
+  de una miniatura del sprite, inconsistente con lo que se ve en el
+  mapa — mismo hueco real para los sprites de flora añadidos después.
+- **Híbrido ASCII+sprite (2026-09-16, mismo día que la retirada de
+  arriba, decisión de Diego que la corrige)**: el "mapa 100% ASCII sin
+  ningún asset de imagen" de la entrada anterior no llegó a sostenerse
+  ni un día completo — los commits `c6af86b` (fauna) y `c939e2e`
+  (construcciones) del mismo merge ya reintroducían sprites reales antes
+  de que se escribiera esta memoria, dejando tanto este documento como
+  un comentario de cabecera del propio `terminal.html` afirmando "CERO
+  imagenes en el mapa" mientras el código un poco más abajo ya las
+  usaba — contradicción real, encontrada auditando el código, no
+  reportada por nadie hasta entonces. Diego, preguntado explícitamente,
+  confirmó el criterio: **base ASCII, con sprites sustituyendo al glifo
+  donde se vaya encontrando arte adecuado, introducidos gradualmente**
+  (no una lista cerrada de categorías) — todos los assets ya
+  disponibles son de uso gratuito según confirmación de Diego (no se
+  investigó licencia individual más allá de eso).
+  Estado real a esta fecha (**CORREGIDO, ver los cinco círculos
+  completos en `docs/historial_capa_visual.md`, este párrafo es el
+  resumen final, no la crónica**): fauna (8 especies) y las 5
+  construcciones comunales ya tenían sprite desde antes de esta sesión;
+  en esta sesión se añadió **flora** — 13 de las 15 especies del
+  catálogo tienen sprite, **mapeo CONFIRMADO por Diego tras dos rondas
+  de aclaración** (un primer mapeo interpretado por Claude fue
+  rechazado dos veces antes de llegar al criterio real: no exige que el
+  nombre de fichero coincida 1:1 con la clave de especie, sino que el
+  arte corresponda al `bioma` real de `config/flora.yaml` — un mismo
+  fichero puede cubrir varias especies con clima afín,
+  `arbustoMontañaTundra.jpg`→montano+ártico,
+  `hierba.jpg`→sus 3 variantes). Solo quedan sin sprite **liquen y
+  musgo**, las 2 especies para las que Diego no aportó ningún icono.
+  Los 10 iconos JPEG viven en `iconos/flora/` (2048×2048, fondo de
+  tablero de ajedrez "quemado" en el propio JPEG, no alfa real —
+  limpiado con verificación visual manual por icono, NO con una
+  heurística de color automática: una heurística de bimodalidad/fase de
+  cuadrícula estuvo a punto de agujerear pétalos reales de una flor,
+  descartada), procesados a
+  `presentacion/terminal_prototipo/sprites_flora/` (10 PNG RGBA,
+  resolución proporcional a `huella_m2` real por especie). Tamaño en
+  pantalla de árbol/arbusto escalado por `huella_m2` real de
+  `config/flora.yaml` por ÁREA visual real (no solo altura — un primer
+  intento escalaba solo `img.style.height` dejando el ancho a merced
+  del aspect ratio nativo de cada PNG, y el pino, con el doble de
+  huella que cualquier arbusto pero un arte muy vertical, salía más
+  ESTRECHO que todos ellos; corregido con `ASPECT_FLORA` real medido
+  por especie), más `FACTOR_TAMANO_ARBUSTO=0.72` (reducción adicional
+  solo para arbusto, pedido explícito de Diego, PROVISIONAL); cobertura
+  (sin `huella_m2` real, no compite por espacio físico) usa un tamaño
+  FIJO en vez de inventar un dato que el motor no tiene. Los recursos
+  sueltos del suelo (madera/piedra) ya NO compiten por el mosaico de
+  cuadrantes con el árbol/construcción de su misma celda — pasan a ser
+  un badge pequeño superpuesto; el 94% de las celdas con árbol también
+  tenían madera, así que antes de este fix la inmensa mayoría de los
+  árboles del mapa se veían reducidos a una miniatura de icono
+  compartido en vez del sprite grande calibrado ("por qué hay árboles
+  en las celdas pequeñas", Diego). De paso se encontró y corrigió un
+  bug real preexistente (desde que se añadieron sprites de fauna/
+  construcciones): `presentacion/vista_web.py` solo servía
+  `/sprites_criaturas/` y `/sprites_construcciones/` por HTTP —
+  cualquier sprite servido a través de `ServidorWeb` (no abierto por
+  `file://` directamente) que viviera en otra subcarpeta habría
+  devuelto 404 sin que nadie lo hubiera notado hasta abrir el visor así.
+- **Profundidad real, dirección, paso natural y jitter de posición en el
+  visor (mismo día — "círculo final" al escribirse esta entrada, luego
+  corregido: hubo un círculo más justo debajo)**: hasta este círculo,
+  fauna tenía un z-index con
+  offset fijo (`1000+y`) que la ponía SIEMPRE por encima de todo el
+  suelo/flora/construcción sin importar su posición real — decidido
+  así en un círculo anterior del mismo día para resolver un bug real de
+  desborde de sprite entre celdas vecinas, con el efecto secundario de
+  que fauna nunca podía quedar oculta por nada. Diego pidió profundidad
+  real ("si pasan por detrás que queden ocultos, no flotando encima");
+  sustituido por un esquema único `zIndexPorFila(y, capa) = y*10 +
+  prioridad` que aplica por igual a terreno/flora/construcción/fauna —
+  la fila real decide siempre primero, la prioridad por tipo (terreno
+  0, flora 2, construcción 4, fauna 6) solo desempata en la misma fila
+  exacta. Verificado con Playwright: un zorro en una fila anterior a un
+  árbol grande queda visiblemente tapado por su follaje. Además: el
+  sprite de fauna ahora se invierte (`scaleX(-1)`) según la dirección
+  real de desplazamiento (inferida comparando la X actual contra la
+  última conocida, persistida en el propio elemento DOM — el motor no
+  expone "dirección" como dato; convención asumida sin poder
+  verificarla contra las 8 especies reales: el arte mira a la derecha
+  de base); y el sondeo de `estado.json` bajó de 1000ms a 400ms
+  (igualando `segundos_por_tick` real del motor, `config/visual.yaml`)
+  con la transición CSS de `0.9s linear` a `0.35s ease-in-out` — a
+  1000ms el motor podía avanzar 2-3 ticks (y una criatura 2-3 celdas)
+  entre dos sondeos, y ninguna curva de animación arregla que un salto
+  de varias celdas en línea recta se lea como caminar en vez de saltar.
+  Pendiente real: el z-index cambia de golpe (sin transición, CSS no
+  anima esa propiedad) en el instante en que una criatura cruza de fila
+  mientras camina — aceptado como límite conocido de Y-sorting simple,
+  no se abordó un mecanismo de interpolación de profundidad que no se
+  pidió.
+  **Añadido justo después, mismo día**: Diego señaló que los sprites
+  "se sitúan siempre en el centro de la celda... parecen líneas rectas"
+  — cierto, `left:50%` fijo (construcción/flora) y `cx+CELDA/2` exacto
+  (fauna) sin ninguna variación. Corregido con `jitterPx`/`jitterPxPorId`
+  (mismo `hashDet` ya usado para variar tono/textura, sal propia):
+  desplazamiento horizontal de hasta ±25% de `CELDA`, determinista por
+  celda para elementos estáticos y por ID de entidad (no por celda
+  actual) para fauna — con semilla de celda el sesgo lateral de un
+  animal "saltaría" en cada cambio de celda, viéndose peor que sin
+  jitter. Sin jitter, deliberadamente: el mosaico de cuadrantes (sprite
+  ya confinado a un cuarto de celda) y el fallback de emoji/glifo de
+  fauna sin sprite (centrado por flex, no por `left` absoluto).
+  **Añadido justo después, mismo día**: Diego preguntó si el jitter
+  animaba a la fauna al caminar (NO — es un sesgo lateral constante por
+  individuo, no oscila; ofrecido pero no implementado si lo quiere) y si
+  todos los assets de un tipo miden lo mismo — SÍ, verificado: un brote
+  recién plantado (`Planta.etapa≈0`, dato real ya expuesto por el DTO,
+  hasta entonces solo usado para opacidad) se veía del mismo tamaño
+  GRANDE que un árbol maduro. A diferencia de fauna (que sí sortea
+  `DimensionesFisicas.altura_m` real por individuo), `Planta` no modela
+  ninguna variación de tamaño máximo entre plantas maduras de la misma
+  especie. Añadidas dos fuentes de variación a
+  `tamanoSpriteFlora`/`tamanoSpriteCobertura`, documentadas por
+  separado para no confundir dato real con relleno: `factorCrecimiento`
+  (real, mapea `etapa` 0→1 a escala 0.35→1.0) y `factorJitterEscala`
+  (relleno visual puro, mismo `hashDet` con sal propia, ±15%
+  determinista por celda, porque el motor no modela variación de tamaño
+  máximo entre plantas maduras).
+  **Añadido justo después, mismo día (2026-09-17 al escribir esto,
+  círculo iniciado el día anterior)**: Diego preguntó cómo funciona el
+  mosaico de cuadrantes, proponiendo reparto proporcional ("si un árbol
+  ocupa el 75% de la celda y un helecho el 25%, el sprite del árbol
+  debería ocupar 3 subceldas y el helecho 1") — aclarado primero que ese
+  ejemplo concreto no llegaba al mosaico (competidora+cobertura se
+  resuelve tiñendo el fondo, no como cuadrante compartido). Implementado
+  para el caso que sí ocurre (2 items reales, el dominante tras el fix
+  de badges): `pesoItem()` reutiliza `huella_m2` real donde existe,
+  reparto de `grid-template-columns` proporcional redondeado a 1-3,
+  sprite escalado al ancho real de su columna en vez de un tamaño fijo
+  igual para todos. Verificado con un mapa sintético aislado + medición
+  directa del DOM: almacén+pino → `"3fr 1fr"`, 23px/8px de altura real
+  (3:1 exacto). Con 3-4 items (raro) se mantiene el grid 2x2 igualitario
+  de siempre. Diego también pidió quitar la opacidad decreciente por
+  edad ("eso no tiene sentido") — retirada por completo (no solo fijada
+  a 1): ya redundante desde que el tamaño refleja la etapa real. Hueco
+  honesto que deja: las 4 especies de cobertura sin sprite pierden toda
+  señal visual de crecimiento, sin sustituto (no hay un tamaño que
+  variar en un glifo de textura a celda completa).
+  **CORREGIDO el mismo día, círculo siguiente (Diego: "quedaría mejor
+  si se pudiesen solapar, por ejemplo el refugio y que el pino crezca
+  por detrás, le daría sensación de más profundidad al mapa")**: el
+  reparto proporcional en columnas de arriba no llegó a un día completo
+  de vida — sustituido por completo por superposición con profundidad,
+  ver `docs/historial_capa_visual.md` para el detalle completo.
+  `pesoItem()` cambia de propósito (ya no reparte ancho, solo ordena
+  profundidad): el item de mayor peso se dibuja a tamaño NORMAL (igual
+  que si estuviera solo), los demás un 18% más pequeños que su PROPIO
+  tamaño nativo (no un 18% del tamaño del principal — construcción y
+  flora usan escalas de referencia independientes, así que la
+  proporción visible entre dos categorías distintas no es
+  necesariamente 0.82:1, verificado real con almacén+pino → 0.94:1),
+  desplazados hacia arriba dentro de la celda y con z-index un punto
+  por debajo del principal. Verificado con capturas sintéticas
+  aisladas tras encontrar y corregir un bug real en el propio arnés de
+  test (no en el motor): `window.DATA = mini` no sustituye el `DATA`
+  real (`let DATA` de nivel superior no cuelga de `window`) — con la
+  forma correcta (`DATA = mini`, sin prefijo), almacén+pino muestra la
+  copa del pino asomando tras el tejado (efecto real, aunque sutil —
+  sin confirmar con Diego si prefiere que asome más) y helecho+hierba
+  silvestre (mismo peso nominal, empate resuelto por orden estable de
+  array) se ven como dos plantas distintas y reconocibles, una detrás/
+  más pequeña de la otra. 675/675 tests.
 - **Renombrado `BOSQUE_* -> SIMULACION_*` (2026-09-16)**: Diego, sobre la
   spec de abajo: "lo de que aparezca bosque en todos los comandos de
   test... deberíamos cambiarlo por simulación, que es lo que es, ya no

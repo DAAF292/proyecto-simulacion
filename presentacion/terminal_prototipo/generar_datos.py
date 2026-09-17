@@ -51,7 +51,7 @@ for i in range(N_TICKS):
     for linea in narrar(bus.eventos_del_tick, gestor):
         cola_cronica.append(linea)
 
-instantanea = construir_instantanea(mundo, gestor, reloj, list(cola_cronica))
+instantanea = construir_instantanea(mundo, gestor, reloj, list(cola_cronica), semilla)
 DESTINO = Path(__file__).resolve().parent
 with open(DESTINO / "datos.json", "w", encoding="utf-8") as f:
     json.dump(instantanea, f)
