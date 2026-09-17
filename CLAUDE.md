@@ -477,10 +477,8 @@ se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
 
 ## Comentarios técnicos vs narrativa histórica (2026-09-02)
 
-Convención nueva, decidida con Diego, aplicable a partir de ahora a
-todo el código del repositorio (no solo al que se toque por otro
-motivo -- ver `.ai-pipeline/guia-tareas.md` para cómo delegar esta
-poda, con los resultados reales de intentarlo).
+Convención decidida con Diego, vigente para todo el código del
+repositorio (no solo al que se toque por otro motivo):
 
 - **Se queda en el código, corto**: qué hace una función/campo, y el
   "por qué" que hace falta para no romperlo al tocarlo -- invariantes
@@ -494,29 +492,11 @@ poda, con los resultados reales de intentarlo).
   Diego, referencias a specs por ruta completa. Nada se pierde, solo
   cambia de sitio.
 
-**ACTUALIZACIÓN (2026-09-02, mismo día): la poda se completó en todo el
-repositorio**, no solo en los tres ficheros originales -- `nucleo/flora.py`,
-`sistemas/sistema_flora.py`, `nucleo/celda.py` (`docs/historial_flora.md`/
-`historial_celda.md`), y a continuación el resto de `nucleo/`
-(`construccion.py`, `disposicion.py`, `territorio.py`, `orografia.py`,
-`asentamiento.py`, `cueva.py`, `materiales.py`, `entidad.py`, `agua.py`,
-`persistencia.py`, `zona_bioma.py`), todo `componentes/`, y todos los
-sistemas (`sistema_movimiento.py`, `sistema_recursos.py`,
-`sistema_decision.py`, `sistema_necesidades.py`, `sistema_reproduccion.py`,
-`sistema_desastres.py`, `sistema_depredacion.py`,
-`sistema_descomposicion.py`, `sistema_clima.py`,
-`sistema_capacidad_fisica.py`, `sistema_ciclo_vital.py`,
-`sistema_capacidad_mental.py`, `sistema_asentamiento.py`) más `main.py`.
-Cada módulo grande generó su propio `docs/historial_<módulo>.md`, mismo
-patrón que los tres originales.
-
-**Hallazgo real sobre CÓMO se hizo, no solo que se hizo**: `dc64f30`
-documenta que delegar esta poda a `mini-swe-agent` falló 2/2 -- tareas
-de calibración de juicio/estilo (qué comentario es "narrativa histórica"
-frente a "invariante que hace falta para no romper el código al
-tocarlo") no tienen un criterio de éxito objetivo que el modelo pueda
-verificar por su cuenta, a diferencia de una implementación con tests.
-Toda la poda del resto del repositorio se hizo directamente por Claude
-en la sesión de esa tarde, no vía pipeline -- decisión consistente con
-ese hallazgo, no una elección arbitraria de herramienta.
+Aplicada ya a todo el repositorio el mismo día que se decidió (no solo
+a los ficheros que la motivaron) -- crónica completa, incluido el
+hallazgo real de que delegarla a `mini-swe-agent` falló 2/2 (tareas de
+calibración de juicio/estilo sin criterio de éxito verificable
+mecánicamente, ver también ".ai-pipeline/guia-tareas.md"), en
+`docs/historial_pipeline_ia.md` (movida ahí el 2026-09-17, era la
+última crónica cerrada que quedaba suelta en este documento).
 

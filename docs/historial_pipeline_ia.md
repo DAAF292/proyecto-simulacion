@@ -535,3 +535,38 @@ combinación exacta de circunstancias (límite externo + trabajo real
 ya comiteado + un PR completamente vacío) que los exponía. Todos
 corregidos y verificados con una repetición real, no solo con
 lectura de código.
+
+## Intento de delegar la poda "comentarios técnicos vs narrativa
+## histórica" al pipeline -- falló 2/2 (2026-09-02)
+
+Contexto: el mismo día en que se decidió con Diego la convención
+"comentarios técnicos vs narrativa histórica" (qué se queda corto en
+el código -- invariantes, gotchas -- y qué sale a
+`docs/historial_<módulo>.md` -- incidentes resueltos, calibraciones
+descartadas, el recorrido de una decisión), la poda se completó en
+todo el repositorio: no solo los tres ficheros originales
+(`nucleo/flora.py`, `sistemas/sistema_flora.py`, `nucleo/celda.py` --
+`docs/historial_flora.md`/`historial_celda.md`), sino a continuación
+el resto de `nucleo/` (`construccion.py`, `disposicion.py`,
+`territorio.py`, `orografia.py`, `asentamiento.py`, `cueva.py`,
+`materiales.py`, `entidad.py`, `agua.py`, `persistencia.py`,
+`zona_bioma.py`), todo `componentes/`, y todos los sistemas
+(`sistema_movimiento.py`, `sistema_recursos.py`, `sistema_decision.py`,
+`sistema_necesidades.py`, `sistema_reproduccion.py`,
+`sistema_desastres.py`, `sistema_depredacion.py`,
+`sistema_descomposicion.py`, `sistema_clima.py`,
+`sistema_capacidad_fisica.py`, `sistema_ciclo_vital.py`,
+`sistema_capacidad_mental.py`, `sistema_asentamiento.py`) más
+`main.py`. Cada módulo grande generó su propio
+`docs/historial_<módulo>.md`, mismo patrón que los tres originales.
+
+**Hallazgo real sobre CÓMO se hizo, no solo que se hizo**: `dc64f30`
+documenta que delegar esta poda a `mini-swe-agent` falló 2/2 -- tareas
+de calibración de juicio/estilo (qué comentario es "narrativa
+histórica" frente a "invariante que hace falta para no romper el
+código al tocarlo") no tienen un criterio de éxito objetivo que el
+modelo pueda verificar por su cuenta, a diferencia de una
+implementación con tests. Toda la poda del resto del repositorio se
+hizo directamente por Claude en la sesión de esa tarde, no vía
+pipeline -- decisión consistente con ese hallazgo, no una elección
+arbitraria de herramienta.
