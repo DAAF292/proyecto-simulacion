@@ -222,6 +222,26 @@ class SistemaMovimiento:
         self.dist_deseada_territorio: int = int(
             self.config.get("social", {}).get("distancia_deseada_territorio", 1)
         )
+        # Sesgo gregario por relaciones interpersonales (2026-09-17, ver
+        # docs/superpowers/specs/2026-09-17-convivencia-familiar-design.md,
+        # Circulo B): SOLO para conscientes, elegir con quien agruparse
+        # (deambular/construir/dormir/socializar) ya no es "el mas
+        # cercano" a secas -- compite afinidad ya acumulada en Relaciones
+        # (familia, amistad, rencor) contra la distancia. PROVISIONAL los
+        # tres, sin calibrar contra el motor en marcha.
+        self.peso_afinidad_social: float = float(
+            self.config.get("social", {}).get("peso_afinidad_social", 1.0)
+        )
+        self.peso_distancia_social: float = float(
+            self.config.get("social", {}).get("peso_distancia_social", 1.0)
+        )
+        # umbral_evasion_social: si el candidato de mayor utilidad tiene
+        # afinidad por debajo de este valor (rencor real, no solo
+        # neutral), se prefiere NO acercarse a nadie (None, cae a paso
+        # aleatorio) antes que acercarse a quien cae mal.
+        self.umbral_evasion_social: float = float(
+            self.config.get("social", {}).get("umbral_evasion_social", -0.3)
+        )
         self.umbral_consciencia_agencia: float = float(
             self.config.get("decision", {}).get("umbral_consciencia_agencia", 0.3)
         )
@@ -757,6 +777,46 @@ class SistemaMovimiento:
             gestor, entidad_id, pos_x, pos_y, radio, zona_idx, solo_conscientes=True
         )
 
+    def _consciente_mas_cercano_por_afinidad(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        pos_x: int,
+        pos_y: int,
+        radio: int,
+        zona_idx: int = 0,
+    ) -> tuple[int | None, tuple[int, int] | None]:
+        """Mismo universo de candidatos que _consciente_mas_cercano_con_id
+        (cualquier consciente en rango, sin restriccion de especie), pero
+        elige por afinidad ya acumulada en vez de por pura cercania (ver
+        _elegir_candidato_social, 2026-09-17, Circulo B de convivencia
+        familiar). Consumida SOLO por SOCIALIZAR -- deliberadamente NO se
+        toca _buscar_entidad_cercana, compartida con HUIDA_ERRATICA/
+        CRISIS_VIOLENTA (estados de crisis mental, ninguno debe razonar
+        sobre relaciones)."""
+        candidatos = []
+        fuente = (
+            self._indice_actual.en_radio(pos_x, pos_y, zona_idx, radio)
+            if self._indice_actual is not None
+            else gestor.entidades_con(Posicion, CapacidadMental)
+        )
+        for eid in fuente:
+            if eid == entidad_id:
+                continue
+            cap_otro = gestor.obtener_componente(eid, CapacidadMental)
+            if cap_otro is None or cap_otro.consciencia < self.umbral_consciencia_agencia:
+                continue
+            pos_o = gestor.obtener_componente(eid, Posicion)
+            if pos_o is None or pos_o.zona_idx != zona_idx:
+                continue
+            dist = abs(pos_o.x - pos_x) + abs(pos_o.y - pos_y)
+            if dist <= radio:
+                candidatos.append((eid, pos_o.x, pos_o.y, dist))
+        if not candidatos:
+            return None, None
+        elegido = self._elegir_candidato_social(gestor, entidad_id, candidatos, radio)
+        return elegido if elegido is not None else (None, None)
+
     def _calcular_huida_erratica(
         self,
         gestor: GestorEntidades,
@@ -833,11 +893,16 @@ class SistemaMovimiento:
         """SOCIALIZAR (2026-09-06, ocio consciente -- ver spec): acto
         consciente e independiente del sesgo gregario de DEAMBULAR.
 
-        Busca al consciente mas cercano de CUALQUIER especie (sin la
+        Busca entre los conscientes de CUALQUIER especie en rango (sin la
         restriccion biologica de _buscar_conspecifico_mas_cercano -- hoy
         solo hay una especie consciente, pero el mecanismo no debe
-        asumirlo). Si no hay ninguno, cae a paso aleatorio (ocio sin
-        mas nadie cerca). Si el mas cercano ya esta a distancia 0
+        asumirlo), eligiendo por AFINIDAD ya acumulada en Relaciones en
+        vez de por pura cercania (2026-09-17, ver docs/superpowers/specs/
+        2026-09-17-convivencia-familiar-design.md, Circulo B: familia/
+        amistad pesan a favor, rencor fuerte puede hacer que se prefiera
+        no acercarse a nadie -- ver _elegir_candidato_social). Si no hay
+        ningun candidato viable, cae a paso aleatorio (ocio sin mas nadie
+        cerca). Si el elegido ya esta a distancia 0
         (misma celda: contacto real), resuelve una ganancia de afinidad
         MUTUA (ambas direcciones, incondicional al contacto -- no depende
         de que la otra parte tambien este "eligiendo" SOCIALIZAR ese tick,
@@ -856,7 +921,7 @@ class SistemaMovimiento:
         real de arriba NO cambia -- sigue disparándose igual si ya se
         está junto a alguien, sea porque ambos caminaron al salón o por
         pura casualidad."""
-        objetivo_id, objetivo_pos = self._consciente_mas_cercano_con_id(
+        objetivo_id, objetivo_pos = self._consciente_mas_cercano_por_afinidad(
             gestor, entidad_id, pos_x, pos_y, radio, zona_idx
         )
         if objetivo_id is not None and objetivo_pos == (pos_x, pos_y):  # contacto real, no solo cercania
@@ -1925,6 +1990,51 @@ class SistemaMovimiento:
 
         return self._paso_aleatorio()
 
+    def _elegir_candidato_social(
+        self,
+        gestor: GestorEntidades,
+        entidad_id: int,
+        candidatos: list[tuple[int, int, int, int]],
+        radio: int,
+    ) -> tuple[int, tuple[int, int]] | None:
+        """Elige con quien agruparse entre `candidatos` ((id, x, y, dist),
+        ya filtrados por especie/consciencia/radio segun corresponda al
+        llamador) por AFINIDAD ya acumulada en Relaciones, no solo
+        distancia (2026-09-17, ver docs/superpowers/specs/2026-09-17-
+        convivencia-familiar-design.md, Circulo B): utilidad = peso_
+        afinidad_social * afinidad - peso_distancia_social * (dist/radio).
+        afinidad = Relaciones.vinculos.get(candidato), 0.0 sin vinculo
+        (ni preferido ni evitado -- asi se conoce gente nueva). Gana el
+        candidato de mayor utilidad; si su afinidad queda por debajo de
+        umbral_evasion_social (rencor real), se prefiere NO acercarse a
+        nadie (None, cae a paso aleatorio) antes que acercarse a quien
+        cae mal."""
+        if not candidatos:
+            return None
+        relaciones = gestor.obtener_componente(entidad_id, Relaciones)
+        mejor_id: int | None = None
+        mejor_pos: tuple[int, int] | None = None
+        mejor_utilidad: float | None = None
+        mejor_afinidad = 0.0
+        for cid, cx, cy, dist in candidatos:
+            afinidad = 0.0
+            if relaciones is not None:
+                vinculo = relaciones.vinculos.get(cid)
+                if vinculo is not None:
+                    afinidad = vinculo.afinidad
+            utilidad = (
+                self.peso_afinidad_social * afinidad
+                - self.peso_distancia_social * (dist / radio if radio > 0 else 0.0)
+            )
+            if mejor_utilidad is None or utilidad > mejor_utilidad:
+                mejor_utilidad = utilidad
+                mejor_id = cid
+                mejor_pos = (cx, cy)
+                mejor_afinidad = afinidad
+        if mejor_afinidad < self.umbral_evasion_social or mejor_id is None or mejor_pos is None:
+            return None
+        return mejor_id, mejor_pos
+
     def _buscar_conspecifico_mas_cercano(
         self,
         gestor: GestorEntidades,
@@ -1934,6 +2044,7 @@ class SistemaMovimiento:
         pos_y: int,
         radio: int,
         zona_idx: int = 0,
+        cap_mental: CapacidadMental | None = None,
     ) -> tuple[int, int] | None:
         """
         Posición del individuo de la MISMA especie más cercano dentro del
@@ -1950,6 +2061,12 @@ class SistemaMovimiento:
         documentado queda resuelto cuando ejecutar() ya construyó el
         índice; sin él (llamada aislada en tests), comportamiento
         idéntico a antes.
+
+        cap_mental (2026-09-17, Círculo B de convivencia familiar): SOLO
+        si es consciente, el candidato se elige por afinidad
+        (_elegir_candidato_social) en vez de por pura cercanía -- fauna
+        (cap_mental=None o por debajo del umbral) conserva el
+        comportamiento original sin cambios.
         """
         candidatos = []
         fuente = (
@@ -1968,12 +2085,17 @@ class SistemaMovimiento:
                 continue
             dist = abs(pos_c.x - pos_x) + abs(pos_c.y - pos_y)
             if dist <= radio:
-                candidatos.append((dist, pos_c.x, pos_c.y))
+                candidatos.append((eid, pos_c.x, pos_c.y, dist))
 
         if not candidatos:
             return None
-        candidatos.sort()
-        _, cx, cy = candidatos[0]
+
+        if cap_mental is not None and cap_mental.consciencia >= self.umbral_consciencia_agencia:
+            elegido = self._elegir_candidato_social(gestor, entidad_id, candidatos, radio)
+            return elegido[1] if elegido is not None else None
+
+        candidatos.sort(key=lambda c: c[3])
+        _, cx, cy, _ = candidatos[0]
         return (cx, cy)
 
     def _calcular_deambular(
@@ -2062,7 +2184,8 @@ class SistemaMovimiento:
             objetivo_social = (
                 manada.centro if manada is not None
                 else self._buscar_conspecifico_mas_cercano(
-                    gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
+                    gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx,
+                    cap_mental=cap_mental,
                 )
             )
             if objetivo_social is not None:
@@ -2136,7 +2259,8 @@ class SistemaMovimiento:
 
         if temperamento is not None and self.rng.random() < temperamento.sociabilidad:
             objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
-                gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
+                gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx,
+                cap_mental=cap_mental,
             )
             if objetivo_conspecifico is not None:
                 dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)
@@ -2603,7 +2727,8 @@ class SistemaMovimiento:
                     return self._acercarse_a(pos_x, pos_y, *objetivo_refugio)
             elif temperamento is not None and self.rng.random() < temperamento.sociabilidad:
                 objetivo_conspecifico = self._buscar_conspecifico_mas_cercano(
-                    gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx
+                    gestor, entidad_id, especie, pos_x, pos_y, radio, zona_idx,
+                    cap_mental=cap_mental,
                 )
                 if objetivo_conspecifico is not None:
                     dist = abs(objetivo_conspecifico[0] - pos_x) + abs(objetivo_conspecifico[1] - pos_y)

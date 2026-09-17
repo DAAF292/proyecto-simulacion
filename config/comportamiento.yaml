@@ -59,6 +59,20 @@ movimiento:
 social:
   distancia_deseada_conspecifico: 1
   distancia_deseada_territorio: 1
+  # Sesgo gregario por relaciones interpersonales (2026-09-17, ver docs/
+  # superpowers/specs/2026-09-17-convivencia-familiar-design.md, Circulo
+  # B -- sistema_movimiento.py:_elegir_candidato_social): SOLO para
+  # conscientes, elegir con quien agruparse al deambular/construir/
+  # dormir/socializar compite afinidad ya acumulada en Relaciones contra
+  # distancia, en vez de ser siempre "el mas cercano". PROVISIONAL los
+  # tres, sin calibrar contra el motor en marcha.
+  peso_afinidad_social: 1.0
+  peso_distancia_social: 1.0
+  # umbral_evasion_social: si el candidato de mayor utilidad tiene
+  # afinidad por debajo de este valor (rencor real), se prefiere NO
+  # acercarse a nadie (cae a paso aleatorio) antes que acercarse a quien
+  # cae mal.
+  umbral_evasion_social: -0.3
   # GREGARISMO -- Pieza 1 (2026-08-30, ver nucleo/disposicion.py:
   # contar_conspecificos_cercanos para el diseno completo). Radio
   # compartido por el bono de caza en grupo (sistema_depredacion.py) y el
