@@ -30,7 +30,6 @@ from componentes.vocacion import Vocacion
 from nucleo.agua import fraccion_escurrida_por_pendiente, hay_agua_potable, pendiente_local
 from nucleo.armas import (
     celda_ofrece_material_arma,
-    mayor_nivel_arma,
     mejor_receta_completable,
     recolectar_material_arma_de_celda,
     tiene_arma_nivel2_o_mas,
@@ -55,7 +54,6 @@ from nucleo.comida import elaborar_recurso, es_elaborado, recurso_base
 from nucleo.entidad import GestorEntidades, crear_fogata, procesar_deceso
 from nucleo.espacio import plantas_competidoras_en
 from nucleo.eventos import BusEventos, Evento, Severidad
-from nucleo.fuego import celda_tiene_combustible, fogata_en
 from nucleo.flora import intentar_colonizar_celda
 from nucleo.indice_espacial import construir_indice_espacial
 from nucleo.inventario import (

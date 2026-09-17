@@ -89,12 +89,7 @@ def vocacion_dominante(vocacion: Vocacion) -> str | None:
     individuo no ha practicado ninguna todavía (las 4 en cero -- fauna
     sin consciencia se queda así para siempre, mismo criterio que
     Agarre.objetos vacío en conejo)."""
-    conteos = {
-        "forrajero": vocacion.conteo_forrajero,
-        "constructor": vocacion.conteo_constructor,
-        "artesano": vocacion.conteo_artesano,
-        "cocinero": vocacion.conteo_cocinero,
-    }
+    conteos = {cubeta: getattr(vocacion, f"conteo_{cubeta}") for cubeta in CUBETAS}
     if all(c == 0 for c in conteos.values()):
         return None
     return max(conteos, key=conteos.__getitem__)

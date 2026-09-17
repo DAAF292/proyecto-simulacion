@@ -101,10 +101,6 @@ def factor_humedad_subsuelo(
     return 1.0 + bono_maximo * saturacion
 
 
-# Alias para preservar compatibilidad con código histórico
-calcular_factor_produccion = factor_produccion
-
-
 def idoneidad_colonizacion(
     especie_cfg: dict[str, Any], celda: Celda, capacidad_retencion: float,
 ) -> float:

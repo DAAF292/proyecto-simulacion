@@ -42,9 +42,8 @@ from componentes.relaciones import Relaciones, Vinculo
 from componentes.semillas import Semillas
 from componentes.vocacion import Vocacion
 from componentes.temperamento import Temperamento
-from nucleo.celda import Celda
 from nucleo.entidad import GestorEntidades
-from nucleo.eventos import BusEventos, Evento, Severidad
+from nucleo.eventos import Evento, Severidad
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
 

@@ -518,7 +518,6 @@ def actualizar(
     recetas_armas = config_armas.get("recetas", [])
     umbral_base_empunar = float(config_armas.get("umbral_base_empunar", 0.5))
     margen_valentia_empunar = float(config_armas.get("margen_valentia_empunar", 0.3))
-    peso_objeto_kg = config.get("peso_objeto_kg", {})
     # Herramientas (2026-09-11, circulo 2 del arco "fabricacion y uso de
     # herramientas" -- ver docs/superpowers/specs/
     # 2026-09-11-fabricacion-herramientas-design.md y config/herramientas.yaml):

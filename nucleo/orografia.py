@@ -36,7 +36,6 @@ def generar_cordilleras(rng: random.Random, config: dict, ancho: int, alto: int)
     direccion unitaria, longitud como FRACCION del lado mayor del mapa,
     anchura de la cresta en celdas y altura de la cresta en [0, 1]."""
     num = rng.randint(*config["num_cordilleras"])
-    lado_mayor = max(ancho, alto)
     cordilleras = []
     for _ in range(num):
         angulo = rng.uniform(0.0, 2.0 * math.pi)

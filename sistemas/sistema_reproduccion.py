@@ -12,8 +12,8 @@ Intencion concreta -- es un chequeo de fondo, mismo criterio que
 "presenciar una muerte" en sistema_capacidad_mental.py.
 
 Con mas de un macho elegible en la misma celda que una hembra, se
-resuelve por el mismo criterio de determinismo que
-id_en_contacto_por_disposicion (nucleo/disposicion.py): el de menor id.
+resuelve por el mismo criterio de determinismo que el resto del motor:
+el de menor id.
 
 Formula: probabilidad_por_tick = factor_base_concepcion * promedio(
 sociabilidad_macho, sociabilidad_hembra), evaluada cada tick.
@@ -82,7 +82,7 @@ from componentes.reproduccion import Reproduccion, Sexo
 from componentes.temperamento import Temperamento
 from nucleo.agua import celda_nacimiento_segura
 from nucleo.ciclo_vital import (
-    TICKS_POR_ANIO, edad_ticks, es_adulto, factor_fecundidad_edad,
+    edad_ticks, es_adulto, factor_fecundidad_edad,
 )
 from nucleo.entidad import nacer_criatura
 from nucleo.eventos import BusEventos, Evento, Severidad
