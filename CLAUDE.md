@@ -5,20 +5,36 @@ aspiración de riqueza narrativa: el legendarium de Tolkien, alcanzada por
 emergencia algorítmica, nunca por autoría manual). Este documento resume las
 decisiones y reglas que gobiernan el proyecto para que cualquier sesión nueva
 de Claude Code parta del mismo entendimiento que las sesiones anteriores
-(migradas desde Cowork el 24-08-2026). No sustituye a los informes de
-`informes/` — es la capa de orientación rápida; para profundidad real, lee:
+(migradas desde Cowork el 24-08-2026). Este documento, junto con
+`docs/historial_*.md`, es la única capa de referencia viva del proyecto —
+para profundidad real, lee esos historiales por arco temático (ver la
+sección "Bitácora completa" más abajo).
 
-- `informes/informe_vision.docx` — qué es el proyecto y por qué, registro no
-  técnico. Prácticamente intemporal, rara vez necesita tocarse.
-- `informes/informe_tecnico.docx` — arquitectura completa, capa por capa, con
-  sección 20 como lista consolidada de cuestiones abiertas.
-- `informes/informe_implementacion_bosque.docx` — bitácora cronológica de
-  implementación, sección 7.N por pieza construida, la fuente más fiable de
-  "qué se probó y qué falló al probarlo contra el motor real".
-- `informes/informe_funcionalidades_actuales.docx` — inventario por área
-  funcional, clasificado en implementado completo / parcial / solo planteado
-  en código. El más propenso a quedar desfasado; contrástalo contra el código
-  antes de fiarte de él a ciegas si ha pasado tiempo desde su última revisión.
+**Retirados los 6 informes `.docx` de `informes/` (2026-09-17)**: existieron
+como capa de "profundidad técnica" separada de este documento desde la
+migración original, pero llevaban desde el 2026-09-10 sin tocarse mientras
+se cerraban de verdad varios arcos grandes (estabilidad de población,
+construcción social completa, todo el pivote de capa visual, renombrado
+`BOSQUE_*→SIMULACION_*`, servidor de control remoto) — 7 días de desfase
+frente a un ritmo de cambio real muy alto. Auditado antes de retirarlos, no
+solo por fecha: `informe_funcionalidades_actuales.docx` no estaba
+simplemente desactualizado, estaba activamente equivocado — dedicaba una
+sección entera al Códice Cartográfico como sistema de presentación vigente
+(retirado por completo ese mismo 2026-09-16), citaba `BOSQUE_CONTINUAR`/
+`BOSQUE_AUTO_TICKS`/`BOSQUE_MODO_VISUAL`/`datos/bosque.db` (renombrados a
+`SIMULACION_*`/`datos/simulacion.db` el mismo día), reportaba "3 archivos
+con 22 tests" frente a los 76/675 reales, y no mencionaba en absoluto el
+arco completo de "asentamiento como entidad propia". El resto de informes
+no se auditó con el mismo nivel de detalle antes de retirarlos junto con
+el que sí se verificó mal, a petición explícita de Diego. Las 3 fichas PDF
+de `informes/` (`ficha_gnomo.pdf`, `ficha_lobo.pdf`,
+`ficha_criatura_vacia.pdf`) se conservan — no son informes narrativos sobre
+el estado del sistema y no se auditaron por el mismo motivo. Nada de su
+contenido se migró a ningún historial antes de borrarlos: a diferencia de
+la poda de `docs/historial_*.md` (que preserva texto palabra por palabra),
+aquí se decidió que un informe demostrablemente incorrecto no merecía
+conservarse ni archivado.
+
 - `docs/historial_capa_visual.md` — historial archivado de la primera
   exploración de arte real (24 a 26-08-2026, PyxelSpace → Urizen → Mini
   Medieval → retirada de orillas), movido aquí el 2026-09-02 por tamaño
