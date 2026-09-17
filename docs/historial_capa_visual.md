@@ -1764,3 +1764,102 @@ honesto que deja esta retirada: las 4 especies de cobertura SIN sprite
 señal visual de etapa de crecimiento -- no había un tamaño que variar
 en un glifo de textura que ya ocupa la celda completa por diseño, y
 Diego no distinguió sprite de glifo al pedir quitar la opacidad.
+
+### Noveno círculo, mismo día -- de reparto en columnas a superposición con profundidad
+
+Diego, el mismo día del reparto proporcional de cuadrantes de arriba:
+"quedaría mejor si se pudiesen solapar, por ejemplo el refugio y que el
+pino crezca por detrás, le daría una sensación de más profundidad al
+mapa" -- tercer diseño distinto para "qué pasa visualmente cuando 2+
+elementos reales comparten una celda", después del grid 2x2 fijo
+original y del reparto proporcional en columnas de arriba (que no
+llegó ni a un día completo de vida).
+
+**Mecanismo nuevo**: se sustituye por completo `crearCeldaCuadrantes()`
+(y toda su CSS asociada -- `.celda-cuadrantes`/`.cuadrante`/
+`.construccion-img-cuadrante`, retiradas del todo, no dejadas muertas)
+por `crearElementosCompartidos()`. `pesoItem()` se reutiliza tal cual
+(mismo dato, huella_m2 real vía `ORDEN_HUELLA_CONSTRUCCION`/
+`HUELLA_FLORA_M2`, `HUELLA_REFERENCIA_FLORA_M2` para cobertura) pero
+cambia de PROPÓSITO: ya no reparte el ancho de la celda, solo decide
+el ORDEN de profundidad. El item de mayor peso (el "principal") se
+dibuja a su tamaño NORMAL -- exactamente el mismo que si estuviera
+solo en la celda, vía la misma `tamanoItem()` ya existente. Los demás
+("secundarios") se dibujan un 18% más pequeños (`factor=0.82` sobre su
+PROPIO tamaño nativo, ver matiz importante más abajo), desplazados
+hacia arriba dentro de la celda (`offsetVertical = CELDA*(0.22+0.08*i)`,
+más desplazamiento cuantos más secundarios haya, para separarlos entre
+sí en el caso raro de 3-4 items) y con un z-index un punto por debajo
+del que le correspondería por `zIndexPorFila()` -- quedan detrás del
+principal, no flotando delante. Jitter horizontal por índice
+(`indiceJitter = (i+1)*37` para secundarios, `0` para el principal,
+reutilizando `jitterPx`/`hashDet` ya existente) para que dos sprites no
+queden apilados en la misma X exacta. `crearElementosCompartidos()`
+devuelve una LISTA de elementos (un fondo compartido + uno por item),
+no un único contenedor -- `renderMapa()` los añade todos y hace
+`continue` a la siguiente celda.
+
+**Matiz real encontrado al verificar, no asumido**: el factor 0.82 se
+aplica sobre el tamaño NATIVO de cada item, calculado con su propia
+escala de referencia (`tamanoSpriteConstruccion` y `tamanoSpriteFlora`
+usan rangos min/max y exponentes de compresión DISTINTOS y
+deliberadamente independientes, ver el comentario de
+`tamanoSpriteConstruccion` -- no comparten unidad ni punto de anclaje).
+Verificado con almacén(construcción, peso 40)+pino(flora, peso 4.5) en
+una celda sintética aislada: pino (secundario) sale a 79.17px, almacén
+(principal) a 83.81px -- una proporción real de 0.94, NO de 0.82,
+porque el tamaño NATIVO sin comprimir del pino (≈96.5px, antes del
+factor) ya es mayor que el tamaño final del almacén en su propia
+escala. El 0.82 es "un 18% más pequeño que si este item estuviera
+solo", nunca "un 18% del tamaño del principal" -- correcto por diseño
+(cada categoría de sprite mantiene su propia escala de referencia,
+decisión de un círculo anterior), pero vale la pena dejarlo explícito
+para no sorprenderse si dos items de categorías distintas no guardan la
+proporción 0.82:1 esperada a simple vista.
+
+**Incidente real durante la verificación, con hallazgo útil sobre la
+metodología de test, no sobre el motor**: la primera ronda de capturas
+sintéticas (mapa de 3 celdas con almacén+pino en una y
+helecho+hierba_silvestre en otra) produjo una imagen ambigua para la
+celda de cobertura -- una columna de lo que parecían pequeños
+rectángulos verdes discontinuos, sin relación aparente con dos plantas
+solapadas. Investigado a fondo antes de concluir nada: la inyección de
+datos sintéticos vía Playwright usaba `page.evaluate('(mini) => {
+window.DATA = mini; ... }')` -- pero `DATA` está declarado como `let
+DATA = window.__DATOS__ || null;` en el nivel superior del `<script>`
+de `terminal.html`. Un `let` de nivel superior en un script clásico NO
+crea una propiedad en `window` (a diferencia de `var`) -- así que
+`window.DATA = mini` creaba una propiedad nueva y completamente
+desconectada de la variable `DATA` real que usan `renderMapa()`/
+`recalcularDerivados()`, dejando el mapa REAL (cargado de `datos.js` al
+abrir la página) sin sustituir. Lo que la captura mostraba no era un
+bug de solapamiento: era contenido real del mapa de 40x40 completo,
+en una celda real lejana coincidiendo por casualidad con el recorte de
+zoom/pan elegido. Corregido usando la forma que ya habían usado
+círculos anteriores de esta misma sesión y que sí funciona
+(`DATA = mini`, sin `window.`, que sí resuelve al binding léxico
+correcto por ejecutarse en el entorno global de la página) -- con eso,
+una captura aislada y ampliada (zoom=20, una sola celda con SOLO
+helecho+hierba_silvestre) confirma sin ambigüedad dos sprites de planta
+reales y distintos, superpuestos con el helecho detrás/más pequeño y
+la hierba delante/a tamaño completo (desempate de peso nominal
+idéntico resuelto por `Array.sort` estable, que conserva el orden
+original del array -- hierba_silvestre, al ir segunda en `c.plantas`,
+gana el desempate como "principal").
+
+**Caso almacén+pino, verificado por separado con zoom/pan que no
+recortara la parte superior de la celda**: el pino aparece como una
+pequeña copa verde triangular asomando sobre el tejado de musgo del
+almacén -- el efecto de profundidad pedido por Diego ("que el pino
+crezca por detrás") se observa real, aunque bastante sutil (el almacén,
+con huella_m2 muchísimo mayor, ocupa casi todo el encuadre). No se ha
+pedido confirmación explícita de Diego sobre si este grado de
+ocultación es el deseado o si preferiría que el elemento secundario
+asomara más -- queda como ajuste fino pendiente de su criterio, no
+como algo ya cerrado, si al verlo en el visor real le resulta
+demasiado sutil.
+
+Verificado: 675/675 tests (suite sin tocar, cambio acotado a
+presentación); sin contaminación de `datos.js`/`datos.json` (las
+verificaciones usaron objetos `DATA` sintéticos inyectados en memoria
+vía Playwright, nunca `generar_datos.py`).

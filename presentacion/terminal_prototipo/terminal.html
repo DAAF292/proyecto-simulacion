@@ -129,28 +129,24 @@
     image-rendering: pixelated;
     width: auto;
   }
-  /* Dentro de un cuadrante del mosaico 2x2 (celda compartida con otro
-     elemento real) el propio flex del cuadrante ya centra -- se anula el
-     posicionamiento absoluto para no salirse de su cuarto de celda. */
-  .construccion-img-cuadrante {
-    position: static;
-    transform: none;
-  }
-  /* Mosaico 2x2 (subdivision puramente visual, ver itemsCelda en el
-     script) -- misma celda de 100m2 del motor, hasta 4 elementos reales
-     distintos repartidos en cuadrantes en vez de colapsados a uno solo. */
-  .celda-cuadrantes {
-    position: absolute; display: grid;
-    grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
-  }
-  .cuadrante {
-    display: flex; align-items: center; justify-content: center;
-    font-family: inherit; font-weight: normal; overflow: hidden;
+  /* Sprite compartido (2026-09-17, Diego: "quedaria mejor si se
+     pudiesen solapar, por ejemplo el refugio y que el pino crezca por
+     detras, le daria sensacion de mas profundidad") -- sustituye al
+     mosaico de cuadrantes (grid 2x2/columnas proporcionales) que vivio
+     aqui hasta este circulo: en vez de partir la celda en fracciones
+     fijas, cada elemento que comparte celda se dibuja con ancla
+     inferior-centro real (igual contrato que .criatura-img, sin
+     transform fijo -- se compone en JS con el offset vertical de
+     profundidad, ver crearImgCompartida) y se superponen con distinto
+     z-index. */
+  .sprite-compartido {
+    position: absolute;
+    image-rendering: pixelated;
+    width: auto;
   }
   /* Badge de recurso en el suelo (2026-09-16, ver añadirBadges/itemsCelda)
      -- esquina superior-derecha, pequeño y fijo, nunca compite por el
-     espacio del elemento principal de la celda (a diferencia del mosaico
-     de cuadrantes que sustituyo para este caso). */
+     espacio de ningun elemento real de la celda. */
   .badge-recurso {
     position: absolute; right: 1px;
     font-family: inherit; font-weight: normal;
@@ -1023,95 +1019,99 @@ function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
   return cont;
 }
 
-// Peso real de un item para el reparto proporcional del mosaico (ver
-// crearCeldaCuadrantes) -- 2026-09-16, Diego: "si un arbol ocupa el 75%
-// de la celda y un helecho el 25%, lo logico es que el sprite del arbol
-// ocupe 3 subceldas y el helecho 1, no?". Reutiliza huella_m2 real donde
-// existe (construccion/arbol/arbusto, mismo dato que ya decide el
-// tamaño a celda completa) -- cobertura y cualquier otro item sin
-// huella_m2 real recibe el peso nominal minimo (HUELLA_REFERENCIA_
-// FLORA_M2), no un numero inventado aparte.
+// Peso real de un item, para decidir el ORDEN de profundidad cuando 2+
+// comparten celda (ver crearElementosCompartidos) -- 2026-09-16/17,
+// historial real en dos circulos: primero se uso para repartir la celda
+// en columnas proporcionales (grid), descartado el 17 (ver mas abajo) a
+// favor de superposicion real. Reutiliza huella_m2 donde existe
+// (construccion/arbol/arbusto, mismo dato que ya decide el tamaño a
+// celda completa) -- cobertura y cualquier otro item sin huella_m2 real
+// recibe el peso nominal minimo (HUELLA_REFERENCIA_FLORA_M2), no un
+// numero inventado aparte.
 function pesoItem(item) {
   if (item.tipoConstruccion) return ORDEN_HUELLA_CONSTRUCCION[item.tipoConstruccion] || HUELLA_REFERENCIA_FLORA_M2;
   if (item.especieFlora) return HUELLA_FLORA_M2[item.especieFlora] || HUELLA_REFERENCIA_FLORA_M2;
   return HUELLA_REFERENCIA_FLORA_M2;
 }
 
-// Mosaico -- solo se usa cuando itemsCelda() devuelve 2 o mas items
-// reales (ver su comentario mas arriba); con 0 o 1 item, crearCeldaTxt
-// sigue dibujando un glifo a tamaño completo, la representacion mas
-// legible para el caso mas comun (suelo desnudo, un unico landmark).
-//
-// REPARTO PROPORCIONAL (2026-09-16, Diego: "si un arbol ocupa el 75% de
-// la celda y un helecho el 25%, lo logico es que el sprite del arbol
-// ocupe 3 subceldas y el helecho 1, no?"). El mosaico anterior daba a
-// CUALQUIER item exactamente 1/4 de la celda, sin relacion con su
-// tamaño real -- con 2 items (el caso dominante con diferencia, tras el
-// fix de badges: casi siempre construccion+flora compitiendo por
-// espacio, o dos coberturas compartiendo celda sin competidora) se
-// reparten ahora 4 "unidades" de columna proporcionalmente al peso real
-// de cada uno (pesoItem, huella_m2 donde existe), redondeadas a un
-// entero de 1 a 3 para que ninguno desaparezca ni se coma toda la
-// celda -- 3+1 para el ejemplo exacto de Diego (arbol huella=5 muy por
-// encima de helecho, peso nominal minimo). El sprite escala con el
-// ANCHO real de su columna, no un tamaño fijo como antes. Con 3 o 4
-// items (caso raro, sin cambios de esta ronda) se mantiene el grid 2x2
-// igualitario -- un reparto proporcional preciso con mas de 2 pesos
-// arbitrarios exigiria un layout bidimensional bastante mas complejo
-// para un caso que apenas se observa en juego libre.
-function crearCeldaCuadrantes(items, cx, cy, fondo) {
-  const cont = document.createElement('div');
-  cont.className = 'celda-cuadrantes';
-  cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
-  cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
-  if (fondo) cont.style.backgroundColor = fondo;
-  const fontSize = Math.round(CELDA * 0.42);
+// capa/tamaño reales de un item generico (construccion/flora/cobertura)
+// -- extraidos de renderMapa() para reutilizarlos tanto en el caso de un
+// solo item como en el de varios compartiendo celda.
+function capaItem(item) {
+  return item.tipoConstruccion ? 'construccion' : 'flora';
+}
+function tamanoItem(item, x, y) {
+  if (item.tipoConstruccion) return tamanoSpriteConstruccion(item.tipoConstruccion);
+  if (item.especieFlora) return tamanoSpriteFlora(item.especieFlora, item.etapaCrecimiento, x, y);
+  if (item.especieCobertura) return tamanoSpriteCobertura(item.etapaCrecimiento, x, y);
+  return null; // glifo simple sin sprite (p.ej. cobertura sin arte)
+}
 
-  let columnas; // fracciones "de 4" por celda del grid, en el orden de `items`
-  if (items.length === 2) {
-    const [w1, w2] = [pesoItem(items[0]), pesoItem(items[1])];
-    const n1 = Math.max(1, Math.min(3, Math.round((w1 / (w1 + w2)) * 4)));
-    columnas = [n1, 4 - n1];
-    cont.style.gridTemplateColumns = columnas.map(n => n + 'fr').join(' ');
-    cont.style.gridTemplateRows = '1fr';
-  } else {
-    columnas = [1, 1, 1, 1]; // grid 2x2 igualitario de siempre
-    cont.style.gridTemplateColumns = '1fr 1fr';
-    cont.style.gridTemplateRows = '1fr 1fr';
-  }
+// Sprite de un item que comparte celda con otro(s) -- mismo contrato de
+// ancla (inferior-centro, ver .sprite-compartido) que crearCeldaImgEstatica,
+// pero con jitter horizontal DISTINTO por indice (para no apilar dos
+// sprites exactamente en la misma X) y un offset vertical opcional que
+// simula profundidad (ver crearElementosCompartidos).
+function crearImgCompartida(src, cx, cy, tamano, indiceJitter, offsetVerticalPx) {
+  const img = document.createElement('img');
+  img.className = 'sprite-compartido';
+  img.src = src;
+  img.style.height = tamano + 'px';
+  const jx = jitterPx(cx / CELDA, cy / CELDA + indiceJitter * 37);
+  img.style.left = (cx + CELDA / 2 + jx) + 'px';
+  img.style.top = (cy + CELDA - offsetVerticalPx) + 'px';
+  img.style.transform = 'translate(-50%, -100%)';
+  return img;
+}
 
-  for (let i = 0; i < columnas.length; i++) {
-    const cuad = document.createElement('div');
-    cuad.className = 'cuadrante';
-    const item = items[i];
-    if (item && item.img) {
-      // Construccion O flora (arbol/arbusto, 2026-09-16) compartiendo
-      // celda con otro elemento real -- el sprite se reduce al tamaño
-      // del propio cuadrante en vez de al de celda completa
-      // (tamanoSpriteConstruccion/tamanoSpriteFlora asumen celda
-      // completa), para no desbordar sobre los demas. Con reparto
-      // proporcional (2 items), la altura escala con el ANCHO real de
-      // la columna (columnas[i]/4 de CELDA) en vez del 0.42 fijo de
-      // antes -- un cuadrante de 3/4 ya puede mostrar un sprite bastante
-      // mayor que uno de 1/4.
-      const fraccion = columnas[i] / 4;
-      // Piso de 0.20 (no 0 ni la propia fraccion sin mas) solo para que
-      // un cuadrante de 1/4 no quede ilegiblemente diminuto -- SIN techo
-      // artificial: un cuadrante de 3/4 SI debe verse notablemente mayor
-      // que el 0.42 fijo que usaban todos por igual antes de este cambio.
-      const img = document.createElement('img');
-      img.className = 'construccion-img construccion-img-cuadrante';
-      img.src = item.img;
-      img.style.height = Math.round(CELDA * Math.max(fraccion, 0.20) * 0.95) + 'px';
-      cuad.appendChild(img);
-    } else if (item) {
-      cuad.textContent = item.ch;
-      cuad.style.color = item.color;
-      cuad.style.fontSize = fontSize + 'px';
+function crearFondoCelda(cx, cy, fondo) {
+  const div = document.createElement('div');
+  div.className = 'celda-txt';
+  div.style.width = CELDA + 'px'; div.style.height = CELDA + 'px';
+  div.style.left = cx + 'px'; div.style.top = cy + 'px';
+  if (fondo) div.style.backgroundColor = fondo;
+  return div;
+}
+
+// SUPERPOSICION CON PROFUNDIDAD (2026-09-17, Diego: "quedaria mejor si
+// se pudiesen solapar, por ejemplo el refugio y que el pino crezca por
+// detras, le daria sensacion de mas profundidad al mapa") -- sustituye
+// por completo al mosaico de columnas/grid del circulo anterior (ver
+// docs/historial_capa_visual.md para el porque de aquel diseño y de
+// esta correccion). Antes, CUALQUIER par de items compartiendo celda se
+// repartia el espacio (proporcional a huella_m2, pero siempre partiendo
+// la celda) -- ahora el elemento de MAYOR peso real (pesoItem) se dibuja
+// a su tamaño NORMAL, exactamente igual que si estuviera solo en la
+// celda; los demas (menor peso) se dibujan DETRAS (z-index menor), algo
+// mas pequeños y desplazados hacia arriba dentro de la propia celda
+// (mas "lejos" de la camara) -- el pino creciendo detras del refugio del
+// ejemplo de Diego, no partido en un cuadrante igual de chico que el
+// refugio. Devuelve una LISTA de elementos (uno por item + uno de fondo
+// compartido), no un unico contenedor -- renderMapa() los añade todos.
+function crearElementosCompartidos(items, cx, cy, fondo, x, y) {
+  const elementos = [crearFondoCelda(cx, cy, fondo)];
+  const ordenados = [...items].sort((a, b) => pesoItem(a) - pesoItem(b));
+  ordenados.forEach((item, i) => {
+    const esPrincipal = i === ordenados.length - 1;
+    const tam = tamanoItem(item, x, y);
+    let el;
+    if (tam != null) {
+      // Secundarios: ~18% mas pequeños y desplazados hacia arriba (mas
+      // desplazamiento cuantos mas secundarios haya, para separarlos
+      // entre si en el caso raro de 3-4 items) -- el principal usa
+      // exactamente el mismo tamaño/offset que si estuviera solo.
+      const factor = esPrincipal ? 1 : 0.82;
+      const offsetVertical = esPrincipal ? 0 : CELDA * (0.22 + 0.08 * i);
+      el = crearImgCompartida(item.img, cx, cy, tam * factor, esPrincipal ? 0 : (i + 1) * 37, offsetVertical);
+    } else {
+      // Glifo simple sin sprite (cobertura sin arte, p.ej.) compartiendo
+      // celda -- sin offset de profundidad, caso raro sin refinar mas.
+      el = crearCeldaTxt(item.ch, item.color, cx, cy);
     }
-    cont.appendChild(cuad);
-  }
-  return cont;
+    el.style.zIndex = String(zIndexPorFila(y, capaItem(item)) + (esPrincipal ? 0 : -1));
+    elementos.push(el);
+  });
+  return elementos;
 }
 
 // Profundidad UNIFICADA por fila (2026-09-16, Diego: "los assets deberian
@@ -1170,14 +1170,24 @@ function renderMapa() {
       // ADYACENTES en la misma fila exacta podrian seguir solapandose
       // entre si por el mismo mecanismo de desempate por orden de
       // insercion -- no observado en juego libre.
+      if (info.items.length > 1) {
+        // 2+ items reales compartiendo celda -- superpuestos con
+        // profundidad (ver crearElementosCompartidos), no repartidos en
+        // un mosaico. Devuelve [fondo, ...sprites], el fondo ya en el
+        // indice 0 es donde cuelgan los badges (unico elemento comun a
+        // toda la celda compartida).
+        const elementos = crearElementosCompartidos(info.items, cx, cy, info.fondo, x, y);
+        elementos[0].style.zIndex = String(zIndexPorFila(y, 'terreno'));
+        añadirBadges(elementos[0], info.badges);
+        elementos.forEach(el => capaEstatica.appendChild(el));
+        continue;
+      }
       const unico = info.items[0] || {};
       const esConstruccionUnica = !!unico.tipoConstruccion;
       const esFloraUnica = !esConstruccionUnica && !!unico.especieFlora;
       const esCoberturaUnica = !esConstruccionUnica && !esFloraUnica && !!unico.especieCobertura;
       let el;
-      if (info.items.length > 1) {
-        el = crearCeldaCuadrantes(info.items, cx, cy, info.fondo);
-      } else if (esConstruccionUnica) {
+      if (esConstruccionUnica) {
         el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion));
       } else if (esFloraUnica) {
         el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora, unico.etapaCrecimiento, x, y));

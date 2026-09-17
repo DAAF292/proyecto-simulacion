@@ -675,6 +675,30 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   honesto que deja: las 4 especies de cobertura sin sprite pierden toda
   señal visual de crecimiento, sin sustituto (no hay un tamaño que
   variar en un glifo de textura a celda completa).
+  **CORREGIDO el mismo día, círculo siguiente (Diego: "quedaría mejor
+  si se pudiesen solapar, por ejemplo el refugio y que el pino crezca
+  por detrás, le daría sensación de más profundidad al mapa")**: el
+  reparto proporcional en columnas de arriba no llegó a un día completo
+  de vida — sustituido por completo por superposición con profundidad,
+  ver `docs/historial_capa_visual.md` para el detalle completo.
+  `pesoItem()` cambia de propósito (ya no reparte ancho, solo ordena
+  profundidad): el item de mayor peso se dibuja a tamaño NORMAL (igual
+  que si estuviera solo), los demás un 18% más pequeños que su PROPIO
+  tamaño nativo (no un 18% del tamaño del principal — construcción y
+  flora usan escalas de referencia independientes, así que la
+  proporción visible entre dos categorías distintas no es
+  necesariamente 0.82:1, verificado real con almacén+pino → 0.94:1),
+  desplazados hacia arriba dentro de la celda y con z-index un punto
+  por debajo del principal. Verificado con capturas sintéticas
+  aisladas tras encontrar y corregir un bug real en el propio arnés de
+  test (no en el motor): `window.DATA = mini` no sustituye el `DATA`
+  real (`let DATA` de nivel superior no cuelga de `window`) — con la
+  forma correcta (`DATA = mini`, sin prefijo), almacén+pino muestra la
+  copa del pino asomando tras el tejado (efecto real, aunque sutil —
+  sin confirmar con Diego si prefiere que asome más) y helecho+hierba
+  silvestre (mismo peso nominal, empate resuelto por orden estable de
+  array) se ven como dos plantas distintas y reconocibles, una detrás/
+  más pequeña de la otra. 675/675 tests.
 - **Renombrado `BOSQUE_* -> SIMULACION_*` (2026-09-16)**: Diego, sobre la
   spec de abajo: "lo de que aparezca bosque en todos los comandos de
   test... deberíamos cambiarlo por simulación, que es lo que es, ya no
