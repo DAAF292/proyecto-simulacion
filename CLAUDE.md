@@ -655,6 +655,26 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   (relleno visual puro, mismo `hashDet` con sal propia, ±15%
   determinista por celda, porque el motor no modela variación de tamaño
   máximo entre plantas maduras).
+  **Añadido justo después, mismo día (2026-09-17 al escribir esto,
+  círculo iniciado el día anterior)**: Diego preguntó cómo funciona el
+  mosaico de cuadrantes, proponiendo reparto proporcional ("si un árbol
+  ocupa el 75% de la celda y un helecho el 25%, el sprite del árbol
+  debería ocupar 3 subceldas y el helecho 1") — aclarado primero que ese
+  ejemplo concreto no llegaba al mosaico (competidora+cobertura se
+  resuelve tiñendo el fondo, no como cuadrante compartido). Implementado
+  para el caso que sí ocurre (2 items reales, el dominante tras el fix
+  de badges): `pesoItem()` reutiliza `huella_m2` real donde existe,
+  reparto de `grid-template-columns` proporcional redondeado a 1-3,
+  sprite escalado al ancho real de su columna en vez de un tamaño fijo
+  igual para todos. Verificado con un mapa sintético aislado + medición
+  directa del DOM: almacén+pino → `"3fr 1fr"`, 23px/8px de altura real
+  (3:1 exacto). Con 3-4 items (raro) se mantiene el grid 2x2 igualitario
+  de siempre. Diego también pidió quitar la opacidad decreciente por
+  edad ("eso no tiene sentido") — retirada por completo (no solo fijada
+  a 1): ya redundante desde que el tamaño refleja la etapa real. Hueco
+  honesto que deja: las 4 especies de cobertura sin sprite pierden toda
+  señal visual de crecimiento, sin sustituto (no hay un tamaño que
+  variar en un glifo de textura a celda completa).
 - **Renombrado `BOSQUE_* -> SIMULACION_*` (2026-09-16)**: Diego, sobre la
   spec de abajo: "lo de que aparezca bosque en todos los comandos de
   test... deberíamos cambiarlo por simulación, que es lo que es, ya no

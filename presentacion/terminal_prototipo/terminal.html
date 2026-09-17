@@ -669,13 +669,14 @@ function itemsCelda(c) {
     });
     if (competidora) {
       const g = CATALOGO_GLIFOS.flora[competidora.especie];
-      // Etapa de crecimiento real (Planta.etapa 0..1) -> opacidad: un
-      // brote se ve tenue, una planta madura llena de color. Mismo alfa
-      // reutilizado como opacity del <img> cuando la especie tiene sprite
-      // (ver crearCeldaImgEstatica) -- no hay arte diferenciado por etapa,
-      // pero la opacidad ya transmite la misma idea sin inventar variantes.
-      const alfa = 0.5 + Math.min(1, competidora.etapa ?? 1) * 0.5;
-      items.push({ ch: g.ch, color: hexARgba(g.color, alfa), img: g.img || null, especieFlora: competidora.especie, alfaSprite: alfa, etapaCrecimiento: competidora.etapa ?? 1 });
+      // Etapa de crecimiento real (Planta.etapa 0..1) -> TAMAÑO (ver
+      // factorCrecimiento en tamanoSpriteFlora), no opacidad. CORREGIDO
+      // 2026-09-16 (Diego: "lo de la opacidad cuando es mas joven
+      // quitalo, eso no tiene sentido") -- una planta joven es mas
+      // PEQUEÑA, no mas transparente; la opacidad decreciente por etapa
+      // ya quedo redundante/incorrecta en cuanto el tamaño empezo a
+      // reflejar la etapa real (circulo anterior), retirada por completo.
+      items.push({ ch: g.ch, color: g.color, img: g.img || null, especieFlora: competidora.especie, etapaCrecimiento: competidora.etapa ?? 1 });
       if (coberturas.length > 0) {
         fondoColor = CATALOGO_GLIFOS.flora[coberturas[0].especie].color;
         fondoAlfa = 0.4;
@@ -687,17 +688,22 @@ function itemsCelda(c) {
       coberturas.forEach((cob, i) => {
         const g = CATALOGO_GLIFOS.flora[cob.especie];
         if (!g) return;
-        const alfa = 0.55 + Math.min(1, cob.etapa ?? 1) * 0.45;
+        // Etapa -> TAMAÑO cuando hay sprite (tamanoSpriteCobertura), ya
+        // no opacidad (ver comentario junto a competidora mas arriba).
+        // Las 4 especies de cobertura SIN sprite (liquen/musgo/hierba_
+        // desertica/hierba_artica) se quedan sin ninguna señal visual de
+        // etapa -- honesto: no hay un tamaño que variar en un glifo de
+        // textura que ya ocupa la celda completa por diseño.
         if (g.img) {
           // Cobertura CON sprite (2026-09-16: hierba/flor_silvestre/
           // helecho) -- especieCobertura distingue este caso de
           // especieFlora (arbol/arbusto) en renderMapa, porque el tamaño
           // se calcula distinto (tamanoSpriteCobertura, fijo, sin
           // huella_m2 real para esta categoria).
-          items.push({ ch: g.ch, color: g.color, img: g.img, especieCobertura: cob.especie, alfaSprite: alfa, etapaCrecimiento: cob.etapa ?? 1 });
+          items.push({ ch: g.ch, color: g.color, img: g.img, especieCobertura: cob.especie, etapaCrecimiento: cob.etapa ?? 1 });
         } else {
           const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
-          items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3, alfa) });
+          items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3) });
         }
       });
     }
@@ -995,7 +1001,7 @@ function añadirBadges(el, badges) {
 // ya calculaba itemsCelda); el <img> se ancla abajo-centro dentro de el,
 // igual que .criatura-img, escalado por huella_m2 real
 // (tamanoSpriteConstruccion) en vez de un tamaño fijo.
-function crearCeldaImgEstatica(src, cx, cy, fondo, tamano, opacidad) {
+function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
   const cont = document.createElement('div');
   cont.className = 'celda-txt';
   cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
@@ -1013,15 +1019,46 @@ function crearCeldaImgEstatica(src, cx, cy, fondo, tamano, opacidad) {
   // real (cx/cy son x*CELDA/y*CELDA exactos, ver celdaAPantalla), estable
   // entre refrescos: el mismo arbol no "salta" de sitio en cada sondeo.
   img.style.left = `calc(50% + ${jitterPx(cx / CELDA, cy / CELDA)}px)`;
-  if (opacidad != null) img.style.opacity = String(opacidad);
   cont.appendChild(img);
   return cont;
 }
 
-// Mosaico 2x2 -- solo se usa cuando itemsCelda() devuelve 2 o mas items
+// Peso real de un item para el reparto proporcional del mosaico (ver
+// crearCeldaCuadrantes) -- 2026-09-16, Diego: "si un arbol ocupa el 75%
+// de la celda y un helecho el 25%, lo logico es que el sprite del arbol
+// ocupe 3 subceldas y el helecho 1, no?". Reutiliza huella_m2 real donde
+// existe (construccion/arbol/arbusto, mismo dato que ya decide el
+// tamaño a celda completa) -- cobertura y cualquier otro item sin
+// huella_m2 real recibe el peso nominal minimo (HUELLA_REFERENCIA_
+// FLORA_M2), no un numero inventado aparte.
+function pesoItem(item) {
+  if (item.tipoConstruccion) return ORDEN_HUELLA_CONSTRUCCION[item.tipoConstruccion] || HUELLA_REFERENCIA_FLORA_M2;
+  if (item.especieFlora) return HUELLA_FLORA_M2[item.especieFlora] || HUELLA_REFERENCIA_FLORA_M2;
+  return HUELLA_REFERENCIA_FLORA_M2;
+}
+
+// Mosaico -- solo se usa cuando itemsCelda() devuelve 2 o mas items
 // reales (ver su comentario mas arriba); con 0 o 1 item, crearCeldaTxt
 // sigue dibujando un glifo a tamaño completo, la representacion mas
 // legible para el caso mas comun (suelo desnudo, un unico landmark).
+//
+// REPARTO PROPORCIONAL (2026-09-16, Diego: "si un arbol ocupa el 75% de
+// la celda y un helecho el 25%, lo logico es que el sprite del arbol
+// ocupe 3 subceldas y el helecho 1, no?"). El mosaico anterior daba a
+// CUALQUIER item exactamente 1/4 de la celda, sin relacion con su
+// tamaño real -- con 2 items (el caso dominante con diferencia, tras el
+// fix de badges: casi siempre construccion+flora compitiendo por
+// espacio, o dos coberturas compartiendo celda sin competidora) se
+// reparten ahora 4 "unidades" de columna proporcionalmente al peso real
+// de cada uno (pesoItem, huella_m2 donde existe), redondeadas a un
+// entero de 1 a 3 para que ninguno desaparezca ni se coma toda la
+// celda -- 3+1 para el ejemplo exacto de Diego (arbol huella=5 muy por
+// encima de helecho, peso nominal minimo). El sprite escala con el
+// ANCHO real de su columna, no un tamaño fijo como antes. Con 3 o 4
+// items (caso raro, sin cambios de esta ronda) se mantiene el grid 2x2
+// igualitario -- un reparto proporcional preciso con mas de 2 pesos
+// arbitrarios exigiria un layout bidimensional bastante mas complejo
+// para un caso que apenas se observa en juego libre.
 function crearCeldaCuadrantes(items, cx, cy, fondo) {
   const cont = document.createElement('div');
   cont.className = 'celda-cuadrantes';
@@ -1029,23 +1066,43 @@ function crearCeldaCuadrantes(items, cx, cy, fondo) {
   cont.style.left = cx + 'px'; cont.style.top = cy + 'px';
   if (fondo) cont.style.backgroundColor = fondo;
   const fontSize = Math.round(CELDA * 0.42);
-  for (let i = 0; i < 4; i++) {
+
+  let columnas; // fracciones "de 4" por celda del grid, en el orden de `items`
+  if (items.length === 2) {
+    const [w1, w2] = [pesoItem(items[0]), pesoItem(items[1])];
+    const n1 = Math.max(1, Math.min(3, Math.round((w1 / (w1 + w2)) * 4)));
+    columnas = [n1, 4 - n1];
+    cont.style.gridTemplateColumns = columnas.map(n => n + 'fr').join(' ');
+    cont.style.gridTemplateRows = '1fr';
+  } else {
+    columnas = [1, 1, 1, 1]; // grid 2x2 igualitario de siempre
+    cont.style.gridTemplateColumns = '1fr 1fr';
+    cont.style.gridTemplateRows = '1fr 1fr';
+  }
+
+  for (let i = 0; i < columnas.length; i++) {
     const cuad = document.createElement('div');
     cuad.className = 'cuadrante';
     const item = items[i];
     if (item && item.img) {
       // Construccion O flora (arbol/arbusto, 2026-09-16) compartiendo
-      // celda con otro elemento real (recurso, planta) -- caso raro pero
-      // posible dentro del presupuesto de huella_m2 del motor. Generico a
-      // proposito (solo mira item.img, no el tipo): el sprite se reduce al
-      // tamaño del propio cuadrante en vez de al de celda completa
-      // (tamanoSpriteConstruccion/tamanoSpriteFlora asumen celda completa),
-      // para no desbordar sobre los demas.
+      // celda con otro elemento real -- el sprite se reduce al tamaño
+      // del propio cuadrante en vez de al de celda completa
+      // (tamanoSpriteConstruccion/tamanoSpriteFlora asumen celda
+      // completa), para no desbordar sobre los demas. Con reparto
+      // proporcional (2 items), la altura escala con el ANCHO real de
+      // la columna (columnas[i]/4 de CELDA) en vez del 0.42 fijo de
+      // antes -- un cuadrante de 3/4 ya puede mostrar un sprite bastante
+      // mayor que uno de 1/4.
+      const fraccion = columnas[i] / 4;
+      // Piso de 0.20 (no 0 ni la propia fraccion sin mas) solo para que
+      // un cuadrante de 1/4 no quede ilegiblemente diminuto -- SIN techo
+      // artificial: un cuadrante de 3/4 SI debe verse notablemente mayor
+      // que el 0.42 fijo que usaban todos por igual antes de este cambio.
       const img = document.createElement('img');
       img.className = 'construccion-img construccion-img-cuadrante';
       img.src = item.img;
-      img.style.height = Math.round(CELDA * 0.42) + 'px';
-      if (item.alfaSprite != null) img.style.opacity = String(item.alfaSprite);
+      img.style.height = Math.round(CELDA * Math.max(fraccion, 0.20) * 0.95) + 'px';
       cuad.appendChild(img);
     } else if (item) {
       cuad.textContent = item.ch;
@@ -1123,9 +1180,9 @@ function renderMapa() {
       } else if (esConstruccionUnica) {
         el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion));
       } else if (esFloraUnica) {
-        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora, unico.etapaCrecimiento, x, y), unico.alfaSprite);
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora, unico.etapaCrecimiento, x, y));
       } else if (esCoberturaUnica) {
-        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(unico.etapaCrecimiento, x, y), unico.alfaSprite);
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(unico.etapaCrecimiento, x, y));
       } else {
         el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
       }

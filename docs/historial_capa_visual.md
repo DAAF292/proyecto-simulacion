@@ -1699,3 +1699,68 @@ esta variación (caso ya minoritario tras el fix de badges). Pendiente
 real distinto, explícitamente sin resolver: la animación real de
 "zancada" al caminar que preguntó Diego -- no implementada, ofrecida
 pero no confirmada.
+
+### Octavo círculo, mismo día -- reparto proporcional de cuadrantes, quitar opacidad por edad
+
+Dos pedidos de Diego: cómo funciona el mosaico de cuadrantes, con una
+propuesta concreta ("si un árbol ocupa el 75% de la celda y un helecho
+el 25%, lo lógico es que el sprite del árbol ocupe 3 subceldas y el
+helecho 1, no?"); y quitar la opacidad decreciente por edad de planta
+("eso no tiene sentido").
+
+**Aclaración necesaria antes de tocar nada**: el ejemplo concreto de
+Diego (árbol+helecho) en realidad NO llegaba al mosaico con el código
+tal como estaba -- `itemsCelda()` resuelve "competidora (árbol/arbusto)
++ cobertura (helecho) en la misma celda" tiñendo el FONDO con el color
+de la cobertura, nunca añadiéndola como item independiente; el helecho
+perdía su propio sprite por completo en ese caso, no compartía
+cuadrante con nada. El mosaico de cuadrantes solo entra en juego con 2+
+items REALES simultáneos -- tras el fix de badges de un círculo
+anterior, el caso dominante con diferencia es construcción+flora
+compitiendo por espacio, o dos especies de cobertura compartiendo celda
+SIN competidora (el motor permite más de una).
+
+**Mecanismo anterior**: grid 2x2 fijo, cada item (hasta 4) a
+exactamente 1/4 de la celda y el mismo tamaño de sprite fijo
+(`CELDA*0.42`), sin ninguna relación con el tamaño real de lo que
+representa -- un almacén y un helecho compartiendo celda se veían
+exactamente igual de grandes.
+
+**Fix real**: `pesoItem(item)` reutiliza `huella_m2` real donde existe
+(`ORDEN_HUELLA_CONSTRUCCION` para construcción, `HUELLA_FLORA_M2` para
+árbol/arbusto) -- cobertura, sin huella_m2 real, recibe el peso nominal
+mínimo (`HUELLA_REFERENCIA_FLORA_M2`), no un número inventado aparte.
+Con exactamente 2 items (el caso dominante), el reparto de columnas se
+calcula proporcional a esos pesos, redondeado a un entero de 1 a 3 (para
+que ninguno desaparezca ni se coma la celda entera) -- `Math.round`
+sobre la fracción real, `grid-template-columns` pasa de fijo `1fr 1fr` a
+`<n1>fr <n2>fr` calculado en JS. El sprite de cada uno escala con el
+ANCHO REAL de su propia columna (`CELDA * fraccion * 0.95`, con un piso
+de 0.20 solo para legibilidad, sin techo artificial) en vez del tamaño
+fijo de antes. Con 3 o 4 items (caso raro, sin cambios de esta ronda) se
+mantiene el grid 2x2 igualitario -- un reparto proporcional preciso con
+más de 2 pesos arbitrarios exige un layout bidimensional bastante más
+complejo para un caso que apenas se observa en juego libre.
+
+Verificado con un mapa sintético aislado (3 celdas, sin ruido del resto
+del mundo real que había confundido una primera inspección visual sobre
+un mapa real completo) y midiendo el DOM resultante directamente, no
+solo mirando la captura: almacén (peso 40) + pino (peso 4.5) en la misma
+celda -> `grid-template-columns: "3fr 1fr"`, alturas de sprite 23px y
+8px respectivamente (proporción real 3:1, coincide exacto con el
+ejemplo de Diego); helecho + hierba_silvestre (mismo peso nominal) ->
+reparto 2:2, tamaños iguales.
+
+**Opacidad por edad, retirada por completo**: `competidora.etapa`/
+`cob.etapa` dejan de calcular ningún `alfa` variable -- desde el círculo
+anterior el TAMAÑO ya refleja la etapa real (`factorCrecimiento`), así
+que la opacidad decreciente había quedado no solo redundante sino
+conceptualmente incorrecta (una planta joven es más pequeña, no más
+transparente/fantasmal). Retirado el parámetro `opacidad` de
+`crearCeldaImgEstatica` y el campo `alfaSprite` de los items -- código
+muerto quitado, no solo puesto a un valor fijo de 1. Único hueco
+honesto que deja esta retirada: las 4 especies de cobertura SIN sprite
+(liquen/musgo/hierba_desertica/hierba_artica) se quedan sin NINGUNA
+señal visual de etapa de crecimiento -- no había un tamaño que variar
+en un glifo de textura que ya ocupa la celda completa por diseño, y
+Diego no distinguió sprite de glifo al pedir quitar la opacidad.
