@@ -27,7 +27,7 @@ zona.clima_actual y Reloj.estacion por su cuenta.
 """
 import random
 
-from nucleo.clima import Estacion, estacion_actual, sortear_clima
+from nucleo.clima import estacion_actual, sortear_clima
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.reloj import Reloj
 

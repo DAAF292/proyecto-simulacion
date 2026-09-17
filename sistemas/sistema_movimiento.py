@@ -88,9 +88,6 @@ class SistemaMovimiento:
         # ningun camino de decision los lee.
         self._stats_roce_social_resueltos: int = 0
         self._stats_crisis_violenta_contacto: int = 0
-        # Catalogo por tick (2026-09-12): cuantos ticks construyeron el
-        # catalogo de especie/sexo/gestacion (solo observacion).
-        self._stats_catalogo_pareja_ticks: int = 0
         self._catalogo_pareja: dict[int, tuple[Any, Any, bool]] | None = None
         # Robo y compartir por confianza (2026-09-07, circulos 3/4 del
         # arco "robo/intercambio de recursos"). Solo observacion.
@@ -217,11 +214,6 @@ class SistemaMovimiento:
         self.coste_sprint: float = float(cfg_mov.get("coste_resistencia_sprint", 0.08))
         self.umbral_agotamiento: float = float(
             cfg_mov.get("umbral_resistencia_agotamiento", 0.05)
-        )
-
-        cfg_mem = self.config.get("memoria", {})
-        self.factor_error_memoria: float = float(
-            cfg_mem.get("factor_error_por_distancia", 0.3)
         )
 
         self.dist_deseada_conspecifico: int = int(
@@ -1893,7 +1885,6 @@ class SistemaMovimiento:
                     gestor.obtener_componente(cid, Gestacion) is not None,
                 )
             self._catalogo_pareja = catalogo
-            self._stats_catalogo_pareja_ticks += 1
 
         candidatos = []
         # 2026-09-08 (nucleo/indice_espacial.py): en_radio ya acota a la

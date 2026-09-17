@@ -30,7 +30,7 @@ from nucleo.orografia import (
     generar_cordilleras,
     sortear_viento_dominante,
 )
-from nucleo.celda import Celda, TipoTerreno
+from nucleo.celda import Celda
 from nucleo.clima import Clima
 from nucleo.flora import colonizar_por_idoneidad, recursos_alimento
 from nucleo.materiales import elegir_sustrato_celda, generar_vetas_minerales

@@ -19,7 +19,6 @@ Historial de diseño y decisiones: docs/historial_componentes.md.
 
 from __future__ import annotations
 
-from typing import Any
 
 
 def capacidad_carga_kg(peso_propio: float, fraccion_carga_maxima: float) -> float:

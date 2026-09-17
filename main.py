@@ -34,11 +34,9 @@ from typing import Any
 import yaml
 
 from componentes.construccion import Construccion
-from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
 from componentes.madriguera import Madriguera
 from componentes.reproduccion import Sexo
-from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
 from componentes.vocacion import Vocacion
 from nucleo.bioma import TipoTerreno
@@ -71,8 +69,6 @@ from sistemas.sistema_movimiento import SistemaMovimiento
 from sistemas.sistema_necesidades import SistemaNecesidades
 from sistemas.sistema_recursos import SistemaRecursos
 from sistemas.sistema_reproduccion import SistemaReproduccion
-
-CAUSAS_MUERTE_ESPERADAS = {"inanicion", "depredacion", "deshidratacion", "ahogamiento", "vejez", "incendio"}
 
 
 @dataclass

@@ -5,20 +5,92 @@ aspiración de riqueza narrativa: el legendarium de Tolkien, alcanzada por
 emergencia algorítmica, nunca por autoría manual). Este documento resume las
 decisiones y reglas que gobiernan el proyecto para que cualquier sesión nueva
 de Claude Code parta del mismo entendimiento que las sesiones anteriores
-(migradas desde Cowork el 24-08-2026). No sustituye a los informes de
-`informes/` — es la capa de orientación rápida; para profundidad real, lee:
+(migradas desde Cowork el 24-08-2026). Este documento, junto con
+`docs/historial_*.md`, es la única capa de referencia viva del proyecto —
+para profundidad real, lee esos historiales por arco temático (ver la
+sección "Bitácora completa" más abajo).
 
-- `informes/informe_vision.docx` — qué es el proyecto y por qué, registro no
-  técnico. Prácticamente intemporal, rara vez necesita tocarse.
-- `informes/informe_tecnico.docx` — arquitectura completa, capa por capa, con
-  sección 20 como lista consolidada de cuestiones abiertas.
-- `informes/informe_implementacion_bosque.docx` — bitácora cronológica de
-  implementación, sección 7.N por pieza construida, la fuente más fiable de
-  "qué se probó y qué falló al probarlo contra el motor real".
-- `informes/informe_funcionalidades_actuales.docx` — inventario por área
-  funcional, clasificado en implementado completo / parcial / solo planteado
-  en código. El más propenso a quedar desfasado; contrástalo contra el código
-  antes de fiarte de él a ciegas si ha pasado tiempo desde su última revisión.
+**Retirados los 6 informes `.docx` de `informes/` (2026-09-17)**: existieron
+como capa de "profundidad técnica" separada de este documento desde la
+migración original, pero llevaban desde el 2026-09-10 sin tocarse mientras
+se cerraban de verdad varios arcos grandes (estabilidad de población,
+construcción social completa, todo el pivote de capa visual, renombrado
+`BOSQUE_*→SIMULACION_*`, servidor de control remoto) — 7 días de desfase
+frente a un ritmo de cambio real muy alto. Auditado antes de retirarlos, no
+solo por fecha: `informe_funcionalidades_actuales.docx` no estaba
+simplemente desactualizado, estaba activamente equivocado — dedicaba una
+sección entera al Códice Cartográfico como sistema de presentación vigente
+(retirado por completo ese mismo 2026-09-16), citaba `BOSQUE_CONTINUAR`/
+`BOSQUE_AUTO_TICKS`/`BOSQUE_MODO_VISUAL`/`datos/bosque.db` (renombrados a
+`SIMULACION_*`/`datos/simulacion.db` el mismo día), reportaba "3 archivos
+con 22 tests" frente a los 76/675 reales, y no mencionaba en absoluto el
+arco completo de "asentamiento como entidad propia". El resto de informes
+no se auditó con el mismo nivel de detalle antes de retirarlos junto con
+el que sí se verificó mal, a petición explícita de Diego. Las 3 fichas PDF
+de `informes/` (`ficha_gnomo.pdf`, `ficha_lobo.pdf`,
+`ficha_criatura_vacia.pdf`) se conservan — no son informes narrativos sobre
+el estado del sistema y no se auditaron por el mismo motivo. Nada de su
+contenido se migró a ningún historial antes de borrarlos: a diferencia de
+la poda de `docs/historial_*.md` (que preserva texto palabra por palabra),
+aquí se decidió que un informe demostrablemente incorrecto no merecía
+conservarse ni archivado.
+
+**Segunda ronda de limpieza de repositorio, mismo día (2026-09-17), a
+continuación de la retirada de informes/ de arriba** — mismo criterio que
+ya se aplicó una vez a `inspiracion/` (127MB sin consumidores, ver Bitácora
+completa): activo sin usar o proceso muerto, no solo "código feo".
+Verificado consumidor por consumidor antes de tocar nada, no por bulto:
+- `oldschool_pc_font_pack_v2.2_web/` (5.8MB, 361 variantes `.woff` del
+  paquete "The Ultimate Oldschool PC Font Pack") retirado del repositorio —
+  de las 361 variantes, una sola (`Web437_IBM_VGA_9x16.woff`) tenía uso
+  real, ya extraída a `presentacion/terminal_prototipo/fonts/` desde el
+  2026-09-16. De paso se resuelve un crédito de licencia que llevaba
+  "pendiente" desde que se adoptó la fuente (comentario propio en
+  `terminal.html`: "atribucion pendiente en el mismo lugar que las de
+  PyxelSpace") — ahora vive en
+  `presentacion/terminal_prototipo/fonts/CREDITS.txt` (CC BY-SA 4.0, VileR,
+  int10h.org). Esto NO resuelve el crédito de PyxelSpace de la lista de
+  pendientes más abajo — son paquetes distintos.
+- `docs/superpowers/plans/` (3 ficheros, 2026-09-03: caballera-rotación,
+  hachurado de relieve, alzado por elevación) retirada por completo —
+  doble relic: es la carpeta con el nombre anterior al reenfoque
+  `plans/→encargos/` del propio 2026-09-03 (ver spec de esa fecha), Y su
+  contenido son planes de implementación para el visor Canvas del Códice
+  Cartográfico, sistema retirado por completo el 2026-09-16. Ningún
+  consumidor posible para ninguna de las dos razones por separado.
+- `docs/superpowers/encargos/pendientes/2026-09-02-propagacion-05-zoocoria.md`
+  retirado — encargo que sí se recogió en su momento (cabecera idéntica al
+  plan real, hoy en `docs/plans/done/2026-09-02-propagacion-05-zoocoria.md`,
+  que sí siguió el flujo completo), pero al que nunca se le aplicó el paso
+  4 del flujo de implementación ("retirar plan X de la cola tras ser
+  recogido") — quince días de cola muerta sin que nadie lo notara.
+- `harness_v2_log.txt`, `resultados_harness_completo.json`,
+  `resultados_harness_completo_v2.json` (raíz del repo, ~144KB, comiteados
+  el 2026-09-13 junto con "assets" sin relación aparente) retirados — datos
+  crudos de una corrida de harness, sin ningún consumidor en código ni
+  documentación, exactamente la categoría que `.gitignore` ya declara
+  ignorar para `herramientas/resultados_harness_*.json` pero que aquí
+  colaron por vivir en la raíz en vez de esa carpeta.
+
+**Deliberadamente NO tocado en esta ronda, con motivo**: `docs/plans/failed/`
+(evidencia histórica real, dos de sus casos —armas primitivas v2, madriguera
+física A— ya citados en la Bitácora completa de este documento como ejemplos
+concretos de auditoría tras disyuntor de 3 intentos); `docs/superpowers/specs/`
+(52 ficheros — son el entregable real de diseño de cada pieza, no un residuo).
+
+**`docs/plans/in_review/` reclasificado el 2026-09-17** (los mismos 14
+ficheros de arriba): verificado pieza por pieza contra su historial
+correspondiente, no en bloque — las piezas de flora (`flora-01` a
+`flora-05`, `fix-flora-sobre-agua`, `propagacion-03-caida-dispatch`,
+`propagacion-05-zoocoria`) confirman en `docs/historial_flora_mundo.md`;
+las de hilo individual (`cimiento-relaciones`, `amistad-convivencia`,
+`afinidad-concepcion`, `nombre-propio`, `pareja-estable`) confirman en
+`docs/historial_hilo_individual.md`; `parejas-fundadoras` confirma en
+`docs/historial_estabilidad_poblacion.md`. Las 14 estaban implementadas
+de verdad, solo les faltaba el movimiento `in_review→done` que el propio
+pipeline debía hacer y nunca hizo — movidas a `docs/plans/done/`,
+carpeta `in_review/` ahora vacía.
+
 - `docs/historial_capa_visual.md` — historial archivado de la primera
   exploración de arte real (24 a 26-08-2026, PyxelSpace → Urizen → Mini
   Medieval → retirada de orillas), movido aquí el 2026-09-02 por tamaño
@@ -294,127 +366,49 @@ sesiones quede junto).
   (primera exploración de arte real, superseded); el 2026-09-15 se le
   añadió la reconstrucción real de la biblioteca de sprites (2026-09-04)
   y sus correcciones, que hasta ahora vivían sueltas en este documento.
+- `docs/historial_servidor_control.md` — renombrado `BOSQUE_*→SIMULACION_*`
+  y el servidor de control remoto (arranque/pausa/velocidad por web),
+  ambos del 2026-09-16, movidos aquí el 2026-09-17 en la segunda poda de
+  este documento (ver más abajo).
 
-## Estado actual y pendientes reales (actualizado 2026-09-16)
+## Estado actual y pendientes reales (actualizado 2026-09-17)
 
 Lista corta de lo que sigue genuinamente abierto hoy — para el detalle de
 cómo se llegó a cada punto, abre el historial correspondiente de arriba.
 
+**Podada esta sección el 2026-09-17** (venía de las ~465 líneas leídas
+arriba en versiones anteriores de este documento, mezclando pendientes
+genuinos con crónica detallada de piezas ya cerradas — el mismo patrón
+que ya obligó a podar la Bitácora completa el 2026-09-15, esta vez
+dentro de la propia sección de pendientes). Todo el contenido cerrado que
+había aquí ya vivía duplicado, con más detalle, en
+`docs/historial_construccion_social.md` y `docs/historial_capa_visual.md`
+(verificado antes de recortar, no asumido); lo que no tenía hogar
+todavía (renombrado `BOSQUE_*→SIMULACION_*`, servidor de control remoto)
+se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
+
 - **El criterio maestro de Diego (5 especies vivas a la vez, ≥50% de las
-  semillas) sigue sin remedirse de forma agregada** desde el harness de
-  15 semillas × 7 especies del 2026-09-12 (entonces: 0-7%, muy por
-  debajo del objetivo). Desde esa medición se aplicaron varias mejoras
-  reales (radio de caza en solitario, orillas vadeables, tasa de
-  consumo por especie, especie zorro) pero ninguna se ha vuelto a medir
-  contra el criterio agregado — es el pendiente más urgente si se quiere
-  saber dónde está el ecosistema hoy, antes de calibrar nada más a
-  ciegas.
-- **CERRADO 2026-09-15, ver `docs/historial_estabilidad_poblacion.md`**:
-  las 4 recomendaciones del informe de calibración del 2026-09-12 ya se
-  investigaron con A/B reales — 3 (techo de manada, densidad de venado,
-  desempate de reputación) quedan sin ningún cambio de config, los datos
-  no respaldan tocar nada; la 4ª (sesgo de vocación hacia forrajero) se
-  confirma real y estructural, no un bug, y queda como decisión de
-  diseño pendiente de Diego (no una calibración numérica). De paso se
-  corrigió una contradicción interna de este propio documento sobre la
-  dirección de `factor_ampliacion_techo_manada`.
-- **Arco nuevo "asentamiento como entidad propia" — Pieza 1 (identidad
-  persistente) CERRADA 2026-09-15**, ver
-  `docs/historial_construccion_social.md`: `Asentamiento` sigue siendo
-  100% derivado (se recalcula cada día), pero ahora conserva un id
-  estable entre recálculos por solape de Jaccard en vez de comparar el
-  conjunto exacto de miembros — cierra de paso un bug real (reemisión
-  de `AsentamientoFundado` ante cualquier fluctuación de población).
-  Verificado con tests dirigidos y con un diagnóstico de 4 semillas
-  nuevas en juego libre (ids estables durante miles de ticks pese a
-  crecer/perder miembros, sin ninguna reemisión espuria). Corrección
-  honesta: el commit `ad7b28b` dice "598/598 tests" en su mensaje —
-  el conteo real verificado es **590 passed**, no amendado por ser un
-  commit ya empujado. **Unificado con el roadmap "asentamientos/
-  profesiones" (2026-09-12) el mismo día, a petición de Diego** —
-  "conocimiento colectivo transmisible" (Pieza 3 de ese roadmap +
-  Piezas 2-3 del informe de hoy) ya CERRADO también, ver
-  `docs/historial_construccion_social.md`: valor agregado por
-  asentamiento (sobrevive a la muerte de cualquier miembro, a
-  diferencia de `Vocacion` individual) que modula la tasa de
-  RECOLECTAR/CONSTRUIR/COCINAR — verificado con las mismas 4 semillas
-  de la Pieza 1, acumulando niveles reales (hasta saturado a 1.0 en
-  "forrajero") desde el primer momento en que existe un asentamiento,
-  a diferencia de casi todas las piezas sociales anteriores de este
-  proyecto que quedaron "correctas pero invisibles" semanas.
-  **"Nombre propio + crónica de asentamiento" (Pieza 4-5 del informe
-  original) CERRADO el mismo 2026-09-15**, ver
-  `docs/historial_construccion_social.md`: nombre generado al fundarse
-  (prefijo+sufijo silábico), con mix probabilístico hacia un catálogo
-  temático si la celda-centro tiene un rasgo geográfico fuerte (agua o
-  montaña — alcance deliberadamente acotado a esos dos, no los 5 biomas,
-  tras feedback crítico de Diego de que un generador puramente silábico
-  "no se diferencia mucho de una generación de nombres común"), más
-  `Persistencia.cronica_de_asentamiento(id)` para consultar los eventos
-  propios de un pueblo aislados de otros. **"Tipos de construcción
-  nuevos" (taller de artesano → mobiliario → comodidad, más almacén
-  personal en refugio) CERRADO 2026-09-16, mismo círculo, dos piezas
-  unificadas a petición explícita de Diego** (contra el criterio
-  habitual de "una complejidad a la vez"), ver
-  `docs/historial_construccion_social.md`: taller como tercer paralelo
-  comunal, gateado por conocimiento colectivo "artesano" del propio
-  asentamiento, habilita FABRICAR "mobiliario" — el mueble se trata como
-  un material más (kg, calidad alta), reutilizando SIN NINGÚN CAMBIO el
-  mecanismo ya construido de mejora de vivienda por sustitución; en
-  paralelo, dormir en el refugio propio ya completado deposita
-  automáticamente el material a granel portado en un almacén personal
-  (`Construccion.almacen`, solo depósito, sin retirada todavía).
-  **Diagnóstico de 4 semillas × 10000 ticks, resultado dividido y
-  honesto**: el almacén de refugio se ejerce con fuerza real en las 4
-  (4 a 198 depósitos según semilla); el taller/mobiliario, en cambio,
-  **0 muebles fabricados en las 4**, incluida la única semilla
-  (402001) donde la cadena comunal SÍ avanzó lo bastante (salón común y
-  cocina completos) — ni siquiera ahí llegó a construirse el taller
-  dentro de la ventana de 10000 ticks. Mecanismo verificado correcto por
-  16 tests dirigidos, pero **"correcto pero invisible" en juego libre**,
-  mismo patrón que ya sufrieron salón común/minería/tala en su día —
-  agravado aquí por el conflicto de capacidad ya documentado en
-  `config/materiales.yaml` (huella_m2 de los 4 edificios comunales suma
-  125, por encima de `capacidad_construccion_celda_m2=80`).
-  **"Pertenencia explícita, colocación satélite y necesidad
-  diferenciada de los comunales" CERRADO el mismo 2026-09-16, mismo
-  día, tres cambios en un único círculo a petición explícita de
-  Diego** ("todo junto"), ver `docs/historial_construccion_social.md`:
-  a raíz de la crítica de Diego al conflicto de capacidad de arriba
-  ("los edificios comunes deberían estar cada uno en celdas
-  distintas") — `Construccion.asentamiento_id` (pertenencia explícita,
-  reemplaza una búsqueda por proximidad que podía confundir dos
-  pueblos vecinos — hallazgo aparte: `Asentamiento.almacen_id`, cacheado
-  a diario desde 2026-09-08, nunca se leía en ningún consumidor real,
-  cache muerta, retirada); solo `salon_comun` sigue anclado al centro
-  exacto, almacén/cocina/taller pasan a "satélite" (celda vecina más
-  próxima con cupo, excluyendo el propio centro para no competir con el
-  ancla); y los 4 tipos comunales compiten AL MISMO NIVEL (se retira la
-  jerarquía "almacén primero", accidente histórico) — cada uno gatea por
-  su propia necesidad real (almacén/cocina: excedente de
-  saciedad/hidratación; salón_común: sociabilidad+curiosidad; taller:
-  déficit de comodidad), desempatando por progreso ya invertido.
-  **Diagnóstico de 4 semillas nuevas (403001-403004) × 10000 ticks,
-  resultado fuerte y consistente en las 4 — a diferencia de la mayoría
-  de piezas sociales de este proyecto, que tardaron semanas en
-  observarse**: en las 4, nacieron MÁS edificios comunales en celda
-  satélite que en el ancla (1-2 ancla frente a 2-4 satélite según
-  semilla) — la colocación satélite se ejerce con fuerza desde el
-  primer momento en que hay más de un tipo comunal pendiente a la vez.
-  Lo que este círculo NO resolvió, honesto: taller/mobiliario sigue en
-  0 muebles fabricados en las 4 semillas (igual que el diagnóstico
-  anterior) — quitarle la competencia directa por espacio no basta por
-  sí solo para que su propio gate gane el argmax a tiempo; no se
-  desglosó por tipo qué construcción concreta ocupó cada celda
-  satélite, así que no se sabe si taller en particular llegó a
-  crearse sin completarse, o ni siquiera eso. Pendiente real: el gate
-  de cocina (excedente de solo saciedad) sigue PROVISIONAL, sin eje
-  mejor identificado que no exigiera inventar un componente nuevo;
-  interacción entre asentamientos (Pieza 4 restante del roadmap
-  unificado) sigue sin empezar; remedir el criterio maestro de Diego
-  contra el ecosistema sigue siendo el pendiente más urgente de todos
-  (ver primer punto de esta lista), sin decidir el orden frente a lo
-  anterior.
+  semillas) sigue sin remedirse de forma agregada**, ni el harness de
+  referencia completo (15 semillas × 12000 ticks sin cortar por límite
+  de tiempo) se ha corrido nunca de principio a fin — cada medición del
+  proyecto hasta hoy usó ventanas truncadas. Desde la última medición
+  agregada (15×7 especies, 2026-09-12: 0-7%, muy por debajo del
+  objetivo) se aplicaron varias mejoras reales (radio de caza en
+  solitario, orillas vadeables, tasa de consumo por especie, especie
+  zorro, arco de comodidad) pero ninguna se ha vuelto a medir contra el
+  criterio agregado — sigue siendo el pendiente más urgente del
+  proyecto, antes de calibrar nada más a ciegas.
+- Sesgo de vocación hacia forrajero (`docs/historial_estabilidad_poblacion.md`):
+  confirmado real y estructural, no un bug — queda como decisión de
+  diseño pendiente de Diego, no una calibración numérica.
+- Arco "asentamiento como entidad propia" (`docs/historial_construccion_social.md`,
+  6 piezas cerradas a esta fecha): taller/mobiliario sigue en **0
+  muebles fabricados** en todas las semillas probadas pese a que el
+  resto de la cadena comunal (almacén, salón común, cocina) sí se
+  ejerce con fuerza — su propio gate no gana el argmax a tiempo; el
+  gate de cocina (excedente de solo saciedad) sigue PROVISIONAL, sin
+  eje mejor identificado; interacción entre asentamientos (Pieza 4 del
+  roadmap unificado) sigue sin empezar.
 - **Caza en manada de lobo contra caballo**: mecanismo verificado
   correcto, pero la coincidencia temporal que exige (~4-6 aliados
   cazando a la vez, dentro de `radio_apoyo_grupal`) es estructuralmente
@@ -429,345 +423,88 @@ cómo se llegó a cada punto, abre el historial correspondiente de arriba.
   tests dirigidos, exige una combinación de condiciones poco frecuente.
 - Decaimiento de afinidad en `Relaciones` (rencor/amistad/pareja):
   introducido el 2026-09-11, sin ninguna calibración contra el motor
-  real más allá de un `BOSQUE_AUTO_TICKS` de humo.
+  real más allá de un `SIMULACION_AUTO_TICKS` de humo.
 - El ciclo minería/tala (fabricar herramienta → extraer veta/talar
   árbol) ya se cierra de verdad en juego libre desde el fix de
   "Vía 1 requiere motivo real" (2026-09-12), pero sin medir su
   frecuencia real a escala de población.
-- Arco de comodidad (Pieza D, mejora de vivienda) cerrado el
-  2026-09-14 sin que el criterio maestro se haya remedido con el
-  cambio ya aplicado — mismo pendiente que el primer punto.
 - **Centinela del pipeline sigue parado** desde el incidente de
   cancelación de "madriguera-física-A" (2026-09-07) — necesita reinicio
   manual en la máquina de Diego. Este entorno de sesión en la nube no
   tiene `OPENROUTER_API_KEY` ni `mini-swe-agent` instalados, así que
-  toda la funcionalidad de las últimas ~15 sesiones se implementó
-  directamente por Claude (excepción ya prevista y usada
-  sistemáticamente, ver "Flujo de implementación" arriba).
+  toda la funcionalidad de las últimas sesiones se implementó
+  directamente por Claude (excepción ya prevista, ver "Flujo de
+  implementación" arriba).
 - **Ciudad enana**: aparcada explícitamente por Diego hasta que se
   plantee la raza enana — no retomar el tema hasta entonces.
-- **Retirada completa del Códice Cartográfico y pivote a mapa 100% ASCII
-  (2026-09-16, decisión de Diego)**: varias sesiones sin encontrar un
-  estilo de arte definitivo (ver `docs/historial_capa_visual.md` y
-  `docs/informe_codice_cartografico.md`) estaban restando foco al
-  desarrollo del motor. `presentacion/vista_web.py` quedó reducido a
-  servidor + contrato JSON (`construir_instantanea`, sin tocar); el
-  visor terminal (`presentacion/terminal_prototipo/`) pasa a ser el
-  ÚNICO sistema visual — en el momento de escribir este párrafo, sin
-  ningún asset de imagen: todo (terreno, agua, relieve, flora por
-  categoría árbol/arbusto/cobertura, fauna, construcciones, recursos en
-  el suelo) se representa con glifo+color de texto desde un catálogo
-  único (`CATALOGO_GLIFOS` en `terminal.html`), con leyenda desplegable
-  generada desde ese mismo catálogo, zoom centrado en el cursor y paneo
-  por arrastre. Los ~83MB de sprites del prototipo anterior se retiraron
-  del repositorio (recuperables por git history si algún día se retoma
-  una vía gráfica). **Esta afirmación de "sin ningún asset de imagen"
-  quedó desmentida el mismo día, ver la entrada "Híbrido ASCII+sprite"
-  más abajo** — se documenta aquí tal cual porque fue la decisión real
-  en ese momento del día, no se reescribe con retroactividad.
-  **Segunda pasada de limpieza el mismo día, a raíz de que Diego preguntó
-  explícitamente "¿has eliminado todo el código muerto y los assets que
-  no se usan?"** (la primera pasada solo tocó lo directamente enredado
-  con el cambio, no fue una auditoría completa): `inspiracion/` (127MB,
-  fotos de referencia + su versión procesada, sin ningún consumidor ya
-  que el pipeline de sprites que las usaba desapareció entero) y los 6
-  scripts de un solo uso en `presentacion/arnes/` que la generaban o la
-  consumían (`extraer_sprites_definitivos.py`,
-  `adaptar_especies_faltantes.py`, `quitar_fondo_inspiracion.py`,
-  `integrar_inspiracion_terminal.py`, más `arreglar_utf8.py`/
-  `empalmar_marco.py`/`empalmar_marco_v2.py`, ligados al HTML del
-  Códice ya retirado); y la dependencia `rich>=13.0` de
-  `requirements.txt`, declarada sin un solo `import rich` en todo el
-  repositorio (hallazgo que ya constaba en una auditoría previa sin que
-  nadie lo hubiera corregido). Lección honesta: la primera pasada de
-  limpieza de este mismo círculo no fue exhaustiva por defecto — hizo
-  falta que Diego preguntase explícitamente para completarla.
-  Pendiente real: confirmación visual de Diego sobre la elección de
-  glifos/colores concreta — es una primera propuesta razonada, no una
-  calibración cerrada; catálogo de eventos filtrable (panel
-  "EVENTOS://LOG") sigue con el placeholder de siempre, sin implementar.
-- **Pictogramas reales para fauna y construcciones (2026-09-16, sesión
-  posterior a la retirada del Códice, mismo día)**: segunda excepción
-  deliberada a "mapa 100% glifos" tras el propio pivote de arriba —
-  Diego pidió pictogramas reales para las criaturas ("no convence del
-  todo, los iconos son demasiado pequeños" con emoji nativos), generó
-  8 sprites de fauna con IA en estilo pixel-art (referencia: un lobo
-  que subió como imagen) y 5 de construcciones (estilo "cabaña musgosa"
-  con 3 referencias propias), todos committeados en bruto a `iconos/` y
-  procesados por Claude (flood-fill de fondo desde los bordes —
-  ver histórico de por qué no un color-key global — recorte a bbox,
-  downscale `NEAREST`) hacia
-  `presentacion/terminal_prototipo/sprites_{criaturas,construcciones}/`,
-  servidos por rutas nuevas en `vista_web.py`
-  (`_servir_sprite(subcarpeta, ruta)`, mismo guardia anti path-traversal
-  reutilizado). Tamaño de sprite ya NO es fijo: fauna escala por
-  `DimensionesFisicas.altura_m` real del individuo, construcciones por
-  `masa_minima_<tipo>` real de `config/materiales.yaml` (no por
-  `huella_m2`, que es el área de suelo — desliz real corregido tras dos
-  rondas de feedback de Diego, ver commits `c939e2e`/`7cb8f90`) — ambas
-  con raíz N-ésima (0.5 fauna, 1/3 construcciones, la relación
-  físicamente correcta entre una MASA y un tamaño lineal) para comprimir
-  el rango real sin desbordar. Bug real de apilamiento encontrado y
-  corregido (commit `4a58e45`): un sprite más ancho que su celda quedaba
-  tapado por la celda vecina con el mismo z-index — construcciones pasan
-  a su propio nivel (500+fila) por encima de todo el suelo. El
-  resplandor de "consciente" (drop-shadow blanco heredado del sistema de
-  glifos) se retiró por completo a petición de Diego ("por que el gnomo
-  tiene un reborde blanco" → "quitalo") — se leía como un borde de
-  recorte mal hecho sobre una silueta de pixel-art real, no como señal
-  deliberada. **Tensión de diseño señalada en esta sesión, RESUELTA en
-  la sesión siguiente, mismo día — ver "Híbrido ASCII+sprite" justo
-  abajo**: con fauna y construcciones ya en sprite, el suelo desnudo
-  (glifo puro) pasaba a ser la única excepción, y Diego había subido
-  además 8 JPGs de flora sin procesar (`iconos/flora/`) sin decidir
-  todavía si integrarlos. Diego zanjó la disyuntiva: híbrido
-  deliberado, sprite donde se encuentre arte adecuado, introducido
-  gradualmente — flora ya integrada bajo ese criterio, ver más abajo.
-  **Hallazgo aparte sin corregir, sigue vigente**: el `@font-face` de
-  VGA437 (`fonts/Web437_IBM_VGA_9x16.woff`) devuelve 404 real al
-  servirse vía `ServidorWeb` — `ManejadorWeb` nunca tuvo una ruta para
-  `/fonts/*`, así que el visor lleva toda la sesión (y probablemente
-  desde que se conectó en vivo) cayendo a la fuente monospace del
-  navegador en vez de la bitmap CRT prevista. Fix trivial (una ruta más,
-  mismo patrón que `/sprites_*`), no aplicado por estar fuera del
-  encargo del momento en que se encontró. La leyenda desplegable
-  tampoco se actualizó tras esto: para fauna/construcciones con sprite
-  real sigue mostrando el glifo/emoji de respaldo del catálogo en vez
-  de una miniatura del sprite, inconsistente con lo que se ve en el
-  mapa — mismo hueco real para los sprites de flora añadidos después.
-- **Híbrido ASCII+sprite (2026-09-16, mismo día que la retirada de
-  arriba, decisión de Diego que la corrige)**: el "mapa 100% ASCII sin
-  ningún asset de imagen" de la entrada anterior no llegó a sostenerse
-  ni un día completo — los commits `c6af86b` (fauna) y `c939e2e`
-  (construcciones) del mismo merge ya reintroducían sprites reales antes
-  de que se escribiera esta memoria, dejando tanto este documento como
-  un comentario de cabecera del propio `terminal.html` afirmando "CERO
-  imagenes en el mapa" mientras el código un poco más abajo ya las
-  usaba — contradicción real, encontrada auditando el código, no
-  reportada por nadie hasta entonces. Diego, preguntado explícitamente,
-  confirmó el criterio: **base ASCII, con sprites sustituyendo al glifo
-  donde se vaya encontrando arte adecuado, introducidos gradualmente**
-  (no una lista cerrada de categorías) — todos los assets ya
-  disponibles son de uso gratuito según confirmación de Diego (no se
-  investigó licencia individual más allá de eso).
-  Estado real a esta fecha (**CORREGIDO, ver los cinco círculos
-  completos en `docs/historial_capa_visual.md`, este párrafo es el
-  resumen final, no la crónica**): fauna (8 especies) y las 5
-  construcciones comunales ya tenían sprite desde antes de esta sesión;
-  en esta sesión se añadió **flora** — 13 de las 15 especies del
-  catálogo tienen sprite, **mapeo CONFIRMADO por Diego tras dos rondas
-  de aclaración** (un primer mapeo interpretado por Claude fue
-  rechazado dos veces antes de llegar al criterio real: no exige que el
-  nombre de fichero coincida 1:1 con la clave de especie, sino que el
-  arte corresponda al `bioma` real de `config/flora.yaml` — un mismo
-  fichero puede cubrir varias especies con clima afín,
-  `arbustoMontañaTundra.jpg`→montano+ártico,
-  `hierba.jpg`→sus 3 variantes). Solo quedan sin sprite **liquen y
-  musgo**, las 2 especies para las que Diego no aportó ningún icono.
-  Los 10 iconos JPEG viven en `iconos/flora/` (2048×2048, fondo de
-  tablero de ajedrez "quemado" en el propio JPEG, no alfa real —
-  limpiado con verificación visual manual por icono, NO con una
-  heurística de color automática: una heurística de bimodalidad/fase de
-  cuadrícula estuvo a punto de agujerear pétalos reales de una flor,
-  descartada), procesados a
-  `presentacion/terminal_prototipo/sprites_flora/` (10 PNG RGBA,
-  resolución proporcional a `huella_m2` real por especie). Tamaño en
-  pantalla de árbol/arbusto escalado por `huella_m2` real de
-  `config/flora.yaml` por ÁREA visual real (no solo altura — un primer
-  intento escalaba solo `img.style.height` dejando el ancho a merced
-  del aspect ratio nativo de cada PNG, y el pino, con el doble de
-  huella que cualquier arbusto pero un arte muy vertical, salía más
-  ESTRECHO que todos ellos; corregido con `ASPECT_FLORA` real medido
-  por especie), más `FACTOR_TAMANO_ARBUSTO=0.72` (reducción adicional
-  solo para arbusto, pedido explícito de Diego, PROVISIONAL); cobertura
-  (sin `huella_m2` real, no compite por espacio físico) usa un tamaño
-  FIJO en vez de inventar un dato que el motor no tiene. Los recursos
-  sueltos del suelo (madera/piedra) ya NO compiten por el mosaico de
-  cuadrantes con el árbol/construcción de su misma celda — pasan a ser
-  un badge pequeño superpuesto; el 94% de las celdas con árbol también
-  tenían madera, así que antes de este fix la inmensa mayoría de los
-  árboles del mapa se veían reducidos a una miniatura de icono
-  compartido en vez del sprite grande calibrado ("por qué hay árboles
-  en las celdas pequeñas", Diego). De paso se encontró y corrigió un
-  bug real preexistente (desde que se añadieron sprites de fauna/
-  construcciones): `presentacion/vista_web.py` solo servía
-  `/sprites_criaturas/` y `/sprites_construcciones/` por HTTP —
-  cualquier sprite servido a través de `ServidorWeb` (no abierto por
-  `file://` directamente) que viviera en otra subcarpeta habría
-  devuelto 404 sin que nadie lo hubiera notado hasta abrir el visor así.
-- **Profundidad real, dirección, paso natural y jitter de posición en el
-  visor (mismo día — "círculo final" al escribirse esta entrada, luego
-  corregido: hubo un círculo más justo debajo)**: hasta este círculo,
-  fauna tenía un z-index con
-  offset fijo (`1000+y`) que la ponía SIEMPRE por encima de todo el
-  suelo/flora/construcción sin importar su posición real — decidido
-  así en un círculo anterior del mismo día para resolver un bug real de
-  desborde de sprite entre celdas vecinas, con el efecto secundario de
-  que fauna nunca podía quedar oculta por nada. Diego pidió profundidad
-  real ("si pasan por detrás que queden ocultos, no flotando encima");
-  sustituido por un esquema único `zIndexPorFila(y, capa) = y*10 +
-  prioridad` que aplica por igual a terreno/flora/construcción/fauna —
-  la fila real decide siempre primero, la prioridad por tipo (terreno
-  0, flora 2, construcción 4, fauna 6) solo desempata en la misma fila
-  exacta. Verificado con Playwright: un zorro en una fila anterior a un
-  árbol grande queda visiblemente tapado por su follaje. Además: el
-  sprite de fauna ahora se invierte (`scaleX(-1)`) según la dirección
-  real de desplazamiento (inferida comparando la X actual contra la
-  última conocida, persistida en el propio elemento DOM — el motor no
-  expone "dirección" como dato; convención asumida sin poder
-  verificarla contra las 8 especies reales: el arte mira a la derecha
-  de base); y el sondeo de `estado.json` bajó de 1000ms a 400ms
-  (igualando `segundos_por_tick` real del motor, `config/visual.yaml`)
-  con la transición CSS de `0.9s linear` a `0.35s ease-in-out` — a
-  1000ms el motor podía avanzar 2-3 ticks (y una criatura 2-3 celdas)
-  entre dos sondeos, y ninguna curva de animación arregla que un salto
-  de varias celdas en línea recta se lea como caminar en vez de saltar.
-  Pendiente real: el z-index cambia de golpe (sin transición, CSS no
-  anima esa propiedad) en el instante en que una criatura cruza de fila
-  mientras camina — aceptado como límite conocido de Y-sorting simple,
-  no se abordó un mecanismo de interpolación de profundidad que no se
-  pidió.
-  **Añadido justo después, mismo día**: Diego señaló que los sprites
-  "se sitúan siempre en el centro de la celda... parecen líneas rectas"
-  — cierto, `left:50%` fijo (construcción/flora) y `cx+CELDA/2` exacto
-  (fauna) sin ninguna variación. Corregido con `jitterPx`/`jitterPxPorId`
-  (mismo `hashDet` ya usado para variar tono/textura, sal propia):
-  desplazamiento horizontal de hasta ±25% de `CELDA`, determinista por
-  celda para elementos estáticos y por ID de entidad (no por celda
-  actual) para fauna — con semilla de celda el sesgo lateral de un
-  animal "saltaría" en cada cambio de celda, viéndose peor que sin
-  jitter. Sin jitter, deliberadamente: el mosaico de cuadrantes (sprite
-  ya confinado a un cuarto de celda) y el fallback de emoji/glifo de
-  fauna sin sprite (centrado por flex, no por `left` absoluto).
-  **Añadido justo después, mismo día**: Diego preguntó si el jitter
-  animaba a la fauna al caminar (NO — es un sesgo lateral constante por
-  individuo, no oscila; ofrecido pero no implementado si lo quiere) y si
-  todos los assets de un tipo miden lo mismo — SÍ, verificado: un brote
-  recién plantado (`Planta.etapa≈0`, dato real ya expuesto por el DTO,
-  hasta entonces solo usado para opacidad) se veía del mismo tamaño
-  GRANDE que un árbol maduro. A diferencia de fauna (que sí sortea
-  `DimensionesFisicas.altura_m` real por individuo), `Planta` no modela
-  ninguna variación de tamaño máximo entre plantas maduras de la misma
-  especie. Añadidas dos fuentes de variación a
-  `tamanoSpriteFlora`/`tamanoSpriteCobertura`, documentadas por
-  separado para no confundir dato real con relleno: `factorCrecimiento`
-  (real, mapea `etapa` 0→1 a escala 0.35→1.0) y `factorJitterEscala`
-  (relleno visual puro, mismo `hashDet` con sal propia, ±15%
-  determinista por celda, porque el motor no modela variación de tamaño
-  máximo entre plantas maduras).
-  **Añadido justo después, mismo día (2026-09-17 al escribir esto,
-  círculo iniciado el día anterior)**: Diego preguntó cómo funciona el
-  mosaico de cuadrantes, proponiendo reparto proporcional ("si un árbol
-  ocupa el 75% de la celda y un helecho el 25%, el sprite del árbol
-  debería ocupar 3 subceldas y el helecho 1") — aclarado primero que ese
-  ejemplo concreto no llegaba al mosaico (competidora+cobertura se
-  resuelve tiñendo el fondo, no como cuadrante compartido). Implementado
-  para el caso que sí ocurre (2 items reales, el dominante tras el fix
-  de badges): `pesoItem()` reutiliza `huella_m2` real donde existe,
-  reparto de `grid-template-columns` proporcional redondeado a 1-3,
-  sprite escalado al ancho real de su columna en vez de un tamaño fijo
-  igual para todos. Verificado con un mapa sintético aislado + medición
-  directa del DOM: almacén+pino → `"3fr 1fr"`, 23px/8px de altura real
-  (3:1 exacto). Con 3-4 items (raro) se mantiene el grid 2x2 igualitario
-  de siempre. Diego también pidió quitar la opacidad decreciente por
-  edad ("eso no tiene sentido") — retirada por completo (no solo fijada
-  a 1): ya redundante desde que el tamaño refleja la etapa real. Hueco
-  honesto que deja: las 4 especies de cobertura sin sprite pierden toda
-  señal visual de crecimiento, sin sustituto (no hay un tamaño que
-  variar en un glifo de textura a celda completa).
-  **CORREGIDO el mismo día, círculo siguiente (Diego: "quedaría mejor
-  si se pudiesen solapar, por ejemplo el refugio y que el pino crezca
-  por detrás, le daría sensación de más profundidad al mapa")**: el
-  reparto proporcional en columnas de arriba no llegó a un día completo
-  de vida — sustituido por completo por superposición con profundidad,
-  ver `docs/historial_capa_visual.md` para el detalle completo.
-  `pesoItem()` cambia de propósito (ya no reparte ancho, solo ordena
-  profundidad): el item de mayor peso se dibuja a tamaño NORMAL (igual
-  que si estuviera solo), los demás un 18% más pequeños que su PROPIO
-  tamaño nativo (no un 18% del tamaño del principal — construcción y
-  flora usan escalas de referencia independientes, así que la
-  proporción visible entre dos categorías distintas no es
-  necesariamente 0.82:1, verificado real con almacén+pino → 0.94:1),
-  desplazados hacia arriba dentro de la celda y con z-index un punto
-  por debajo del principal. Verificado con capturas sintéticas
-  aisladas tras encontrar y corregir un bug real en el propio arnés de
-  test (no en el motor): `window.DATA = mini` no sustituye el `DATA`
-  real (`let DATA` de nivel superior no cuelga de `window`) — con la
-  forma correcta (`DATA = mini`, sin prefijo), almacén+pino muestra la
-  copa del pino asomando tras el tejado (efecto real, aunque sutil —
-  sin confirmar con Diego si prefiere que asome más) y helecho+hierba
-  silvestre (mismo peso nominal, empate resuelto por orden estable de
-  array) se ven como dos plantas distintas y reconocibles, una detrás/
-  más pequeña de la otra. 675/675 tests.
-- **Renombrado `BOSQUE_* -> SIMULACION_*` (2026-09-16)**: Diego, sobre la
-  spec de abajo: "lo de que aparezca bosque en todos los comandos de
-  test... deberíamos cambiarlo por simulación, que es lo que es, ya no
-  es un solo bosque". `SIMULACION_MODO_VISUAL`/`SIMULACION_AUTO_TICKS`/
-  `SIMULACION_CONTINUAR` (las 3 únicas lecturas reales de `os.environ`
-  del proyecto) y `datos/bosque.db` → `datos/simulacion.db`. Alcance
-  acotado a código y documentación VIVA (`main.py`, comentarios en
-  `sistemas/`/`nucleo/` que citan el nombre, `COMANDOS.md`, README del
-  visor) — la bitácora histórica ya cerrada (`docs/historial_*.md`,
-  `docs/plans/*`, las specs de sesiones anteriores) conserva el nombre
-  real usado en su momento a propósito, no se reescribió.
-- **Servidor de control remoto (2026-09-16, ver
-  `docs/superpowers/specs/2026-09-16-servidor-control-remoto-design.md`,
-  implementado directamente por Claude el mismo día — infraestructura de
-  control/presentación, no una regla nueva del motor)**: Diego preguntó
-  si podía alojarse el programa y lanzar/controlar una partida remota
-  por web, con la queja explícita de que el arranque actual por env vars
-  "debería ser un comando". `python3 servidor.py` (nuevo, raíz) arranca
-  `ServidorWeb`+`GestorPartidas` sin lanzar ninguna partida; desde el
-  navegador (barra de control nueva en `terminal.html`): NUEVA PARTIDA
-  (semilla aleatoria u opcional), PAUSAR/REANUDAR, velocidad (0.25x-8x,
-  límites sin calibrar), FINALIZAR — 5 endpoints `POST /partida/*`
-  nuevos en `vista_web.py`, 501 si el servidor no tiene
-  `GestorPartidas` inyectado (modo CLI de `main.py` de siempre, sin
-  cambios de comportamiento, condición de aceptación verificada con los
-  658 tests previos intactos). `main.py` se refactorizó en
-  `preparar_partida()`/`avanzar_un_tick()` reutilizables entre el modo
-  CLI y el nuevo `ejecutar_partida_controlada()` (hilo de fondo,
-  `nucleo/control_partida.py:ControlPartida` con pausado/detener/
-  velocidad thread-safe). **Bug real encontrado en verificación manual
-  contra el servidor real, no en tests**: `pausada` quedaba hardcodeada
-  a `False` en el payload, y aunque se leyera bien de `control`, el
-  hilo se queda bloqueado dentro de la espera de pausa y NUNCA vuelve a
-  publicar mientras dura — `GestorPartidas.pausar()/reanudar()` parchean
-  ahora directamente el último JSON servido. Verificado con Playwright
-  contra el servidor real (no solo tests): ciclo completo pantalla de
-  espera → nueva partida → mapa real → pausa (tick congelado, confirmado
-  con dos lecturas) → reanudar → velocidad → finalizar → vuelta a
-  pantalla de espera. Sin autenticación ni TLS (aceptado por ahora,
-  "solo quiero verlo yo"; hueco real si se comparte la URL); una partida
-  nueva sobreescribe `datos/simulacion.db` sin histórico de partidas
-  anteriores. **Pendiente real**: Diego no ha desplegado esto en ninguna
-  máquina remota todavía, solo verificado en local dentro de esta
-  sesión — sigue sin probarse el caso de uso real que lo motivó.
+- Capa visual (`docs/historial_capa_visual.md`, único sistema visual
+  desde la retirada del Códice Cartográfico el 2026-09-16, ahora híbrido
+  ASCII+sprite): confirmación visual de Diego sobre la elección concreta
+  de glifos/colores sigue pendiente (primera propuesta razonada, no
+  calibración cerrada); catálogo de eventos filtrable (panel
+  "EVENTOS://LOG") sigue con el placeholder de siempre; liquen y musgo
+  siguen sin sprite (únicas 2 especies de flora sin icono aportado);
+  `FACTOR_TAMANO_ARBUSTO=0.72` sigue PROVISIONAL; z-index sin transición
+  al cruzar de fila mientras se camina, aceptado como límite conocido de
+  Y-sorting simple. **El `@font-face` de VGA437
+  (`fonts/Web437_IBM_VGA_9x16.woff`) sigue devolviendo 404 real al
+  servirse vía `ServidorWeb`** — verificado de nuevo el 2026-09-17,
+  `ManejadorWeb` sigue sin ninguna ruta `/fonts/*` (solo tiene
+  `/sprites_criaturas/`, `/sprites_construcciones/`, `/sprites_flora/`);
+  fix trivial, mismo patrón que las rutas de sprites, no aplicado. La
+  leyenda desplegable tampoco se actualizó: para fauna/construcciones/
+  flora con sprite real sigue mostrando el glifo/emoji de respaldo del
+  catálogo en vez de una miniatura del sprite.
+- Servidor de control remoto (`docs/historial_servidor_control.md`):
+  Diego no lo ha desplegado en ninguna máquina remota todavía, solo
+  verificado en local — sigue sin probarse el caso de uso real que lo
+  motivó. Sin autenticación ni TLS (aceptado por ahora, hueco real si se
+  comparte la URL).
 - Selector de zona real en el visor web: nunca añadido, el visor solo
   dibuja superficie (`zona_idx == 0`).
 - Créditos de licencia de los paquetes PyxelSpace: pendiente desde la
-  migración original (24-08-2026), nunca resuelto.
-- **El harness de referencia completo (15 semillas × 12000 ticks sin
-  cortar por límite de tiempo) sigue sin correrse nunca de principio a
-  fin** — cada medición del proyecto hasta hoy ha usado ventanas
-  truncadas por el cómputo real disponible en cada sesión. Sigue siendo
-  la referencia de rigor pendiente para dar cualquier calibración por
-  cerrada de verdad.
+  migración original (24-08-2026), nunca resuelto — nota aparte, no
+  confundir con el crédito de la fuente VGA437, resuelto el 2026-09-17
+  (ver segunda ronda de limpieza más arriba).
+- **Audit de código muerto real (2026-09-17, `vulture`+`ruff`, cada
+  hallazgo verificado contra uso real antes de tocarlo -- 675/675 tests
+  intactos)**: eliminados `id_en_contacto_por_disposicion()`
+  (`nucleo/disposicion.py`, función completa sin ningún llamador),
+  `calcular_factor_produccion` (`nucleo/flora.py`, alias de
+  compatibilidad ya sin consumidor), `CAUSAS_MUERTE_ESPERADAS`
+  (`main.py`), 12 imports y 2 variables locales sin uso. **Hallazgo real
+  con impacto, no solo limpieza cosmética**: `sistema_movimiento.py`
+  leía `memoria.factor_error_por_distancia` para
+  `self.factor_error_memoria`, clave renombrada a
+  `factor_imprecision_distancia` el 2026-08-23 al corregir
+  `nucleo/memoria.py` — desde entonces caía siempre a su valor por
+  defecto (0.3) sin que ningún camino de decisión lo leyera ya, y nadie
+  lo detectó en 3 semanas y media. `CUBETAS` (`nucleo/vocacion.py`)
+  refactorizado en vez de eliminado: dos comentarios en otros ficheros
+  lo citan como fuente canónica del orden de desempate, así que
+  `vocacion_dominante()` ahora construye su diccionario desde `CUBETAS`
+  de verdad en vez de duplicar las 4 claves a mano. Verificado y
+  descartado como falso positivo: `Clima.LLUVIOSO`/`TORMENTA`
+  (`nucleo/clima.py`) parecían sin uso por construirse dinámicamente
+  vía `Clima(valor)` desde `config/clima.yaml`, que sí define
+  probabilidades reales para ambos. Verificado y dejado intacto por ser
+  código vivo sin consumidor todavía, no muerto:
+  `Persistencia.biografia_de()`/`cronica_de_asentamiento()` — API ya
+  implementada y cubierta por tests, esperando al panel
+  "EVENTOS://LOG" del visor (todavía placeholder).
 - Estructuras multi-celda (muralla, castillo), abuelos/tíos en
   parentesco (bloqueados por la purga de `Identidad` al morir), y
   comodidad como motor general más allá de vivienda (herramienta,
   comida, conexión con ocio→"arte") — visión declarada por Diego, sin
   ningún diseño todavía.
 - Todo el catálogo de constantes numéricas nuevas introducidas en las
-  últimas ~15 sesiones sigue marcado PROVISIONAL en su propio fichero
-  de config, sin calibrar contra el harness completo.
+  últimas sesiones sigue marcado PROVISIONAL en su propio fichero de
+  config, sin calibrar contra el harness completo.
 
 ## Comentarios técnicos vs narrativa histórica (2026-09-02)
 
-Convención nueva, decidida con Diego, aplicable a partir de ahora a
-todo el código del repositorio (no solo al que se toque por otro
-motivo -- ver `.ai-pipeline/guia-tareas.md` para cómo delegar esta
-poda, con los resultados reales de intentarlo).
+Convención decidida con Diego, vigente para todo el código del
+repositorio (no solo al que se toque por otro motivo):
 
 - **Se queda en el código, corto**: qué hace una función/campo, y el
   "por qué" que hace falta para no romperlo al tocarlo -- invariantes
@@ -781,29 +518,11 @@ poda, con los resultados reales de intentarlo).
   Diego, referencias a specs por ruta completa. Nada se pierde, solo
   cambia de sitio.
 
-**ACTUALIZACIÓN (2026-09-02, mismo día): la poda se completó en todo el
-repositorio**, no solo en los tres ficheros originales -- `nucleo/flora.py`,
-`sistemas/sistema_flora.py`, `nucleo/celda.py` (`docs/historial_flora.md`/
-`historial_celda.md`), y a continuación el resto de `nucleo/`
-(`construccion.py`, `disposicion.py`, `territorio.py`, `orografia.py`,
-`asentamiento.py`, `cueva.py`, `materiales.py`, `entidad.py`, `agua.py`,
-`persistencia.py`, `zona_bioma.py`), todo `componentes/`, y todos los
-sistemas (`sistema_movimiento.py`, `sistema_recursos.py`,
-`sistema_decision.py`, `sistema_necesidades.py`, `sistema_reproduccion.py`,
-`sistema_desastres.py`, `sistema_depredacion.py`,
-`sistema_descomposicion.py`, `sistema_clima.py`,
-`sistema_capacidad_fisica.py`, `sistema_ciclo_vital.py`,
-`sistema_capacidad_mental.py`, `sistema_asentamiento.py`) más `main.py`.
-Cada módulo grande generó su propio `docs/historial_<módulo>.md`, mismo
-patrón que los tres originales.
-
-**Hallazgo real sobre CÓMO se hizo, no solo que se hizo**: `dc64f30`
-documenta que delegar esta poda a `mini-swe-agent` falló 2/2 -- tareas
-de calibración de juicio/estilo (qué comentario es "narrativa histórica"
-frente a "invariante que hace falta para no romper el código al
-tocarlo") no tienen un criterio de éxito objetivo que el modelo pueda
-verificar por su cuenta, a diferencia de una implementación con tests.
-Toda la poda del resto del repositorio se hizo directamente por Claude
-en la sesión de esa tarde, no vía pipeline -- decisión consistente con
-ese hallazgo, no una elección arbitraria de herramienta.
+Aplicada ya a todo el repositorio el mismo día que se decidió (no solo
+a los ficheros que la motivaron) -- crónica completa, incluido el
+hallazgo real de que delegarla a `mini-swe-agent` falló 2/2 (tareas de
+calibración de juicio/estilo sin criterio de éxito verificable
+mecánicamente, ver también ".ai-pipeline/guia-tareas.md"), en
+`docs/historial_pipeline_ia.md` (movida ahí el 2026-09-17, era la
+última crónica cerrada que quedaba suelta en este documento).
 

@@ -16,7 +16,7 @@ from componentes.planta import Planta
 from componentes.posicion import Posicion
 from nucleo.bioma import TipoTerreno
 from nucleo.clima import estacion_actual as _estacion_actual_desde_indice
-from nucleo.entidad import GestorEntidades, crear_planta
+from nucleo.entidad import GestorEntidades
 from nucleo.eventos import BusEventos
 from nucleo.flora import factor_humedad_subsuelo, factor_produccion, intentar_colonizar_celda
 from nucleo.mundo import Mundo
