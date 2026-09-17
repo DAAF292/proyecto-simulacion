@@ -35,6 +35,53 @@ la poda de `docs/historial_*.md` (que preserva texto palabra por palabra),
 aquí se decidió que un informe demostrablemente incorrecto no merecía
 conservarse ni archivado.
 
+**Segunda ronda de limpieza de repositorio, mismo día (2026-09-17), a
+continuación de la retirada de informes/ de arriba** — mismo criterio que
+ya se aplicó una vez a `inspiracion/` (127MB sin consumidores, ver Bitácora
+completa): activo sin usar o proceso muerto, no solo "código feo".
+Verificado consumidor por consumidor antes de tocar nada, no por bulto:
+- `oldschool_pc_font_pack_v2.2_web/` (5.8MB, 361 variantes `.woff` del
+  paquete "The Ultimate Oldschool PC Font Pack") retirado del repositorio —
+  de las 361 variantes, una sola (`Web437_IBM_VGA_9x16.woff`) tenía uso
+  real, ya extraída a `presentacion/terminal_prototipo/fonts/` desde el
+  2026-09-16. De paso se resuelve un crédito de licencia que llevaba
+  "pendiente" desde que se adoptó la fuente (comentario propio en
+  `terminal.html`: "atribucion pendiente en el mismo lugar que las de
+  PyxelSpace") — ahora vive en
+  `presentacion/terminal_prototipo/fonts/CREDITS.txt` (CC BY-SA 4.0, VileR,
+  int10h.org). Esto NO resuelve el crédito de PyxelSpace de la lista de
+  pendientes más abajo — son paquetes distintos.
+- `docs/superpowers/plans/` (3 ficheros, 2026-09-03: caballera-rotación,
+  hachurado de relieve, alzado por elevación) retirada por completo —
+  doble relic: es la carpeta con el nombre anterior al reenfoque
+  `plans/→encargos/` del propio 2026-09-03 (ver spec de esa fecha), Y su
+  contenido son planes de implementación para el visor Canvas del Códice
+  Cartográfico, sistema retirado por completo el 2026-09-16. Ningún
+  consumidor posible para ninguna de las dos razones por separado.
+- `docs/superpowers/encargos/pendientes/2026-09-02-propagacion-05-zoocoria.md`
+  retirado — encargo que sí se recogió en su momento (cabecera idéntica al
+  plan real en `docs/plans/in_review/2026-09-02-propagacion-05-zoocoria.md`,
+  que sí siguió el flujo completo), pero al que nunca se le aplicó el paso
+  4 del flujo de implementación ("retirar plan X de la cola tras ser
+  recogido") — quince días de cola muerta sin que nadie lo notara.
+- `harness_v2_log.txt`, `resultados_harness_completo.json`,
+  `resultados_harness_completo_v2.json` (raíz del repo, ~144KB, comiteados
+  el 2026-09-13 junto con "assets" sin relación aparente) retirados — datos
+  crudos de una corrida de harness, sin ningún consumidor en código ni
+  documentación, exactamente la categoría que `.gitignore` ya declara
+  ignorar para `herramientas/resultados_harness_*.json` pero que aquí
+  colaron por vivir en la raíz en vez de esa carpeta.
+
+**Deliberadamente NO tocado en esta ronda, con motivo**: `docs/plans/failed/`
+(evidencia histórica real, dos de sus casos —armas primitivas v2, madriguera
+física A— ya citados en la Bitácora completa de este documento como ejemplos
+concretos de auditoría tras disyuntor de 3 intentos); `docs/plans/in_review/`
+(14 ficheros, varios de más de dos semanas — varias de las piezas que
+describen constan como cerradas en `docs/historial_*.md`, pero mover cada
+uno a `done/` exige verificar pieza por pieza contra su historial
+correspondiente, no un movimiento en bloque); `docs/superpowers/specs/` (52
+ficheros — son el entregable real de diseño de cada pieza, no un residuo).
+
 - `docs/historial_capa_visual.md` — historial archivado de la primera
   exploración de arte real (24 a 26-08-2026, PyxelSpace → Urizen → Mini
   Medieval → retirada de orillas), movido aquí el 2026-09-02 por tamaño
