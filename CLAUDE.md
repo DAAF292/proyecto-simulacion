@@ -466,6 +466,32 @@ se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
   migración original (24-08-2026), nunca resuelto — nota aparte, no
   confundir con el crédito de la fuente VGA437, resuelto el 2026-09-17
   (ver segunda ronda de limpieza más arriba).
+- **Audit de código muerto real (2026-09-17, `vulture`+`ruff`, cada
+  hallazgo verificado contra uso real antes de tocarlo -- 675/675 tests
+  intactos)**: eliminados `id_en_contacto_por_disposicion()`
+  (`nucleo/disposicion.py`, función completa sin ningún llamador),
+  `calcular_factor_produccion` (`nucleo/flora.py`, alias de
+  compatibilidad ya sin consumidor), `CAUSAS_MUERTE_ESPERADAS`
+  (`main.py`), 12 imports y 2 variables locales sin uso. **Hallazgo real
+  con impacto, no solo limpieza cosmética**: `sistema_movimiento.py`
+  leía `memoria.factor_error_por_distancia` para
+  `self.factor_error_memoria`, clave renombrada a
+  `factor_imprecision_distancia` el 2026-08-23 al corregir
+  `nucleo/memoria.py` — desde entonces caía siempre a su valor por
+  defecto (0.3) sin que ningún camino de decisión lo leyera ya, y nadie
+  lo detectó en 3 semanas y media. `CUBETAS` (`nucleo/vocacion.py`)
+  refactorizado en vez de eliminado: dos comentarios en otros ficheros
+  lo citan como fuente canónica del orden de desempate, así que
+  `vocacion_dominante()` ahora construye su diccionario desde `CUBETAS`
+  de verdad en vez de duplicar las 4 claves a mano. Verificado y
+  descartado como falso positivo: `Clima.LLUVIOSO`/`TORMENTA`
+  (`nucleo/clima.py`) parecían sin uso por construirse dinámicamente
+  vía `Clima(valor)` desde `config/clima.yaml`, que sí define
+  probabilidades reales para ambos. Verificado y dejado intacto por ser
+  código vivo sin consumidor todavía, no muerto:
+  `Persistencia.biografia_de()`/`cronica_de_asentamiento()` — API ya
+  implementada y cubierta por tests, esperando al panel
+  "EVENTOS://LOG" del visor (todavía placeholder).
 - Estructuras multi-celda (muralla, castillo), abuelos/tíos en
   parentesco (bloqueados por la purga de `Identidad` al morir), y
   comodidad como motor general más allá de vivienda (herramienta,
