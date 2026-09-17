@@ -422,9 +422,25 @@ class SistemaNecesidades:
                     eid, "energia", nec.energia, tasa_energia
                 )
 
-            # 3. Asfixia por inmersión
+            # 3. Asfixia por inmersión -- exenta para especies que vuelan
+            # (2026-09-17, ver docs/superpowers/specs/2026-09-17-vuelo-
+            # aguila-design.md y el hallazgo del harness completo del
+            # mismo dia): el circulo de vuelo original solo eximio a
+            # estas especies del BLOQUEO de movimiento en agua profunda
+            # (sistema_movimiento.py, "volar sobre agua profunda no
+            # ahoga"), pero nunca de ESTE chequeo independiente -- un
+            # aguila podia volar libremente SOBRE agua profunda (ya sin
+            # bloqueo) y aun asi ahogarse por quedarse ahi parada,
+            # exactamente la contradiccion que la spec original queria
+            # evitar. Verificado: 17 muertes reales por ahogamiento de
+            # aguila en el harness de 15x10000 antes de este fix.
+            especie_vuela = bool(
+                self.config.get("rangos_raciales", {})
+                .get(ident.especie.value, {})
+                .get("vuela", False)
+            )
             prof_agua = profundidad_agua_potable(celda)
-            if prof_agua > dims.altura:
+            if prof_agua > dims.altura and not especie_vuela:
                 nec.oxigenacion = max(0.0, nec.oxigenacion - self.tasa_drenaje_oxigeno)
             else:
                 nec.oxigenacion = min(1.0, nec.oxigenacion + self.tasa_recup_oxigeno)

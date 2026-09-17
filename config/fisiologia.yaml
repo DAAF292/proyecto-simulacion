@@ -394,6 +394,29 @@ necesidades:
     tasa_perdida_hidratacion_por_tick: 0.0008
     probabilidad_muerte_deshidratacion: 0.0004
 
+  aguila:
+    # AÑADIDO 2026-09-17 (ver docs/superpowers/specs/2026-09-17-vuelo-
+    # aguila-design.md) -- MISMO fallo exacto que ya se documentó para
+    # zorro justo arriba, esta vez detectado por el harness completo
+    # (15x10000 ticks) en vez de por una corrida dedicada: la spec
+    # original dejó aguila SIN entrada propia, cayendo al `defecto`
+    # (tasa_perdida_saciedad_por_tick=0.012 -- 15x MÁS RÁPIDO que el par
+    # ya validado del resto del catálogo). Verificado con un trazado
+    # directo de un individuo real: saciedad cae de 1.0 a 0.0 en menos
+    # de 100 ticks pese a pasar el 53% de esos ticks en Accion.CAZAR
+    # -- no es que aguila no cace, es que el hambre le gana la carrera
+    # de forma estructural. Resultado agregado real (15 semillas): 0
+    # concepciones en TODA la corrida, causa de muerte dominante
+    # inanición (95 de 118 muertes) -- identico patrón cualitativo al
+    # que motivó el fix de zorro (100% de muertes por inanición, 0
+    # concepciones). Mismo par ya validado que el resto del catálogo,
+    # sin excepción. PROVISIONAL, sin recalibrar contra el harness
+    # completo tras este cambio.
+    tasa_perdida_saciedad_por_tick: 0.0008
+    probabilidad_muerte_saciedad_critica: 0.0004
+    tasa_perdida_hidratacion_por_tick: 0.0008
+    probabilidad_muerte_deshidratacion: 0.0004
+
 consumo:
   # tasa_consumo_al_comer (2026-09-10, ver docs/superpowers/specs/
   # 2026-09-10-tasa-consumo-por-especie-design.md): valor UNIVERSAL de
