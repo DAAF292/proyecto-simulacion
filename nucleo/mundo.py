@@ -82,3 +82,20 @@ class Mundo:
         # cualquier especie (no solo gnomo), sin identidad persistida
         # entre recálculos, no se guarda en SQLite.
         self.manadas: dict[int, Any] = {}
+
+        # CORREGIDO 2026-09-13 (bug real, encontrado via el prototipo
+        # terminal en vivo -- Diego: "por que se repiten los mensajes?"):
+        # vivia antes en CADA ZonaBioma.estacion_previa (ver
+        # nucleo/zona_bioma.py), asumiendo que el cambio de estacion era
+        # "por zona" -- pero la estacion la decide Reloj.estacion, un
+        # unico reloj global compartido por TODAS las zonas (superficie +
+        # cada cueva). Con varias zonas, sistemas/sistema_clima.py emitia
+        # un evento CambioEstacion IDENTICO por cada una el mismo dia --
+        # cuatro zonas, cuatro lineas repetidas en la cronica. El CLIMA
+        # (sistema_clima.py:actualizar, sorteo del tiempo) SI es
+        # legitimamente por zona y sigue viviendo en ZonaBioma.clima_actual
+        # sin cambios -- solo la deteccion de cambio de ESTACION (un
+        # hecho de calendario, no de bioma) se mueve aqui, al unico sitio
+        # que representa "el mundo" en su conjunto. No se persiste, mismo
+        # criterio que asentamientos/manadas.
+        self.estacion_previa: Any = None

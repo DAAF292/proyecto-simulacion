@@ -5,11 +5,14 @@ que sistema_recursos.py: toda la mutacion de un mismo dominio vive en un
 solo sitio):
 
 - Estacion: puramente derivada de Reloj.estacion (nucleo/clima.py,
-  estacion_actual) -- no hay estado propio que mantener, se recalcula
-  cada corte de dia. Se detecta el CAMBIO de estacion comparando con la
-  ultima conocida, para emitir un evento NOTABLE solo al entrar en una
-  nueva (mismo patron que CrisisMental: se narra la transicion, no cada
-  dia que dura).
+  estacion_actual) -- un unico reloj GLOBAL, compartido por todas las
+  zonas. Se detecta el CAMBIO de estacion comparando con la ultima
+  conocida (mundo.estacion_previa, no una copia por zona -- CORREGIDO
+  2026-09-13, ver git log: vivia antes en cada ZonaBioma y se repetia
+  una vez por zona el mismo dia, un evento identico por cada cueva
+  ademas de superficie), para emitir un evento NOTABLE solo al entrar en
+  una nueva (mismo patron que CrisisMental: se narra la transicion, no
+  cada dia que dura).
 - Clima: sorteo con probabilidad condicionada a la estacion activa
   (nucleo/clima.sortear_clima), guardado en zona.clima_actual. Cambia
   potencialmente cada dia -- no se narra cada cambio como NOTABLE (seria
@@ -48,6 +51,27 @@ class SistemaClima:
         self.rng = rng
 
     def ejecutar(self, gestor, mundo, reloj: Reloj, bus_eventos: BusEventos) -> None:
+        # CORREGIDO 2026-09-13: el cambio de ESTACION es un hecho global
+        # (un unico Reloj compartido por todas las zonas), se detecta y
+        # se emite UNA sola vez aqui -- antes vivia dentro de actualizar()
+        # y se repetia una vez por zona (superficie + cada cueva), tantas
+        # lineas identicas en la cronica como zonas hubiera. El CLIMA
+        # (tiempo del dia) SI es legitimamente por zona y sigue
+        # sorteandose una vez por cada una dentro de actualizar().
+        if reloj.tick_actual % Reloj.TICKS_POR_DIA == 0:
+            estacion_hoy = estacion_actual(reloj.estacion)
+            if mundo.estacion_previa != estacion_hoy:
+                bus_eventos.emitir(
+                    Evento(
+                        tipo="CambioEstacion",
+                        severidad=Severidad.NOTABLE,
+                        tick=reloj.tick_actual,
+                        entidad_id=None,
+                        datos={"estacion": estacion_hoy.value},
+                    )
+                )
+            mundo.estacion_previa = estacion_hoy
+
         # Cada ZonaBioma sortea su propio clima -- se actualizan todas
         # las zonas del territorio, no solo zonas[0].
         for zona in mundo.territorio.zonas:
@@ -59,19 +83,6 @@ def actualizar(zona, reloj: Reloj, config: dict, rng: random.Random, bus: BusEve
         return
 
     estacion_hoy = estacion_actual(reloj.estacion)
-
-    if zona.estacion_previa != estacion_hoy:
-        bus.emitir(
-            Evento(
-                tipo="CambioEstacion",
-                severidad=Severidad.NOTABLE,
-                tick=tick_actual,
-                entidad_id=None,
-                datos={"estacion": estacion_hoy.value},
-            )
-        )
-    zona.estacion_previa = estacion_hoy
-
     zona.clima_actual = sortear_clima(rng, estacion_hoy, config["clima"])
     bus.emitir(
         Evento(
