@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from componentes.agarre import Agarre
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -50,10 +51,11 @@ from nucleo.reloj import Reloj
 def _serializar_snapshot_padre(gest: Gestacion | None) -> dict[str, Any]:
     """
     Convierte la instantánea del padre guardada en Gestacion (dimensiones_
-    padre, temperamento_padre, capacidad_mental_padre, duracion_gestacion_
-    padre, tamano_camada) en un dict serializable a JSON. tick_inicio e
-    id_padre SÍ tienen sus propias columnas (no van aquí); todo lo demás
-    de la instantánea del padre se empaqueta en un único blob JSON.
+    padre, temperamento_padre, capacidad_mental_padre,
+    animo_punto_base_padre, duracion_gestacion_padre, tamano_camada) en un
+    dict serializable a JSON. tick_inicio e id_padre SÍ tienen sus propias
+    columnas (no van aquí); todo lo demás de la instantánea del padre se
+    empaqueta en un único blob JSON.
     """
     if gest is None:
         return {}
@@ -61,25 +63,33 @@ def _serializar_snapshot_padre(gest: Gestacion | None) -> dict[str, Any]:
         "dimensiones_padre": dataclasses.asdict(gest.dimensiones_padre),
         "temperamento_padre": dataclasses.asdict(gest.temperamento_padre),
         "capacidad_mental_padre": dataclasses.asdict(gest.capacidad_mental_padre),
+        "animo_punto_base_padre": gest.animo_punto_base_padre,
         "duracion_gestacion_padre": gest.duracion_gestacion_padre,
         "tamano_camada": gest.tamano_camada,
     }
 
 
 def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, Any]) -> Gestacion:
-    """Inversa de _serializar_snapshot_padre -- ver su docstring."""
+    """Inversa de _serializar_snapshot_padre -- ver su docstring.
+
+    animo_punto_base_padre (2026-09-18): .get con default 0.5 -- una
+    partida guardada ANTES de este círculo no tiene esta clave en su
+    blob JSON; 0.5 es el centro neutro de punto_base, mismo valor que
+    el default del propio componente Animo.
+    """
     return Gestacion(
         tick_inicio=tick_inicio,
         id_padre=id_padre,
         dimensiones_padre=DimensionesFisicas(**snapshot["dimensiones_padre"]),
         temperamento_padre=Temperamento(**snapshot["temperamento_padre"]),
         capacidad_mental_padre=CapacidadMental(**snapshot["capacidad_mental_padre"]),
+        animo_punto_base_padre=snapshot.get("animo_punto_base_padre", 0.5),
         duracion_gestacion_padre=snapshot["duracion_gestacion_padre"],
         tamano_camada=snapshot["tamano_camada"],
     )
 
 
-VERSION_ESQUEMA = "0.41-fase0"
+VERSION_ESQUEMA = "0.42-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -257,7 +267,14 @@ class Persistencia:
                     -- posicionales fila[N] ya usados por el resto de este
                     -- modulo al cargar -- un campo nuevo intercalado habria
                     -- desplazado docenas de indices sin necesidad real.
-                    comodidad REAL NOT NULL DEFAULT 0.0
+                    comodidad REAL NOT NULL DEFAULT 0.0,
+                    -- animo (2026-09-18, ver componentes/animo.py): AL FINAL
+                    -- por el mismo motivo que comodidad arriba -- no
+                    -- renumerar los indices posicionales fila[N] ya usados.
+                    -- DEFAULT 0.5 (centro neutro) para partidas guardadas
+                    -- antes de este circulo.
+                    animo_estado REAL NOT NULL DEFAULT 0.5,
+                    animo_punto_base REAL NOT NULL DEFAULT 0.5
                 )
                 """
             )
@@ -572,6 +589,7 @@ class Persistencia:
                 semillas = gestor.obtener_componente(eid, Semillas)
                 relaciones = gestor.obtener_componente(eid, Relaciones)
                 vocacion = gestor.obtener_componente(eid, Vocacion)
+                animo = gestor.obtener_componente(eid, Animo)
 
                 if pos and nec and dims and pf and temp and cm and pm and rep:
                     filas_criaturas.append(
@@ -650,6 +668,8 @@ class Persistencia:
                                 }
                             ) if vocacion else None,
                             nec.comodidad,
+                            animo.estado if animo else 0.5,
+                            animo.punto_base if animo else 0.5,
                         )
                     )
             cur.executemany(
@@ -657,7 +677,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -1001,7 +1021,10 @@ class Persistencia:
             # y desplaza en +1 esos índices otra vez más (fila[52]..fila[56]);
             # comodidad (2026-09-14, Pieza C del arco "comodidad") se
             # añadió DESPUÉS de vocacion, como fila[52], y desplaza en +1
-            # esos índices una última vez (fila[53]..fila[57]).
+            # esos índices una vez más (fila[53]..fila[57]); animo_estado/
+            # animo_punto_base (2026-09-18, ver componentes/animo.py) se
+            # añadieron DESPUÉS de comodidad, como fila[53]/fila[54], y
+            # desplazan en +2 esos índices una última vez (fila[55]..fila[59]).
             # La columna inventario (fila[46]) guarda un JSON único con
             # {"contenidos": ..., "objetos": ...} desde armas primitivas v2
             # (2026-09-03) -- ver carga de Inventario más abajo. Ninguno
@@ -1030,6 +1053,9 @@ class Persistencia:
                         impulso_reproductivo=fila[10],
                         comodidad=fila[52],
                     ),
+                )
+                gestor.anadir_componente(
+                    eid, Animo(estado=fila[53], punto_base=fila[54])
                 )
                 dims = DimensionesFisicas(
                     peso=fila[11],
@@ -1146,11 +1172,11 @@ class Persistencia:
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[53]),
-                        nombre=fila[54],
-                        tick_nacimiento=fila[55],
-                        id_madre=fila[56],
-                        id_padre=fila[57],
+                        especie=Especie(fila[55]),
+                        nombre=fila[56],
+                        tick_nacimiento=fila[57],
+                        id_madre=fila[58],
+                        id_padre=fila[59],
                     ),
                 )
 

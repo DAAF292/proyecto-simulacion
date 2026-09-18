@@ -191,6 +191,7 @@ cazar) -- buscar pareja no es un esfuerzo fisico sostenido equivalente,
 es basicamente caminar, la misma accion de base que deambular.
 """
 from componentes.agarre import Agarre
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
@@ -697,6 +698,11 @@ def actualizar(
             techos_por_especie[especie] = techos
         return techos
 
+    cfg_animo = config.get("animo", {})
+    peso_animo_deambular = float(cfg_animo.get("peso_animo_deambular", 0.15))
+    impulso_entrada_crisis = float(cfg_animo.get("impulso_entrada_crisis", 0.25))
+    impulso_salida_crisis = float(cfg_animo.get("impulso_salida_crisis", 0.1))
+
     for id_entidad in gestor.entidades_con(
         Necesidades, Intencion, Identidad, PoolFisico, PoolMental, Temperamento, Reproduccion,
         CapacidadMental, Inventario, DimensionesFisicas, Posicion,
@@ -708,6 +714,7 @@ def actualizar(
         pool_mental = gestor.obtener_componente(id_entidad, PoolMental)
         temperamento = gestor.obtener_componente(id_entidad, Temperamento)
         cap_mental = gestor.obtener_componente(id_entidad, CapacidadMental)
+        animo = gestor.obtener_componente(id_entidad, Animo)
         inventario = gestor.obtener_componente(id_entidad, Inventario)
         dims = gestor.obtener_componente(id_entidad, DimensionesFisicas)
         pos = gestor.obtener_componente(id_entidad, Posicion)
@@ -741,7 +748,21 @@ def actualizar(
                         datos=datos_crisis,
                     )
                 )
+                # Animo (2026-09-18, ver componentes/animo.py): impulso
+                # puntual NEGATIVO solo en la transicion de ENTRADA (mismo
+                # criterio que el propio Evento CrisisMental, no en cada
+                # tick que dura).
+                if animo is not None:
+                    animo.estado = max(0.0, animo.estado - impulso_entrada_crisis)
             continue  # override completo -- no compite en la Utility AI normal
+
+        # Animo (2026-09-18): transicion de SALIDA de crisis -- se detecta
+        # aqui, en el camino normal (NO se entra en el bloque de arriba
+        # este tick), comparando Intencion.accion contra el valor del tick
+        # anterior ANTES de que la Utility AI normal la sobreescriba mas
+        # abajo. Impulso puntual POSITIVO, menor que el de entrada.
+        if animo is not None and intencion.accion in _ACCIONES_CRISIS:
+            animo.estado = min(1.0, animo.estado + impulso_salida_crisis)
 
         utilidad_huir = 0.0 if agotado else (1.0 - necesidades.seguridad)
 
@@ -819,10 +840,17 @@ def actualizar(
         # calculada). Primer consumidor real de Temperamento.curiosidad,
         # modulando en pie de igualdad con sociabilidad. Sin drive dinamico
         # nuevo: usa directamente los rasgos fijos de Temperamento.
+        # Animo (2026-09-18, ver componentes/animo.py): factor_animo_social
+        # en [0.5, 1.0] -- animo bajo reduce la motivacion social efectiva
+        # hasta la mitad de lo que darian sociabilidad+curiosidad solas;
+        # animo alto NO da bonus por encima del rasgo fijo (solo frena, no
+        # empuja hacia arriba).
+        factor_animo_social = 0.5 + 0.5 * animo.estado if animo is not None else 1.0
         utilidad_socializar = (
             0.0
             if (cap_mental.consciencia < umbral_consciencia_agencia or fisica_bajo_umbral)
             else utilidad_socializar_base * (temperamento.sociabilidad + temperamento.curiosidad) / 2.0
+            * factor_animo_social
         )
 
         # CONSTRUIR / RECOLECTAR (ver docstring del modulo,
@@ -1409,6 +1437,14 @@ def actualizar(
                     sistema_decision._stats_gate_manos_libres_disparado += 1
                 utilidad_fabricar = 0.0
 
+        # Animo (2026-09-18, ver componentes/animo.py): animo bajo empuja
+        # hacia deambular sin rumbo (inquietud/aislamiento) -- suma sobre
+        # la base fija, nunca resta por debajo de ella (un animo alto no
+        # reduce la utilidad de fondo, solo uno bajo la aumenta).
+        utilidad_deambular = base_deambular + (
+            peso_animo_deambular * (1.0 - animo.estado) if animo is not None else 0.0
+        )
+
         candidatas = (
             (utilidad_huir, Accion.HUIR),
             # BUSCAR_REFUGIO_PARTO justo despues de HUIR (2026-09-17,
@@ -1452,7 +1488,7 @@ def actualizar(
             # bajas su utilidad puede quedar por debajo de 0.1 y DEAMBULAR
             # gana el argmax -- la decision es continua, no una regla de zona.
             (utilidad_socializar, Accion.SOCIALIZAR),
-            (base_deambular, Accion.DEAMBULAR),
+            (utilidad_deambular, Accion.DEAMBULAR),
         )
         # max() con esta lista respeta el orden de prioridad en empates
         # porque conserva el primer maximo encontrado.

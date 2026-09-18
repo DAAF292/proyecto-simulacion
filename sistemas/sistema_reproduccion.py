@@ -72,6 +72,7 @@ progenitores, como fraccion del rango racial completo -- provisional,
 sin calibrar contra el motor en marcha (ver nucleo/entidad.py:
 _heredar_valor).
 """
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
@@ -245,6 +246,18 @@ def _resolver_nacimientos(gestor, config: dict, rng, bus: BusEventos, tick_actua
                     },
                 )
             )
+            # Animo de la madre (2026-09-18, ver componentes/animo.py):
+            # impulso puntual POSITIVO por nacimiento -- aplicado aqui
+            # directamente (no via bus_eventos en sistema_necesidades.py)
+            # porque SistemaReproduccion corre DESPUES de SistemaNecesidades
+            # en el orden de fases del tick (main.py) -- leerlo desde el
+            # bus en necesidades llegaria con un tick de retraso.
+            animo_madre = gestor.obtener_componente(id_madre, Animo)
+            if animo_madre is not None:
+                impulso_nacimiento = float(
+                    config.get("animo", {}).get("impulso_nacimiento", 0.15)
+                )
+                animo_madre.estado = min(1.0, animo_madre.estado + impulso_nacimiento)
         gestor.quitar_componente(id_madre, Gestacion)
 
 
@@ -359,6 +372,7 @@ def actualizar(
 
         dimensiones_macho = gestor.obtener_componente(id_macho, DimensionesFisicas)
         capacidad_macho = gestor.obtener_componente(id_macho, CapacidadMental)
+        animo_macho = gestor.obtener_componente(id_macho, Animo)
         rep_macho = gestor.obtener_componente(id_macho, Reproduccion)
         # tamano_camada (ver componentes/gestacion.py y
         # config/constantes.yaml seccion 'camada'): se sortea AQUI, en la
@@ -386,6 +400,7 @@ def actualizar(
                 dimensiones_padre=dimensiones_macho,
                 temperamento_padre=temperamento_macho,
                 capacidad_mental_padre=capacidad_macho,
+                animo_punto_base_padre=animo_macho.punto_base,
                 duracion_gestacion_padre=rep_macho.duracion_gestacion_dias,
                 tamano_camada=tamano_camada,
             ),

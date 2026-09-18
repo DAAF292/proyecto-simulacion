@@ -92,8 +92,16 @@ class SistemaColonizacion:
 
             x, y = self.rng.choice(celdas_candidatas)
             especie = Especie(especie_str)
-            for _ in range(self.tamano_pareja_colonizadora):
+            # entidades_id (2026-09-18, hallazgo colateral del circulo de
+            # Animo): SIN esto, main.py no puede registrar la pareja en la
+            # tabla historica 'entidades' -- el INNER JOIN de
+            # Persistencia.cargar_snapshot() las descartaba en silencio en
+            # cualquier partida guardada tras una colonizacion espontanea,
+            # desde el mismo dia en que se introdujo este sistema.
+            ids_nuevos = [
                 crear_criatura(gestor, especie, x, y, self.config, self.rng)
+                for _ in range(self.tamano_pareja_colonizadora)
+            ]
 
             bus_eventos.emitir(
                 Evento(
@@ -103,6 +111,7 @@ class SistemaColonizacion:
                     datos={
                         "especie": especie_str, "x": x, "y": y,
                         "poblacion_previa": poblacion_actual,
+                        "entidades_id": ids_nuevos,
                     },
                 )
             )

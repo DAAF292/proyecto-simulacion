@@ -11,6 +11,7 @@ import random
 from typing import Any, Type, TypeVar
 
 from componentes.agarre import Agarre
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.fogata import Fogata
@@ -445,6 +446,14 @@ def crear_criatura(
     )
     gestor.anadir_componente(entidad_id, temp)
 
+    # 3b. Animo (2026-09-18, ver componentes/animo.py) -- punto_base
+    # sorteado con el mismo mecanismo que Temperamento (rango racial,
+    # NO derivado de ningun rasgo de temp de arriba). estado arranca
+    # igual a punto_base -- un individuo recien creado no tiene ningun
+    # empujon fisiologico/social todavia.
+    punto_base_animo = _sortear_valor(rng, cfg_esp.get("punto_base", [0.4, 0.6]))
+    gestor.anadir_componente(entidad_id, Animo(estado=punto_base_animo, punto_base=punto_base_animo))
+
     # 4. Capacidad Mental
     mental = CapacidadMental(
         inteligencia=_sortear_valor(rng, cfg_esp.get("inteligencia", [0.2, 0.6])),
@@ -682,6 +691,19 @@ def nacer_criatura(
         curiosidad=heredar("curiosidad", temperamento_madre.curiosidad, temp_padre.curiosidad),
     )
     gestor.anadir_componente(entidad_id, temp)
+
+    # Animo (2026-09-18, ver componentes/animo.py) -- mismo mecanismo de
+    # herencia que Temperamento: punto_base es promedio+mutacion de
+    # ambos progenitores, acotado al rango racial. estado arranca igual
+    # a SU PROPIO punto_base heredado, nunca al estado del momento de
+    # ningun progenitor (mismo criterio que el resto de pools dinamicos).
+    animo_madre = gestor.obtener_componente(id_madre, Animo)
+    punto_base_hijo = heredar(
+        "punto_base", animo_madre.punto_base, gestacion.animo_punto_base_padre
+    )
+    gestor.anadir_componente(
+        entidad_id, Animo(estado=punto_base_hijo, punto_base=punto_base_hijo)
+    )
 
     mental = CapacidadMental(
         inteligencia=heredar("inteligencia", capacidad_madre.inteligencia, capacidad_padre.inteligencia),

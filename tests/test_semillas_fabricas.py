@@ -50,6 +50,7 @@ def test_ley_nacer_criatura_anade_semillas_vacio():
         dimensiones_padre=dim_padre,
         temperamento_padre=temp_padre,
         capacidad_mental_padre=cap_padre,
+        animo_punto_base_padre=0.5,
         duracion_gestacion_padre=rep_padre.duracion_gestacion_dias,
         tamano_camada=1,
     )

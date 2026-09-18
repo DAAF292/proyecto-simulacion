@@ -129,6 +129,14 @@ rangos_raciales:
     lealtad: [0.4, 0.8]
     fe: [0.3, 0.7]
     curiosidad: [0.4, 0.8]
+    # punto_base (2026-09-18, componentes/animo.py -- ver docs/superpowers/
+    # specs/2026-09-18-animo-design.md): ancla individual del estado de
+    # animo, mismo mecanismo de sorteo/herencia que Temperamento pero capa
+    # conceptualmente distinta (no derivada de ningun rasgo de arriba).
+    # PROVISIONAL: las 9 especies parten del MISMO rango neutro [0.4, 0.6]
+    # -- sin base empirica todavia de que una especie deba nacer mas
+    # optimista que otra, diferenciarlo es calibracion futura.
+    punto_base: [0.4, 0.6]
     inteligencia: [0.4, 0.8]
     memoria: [0.4, 0.8]
     voluntad: [0.3, 0.7]
@@ -191,6 +199,7 @@ rangos_raciales:
     lealtad: [0.5, 0.9]
     fe: [0.0, 0.3]
     curiosidad: [0.2, 0.5]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.2, 0.5]
     memoria: [0.3, 0.6]
     voluntad: [0.2, 0.5]
@@ -330,6 +339,7 @@ rangos_raciales:
     lealtad: [0.3, 0.6]
     fe: [0.0, 0.1]
     curiosidad: [0.2, 0.5]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.1, 0.3]
     memoria: [0.2, 0.5]
     voluntad: [0.1, 0.3]
@@ -414,6 +424,7 @@ rangos_raciales:
     lealtad: [0.2, 0.5]
     fe: [0.0, 0.1]
     curiosidad: [0.4, 0.8]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.15, 0.35]
     memoria: [0.25, 0.55]
     voluntad: [0.1, 0.3]
@@ -476,6 +487,7 @@ rangos_raciales:
     lealtad: [0.4, 0.7]
     fe: [0.0, 0.1]
     curiosidad: [0.2, 0.5]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.1, 0.3]
     memoria: [0.2, 0.5]
     voluntad: [0.1, 0.3]
@@ -540,6 +552,7 @@ rangos_raciales:
     lealtad: [0.4, 0.7]
     fe: [0.0, 0.1]
     curiosidad: [0.2, 0.5]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.1, 0.3]
     memoria: [0.2, 0.5]
     voluntad: [0.1, 0.3]
@@ -586,6 +599,7 @@ rangos_raciales:
     lealtad: [0.4, 0.7]
     fe: [0.0, 0.1]
     curiosidad: [0.2, 0.5]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.1, 0.3]
     memoria: [0.2, 0.5]
     voluntad: [0.1, 0.3]
@@ -645,6 +659,7 @@ rangos_raciales:
     lealtad: [0.3, 0.6]
     fe: [0.0, 0.2]
     curiosidad: [0.3, 0.6]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.3, 0.6]
     memoria: [0.3, 0.6]
     voluntad: [0.2, 0.5]
@@ -699,6 +714,7 @@ rangos_raciales:
     lealtad: [0.2, 0.5]
     fe: [0.0, 0.2]
     curiosidad: [0.3, 0.6]
+    punto_base: [0.4, 0.6]
     inteligencia: [0.3, 0.6]
     memoria: [0.3, 0.6]
     voluntad: [0.3, 0.6]

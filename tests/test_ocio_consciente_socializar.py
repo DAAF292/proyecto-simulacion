@@ -17,6 +17,7 @@ exactamente el comportamiento (escribe rencor NEGATIVO).
 import random
 from pathlib import Path
 
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.identidad import Especie
@@ -109,6 +110,11 @@ def _gnomo_ocio_pleno(gestor, config, rng, mundo, temp, cap, x=0, y=0,
     nec = gestor.obtener_componente(eid, Necesidades)
     nec.confort_termico = confort_termico
     nec.comodidad = calidad
+    # Animo neutralizado a pleno (2026-09-18, ver componentes/animo.py):
+    # mismo motivo que confort_termico/comodidad arriba -- sin esto, el
+    # punto_base sorteado (0.4-0.6) introduciria un factor de ambientacion
+    # social no controlado, ajeno a lo que este fichero prueba.
+    gestor.obtener_componente(eid, Animo).estado = 1.0
     return eid
 
 

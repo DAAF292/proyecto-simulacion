@@ -646,6 +646,25 @@ def avanzar_un_tick(
             estado.persistencia.registrar_entidad_nueva(ev.entidad_id, ev.datos)
         elif ev.tipo == "Muerte":
             estado.persistencia.marcar_entidad_muerta(ev.entidad_id)
+        elif ev.tipo == "ColonizacionEspontanea":
+            # 2026-09-18, hallazgo colateral del circulo de Animo: sin
+            # esto, una pareja colonizadora nunca entraba en la tabla
+            # historica 'entidades' -- el INNER JOIN de
+            # Persistencia.cargar_snapshot() la descartaba en silencio en
+            # cualquier partida guardada tras dispararse este sistema,
+            # desde el mismo dia en que se introdujo (mismo patron que
+            # _registrar_fundador() para la poblacion inicial).
+            for eid_colono in ev.datos.get("entidades_id", []):
+                identidad_colono = estado.gestor.obtener_componente(eid_colono, Identidad)
+                if identidad_colono is not None:
+                    estado.persistencia.registrar_entidad_nueva(
+                        eid_colono,
+                        {
+                            "especie": identidad_colono.especie.value,
+                            "nombre": identidad_colono.nombre,
+                            "tick_nacimiento": identidad_colono.tick_nacimiento,
+                        },
+                    )
     estado.persistencia.persistir_eventos(eventos_tick)
 
     lineas_narradas = narrar(eventos_tick, estado.gestor)

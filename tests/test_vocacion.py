@@ -8,6 +8,7 @@ import random
 import tempfile
 from pathlib import Path
 
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Especie, Identidad
@@ -158,6 +159,12 @@ def _gnomo_neutralizado(gestor, config, rng, x=0, y=0) -> int:
     nec.confort_termico = 1.0
     gestor.obtener_componente(eid, Temperamento).sociabilidad = 0.0
     gestor.obtener_componente(eid, CapacidadMental).consciencia = 0.8
+    # Animo neutralizado a pleno (2026-09-18, ver componentes/animo.py):
+    # este helper existe para aislar el efecto bajo prueba (aptitud
+    # vocacional) del resto de moduladores de utilidad_socializar -- sin
+    # esto, el punto_base sorteado (0.4-0.6) introduciria un factor no
+    # controlado.
+    gestor.obtener_componente(eid, Animo).estado = 1.0
     return eid
 
 

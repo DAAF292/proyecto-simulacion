@@ -167,3 +167,76 @@ sociedad. Nombre rechazado antes de Agarre: "Empuñadura" -- Diego lo
 corrigió: "si creamos una raza que tenga 4 manos que, o una con dos
 manos y una cola prensil... es parte de la criatura, una capacidad que
 tiene como tiene la de andar o comer".
+
+## `animo.py`
+
+FUNDAMENTO (2026-09-18, conversación de diseño con Diego). Origen:
+Diego señaló un hueco real en la misma sesión que cerró evasión por
+vuelo/nivel trófico/colonización espontánea (ver
+`docs/historial_fauna_especies.md`) -- "no tenemos en el motor ningún
+mecanismo que nos permita saber cuál es el estado anímico de las
+criaturas, eso es algo cambiante en lo que afecta el temperamento y
+muchas otras cosas externas". Verificado contra el código antes de
+diseñar: no existía nada parecido -- ni `Temperamento` (fijo de por
+vida) ni `PoolMental.estabilidad` (dinámico, pero un eje de riesgo de
+colapso mental, binario en la práctica hasta tocar fondo, sin ninguna
+gradación conductual intermedia) cubrían "cómo se siente este individuo
+en general ahora mismo".
+
+Tres decisiones de alcance cerradas explícitamente por Diego antes de
+diseñar el mecanismo (2026-09-18): un único eje escalar (no varias
+dimensiones de afecto tipo valencia/activación); fuentes desde el
+primer círculo = fisiológico + clima + eventos sociales (Diego eligió
+la opción de mayor superficie en vez de la más pequeña recomendada,
+con la advertencia explícita de que esto se aparta del principio de
+"círculos pequeños" del propio proyecto); efecto de vuelta = AMBOS
+(modula decisión de forma continua Y alimenta `PoolMental` como fuente
+adicional, en vez de solo uno de los dos).
+
+Diseño final: `punto_base` (ancla racial + sorteo individual, SÍ
+hereditario -- mismo mecanismo que `Temperamento`, capa
+deliberadamente NO derivada de ningún rasgo de Temperamento pese a que
+Diego preguntó si debía atarse a alguno) + `estado` (el valor dinámico,
+nunca hereditario, arranca igual a `punto_base` en cada nacimiento).
+Deriva hacia un objetivo que combina la urgencia fisiológica máxima
+(mismo "cuello de botella" que ya usa la Utility AI), `confort_termico`
+(síntesis ya existente de clima+estación+refugio+fogata, nunca se lee
+`Clima`/`Estacion` directamente) y tres impulsos puntuales de catálogo
+deliberadamente corto: duelo (pérdida de un vínculo `Relaciones` de
+afinidad alta), nacimiento propio, entrada/salida de `CrisisMental`.
+Efectos de vuelta: modula `utilidad_socializar` (factor en [0.5, 1.0],
+nunca da bonus por encima del temperamento fijo) y `utilidad_deambular`
+(ánimo bajo empuja hacia el aislamiento), y añade una fuente adicional
+de drenaje/alivio a `PoolMental.estabilidad` -- deliberadamente
+excluidas de este primer círculo las utilidades de supervivencia dura
+(huir/comer/beber/dormir/pareja/construir), para no introducir una
+fuente más de varianza justo cuando la estabilidad de población está
+bajo escrutinio activo (ver `docs/historial_estabilidad_poblacion.md`).
+
+Spec completo, con la sección de verificación real (bugs encontrados al
+implementar, no solo al diseñar): `docs/superpowers/specs/
+2026-09-18-animo-design.md`. Dos hallazgos reales de esa verificación
+merecen cita aparte: (1) la primera pasada de implementación olvidó
+sortear/heredar `Animo` en `nucleo/entidad.py::nacer_criatura` (solo se
+hizo en `crear_criatura`, la siembra fundadora) -- detectado por un test
+de herencia, no por lectura de código; (2) verificando la persistencia
+de `Animo` de punta a punta (guardar/cargar una partida real de 600
+ticks) se descubrió que `sistema_colonizacion.py` (círculo del
+2026-09-17) creaba parejas colonizadoras sin registrarlas en la tabla
+histórica `entidades` -- el INNER JOIN de
+`Persistencia.cargar_snapshot()` las descartaba en silencio en
+cualquier partida guardada tras dispararse ese sistema, desde el mismo
+día en que se introdujo. Corregido en el mismo círculo (ajeno a Animo
+pero en el mismo dominio de persistencia que ya se estaba verificando).
+
+Observación honesta, PROVISIONAL, deliberadamente sin recalibrar por
+iniciativa propia: un smoke test real de 600 ticks (12 individuos,
+gnomo/lobo/conejo, semilla única) mostró `Animo.estado` cayendo con
+fuerza real -- media 0.10, la mayoría de individuos en 0.0 --
+correlacionado con `Necesidades.energia` llegando a 0.0 en varias
+criaturas. Coherente con el propio diseño (una sola necesidad en crisis
+ya basta para arrastrar el objetivo a 0 con
+`peso_fisiologico_animo=0.4`), pero no hay base todavía para saber si
+es la calibración deseada o demasiado agresiva -- ninguna constante de
+`config/animo.yaml` se tocó a partir de esta única observación; hace
+falta el harness completo para calibrar con criterio real.

@@ -137,3 +137,34 @@ def test_umbral_configurable_permite_poblacion_ligeramente_por_encima():
 
     # 3 < umbral 5 -- SI deberia colonizar (2 mas -> 5 en total)
     assert _poblacion_de(gestor, Especie.ZORRO) == 5
+
+
+def test_evento_incluye_entidades_id_de_la_pareja_nueva():
+    """Ley (2026-09-18, hallazgo colateral del circulo de Animo): el
+    evento lleva los ids reales de la pareja creada -- sin esto, main.py
+    no puede registrarlos en la tabla historica 'entidades', y el INNER
+    JOIN de Persistencia.cargar_snapshot() los descarta en silencio en
+    cualquier partida guardada tras una colonizacion."""
+    config = _config()
+    config["colonizacion"] = dict(config["colonizacion"])
+    config["colonizacion"]["probabilidad_colonizacion_diaria"] = 1.0
+    config["colonizacion"]["tamano_pareja_colonizadora"] = 2
+    gestor = GestorEntidades()
+    mundo = Mundo(20, 20, config, random.Random(1))
+
+    sistema = SistemaColonizacion(config, random.Random(3))
+    reloj = Reloj()
+    bus = BusEventos()
+    sistema.ejecutar(gestor, mundo, reloj, bus)
+
+    eventos_zorro = [
+        e for e in bus.eventos_del_tick
+        if e.tipo == "ColonizacionEspontanea" and e.datos.get("especie") == "zorro"
+    ]
+    assert len(eventos_zorro) == 1
+    ids_evento = eventos_zorro[0].datos.get("entidades_id")
+    assert ids_evento is not None and len(ids_evento) == 2
+    for eid in ids_evento:
+        identidad = gestor.obtener_componente(eid, Identidad)
+        assert identidad is not None
+        assert identidad.especie == Especie.ZORRO

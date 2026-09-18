@@ -1,0 +1,31 @@
+# ==============================================================================
+# config/animo.yaml
+# Estado de animo dinamico -- ver componentes/animo.py y docs/superpowers/
+# specs/2026-09-18-animo-design.md
+#
+# TODO PROVISIONAL: hipotesis de partida razonada, sin ninguna calibracion
+# contra el motor en marcha todavia -- primer circulo del mecanismo.
+# ==============================================================================
+
+animo:
+  # Deriva hacia el objetivo (mismo patron que confort_termico/comodidad
+  # en sistema_necesidades.py).
+  tasa_deriva_animo: 0.02
+  peso_fisiologico_animo: 0.4
+  peso_termico_animo: 0.3
+
+  # Eventos puntuales (sesgan `estado` directamente, no el objetivo).
+  umbral_afinidad_duelo: 0.5
+  impulso_duelo: 0.3
+  impulso_nacimiento: 0.15
+  impulso_entrada_crisis: 0.25
+  impulso_salida_crisis: 0.1
+
+  # Efecto sobre decision (sistema_decision.py).
+  peso_animo_deambular: 0.15
+
+  # Efecto sobre PoolMental (sistema_capacidad_mental.py).
+  umbral_animo_bajo: 0.3
+  umbral_animo_alto: 0.8
+  tasa_drenaje_animo_bajo: 0.01
+  tasa_alivio_animo_alto: 0.005

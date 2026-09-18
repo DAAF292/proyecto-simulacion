@@ -56,6 +56,7 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.identidad import Identidad
@@ -147,6 +148,16 @@ class SistemaNecesidades:
         self.piso_satisfaccion_vivienda: float = float(
             self.defecto.get("piso_satisfaccion_vivienda", 0.2)
         )
+        # Animo (2026-09-18, ver componentes/animo.py y docs/superpowers/
+        # specs/2026-09-18-animo-design.md): deriva hacia un objetivo,
+        # mismo patron que confort_termico/comodidad, ver bloque 4c en
+        # ejecutar(). PROVISIONAL, sin calibrar contra el motor en marcha.
+        cfg_animo = self.config.get("animo", {})
+        self.tasa_deriva_animo: float = float(cfg_animo.get("tasa_deriva_animo", 0.02))
+        self.peso_fisiologico_animo: float = float(cfg_animo.get("peso_fisiologico_animo", 0.4))
+        self.peso_termico_animo: float = float(cfg_animo.get("peso_termico_animo", 0.3))
+        self.umbral_afinidad_duelo: float = float(cfg_animo.get("umbral_afinidad_duelo", 0.5))
+        self.impulso_duelo: float = float(cfg_animo.get("impulso_duelo", 0.3))
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
         # Refugio/Fogata como fuentes de calor (ver nucleo/fuego.py y
         # config/fisiologia.yaml -- suman al objetivo ambiental, no lo
@@ -336,6 +347,20 @@ class SistemaNecesidades:
         drenaje de seguridad por amenaza y el bono de defensa en grupo.
         Sin indice, se construye uno interno (mismo comportamiento)."""
         self._indice_actual = indice if indice is not None else construir_indice_espacial(gestor)
+        # Duelo (bloque 4d, ver docstring del modulo y componentes/animo.py):
+        # ids de quien murio EN ESTE TICK, leidos una sola vez del bus antes
+        # del bucle -- se comparan contra Relaciones.vinculos de CADA
+        # individuo dentro del bucle principal (no exige percibir la muerte
+        # en el momento, a diferencia del trauma generico de PoolMental).
+        # Nota de sincronizacion de fases (main.py): captura las muertes de
+        # depredacion (fase anterior, mismo tick) pero NO las de incendio/
+        # ciclo_vital (corte de dia, fase posterior en el mismo tick) --
+        # esas se detectan con un tick de retraso. Aceptado por alcance,
+        # ver docs/superpowers/specs/2026-09-18-animo-design.md.
+        ids_fallecidos_tick = [
+            ev.entidad_id for ev in bus_eventos.eventos_del_tick
+            if ev.tipo == "Muerte" and ev.entidad_id is not None
+        ]
         entidades = sorted(
             gestor.entidades_con(Necesidades, Posicion, DimensionesFisicas, Identidad)
         )
@@ -351,6 +376,7 @@ class SistemaNecesidades:
             cap_mental = gestor.obtener_componente(eid, CapacidadMental)
             relaciones = gestor.obtener_componente(eid, Relaciones)
             satisfaccion = gestor.obtener_componente(eid, Satisfaccion)
+            animo = gestor.obtener_componente(eid, Animo)
 
             if nec is None or pos is None or dims is None or ident is None:
                 continue
@@ -570,6 +596,49 @@ class SistemaNecesidades:
                     nec.comodidad = max(
                         obj_comodidad, nec.comodidad - self.tasa_deriva_comodidad
                     )
+
+            # 4c. Deriva de Animo (2026-09-18, ver componentes/animo.py):
+            # mismo patron de deriva hacia un objetivo que confort_termico/
+            # comodidad arriba. A diferencia de comodidad, se aplica a TODA
+            # criatura (fauna incluida) -- fisiologia y clima ya se miden
+            # para todas por igual, sin gate de consciencia.
+            #
+            # urgencia_fisiologica: el "cuello de botella" de Maslow, mismo
+            # criterio que ya usa la Utility AI (sistema_decision.py) -- la
+            # necesidad peor cubierta manda, no una suma de las tres.
+            if animo is not None:
+                urgencia_fisiologica = max(
+                    1.0 - nec.saciedad, 1.0 - nec.hidratacion, 1.0 - nec.energia
+                )
+                objetivo_animo = (
+                    animo.punto_base
+                    - self.peso_fisiologico_animo * urgencia_fisiologica
+                    - self.peso_termico_animo * (1.0 - nec.confort_termico)
+                )
+                objetivo_animo = max(0.0, min(1.0, objetivo_animo))
+                if animo.estado < objetivo_animo:
+                    animo.estado = min(objetivo_animo, animo.estado + self.tasa_deriva_animo)
+                elif animo.estado > objetivo_animo:
+                    animo.estado = max(objetivo_animo, animo.estado - self.tasa_deriva_animo)
+
+                # 4d. Duelo (fuente social, solo consciente con Relaciones --
+                # fauna nunca escribe en su propio Relaciones, mismo
+                # aplazamiento que el resto del componente). Impulso
+                # PUNTUAL sobre estado, proporcional a la afinidad real del
+                # vinculo -- no exige percepcion espacial de la muerte, a
+                # diferencia del trauma generico de PoolMental.
+                if (
+                    relaciones is not None
+                    and ids_fallecidos_tick
+                    and cap_mental is not None
+                    and cap_mental.consciencia >= self.umbral_consciencia_agencia
+                ):
+                    for id_fallecido in ids_fallecidos_tick:
+                        vinculo = relaciones.vinculos.get(id_fallecido)
+                        if vinculo is not None and vinculo.afinidad >= self.umbral_afinidad_duelo:
+                            animo.estado = max(
+                                0.0, animo.estado - self.impulso_duelo * vinculo.afinidad
+                            )
 
             # 5. Seguridad: drena si hay amenaza percibida, se recupera si
             #    no (ver DRENAJE REAL DE SEGURIDAD POR AMENAZA en el

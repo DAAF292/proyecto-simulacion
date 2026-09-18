@@ -170,24 +170,17 @@ carpeta `in_review/` ahora vacía.
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- **Tests automatizados (CORREGIDO 2026-09-18, la cifra "76/675" llevaba
-  desactualizada desde el 2026-09-16 -- mismo patrón de honestidad que
-  ya obligó a corregir 87→129→675 en su momento)**: `tests/` contiene 87
-  ficheros / 759 tests reales a esta fecha (verificado con
-  `pytest --collect-only`, no de memoria). El salto de 675 a 759
-  corresponde a la ronda de vuelo/águila, evasión por vuelo, nivel
-  trófico, colonización espontánea, madurez por longevidad individual y
-  las correcciones de águila post-harness (ver "Estado actual" más
-  abajo y `docs/historial_fauna_especies.md`/
-  `docs/historial_estabilidad_poblacion.md` para el detalle completo de
-  cada pieza). Siguen escritos como "ley física" con docstring
+- **Tests automatizados (CORREGIDO 2026-09-18, misma tarde)**: `tests/`
+  contiene 88 ficheros / 772 tests reales a esta fecha (verificado con
+  `pytest --collect-only`, no de memoria). El salto de 759 a 772
+  corresponde al círculo de `Animo` (12 tests nuevos,
+  `tests/test_animo.py`, ver `docs/historial_componentes.md`) y al fix
+  del gap de persistencia de colonización espontánea descubierto al
+  verificarlo (1 test). Siguen escritos como "ley física" con docstring
   explicando el comportamiento que validan. La cobertura sigue siendo
   parcial (nada del bucle principal salvo el ciclo de vida del hilo de
   `GestorPartidas`, la mayoría de sistemas de comportamiento, ni la
   mayor parte de persistencia). CI/linting sigue sin configurar.
-
-## Cómo comportarte al ayudar en este proyecto
-
 - **Distingue el tipo de tarea**: diseño conceptual (se resuelve en
   conversación, proponer/justificar/invitar a la crítica/cerrar solo cuando
   Diego confirma), documentación (cuando algo se cierre, ofrece dejarlo por
@@ -388,6 +381,15 @@ cifras reales de cada medición, en
 reescritos). Esta sección solo recoge lo que sigue abierto tras ese
 trabajo, no lo repite.
 
+**Añadido más tarde el mismo 2026-09-18**: nuevo componente `Animo`
+(estado interno dinámico, distinto de `Temperamento` fijo y de
+`PoolMental.estabilidad`) — ver `docs/historial_componentes.md` y
+`docs/superpowers/specs/2026-09-18-animo-design.md` para el diseño
+completo y la verificación real (incluye dos bugs encontrados al
+implementar: herencia olvidada en `nacer_criatura`, y un gap de
+persistencia real en `sistema_colonizacion.py` -- ajeno a Animo pero
+corregido en el mismo círculo por estar en el mismo dominio).
+
 **Podada esta sección el 2026-09-17** (venía de las ~465 líneas leídas
 arriba en versiones anteriores de este documento, mezclando pendientes
 genuinos con crónica detallada de piezas ya cerradas — el mismo patrón
@@ -555,6 +557,16 @@ se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
 - Todo el catálogo de constantes numéricas nuevas introducidas en las
   últimas sesiones sigue marcado PROVISIONAL en su propio fichero de
   config, sin calibrar contra el harness completo.
+- **`Animo` (2026-09-18, `config/animo.yaml`)**: observación real, no
+  ignorada — un smoke test de 600 ticks (12 individuos, semilla única)
+  mostró `Animo.estado` cayendo con fuerza (media 0.10, mayoría en 0.0)
+  correlacionado con `Necesidades.energia` llegando a 0.0 en varias
+  criaturas. Coherente con el diseño (`peso_fisiologico_animo=0.4` ya
+  basta para arrastrar el objetivo a 0 con una sola necesidad en
+  crisis), pero sin base para saber si es la calibración deseada o
+  demasiado agresiva con una sola observación de escala tan pequeña —
+  ninguna constante se tocó a partir de ella. Pendiente real: observar
+  contra el harness completo antes de recalibrar con criterio.
 
 ## Comentarios técnicos vs narrativa histórica (2026-09-02)
 

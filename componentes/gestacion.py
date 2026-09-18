@@ -12,11 +12,16 @@ y fin de un embarazo concreto) rompería esa distinción. Gestacion es
 justo lo opuesto: nace y muere con cada embarazo.
 
 id_padre + instantánea del padre (dimensiones_padre, temperamento_padre,
-capacidad_mental_padre, duracion_gestacion_padre): se guardan en el
-momento de la CONCEPCIÓN, no se vuelven a consultar en vivo al resolver
-el nacimiento -- el padre podría morir durante la gestación y el
-nacimiento no debería depender de que siga vivo entonces. La genética
-se fija en la concepción, no en el parto.
+capacidad_mental_padre, animo_punto_base_padre, duracion_gestacion_padre):
+se guardan en el momento de la CONCEPCIÓN, no se vuelven a consultar en
+vivo al resolver el nacimiento -- el padre podría morir durante la
+gestación y el nacimiento no debería depender de que siga vivo
+entonces. La genética se fija en la concepción, no en el parto.
+
+animo_punto_base_padre (2026-09-18, ver componentes/animo.py): solo el
+ANCLA racial del padre, no su Animo.estado del momento -- estado es
+transitorio y no se hereda (mismo criterio que el resto de pools
+dinámicos), pero punto_base sí, mismo mecanismo que Temperamento.
 
 tamano_camada: igual que el resto de esta clase, se sortea y se fija en
 la CONCEPCIÓN, no en el parto -- es un hecho biológico real que una
@@ -56,5 +61,6 @@ class Gestacion:
     dimensiones_padre: DimensionesFisicas
     temperamento_padre: Temperamento
     capacidad_mental_padre: CapacidadMental
+    animo_punto_base_padre: float
     duracion_gestacion_padre: float
     tamano_camada: int

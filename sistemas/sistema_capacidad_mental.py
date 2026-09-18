@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from componentes.animo import Animo
 from componentes.capacidad_mental import CapacidadMental
 from componentes.dimensiones_fisicas import DimensionesFisicas
 from componentes.necesidades import Necesidades
@@ -39,6 +40,16 @@ class SistemaCapacidadMental:
         self.penalizacion_presenciar_muerte: float = float(
             cfg_mental.get("penalizacion_estabilidad_presenciar_muerte", 0.15)
         )
+
+        # Animo (2026-09-18, ver componentes/animo.py y docs/superpowers/
+        # specs/2026-09-18-animo-design.md): fuente adicional de
+        # PoolMental.estabilidad -- reutiliza el pool y el umbral de
+        # crisis ya existentes, ningun mecanismo de colapso nuevo.
+        cfg_animo = self.config.get("animo", {})
+        self.umbral_animo_bajo: float = float(cfg_animo.get("umbral_animo_bajo", 0.3))
+        self.umbral_animo_alto: float = float(cfg_animo.get("umbral_animo_alto", 0.8))
+        self.tasa_drenaje_animo_bajo: float = float(cfg_animo.get("tasa_drenaje_animo_bajo", 0.01))
+        self.tasa_alivio_animo_alto: float = float(cfg_animo.get("tasa_alivio_animo_alto", 0.005))
 
         cfg_per = self.config.get("percepcion", {})
         self.radio_min: int = int(cfg_per.get("radio_minimo_celdas", 0))
@@ -81,6 +92,7 @@ class SistemaCapacidadMental:
             nec = gestor.obtener_componente(eid, Necesidades)
             dims = gestor.obtener_componente(eid, DimensionesFisicas)
             pos = gestor.obtener_componente(eid, Posicion)
+            animo = gestor.obtener_componente(eid, Animo)
 
             if pm is None or cm is None or nec is None or dims is None or pos is None:
                 continue
@@ -115,3 +127,24 @@ class SistemaCapacidadMental:
                 pm.estabilidad = min(
                     cm.estabilidad_mental_maxima, pm.estabilidad + recuperacion
                 )
+
+            # 4. Animo sostenido (2026-09-18, ver componentes/animo.py):
+            # fuente adicional, independiente de amenaza/muerte -- un
+            # animo bajo sostenido añade riesgo de crisis a largo plazo; uno
+            # alto da un pequeño alivio. El alivio NO se divide por
+            # estabilidad_mental_maxima, mismo criterio que
+            # curacion/recuperacion en PoolFisico (solo el DRENAJE bruto se
+            # divide, ver bloques 1 y 2 arriba).
+            if animo is not None:
+                if animo.estado < self.umbral_animo_bajo:
+                    drenaje_animo = (
+                        (self.umbral_animo_bajo - animo.estado)
+                        * self.tasa_drenaje_animo_bajo
+                        / max(0.1, cm.estabilidad_mental_maxima)
+                    )
+                    pm.estabilidad = max(0.0, pm.estabilidad - drenaje_animo)
+                elif animo.estado > self.umbral_animo_alto:
+                    alivio_animo = (animo.estado - self.umbral_animo_alto) * self.tasa_alivio_animo_alto
+                    pm.estabilidad = min(
+                        cm.estabilidad_mental_maxima, pm.estabilidad + alivio_animo
+                    )

@@ -196,6 +196,7 @@ def _hacer_gestante(gestor, config, rng, madre_id, x=0, y=0, fraccion_transcurri
             tick_inicio=tick_inicio, id_padre=padre_id,
             dimensiones_padre=dims_padre, temperamento_padre=temp_padre,
             capacidad_mental_padre=cap_padre,
+            animo_punto_base_padre=0.5,
             duracion_gestacion_padre=rep_madre.duracion_gestacion_dias,
             tamano_camada=1,
         ),
