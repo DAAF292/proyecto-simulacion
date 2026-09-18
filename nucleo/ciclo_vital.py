@@ -29,9 +29,9 @@ def probabilidad_muerte_vejez(
     sistema_ciclo_vital.py la muestrea una vez contra rng.random()).
 
     Diseño: curva de saturación sobre la razón entre edad actual y la
-    longevidad INDIVIDUAL ya sorteada (dims.longevidad, en años -- no el
-    mínimo racial que usa es_adulto(), que es la elegibilidad
-    reproductiva, un concepto distinto). ratio = edad / longevidad:
+    longevidad INDIVIDUAL ya sorteada (dims.longevidad, en años -- mismo
+    ancla que es_adulto() usa desde 2026-09-18, ver su docstring).
+    ratio = edad / longevidad:
       - ratio=0 (recién nacido) -> probabilidad 0.
       - ratio=1 (llega exactamente a su longevidad individual) ->
         probabilidad = techo_probabilidad EXACTO.
@@ -92,18 +92,42 @@ def factor_fecundidad_edad(
     return 1.0 - min(1.0, fase ** exponente)
 
 
-def es_adulto(edad_en_ticks: int, especie: str, rangos_raciales: dict, fraccion_madurez: float) -> bool:
+def es_adulto(edad_en_ticks: int, longevidad_individual: float, fraccion_madurez: float) -> bool:
     """Elegibilidad para reproducirse -- reutiliza el MISMO ancla que la
-    muerte por vejez: el mínimo racial de longevidad. La madurez es una
-    fracción de ese suelo racial, no un atributo nuevo e independiente
-    que haya que sortear aparte.
+    muerte por vejez y la fecundidad por edad: la longevidad INDIVIDUAL
+    ya sorteada (dims.longevidad), no el mínimo racial. La madurez es
+    una fracción de esa longevidad propia, no un atributo nuevo e
+    independiente que haya que sortear aparte.
+
+    CORREGIDO 2026-09-18 (ver docs/superpowers/specs/2026-09-18-
+    madurez-por-longevidad-individual-design.md): hasta esa fecha usaba
+    el mínimo racial fijo -- misma edad en ticks para CUALQUIER
+    individuo de la especie, con independencia de su propia longevidad
+    sorteada, a diferencia de probabilidad_muerte_vejez/
+    factor_fecundidad_edad (ambas ya usaban la longevidad individual
+    desde su creación). Consecuencia real verificada contra el motor:
+    toda una camada nacida junta maduraba en el MISMO instante exacto,
+    sincronizando cuándo esa cohorte entera se unía al grupo
+    reproductivo activo -- confirmado como un amplificador real del
+    ciclo boom-and-bust de ardilla (diagnóstico aislado sin
+    depredadores: crecimiento sostenido hasta un pico en el tick ~7000,
+    caída del 76% en los siguientes 2500 ticks). Con la longevidad
+    individual, la madurez de una misma camada se dispersa igual que ya
+    se dispersaba su muerte -- mitiga la sincronización, no elimina el
+    ciclo boom-bust en sí (el agotamiento de recursos en el pico sigue
+    sin resolverse, círculo aparte).
 
     PROVISIONAL (calibración numérica): fraccion_madurez = 0.2
-    (config/poblacion.yaml, sección ciclo_vital). Para el lobo (mínimo
-    racial 8 años) da madurez a los 1.6 años -- coherente con la edad
-    real de madurez sexual del lobo (aprox. 1-2 años). Para el gnomo
-    (mínimo racial 45 años) da 9 años, sin ningún dato de referencia
-    equivalente con el que contrastarlo -- puramente provisional.
+    (config/poblacion.yaml, sección ciclo_vital). Para un lobo con
+    longevidad individual de 8 años (mínimo del rango racial) da
+    madurez a los 1.6 años -- coherente con la edad real de madurez
+    sexual del lobo (aprox. 1-2 años); con longevidad individual de 14
+    años (máximo del rango) da 2.8 años, ya fuera de esa referencia
+    pero sin dato mejor con el que recalibrar. Para el gnomo, entre 9 y
+    13 años según su propio sorteo (rango racial 45-65), sin ningún
+    dato de referencia real con el que contrastarlo -- puramente
+    provisional en ambos casos, sin cambios respecto a antes de esta
+    corrección.
     """
-    minimo_racial_ticks = rangos_raciales[especie]["longevidad"][0] * TICKS_POR_ANIO
-    return edad_en_ticks >= fraccion_madurez * minimo_racial_ticks
+    longevidad_ticks = longevidad_individual * TICKS_POR_ANIO
+    return edad_en_ticks >= fraccion_madurez * longevidad_ticks

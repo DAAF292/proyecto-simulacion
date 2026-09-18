@@ -163,10 +163,10 @@ utilidad = 1.0 - Necesidades.impulso_reproductivo, MISMO patron que el
 resto de necesidades fisicas de esta tupla -- pero con gates adicionales
 que la fuerzan a 0.0 (no compite, cae a otra candidata) en vez de
 intentar codificar la elegibilidad dentro de la formula de utilidad:
-  1. no adulto (nucleo/ciclo_vital.py:es_adulto(), MISMO minimo racial de
-     longevidad que ya usa muerte por vejez y sistema_reproduccion.py --
-     fraccion_madurez es por especie en rangos_raciales, config/
-     constantes.yaml).
+  1. no adulto (nucleo/ciclo_vital.py:es_adulto(), MISMA longevidad
+     INDIVIDUAL ya sorteada que usa muerte por vejez y
+     sistema_reproduccion.py, desde 2026-09-18 -- fraccion_madurez es
+     por especie en rangos_raciales, config/constantes.yaml).
   2. hembra ya gestando (componentes/gestacion.py) -- no tiene sentido
      buscar pareja mientras se gesta. No se comprueba en el macho porque
      Gestacion solo se anade a la hembra (ver sistema_reproduccion.py).
@@ -766,7 +766,7 @@ def actualizar(
         # renombrado 2026-09-14, no especifico de pareja).
         edad = edad_ticks(identidad.tick_nacimiento, tick_actual)
         fraccion_madurez = rangos_raciales[identidad.especie.value]["fraccion_madurez"]
-        adulto = es_adulto(edad, identidad.especie.value, rangos_raciales, fraccion_madurez)
+        adulto = es_adulto(edad, dims.longevidad, fraccion_madurez)
         gestando = gestor.obtener_componente(id_entidad, Gestacion) is not None
         fisica_bajo_umbral = any(
             getattr(necesidades, n) < umbral_necesidades_superiores

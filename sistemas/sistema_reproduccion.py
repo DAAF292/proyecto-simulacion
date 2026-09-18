@@ -1,8 +1,9 @@
 """SistemaReproduccion (informe tecnico, 6.3).
 
 Elegibilidad: misma especie, sexo opuesto, ambos adultos
-(nucleo/ciclo_vital.py:es_adulto(), reutiliza el mismo minimo racial de
-longevidad que ya usa la muerte por vejez), ninguno de los dos ya
+(nucleo/ciclo_vital.py:es_adulto(), reutiliza la misma longevidad
+INDIVIDUAL ya sorteada que usa la muerte por vejez, desde 2026-09-18),
+ninguno de los dos ya
 gestando (componentes/gestacion.py). Resuelto por CONTACTO -- misma
 celda, mismo criterio que sistema_depredacion.py resuelve captura.
 SistemaMovimiento ya se encarga de acercar a los coespecificos (sesgo
@@ -92,7 +93,7 @@ from nucleo.reloj import Reloj
 
 def _macho_elegible_en_contacto(
     gestor, candidatos: list, id_hembra: int, especie_hembra, posicion_hembra,
-    tick_actual: int, rangos_raciales: dict, fraccion_madurez: float,
+    tick_actual: int, fraccion_madurez: float,
     indice=None,
 ):
     """indice (2026-09-08, nucleo/indice_espacial.py): si se pasa, se
@@ -127,8 +128,11 @@ def _macho_elegible_en_contacto(
             or posicion_macho.zona_idx != posicion_hembra.zona_idx
         ):
             continue
+        dims_macho = gestor.obtener_componente(id_macho, DimensionesFisicas)
+        if dims_macho is None:
+            continue
         edad_macho = edad_ticks(identidad_macho.tick_nacimiento, tick_actual)
-        if not es_adulto(edad_macho, identidad_macho.especie.value, rangos_raciales, fraccion_madurez):
+        if not es_adulto(edad_macho, dims_macho.longevidad, fraccion_madurez):
             continue
         return id_macho
     return None
@@ -293,14 +297,17 @@ def actualizar(
         fraccion_madurez = rangos_raciales[especie_hembra]["fraccion_madurez"]
         factor_base = rangos_raciales[especie_hembra]["factor_base_concepcion"]
 
+        dims_hembra = gestor.obtener_componente(id_hembra, DimensionesFisicas)
+        if dims_hembra is None:
+            continue
         edad_hembra = edad_ticks(identidad_hembra.tick_nacimiento, tick_actual)
-        if not es_adulto(edad_hembra, identidad_hembra.especie.value, rangos_raciales, fraccion_madurez):
+        if not es_adulto(edad_hembra, dims_hembra.longevidad, fraccion_madurez):
             continue
 
         posicion_hembra = gestor.obtener_componente(id_hembra, Posicion)
         id_macho = _macho_elegible_en_contacto(
             gestor, candidatos, id_hembra, identidad_hembra.especie, posicion_hembra,
-            tick_actual, rangos_raciales, fraccion_madurez, indice=indice,
+            tick_actual, fraccion_madurez, indice=indice,
         )
         if id_macho is None:
             continue
