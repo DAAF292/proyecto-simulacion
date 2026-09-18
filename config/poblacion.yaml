@@ -280,7 +280,25 @@ rangos_raciales:
     # la camada (no el paquete completo) es la correccion quirurgica.
     # PROVISIONAL, sin calibrar contra el harness completo con este
     # cambio ya aplicado.
-    camada: [2, 3]
+    #
+    # REVERTIDO A [2, 4] EL 2026-09-18 -- ver docs/superpowers/specs/
+    # 2026-09-18-madurez-por-longevidad-individual-design.md. El intento
+    # de 2026-09-09 con este MISMO valor ([2,3]->[2,4]) ya habia
+    # eliminado la extincion por completo (0/8 semillas) -- se revirtio
+    # entonces NO porque fallara, sino por miedo a la magnitud del boom
+    # resultante (691 individuos, peor que el peor caso historico sin
+    # tocar nada). Esa magnitud estaba amplificada por un bug real
+    # corregido ayer: es_adulto() sincronizaba la madurez de toda una
+    # camada en el mismo instante (minimo racial fijo, no la longevidad
+    # individual de cada uno) -- con la madurez ya dispersa, el mismo
+    # aumento de camada deberia producir un crecimiento mas gradual, sin
+    # el boom descontrolado de entonces. Harness completo posterior a la
+    # correccion de madurez midio conejo en 73% de extincion (peor que
+    # el 27% previo al fix) -- se prueba revertir este recorte
+    # especificamente motivado por el boom que ya no deberia producirse
+    # de la misma forma. PROVISIONAL, sin calibrar contra el harness
+    # completo con este cambio ya aplicado.
+    camada: [2, 4]
     fraccion_madurez: 0.3
     # factor_base_concepcion SUBIDA PARCIALMENTE 2026-09-09 -- ver
     # comentario de camada arriba, misma investigacion. De 0.008 (REBAJADA
@@ -353,7 +371,21 @@ rangos_raciales:
     # ind/celda, ~80-112 individuos) en el extremo alto de la muestra --
     # mejora real, NO una solucion cerrada. PROVISIONAL, sin calibrar
     # contra el harness completo con este cambio ya aplicado.
-    camada: [2, 3]
+    #
+    # REVERTIDO A [3, 4] EL 2026-09-18 -- mismo razonamiento que conejo
+    # arriba, ver docs/superpowers/specs/2026-09-18-madurez-por-
+    # longevidad-individual-design.md. El recorte de 2026-09-09 (4->3)
+    # se aplico especificamente para frenar un boom sin techo (poblacion
+    # final media 232, maximos 701) -- parte de ese boom estaba
+    # amplificado por el mismo bug de sincronizacion de madurez
+    # corregido ayer (es_adulto() usaba el minimo racial fijo, no la
+    # longevidad individual). Harness completo posterior a esa
+    # correccion midio ardilla en 93% de extincion (peor que el 67%
+    # previo) -- se prueba revertir el recorte de camada especifico que
+    # se aplico por ese motivo, ahora que ya no deberia producirse el
+    # mismo boom descontrolado. PROVISIONAL, sin calibrar contra el
+    # harness completo con este cambio ya aplicado.
+    camada: [3, 4]
     fraccion_madurez: 0.4
     # RECALIBRADO 2026-09-06 (investigacion de estabilidad de poblacion,
     # ver CLAUDE.md y config/fisiologia.yaml:necesidades.ardilla para el
