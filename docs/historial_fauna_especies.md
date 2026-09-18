@@ -1119,3 +1119,141 @@ zorro sigue sin confirmar ni refutar; si se retoma, un lote mucho mayor
 (15-20 semillas nuevas por condición, no pareadas) sería el candidato
 metodológicamente correcto, mismo criterio que el resto del proyecto ya
 aprendió a aplicar tras la investigación de "Sobrepoblación...".
+
+## Círculo 2026-09-17: evasión por vuelo, nivel trófico, segunda ronda
+## de bugs de águila, y colonización espontánea
+
+Origen: en la misma conversación en la que se cerró el círculo de
+vuelo/águila (aguila como primera especie voladora, entrada anterior de
+este historial), Diego cuestionó dos supuestos concretos del propio
+mecanismo de depredación -- "no me parece muy factible que un lobo cace
+un águila" y "no sé si los zorros son presas reales de lobos" -- y una
+tercera pregunta más estructural, con el catálogo de fauna ya en 9
+especies: "cada vez hay más razas de fauna, lo de que todas coexistan
+en todas las semillas quizás empieza a ser algo inalcanzable... es
+normal que en ecosistemas haya criaturas que prosperen más". Decisión
+explícita de Diego sobre el orden: "vamos de menos complejidad a más"
+-- evasión por vuelo primero, nivel trófico después (ambas en este
+historial), criterio de diversidad y colonización espontánea después
+(en `docs/historial_estabilidad_poblacion.md` y aquí respectivamente).
+
+### Evasión por vuelo frente a depredador terrestre
+
+Spec: `docs/superpowers/specs/2026-09-17-evasion-vuelo-depredacion-design.md`.
+Reutiliza el rasgo racial `vuela` ya introducido en el círculo anterior
+-- sin mecanismo nuevo, solo una nueva consecuencia de un rasgo
+existente, siguiendo el principio de "reutiliza antes de inventar".
+Regla: cuando la presa vuela y el cazador no, `prob_exito` se fija al
+suelo ya existente `captura_prob_min` en vez de calcularse
+normalmente -- modela captura "rara pero posible" (un lobo que
+sorprende un águila posada o herida) sin inventar una probabilidad
+nueva ni un mecanismo de "presa inmune". Implementado en
+`sistemas/sistema_depredacion.py` (`_vuela()` helper +
+bloque en `_resolver_ataque`). Tests: `test_evasion_vuelo_depredacion.py`
+(4 tests). Aprobado por Diego ("adelante si") y subido a máster el
+mismo día.
+
+### Nivel trófico
+
+Spec: `docs/superpowers/specs/2026-09-17-nivel-trofico-design.md`. Tres
+opciones planteadas a Diego para resolver la tensión zorro-como-presa;
+eligió la categórica ("la dos es la más útil realmente... esto es un
+mundo de fantasía, tener esa categorización nos facilita, imagina que
+introducimos un monstruo que sí caza lobos" -- razonamiento propio de
+Diego, no sugerido). Nuevo rasgo racial `nivel_trofico` (entero fijo
+por especie, no sorteado por individuo, mismo patrón de declaración que
+`vuela`/`medio_alimentacion`): lobo, zorro y águila declarados nivel 1
+(pares ecológicos entre sí, explícitamente NO una jerarquía interna);
+herbívoros sin declarar, nivel 0 por defecto. Regla de tres casos, ley
+general y neutra (principio 5), no un carve-out por especie:
+- presa de nivel MENOR que el cazador → caza normal, sin cambios.
+- presa del MISMO nivel → penalización de probabilidad
+  (`penalizacion_disposicion_mismo_nivel_trofico=0.35`, PROVISIONAL en
+  `config/combate.yaml`), no un suelo -- la depredación intragremial
+  (zorro cazando zorro, lobo cazando zorro) es rara pero real en la
+  naturaleza, así que se penaliza sin prohibirse.
+- presa de nivel MAYOR → nunca válida como presa, gate duro en
+  `_es_presa_valida`.
+
+Diseñado explícitamente pensando en especies futuras de nivel 2+ (un
+"super-depredador" que sí cace lobo/zorro/águila) sin necesitar ningún
+mecanismo nuevo cuando llegue ese momento -- razón por la que Diego
+prefirió esta opción sobre las otras dos más simples. Tests:
+`test_nivel_trofico.py` (5 tests). Subido a máster el mismo día.
+
+### Segunda ronda de bugs de águila -- encontrados durante
+### instrumentación y verificación, no por queja de Diego
+
+Dos bugs reales encontrados al auditar águila en profundidad tras su
+introducción, ninguno reportado antes porque nadie había corrido el
+motor con águila viva el tiempo suficiente para verlos:
+
+- **Tasa de hambre 15x más rápida de lo previsto**: diagnosticado
+  corriendo el motor real (`ejecutar_tick` invocado directamente en un
+  script, no solo leyendo código) y siguiendo una única entidad águila
+  tick a tick -- murió de inanición en el tick 138 pese a cazar el 53%
+  del tiempo. Causa real: `config/fisiologia.yaml` no tenía ninguna
+  entrada `aguila:` bajo `necesidades:`, cayendo al valor por defecto
+  del sistema -- **repetición exacta de un bug ya corregido en zorro el
+  2026-09-14**, documentado en el mismo fichero de config y no
+  replicado a la siguiente especie voladora nueva. Fix: bloque
+  `aguila:` añadido con las tasas estándar del resto de fauna
+  (`tasa_perdida_saciedad_por_tick: 0.0008`,
+  `probabilidad_muerte_saciedad_critica: 0.0004`, mismos valores para
+  hidratación).
+- **Ahogamiento pese a volar**: el propio diseño original del rasgo
+  `vuela` ("volar sobre agua profunda no ahoga") solo se había
+  implementado en el bloqueo de movimiento (`sistema_movimiento.py`);
+  el drenaje de asfixia por inmersión de `sistema_necesidades.py` es un
+  camino completamente independiente y nunca recibió la misma
+  excepción -- un águila podía ahogarse en agua profunda igual que un
+  gnomo. Fix: condición `and not especie_vuela` añadida al gate de
+  ahogamiento (~línea 425).
+
+Ambos verificados con `tests/test_correcciones_aguila_post_harness.py`
+(4 tests, incluida una regresión explícita de que especies NO voladoras
+deben seguir ahogándose igual que antes). Subido a máster junto con el
+resto de fixes de esta ronda.
+
+**Resultado real tras corregir ambos bugs, medido en el harness
+completo de 15×10000 (ver desglose completo en
+`docs/historial_estabilidad_poblacion.md`)**: águila sigue
+extinguiéndose en el 87% de las semillas (13/15) -- los dos fixes eran
+reales y necesarios (sin ellos, águila no sobrevivía ni el tiempo
+mínimo para que cualquier otro mecanismo la afectara), pero no
+resuelven por sí solos la viabilidad de la especie. Con solo 20
+concepciones → 18 nacimientos agregados en las 15 semillas, la muestra
+es demasiado pequeña para diagnosticar la causa siguiente con
+confianza -- pendiente real, no cerrado.
+
+### Colonización espontánea
+
+Spec: `docs/superpowers/specs/2026-09-17-colonizacion-espontanea-design.md`.
+Origen: idea propia de Diego, no una respuesta a un bug -- dar a cada
+especie más de una oportunidad real de arraigar en el mundo, en vez de
+depender enteramente de la siembra inicial de partida. Ley genérica
+(principio 1, "reglas no guiones"), deliberadamente restringida a
+especies ya en apuros para no convertirse en una válvula de
+reaparición disfrazada que enmascare extinciones reales: cualquier
+especie con población viva por debajo de `umbral_poblacion_critica=2`
+sortea una probabilidad diaria baja
+(`probabilidad_colonizacion_diaria=0.005`) de que aparezca una pareja
+reproductora nueva (`tamano_pareja_colonizadora=2`) en una celda de
+bioma compatible con la especie (`BIOMAS_POR_ESPECIE` en el propio
+sistema). Implementado en `sistemas/sistema_colonizacion.py` (nuevo
+fichero), integrado en `main.py` en el corte de día, emite
+`Evento("ColonizacionEspontanea", Severidad.HISTORICO, ...)`. Tests:
+`tests/test_colonizacion_espontanea.py` (5 tests).
+
+**Resultado real medido en el harness completo de 15×10000**: el
+mecanismo se ejerce con fuerza real, no es papel mojado -- 82 eventos
+en total, en 15/15 semillas, repartidos precisamente hacia las especies
+que más lo necesitaban (zorro 21, águila 14, conejo 12, ardilla 12,
+lobo 9, cabra montesa 8). **Pero no es suficiente por sí sola para
+evitar la extinción final** de esas mismas especies en la misma
+corrida (ver `docs/historial_estabilidad_poblacion.md` para el análisis
+completo) -- las parejas colonizadoras nuevas siguen sujetas a la misma
+dinámica de fondo (incluido, en esa misma corrida, el bug de madurez
+sincronizada que se diagnosticó a continuación). Colonización
+espontánea da más oportunidades de arraigo, no inmunidad a una causa
+estructural no resuelta todavía.

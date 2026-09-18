@@ -3094,3 +3094,288 @@ abierta como pregunta de diseño para Diego, no como una calibración
 pendiente. Ningún commit de código en esta ronda -- investigación pura,
 con resultados mayormente negativos, documentados con la misma
 honestidad que el resto del proyecto exige.
+
+## Círculo 2026-09-17/18: criterio de diversidad sostenida, madurez por
+## longevidad individual (bug real encontrado), y ajuste de camada
+## conejo/ardilla -- aún sin validar a escala completa
+
+### Rediseño del criterio maestro: diversidad sostenida + techo de
+### extinción por especie
+
+Spec: `docs/superpowers/specs/2026-09-17-criterio-diversidad-sostenida-design.md`.
+Origen: la misma conversación del círculo de fauna de arriba
+(`docs/historial_fauna_especies.md`) -- Diego cuestionó si "todas las
+especies vivas a la vez" sigue siendo un objetivo razonable con el
+catálogo creciendo, señalando que en un ecosistema real es normal que
+unas especies prosperen más que otras. Tres opciones planteadas; Diego
+eligió combinar B+C ("vamos con la B+C"):
+
+- **Diversidad media sostenida**: número medio de especies vivas
+  muestreado a lo largo de TODA la corrida (cada 1000 ticks, sobre la
+  `trayectoria` que el harness ya recogía -- cero infraestructura de
+  muestreo nueva), no solo en el instante final. Mide persistencia real
+  del ecosistema, no una fotografía puntual.
+- **Techo de extinción por especie**, independiente
+  (`TECHO_EXTINCION_AVISO = 0.5`): aviso explícito cuando una especie
+  concreta se extingue en más de la mitad de las semillas, sin
+  mezclarlo con el resto del ecosistema -- una especie estructuralmente
+  frágil no debería poder esconderse detrás de un promedio agregado
+  saludable.
+
+El criterio original de Diego (5 especies originales vivas A LA VEZ en
+el mismo instante) se conserva en el resumen del harness solo como nota
+histórica ("[historico, ya no es el criterio principal]"), por
+comparabilidad con las citas previas de este mismo documento y de
+`CLAUDE.md` -- ya no es el objetivo real desde esta fecha. Implementado
+íntegramente en `herramientas/harness_calibracion.py`
+(`_imprimir_resumen`), sin tocar el motor de simulación.
+
+### Investigación del patrón de vejez sincronizada en ardilla y
+### hallazgo real: `es_adulto()` ignoraba la longevidad individual
+
+Pedido explícito de Diego tras revisar los resultados del primer
+harness completo de 15×10000 de esta ronda (ver tabla más abajo, misma
+corrida que expuso las cifras de extinción de águila/zorro/nivel
+trófico). Investigación empírica, no solo lectura de código: se corrió
+una simulación aislada de ardilla sin depredadores para observar el
+patrón de colapso puro, confirmando un ciclo de auge-y-colapso
+(boom-and-bust) sincronizado por camada.
+
+**Causa real encontrada**: `probabilidad_muerte_vejez()` y
+`factor_fecundidad_edad()` siempre usaron la longevidad individual ya
+sorteada de cada criatura (`dims.longevidad`), pero `es_adulto()` usaba
+el MÍNIMO racial fijo (`rangos_raciales[especie]["longevidad"][0]`) --
+toda una camada alcanzaba la madurez sexual en el mismo tick exacto,
+indiferente a que sus muertes por vejez individuales ya estaban
+correctamente dispersas. El resultado neto: nacimientos y maduraciones
+sincronizados por generación, muertes dispersas -- la combinación
+perfecta para un ciclo de auge-y-colapso.
+
+Diego preguntó explícitamente si el mismo problema afectaba a otras
+especies. Métrica nueva para responder con datos, no intuición: ticks
+de dispersión de madurez introducidos por el fix, como fracción de la
+vida mínima en ticks de cada especie. Resultado: **ardilla y conejo
+ambas ~60%** (con diferencia, las dos más afectadas), gnomo solo 4.4%
+(la menos afectada) -- explica de forma limpia por qué solo
+ardilla/conejo han necesitado recalibraciones repetidas de boom-bust a
+lo largo de la historia de este documento, y gnomo nunca.
+
+**Fix implementado** (spec
+`docs/superpowers/specs/2026-09-18-madurez-por-longevidad-individual-design.md`):
+firma de `es_adulto()` en `nucleo/ciclo_vital.py` cambiada de
+`(edad_en_ticks, especie, rangos_raciales, fraccion_madurez)` a
+`(edad_en_ticks, longevidad_individual, fraccion_madurez)`. Aplicado en
+`sistema_decision.py` (gate de emancipación/búsqueda de pareja) y
+`sistema_reproduccion.py` (elegibilidad de macho y de hembra, ambas
+consultando ya `DimensionesFisicas` en ese punto). Test nuevo que
+verifica la ley central: dos lobos de la misma camada, con
+longevidades individuales sorteadas de 8 y 14 años, maduran en ticks
+distintos (768 y 1344) -- antes del fix, ambos maduraban exactamente en
+el mismo tick pese a la diferencia real de longevidad.
+`tests/test_ciclo_vital_es_adulto.py` reescrito por completo con la
+nueva firma.
+
+### Resultado contraintuitivo a escala completa: el fix EMPEORÓ la
+### extinción de conejo y ardilla, no la mejoró
+
+Diego autorizó implementación autónoma completa y pidió explícitamente:
+"cuando lo tengas todo estable vuelve a lanzar una ejecución de 15
+semillas, quiero que analices todas las métricas posibles, causas de
+muerte, mecanismos sociales, construcciones, flora, fauna". Corrida
+real: 15 semillas (200001-200015) × 10000 ticks, con el fix de madurez
+YA aplicado y con toda la instrumentación completa (ver sección
+siguiente). 2 de 15 semillas se cortaron por tiempo antes de los 10000
+ticks (9816 y 9696 respectivamente), el resto llegó completa.
+
+**Resultado, reportado a Diego sin maquillar nada**:
+
+| especie | extinción (15 semillas) |
+|---|---|
+| gnomo | 0% |
+| caballo | 7% |
+| venado | 20% |
+| cabra_montesa | 47% |
+| lobo | 67% |
+| conejo | **73%** |
+| zorro | 80% |
+| águila | 87% |
+| ardilla | **93%** |
+
+Diversidad media sostenida: 7.01/9 especies posibles (6.27 min / 8.18
+max por semilla). Especies por encima del techo de extinción del 50%:
+lobo, conejo, ardilla, zorro, águila -- cinco de nueve.
+
+Esto es un EMPEORAMIENTO frente a la medición previa sin el fix de
+madurez (conejo 27%→73%, ardilla 67%→93%, citas de la conversación con
+Diego, no remedidas de forma aislada en este documento). El propio fix,
+verificado correcto en aislamiento (elimina el boom explosivo
+sincronizado, como se pretendía), produce un resultado peor a escala de
+ecosistema completo.
+
+**Hipótesis mecanística ofrecida a Diego, explícitamente no probada**:
+"colchón de auge-y-colapso" -- dispersar la madurez elimina el boom
+sincronizado por camada, pero ese boom, aunque seguido de un colapso
+abrupto, daba a la población un pico de tamaño grande que la hacía más
+difícil de extinguir del todo frente a depredación o pérdida
+estocástica normal. Sin alcanzar nunca ese pico, la población es
+paradójicamente MÁS vulnerable a la extinción total, pese a tener una
+curva de declive individual más suave y "más sana" en apariencia.
+
+**Cautela metodológica señalada explícitamente, no omitida**: el propio
+cambio en el número de tiradas de `rng` por tick (el fix añade/cambia
+lecturas de `dims.longevidad` en puntos donde antes se leía
+`rangos_raciales`) puede desplazar la secuencia aleatoria completa
+para TODAS las entidades desde ese punto en adelante -- el mismo
+artefacto de "desplazamiento de secuencia" ya documentado media docena
+de veces en este proyecto. Con una sola corrida de 15 semillas no
+pareadas contra la medición previa, la comparación es indicativa, no
+una prueba causal limpia -- pero la consistencia y la coherencia
+mecanística del resultado (afecta más a las dos especies con mayor
+fracción de dispersión de madurez, exactamente como predice la
+hipótesis del colchón) hacen razonable tratarlo como señal real y no
+solo como ruido.
+
+### Decisión de Diego: no revertir el mecanismo, recalibrar en torno a él
+
+Respuesta explícita de Diego ante el resultado negativo: "no, creo que
+el mecanismo es el correcto, ahora que hemos eliminado ese boom que se
+producía es momento de ajustar tasas de fertilidad y camada" -- en vez
+de revertir el fix de madurez (que es correcto por diseño, ley central
+verificada), recalibrar camada/fertilidad para compensar la pérdida del
+"colchón" que el bug proporcionaba sin que nadie lo hubiera diseñado
+como tal.
+
+Antes de tocar `config/poblacion.yaml`, se releyó el propio historial
+de comentarios fechados del fichero (2026-09-09): confirma que subir la
+camada de conejo a exactamente `[2, 4]` YA había eliminado por completo
+la extinción de conejo en su momento (0/8 semillas) antes de revertirse
+-- únicamente por prudencia frente a la magnitud de población
+resultante (691 individuos en una semilla), no porque el ajuste
+fallara. Esto valida con evidencia histórica real la lógica de Diego,
+no solo su intuición del momento.
+
+**Ajuste aplicado, PROVISIONAL, sin validar a escala completa
+todavía**:
+- conejo: `camada: [2, 3] → [2, 4]` (revierte exactamente el valor que
+  ya se había probado eficaz en 2026-09-09).
+- ardilla: `camada: [2, 3] → [3, 4]` (mismo criterio, ajustado a la
+  fracción de dispersión de madurez propia de ardilla, ligeramente
+  distinta a la de conejo).
+
+Ambos cambios documentados con comentarios extensos y fechados
+directamente en `config/poblacion.yaml`, explicando el contexto
+histórico de 2026-09-09 y el fix de `es_adulto` como disparador real de
+la reconsideración -- mismo criterio de trazabilidad que el resto de
+constantes PROVISIONAL del proyecto.
+
+### Validación pendiente -- explícitamente incompleta, interrumpida a
+### petición de Diego
+
+Se lanzó un harness completo de 15×10000 para medir el efecto real del
+ajuste de camada a la misma escala que expuso el problema. Diego pidió
+detenerlo antes de completarse: "no, lanza un par de semillas rápidas,
+no quiero esperar 90 minutos". El proceso se identificó
+(`ps aux | grep harness_calibracion`) y se terminó con `kill -TERM`
+sobre todos los PIDs relevantes, confirmando el cierre.
+
+En su lugar se corrió una prueba rápida de 3 semillas (200001-200003) ×
+4000 ticks. Resultado, entregado a Diego con la reserva metodológica
+explícita de que **esto NO valida el ajuste** -- el efecto real del
+patrón de auge-y-colapso, según los diagnósticos aislados previos, no
+se manifiesta hasta ~tick 7000-9500, muy por encima de los 4000 ticks
+de esta prueba:
+
+- Extinción: conejo 1/3 (33%), ardilla 1/3 (33%), zorro 1/3 (33%),
+  águila 3/3 (100%), resto (gnomo/lobo/caballo/venado/cabra_montesa) en
+  0%.
+- Diversidad media sostenida: 8.53/9 (8.40 min / 8.60 max) -- notablemente
+  más alta que la corrida completa anterior, pero sobre una ventana
+  demasiado corta para ser comparable de forma rigurosa.
+
+**Sigue siendo el pendiente de validación más inmediato del proyecto**,
+más urgente incluso que remedir el criterio agregado bajo condiciones
+estables -- sin una corrida completa de 15×10000 (o el harness de
+referencia real de 15×12000 que sigue sin correrse nunca de principio a
+fin, ver `CLAUDE.md`), no se sabe si el ajuste de camada realmente
+resuelve el problema o solo reintroduce el riesgo de auge descontrolado
+que motivó el recorte original de 2026-09-09.
+
+### Instrumentación completa del harness de calibración
+
+Spec: `docs/superpowers/specs/2026-09-18-instrumentacion-harness-design.md`.
+Origen: pedido explícito de Diego tras notar que el análisis del
+harness completo de 15×10000 de arriba no podía decir nada sobre flora,
+y que varios mecanismos del motor con contadores reales propios
+(colonización espontánea, taller/mobiliario, minería, socialización por
+afinidad) nunca se leían desde el harness: "si vamos a invertir tiempo
+en pruebas largas de monitorización, lo lógico es poder extraer todas
+las mediciones posibles para sacar conclusiones. Si no es desaprovechar
+el tiempo y la capacidad de cómputo" -- corrigiendo explícitamente una
+propuesta mía anterior de arreglar solo un subconjunto prioritario.
+
+Auditoría previa real: los 48 atributos `self._stats_*` de
+`sistemas/*.py` listados y comparados uno a uno contra lo que
+`herramientas/harness_calibracion.py::correr_semilla` capturaba.
+Gaps reales encontrados y corregidos: **flora** (cero métricas antes de
+esta ronda, el gap más importante -- nuevo helper `_contar_flora()`,
+población de `Planta` por especie + `masa_tronco_kg` total en pie),
+colonización espontánea (evento del bus, total y por especie), minería
+(`picos_fabricados`, `veta_bloqueada_sin_pico`,
+`piedra_sustrato_bloqueada_sin_pico`), taller/mobiliario y mejora de
+vivienda (`muebles_fabricados`, `deposito_almacen_refugio`,
+`mejora_refugio_sustituciones`, `construir_mejora_elegido`),
+desglose de socialización/rumor/sonido (antes solo un total agregado
+sin saber si el fallback de sonido producía caza real, carroñeo o pista
+falsa), colocación comunal (`comunal_creado_ancla`/`_satelite`),
+madriguera (`madriguera_miembros_nuevos`).
+
+**Bug de tipo real encontrado al verificar, no solo al leer código**:
+tres de los contadores nuevos son `set()` (no enteros) que el propio
+sistema usa para deduplicar dentro de la partida --
+`_stats_socializar_afinidad_pares` (`sistema_movimiento.py`, cada par
+se añade dos veces en direcciones opuestas, capturado como
+`len(...) // 2`), `_stats_rumor_terceros_nuevos` y
+`_stats_madriguera_miembros_nuevos` (una sola vez por evento real,
+capturados como `len(...)` directo). Capturarlos tal cual producía un
+`TypeError: unsupported operand type(s) for +: 'int' and 'set'` real en
+la suma agregada del resumen, detectado en la primera corrida corta de
+verificación (2 semillas × 1200 ticks), no anticipado leyendo el
+código. Ninguno de los 48 atributos `_stats_*` en sí se renombró ni se
+modificó -- solo se leen desde el harness; el motor de simulación no
+cambió en absoluto en esta ronda. Suite completa: 759 passed sin
+cambios.
+
+### Resultados agregados adicionales del harness de 15×10000
+### instrumentado -- cifras que no encajaban en las secciones de arriba
+
+Para referencia futura, del mismo lote de 15 semillas que expuso el
+problema de madurez:
+
+- **Asentamiento**: 5/15 semillas formaron al menos un asentamiento,
+  3/15 completaron almacén, 3/15 completaron cocina, solo 1/15 completó
+  salón común.
+- **Taller/mobiliario**: sigue en 0 muebles fabricados en las 15
+  semillas, pese a que ahora sí hay colocación comunal real medida (1
+  ancla + 10 satélites) -- el propio gate de taller/mobiliario sigue
+  sin ganar el argmax a tiempo, exactamente como ya constaba en
+  `CLAUDE.md` antes de esta ronda, ahora confirmado con instrumentación
+  directa en vez de inferencia.
+- **Minería**: 0 árboles talados, 0 picos fabricados en las 15
+  semillas -- el ciclo de minería con herramienta real (fabricar pico →
+  extraer veta) no se cerró ni una sola vez en este lote, pese a que sí
+  se había observado cerrarse en juego libre en sesiones anteriores
+  (ver `docs/historial_profundidad_geologica.md` y
+  `docs/historial_profesiones.md`) -- posible efecto de escala/ruido de
+  semilla, no investigado a fondo en esta ronda.
+- **Flora**: primera medición agregada real de la historia del
+  proyecto -- masa leñosa en pie (`masa_tronco_kg`) promedio 20479.7 kg
+  por semilla al cierre; `arbusto_espinoso` domina de forma abrumadora
+  la población de plantas final (353855 unidades agregadas de 15
+  semillas), muy por encima de cualquier otra especie de flora.
+- **Sonido**: `sonidos_emitidos` reporta 180094 en esta corrida --
+  valor claramente no nulo, en contraste con el "reporta 0" que constaba
+  como sospecha de bug de instrumentación en `CLAUDE.md`. No se
+  investigó a fondo si el contador sospechoso era exactamente este o
+  si la propia ronda de instrumentación de arriba corrigió de paso la
+  causa -- señalado como aparentemente resuelto, no confirmado con
+  certeza plena.

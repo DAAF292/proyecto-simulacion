@@ -170,18 +170,19 @@ carpeta `in_review/` ahora vacía.
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- **Tests automatizados (CORREGIDO 2026-09-16, la cifra "129" llevaba
-  desactualizada desde el 2026-09-04 sin que nadie la revisara en las
-  ~12 sesiones intermedias -- mismo patrón de honestidad que ya obligó a
-  corregir 87→129 en su momento, esta vez con un salto mayor)**: `tests/`
-  contiene 76 ficheros / 675 tests reales a esta fecha (verificado con
-  `pytest --collect-only`, no de memoria). Los últimos 17 son de esta
-  misma sesión (`test_control_partida.py`/`test_gestor_partidas.py`, ver
-  servidor de control remoto más abajo) -- el resto del salto de 129 a
-  658 corresponde a todas las sesiones intermedias, nunca actualizado
-  aquí. Siguen escritos como "ley física" con docstring explicando el
-  comportamiento que validan. La cobertura sigue siendo parcial (nada
-  del bucle principal salvo el ciclo de vida del hilo de
+- **Tests automatizados (CORREGIDO 2026-09-18, la cifra "76/675" llevaba
+  desactualizada desde el 2026-09-16 -- mismo patrón de honestidad que
+  ya obligó a corregir 87→129→675 en su momento)**: `tests/` contiene 87
+  ficheros / 759 tests reales a esta fecha (verificado con
+  `pytest --collect-only`, no de memoria). El salto de 675 a 759
+  corresponde a la ronda de vuelo/águila, evasión por vuelo, nivel
+  trófico, colonización espontánea, madurez por longevidad individual y
+  las correcciones de águila post-harness (ver "Estado actual" más
+  abajo y `docs/historial_fauna_especies.md`/
+  `docs/historial_estabilidad_poblacion.md` para el detalle completo de
+  cada pieza). Siguen escritos como "ley física" con docstring
+  explicando el comportamiento que validan. La cobertura sigue siendo
+  parcial (nada del bucle principal salvo el ciclo de vida del hilo de
   `GestorPartidas`, la mayoría de sistemas de comportamiento, ni la
   mayor parte de persistencia). CI/linting sigue sin configurar.
 
@@ -371,10 +372,21 @@ sesiones quede junto).
   ambos del 2026-09-16, movidos aquí el 2026-09-17 en la segunda poda de
   este documento (ver más abajo).
 
-## Estado actual y pendientes reales (actualizado 2026-09-17)
+## Estado actual y pendientes reales (actualizado 2026-09-18)
 
 Lista corta de lo que sigue genuinamente abierto hoy — para el detalle de
 cómo se llegó a cada punto, abre el historial correspondiente de arriba.
+
+**Actualizada 2026-09-18** tras un círculo grande cerrado en una sola
+sesión (evasión por vuelo en depredación, nivel trófico, criterio de
+diversidad sostenida, colonización espontánea, dos bugs más de águila,
+madurez por longevidad individual, ajuste de camada conejo/ardilla,
+instrumentación completa del harness) — detalle completo, incluidas las
+cifras reales de cada medición, en
+`docs/historial_fauna_especies.md` y
+`docs/historial_estabilidad_poblacion.md` (ambos ampliados hoy, no
+reescritos). Esta sección solo recoge lo que sigue abierto tras ese
+trabajo, no lo repite.
 
 **Podada esta sección el 2026-09-17** (venía de las ~465 líneas leídas
 arriba en versiones anteriores de este documento, mezclando pendientes
@@ -387,37 +399,80 @@ había aquí ya vivía duplicado, con más detalle, en
 todavía (renombrado `BOSQUE_*→SIMULACION_*`, servidor de control remoto)
 se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
 
-- **El criterio maestro de Diego (5 especies vivas a la vez, ≥50% de las
-  semillas) sigue sin remedirse de forma agregada**, ni el harness de
-  referencia completo (15 semillas × 12000 ticks sin cortar por límite
-  de tiempo) se ha corrido nunca de principio a fin — cada medición del
-  proyecto hasta hoy usó ventanas truncadas. Desde la última medición
-  agregada (15×7 especies, 2026-09-12: 0-7%, muy por debajo del
-  objetivo) se aplicaron varias mejoras reales (radio de caza en
-  solitario, orillas vadeables, tasa de consumo por especie, especie
-  zorro, arco de comodidad) pero ninguna se ha vuelto a medir contra el
-  criterio agregado — sigue siendo el pendiente más urgente del
-  proyecto, antes de calibrar nada más a ciegas.
+- **El criterio maestro original de Diego (5 especies vivas a la vez) ya
+  NO es el criterio de referencia** — sustituido el 2026-09-17 por
+  decisión explícita de Diego ante un catálogo de fauna creciente
+  (diversidad media sostenida a lo largo de la corrida + techo de
+  extinción por especie del 50%, ver
+  `docs/historial_estabilidad_poblacion.md`). **Bajo ese criterio
+  nuevo, sí se remidió de forma agregada por primera vez** (15×10000,
+  no el harness de referencia completo de 15×12000, que sigue sin
+  correrse nunca de principio a fin): diversidad media sostenida
+  7.01/9 especies posibles, con lobo (67%), conejo (73%), zorro (80%),
+  águila (87%) y ardilla (93%) por encima del techo de extinción —
+  cinco de nueve especies en riesgo estructural real, resultado
+  claramente por debajo de cualquier lectura razonable del objetivo de
+  Diego pese a las mejoras aplicadas hoy mismo (evasión por vuelo,
+  nivel trófico, colonización espontánea, madurez por longevidad
+  individual). **Sigue siendo el pendiente más urgente del proyecto**:
+  un ajuste de camada de conejo/ardilla se aplicó a continuación (ver
+  abajo) pero su validación a la misma escala fue interrumpida a
+  petición explícita de Diego antes de completarse — no hay todavía
+  ninguna medición agregada bajo el criterio nuevo que muestre una
+  mejora real.
+- **Ajuste de camada conejo/ardilla (2026-09-18), PROVISIONAL, sin
+  validar a escala completa**: tras corregir un bug real en
+  `es_adulto()` (usaba el mínimo racial de longevidad en vez de la
+  longevidad individual sorteada, sincronizando la madurez de camadas
+  enteras pese a que sus muertes ya estaban dispersas — afectaba a
+  conejo y ardilla en ~60% de su vida mínima, a gnomo solo en 4.4%), la
+  extinción de conejo y ardilla EMPEORÓ a escala completa (27%→73% y
+  67%→93% respectivamente) en vez de mejorar, pese a que el fix es
+  correcto y verificado en aislamiento — hipótesis no probada: el boom
+  sincronizado que el bug producía actuaba como "colchón" de tamaño de
+  población que dificultaba la extinción total, y su desaparición deja
+  a ambas especies más vulnerables pese a una curva de declive más
+  suave. Diego decidió no revertir el fix (correcto) y recalibrar
+  camada en su lugar: conejo `[2,3]→[2,4]`, ardilla `[2,3]→[3,4]` en
+  `config/poblacion.yaml`. Una corrida rápida de 3×4000 ticks no mostró
+  fallo catastrófico inmediato, pero **no valida el ajuste** — el
+  efecto real del ciclo de auge-y-colapso no se manifiesta hasta
+  ~tick 7000-9500 según los diagnósticos previos, y el harness completo
+  de 15×10000 lanzado para medirlo se interrumpió a petición de Diego
+  antes de completarse. Pendiente real inmediato: relanzar esa
+  validación completa cuando Diego quiera esperar el tiempo que toma.
 - Sesgo de vocación hacia forrajero (`docs/historial_estabilidad_poblacion.md`):
   confirmado real y estructural, no un bug — queda como decisión de
   diseño pendiente de Diego, no una calibración numérica.
 - Arco "asentamiento como entidad propia" (`docs/historial_construccion_social.md`,
   6 piezas cerradas a esta fecha): taller/mobiliario sigue en **0
-  muebles fabricados** en todas las semillas probadas pese a que el
-  resto de la cadena comunal (almacén, salón común, cocina) sí se
-  ejerce con fuerza — su propio gate no gana el argmax a tiempo; el
-  gate de cocina (excedente de solo saciedad) sigue PROVISIONAL, sin
-  eje mejor identificado; interacción entre asentamientos (Pieza 4 del
-  roadmap unificado) sigue sin empezar.
+  muebles fabricados** en todas las semillas probadas (reconfirmado de
+  nuevo el 2026-09-18 en un lote de 15×10000 con instrumentación
+  directa, no solo inferencia) pese a que el resto de la cadena comunal
+  (almacén, salón común, cocina) sí se ejerce con fuerza y a que la
+  colocación comunal por afinidad ya produce colocaciones reales (1
+  ancla + 10 satélites en ese mismo lote) — su propio gate no gana el
+  argmax a tiempo; el gate de cocina (excedente de solo saciedad) sigue
+  PROVISIONAL, sin eje mejor identificado; interacción entre
+  asentamientos (Pieza 4 del roadmap unificado) sigue sin empezar. En
+  el mismo lote, minería con pico también en 0 (picos_fabricados=0,
+  0 árboles talados) pese a que el ciclo sí se había observado cerrarse
+  en juego libre en sesiones anteriores — posible efecto de escala o de
+  ruido de semilla, sin investigar a fondo.
 - **Caza en manada de lobo contra caballo**: mecanismo verificado
   correcto, pero la coincidencia temporal que exige (~4-6 aliados
   cazando a la vez, dentro de `radio_apoyo_grupal`) es estructuralmente
   rara — 0 casos en más de 80 corridas acumuladas de varias sesiones,
   incluido un A/B con el factor de manada al triple (6.0) que tampoco
   produjo ninguna captura.
-- `sonidos_emitidos_totales` del harness de calibración reporta 0 pese a
-  que la amenaza por sonido sí se ejerce en la misma corrida — sospecha
-  de bug de instrumentación, nunca verificado a fondo.
+- `sonidos_emitidos_totales` del harness de calibración: la sospecha de
+  bug de instrumentación aparenta estar resuelta desde el
+  2026-09-18 (la ronda de instrumentación completa del harness ahora
+  reporta 180094 sonidos emitidos en un lote de 15×10000, claramente no
+  cero) — pero no se confirmó con certeza si la causa exacta era ese
+  bug de instrumentación o si la nueva captura simplemente lo corrigió
+  de paso; no verificado a fondo todavía, ver
+  `docs/historial_estabilidad_poblacion.md`.
 - Robo de arma (`nucleo/conflicto.py` vía `_intentar_robo_arma`): sin
   observar en juego libre en ninguna semilla probada — correcto por
   tests dirigidos, exige una combinación de condiciones poco frecuente.
