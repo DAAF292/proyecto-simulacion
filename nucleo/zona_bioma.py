@@ -112,12 +112,12 @@ class ZonaBioma:
         guarda): se resembraria en el primer corte de dia tras cargar,
         mismo estatus de imprecision aceptada que ya tiene Intencion tras
         una carga."""
-        self.estacion_previa = None
-        """Ultima Estacion vista por sistema_clima.py, para detectar el
-        cambio de estacion y emitir CambioEstacion solo al entrar en una
-        nueva (mismo patron que CrisisMental). None hasta el primer
-        corte de dia -- tampoco se persiste, mismo criterio que
-        clima_actual."""
+        # estacion_previa vivia aqui hasta el 2026-09-13 -- MOVIDO a
+        # Mundo.estacion_previa (bug real: la estacion es un hecho
+        # GLOBAL de un unico Reloj compartido, no "por zona de bioma"
+        # como clima_actual; con varias zonas emitia un CambioEstacion
+        # identico por cada una. Ver sistemas/sistema_clima.py y
+        # nucleo/mundo.py para el detalle completo.
 
     def celda(self, x: int, y: int) -> Celda:
         return self.grid[x][y]
