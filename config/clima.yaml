@@ -48,28 +48,48 @@ bioma:
   umbral_lluvia_bosque: 0.6041
 
 estaciones:
+  # RECALIBRADO 2026-09-18 (ver docs/superpowers/specs/
+  # 2026-09-18-confort-termico-bipolar-design.md): objetivo_confort_termico
+  # deja de ser monotono ("mas alto = mejor", verano=0.8 el mejor,
+  # invierno=0.15 el peor) y pasa a ser BIPOLAR -- 0.5 es el ideal, los
+  # dos extremos (0.0 y 1.0) son igual de malos (hipotermia / golpe de
+  # calor). Cada estacion por si sola queda moderada (a +-0.15 del ideal,
+  # simetrico entre verano/invierno) -- ningun extremo real se alcanza
+  # sin un evento de clima.efectos raro (ola_calor/ventisca) encima.
+  # PROVISIONAL, sin calibrar contra el motor en marcha.
   primavera:
     modificador_regeneracion: 1.0
-    objetivo_confort_termico: 0.55
+    objetivo_confort_termico: 0.5
   verano:
     modificador_regeneracion: 1.2
-    objetivo_confort_termico: 0.8
+    objetivo_confort_termico: 0.65
   otono:
     modificador_regeneracion: 0.9
     objetivo_confort_termico: 0.45
   invierno:
     modificador_regeneracion: 0.5
-    objetivo_confort_termico: 0.15
+    objetivo_confort_termico: 0.35
 
 clima:
+  # ola_calor/ventisca (2026-09-18): deliberadamente restringidos a UNA
+  # sola estacion cada uno (verano / invierno respectivamente) -- no se
+  # reparten tambien a estaciones limitrofes en este primer circulo, mas
+  # simple y auditable; ampliar la ventana estacional es una calibracion
+  # futura, no una suposicion de partida. sortear_clima() (nucleo/clima.py)
+  # no necesita ningun cambio de logica -- ya itera solo las claves
+  # presentes en la tabla de cada estacion.
   probabilidades_por_estacion:
     primavera: {despejado: 0.5, lluvioso: 0.45, tormenta: 0.05}
-    verano: {despejado: 0.75, lluvioso: 0.2, tormenta: 0.05}
+    verano: {despejado: 0.65, lluvioso: 0.15, tormenta: 0.05, ola_calor: 0.15}
     otono: {despejado: 0.4, lluvioso: 0.5, tormenta: 0.1}
-    invierno: {despejado: 0.55, lluvioso: 0.35, tormenta: 0.1}
+    invierno: {despejado: 0.4, lluvioso: 0.3, tormenta: 0.1, ventisca: 0.2}
   efectos:
     despejado:
-      ajuste_confort: 0.05
+      # ajuste_confort RECALIBRADO 2026-09-18: antes +0.05 (bajo el
+      # modelo monotono, despejado siempre era "el clima bueno") -- bajo
+      # el modelo bipolar, un dia despejado no es intrinsecamente mejor
+      # que uno nublado, es simplemente neutro.
+      ajuste_confort: 0.0
       modificador_regeneracion: 1.0
       tasa_generacion_charco_por_tick: 0.0
     lluvioso:
@@ -80,6 +100,19 @@ clima:
       ajuste_confort: -0.1
       modificador_regeneracion: 0.9
       tasa_generacion_charco_por_tick: 0.01
+    # ola_calor/ventisca (2026-09-18): los unicos dos climas cuyo
+    # ajuste_confort por si solo, sumado a la estacion correspondiente,
+    # puede acercar de verdad a un umbral de mortalidad termica (ver
+    # config/fisiologia.yaml) -- sin refugio/sombra que lo compense.
+    # PROVISIONAL, sin calibrar contra el motor en marcha.
+    ola_calor:
+      ajuste_confort: 0.35
+      modificador_regeneracion: 1.1
+      tasa_generacion_charco_por_tick: 0.0
+    ventisca:
+      ajuste_confort: -0.35
+      modificador_regeneracion: 0.3
+      tasa_generacion_charco_por_tick: 0.0
 
 desastres:
   prob_ignicion_base_bosque: 0.0015
@@ -87,6 +120,11 @@ desastres:
     despejado: 1.5
     lluvioso: 0.2
     tormenta: 1.0
+    # ola_calor/ventisca (2026-09-18): sequedad extrema dispara el
+    # riesgo de ignicion muy por encima de un dia despejado normal;
+    # ventisca lo casi anula (nieve/humedad). PROVISIONAL.
+    ola_calor: 2.5
+    ventisca: 0.05
   prob_propagacion_por_tick: 0.08
   prob_extincion_por_tick: 0.35
   dano_por_tick_en_llamas: 0.15

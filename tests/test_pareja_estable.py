@@ -19,6 +19,7 @@ from componentes.necesidades import Necesidades
 from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones, Vinculo
 from main import cargar_configuracion
+from nucleo.clima import Clima
 from nucleo.entidad import GestorEntidades, crear_construccion, crear_criatura, crear_fogata
 from nucleo.eventos import BusEventos
 from nucleo.mundo import Mundo
@@ -162,8 +163,9 @@ def _escenario_necesidades(config, rng, establecer_pareja=True, consciencia_a=0.
         _hacer_pareja(gestor, a, b, afinidad_ab=afinidad_ab, afinidad_ba=afinidad_ba)
     sistema = SistemaNecesidades(config, rng)
     reloj = Reloj()
-    # tick=360 -> dia 15 -> estacion 3 (invierno); base confort 0.15 +
-    # despejado 0.05 = 0.2
+    # tick=360 -> dia 15 -> estacion 3 (invierno); base confort 0.35 +
+    # despejado 0.0 = 0.35 (2026-09-18, recalibracion bipolar -- ver
+    # docs/superpowers/specs/2026-09-18-confort-termico-bipolar-design.md)
     reloj.tick_actual = 15 * 24
     return gestor, mundo, sistema, reloj, a, b
 
@@ -181,18 +183,24 @@ def test_ley_bono_confort_pareja_se_suma_al_objetivo():
 
 
 def test_ley_bono_confort_pareja_se_acumula_con_refugio_y_fogata():
+    """(2026-09-18, recalibracion bipolar -- ver docs/superpowers/specs/
+    2026-09-18-confort-termico-bipolar-design.md): refugio+fogata
+    (0.3+0.3=0.6) ya saturarian por si solos el techo de 0.5, ocultando
+    el efecto de pareja -- se fuerza VENTISCA (objetivo ambiental 0.0) y
+    solo fogata (sin refugio) para dejar margen real hasta el techo y
+    poder observar que pareja SI se acumula encima de un bono de calor
+    ya existente."""
     config = _config()
     rng = random.Random(12)
     gestor, mundo, sistema, reloj, a, b = _escenario_necesidades(config, rng)
-    # refugio + fogata en la misma celda (0,0)
-    cid = crear_construccion(gestor, 0, 0, "refugio", propietario_id=a)
-    gestor.obtener_componente(cid, Construccion).completado_alguna_vez = True
+    mundo.territorio.zonas[0].clima_actual = Clima.VENTISCA
     crear_fogata(gestor, 0, 0, 100.0)
-    # objetivo sin pareja: 0.2 + 0.3 + 0.3 = 0.8; con pareja 0.95
+    # objetivo sin pareja: 0.0 (ventisca) + 0.3 (fogata) = 0.3; con pareja
+    # 0.3 + 0.15 = 0.45 -- ambos por debajo del techo de 0.5.
     nec_a = gestor.obtener_componente(a, Necesidades)
-    nec_a.confort_termico = 0.8
+    nec_a.confort_termico = 0.3
     sistema.ejecutar(gestor, mundo, reloj, BusEventos())
-    assert nec_a.confort_termico == 0.8 + sistema.tasa_deriva_termica
+    assert nec_a.confort_termico == 0.3 + sistema.tasa_deriva_termica
 
 
 def test_ley_bono_confort_no_se_aplica_a_entidad_no_consciente():
@@ -203,12 +211,12 @@ def test_ley_bono_confort_no_se_aplica_a_entidad_no_consciente():
     )
     # B (consciente) si es pareja de A; A no es consciente y no debe recibir bono.
     nec_a = gestor.obtener_componente(a, Necesidades)
-    nec_a.confort_termico = 0.2
+    nec_a.confort_termico = 0.35
     nec_b = gestor.obtener_componente(b, Necesidades)
     nec_b.confort_termico = 0.2
     sistema.ejecutar(gestor, mundo, reloj, BusEventos())
-    # A se queda en el objetivo ambiental (no sube: 0.2 == obj sin pareja)
-    assert nec_a.confort_termico == 0.2
+    # A se queda en el objetivo ambiental (no sube: 0.35 == obj sin pareja)
+    assert nec_a.confort_termico == 0.35
     # B, consciente, sube por el bono
     assert nec_b.confort_termico == 0.2 + sistema.tasa_deriva_termica
 
@@ -220,9 +228,9 @@ def test_ley_bono_confort_no_se_aplica_cuando_la_presente_no_es_pareja():
         config, rng, afinidad_ba=0.1
     )
     nec_a = gestor.obtener_componente(a, Necesidades)
-    nec_a.confort_termico = 0.2
+    nec_a.confort_termico = 0.35
     sistema.ejecutar(gestor, mundo, reloj, BusEventos())
-    assert nec_a.confort_termico == 0.2
+    assert nec_a.confort_termico == 0.35
 
 
 # ---------------------------------------------------------------------------

@@ -67,8 +67,9 @@ from componentes.posicion import Posicion
 from componentes.relaciones import Relaciones
 from componentes.satisfaccion import Satisfaccion
 from componentes.temperamento import Temperamento
-from nucleo.agua import profundidad_agua_potable
+from nucleo.agua import hay_agua_potable, profundidad_agua_potable
 from nucleo.amenaza import posicion_amenaza_mas_cercana
+from nucleo.bioma import TipoTerreno
 from nucleo.clima import Clima, estacion_actual, objetivo_confort_termico
 from nucleo.disposicion import contar_conspecificos_cercanos
 from nucleo.entidad import GestorEntidades, procesar_deceso
@@ -206,6 +207,27 @@ class SistemaNecesidades:
         )
         self.bono_seguridad_cocina_comun: float = float(
             self.defecto.get("bono_seguridad_cocina_comun", 0.1)
+        )
+        # confort_termico BIPOLAR (2026-09-18, ver docs/superpowers/specs/
+        # 2026-09-18-confort-termico-bipolar-design.md): agua/sombra_bosque
+        # son el contrapunto de FRESCOR de refugio/fogata/etc -- ver bloque
+        # 4 en ejecutar(). Mortalidad termica dual, mismo patron de
+        # override que probabilidad_muerte_saciedad_critica.
+        self.bono_confort_agua: float = float(self.defecto.get("bono_confort_agua", 0.2))
+        self.bono_confort_sombra_bosque: float = float(
+            self.defecto.get("bono_confort_sombra_bosque", 0.15)
+        )
+        self.umbral_hipotermia: float = float(
+            self.defecto.get("umbral_confort_termico_hipotermia", 0.15)
+        )
+        self.umbral_golpe_calor: float = float(
+            self.defecto.get("umbral_confort_termico_golpe_calor", 0.85)
+        )
+        self.prob_muerte_hipotermia_base: float = float(
+            self.defecto.get("probabilidad_muerte_hipotermia", 0.005)
+        )
+        self.prob_muerte_golpe_calor_base: float = float(
+            self.defecto.get("probabilidad_muerte_golpe_calor", 0.005)
         )
         self.umbral_pareja: float = float(
             self.config.get("relaciones", {}).get("umbral_pareja", 0.3)
@@ -471,49 +493,59 @@ class SistemaNecesidades:
             else:
                 nec.oxigenacion = min(1.0, nec.oxigenacion + self.tasa_recup_oxigeno)
 
-            # 4. Deriva de Confort Térmico estacional + clima del día.
-            # Reloj.estacion es un int CRECIENTE, no cíclico (nucleo/
-            # reloj.py: "dia/estacion/anio son unidades derivadas") --
-            # hay que reducirlo al ciclo de 4 y convertirlo al Enum
-            # Estacion vía nucleo.clima.estacion_actual() antes de poder
-            # leer .value. nucleo.clima.objetivo_confort_termico() ya
-            # combina estación (base) + clima del día (ajuste_confort).
-            # Mismo patrón defensivo que sistema_recursos.py/
-            # sistema_flora.py para leer zona.clima_actual (puede no
-            # existir en un mundo recién creado antes del primer sorteo
-            # de clima).
+            # 4. Deriva de Confort Térmico estacional + clima del día,
+            # BIPOLAR (2026-09-18, ver docs/superpowers/specs/
+            # 2026-09-18-confort-termico-bipolar-design.md, conversación
+            # con Diego): 0.5 es el ideal, AMBOS extremos son malos
+            # (hipotermia/golpe de calor, ver punto 7 más abajo) -- antes
+            # el eje era monótono (más alto = siempre mejor). Reloj.estacion
+            # es un int CRECIENTE, no cíclico (nucleo/reloj.py:
+            # "dia/estacion/anio son unidades derivadas") -- hay que
+            # reducirlo al ciclo de 4 y convertirlo al Enum Estacion vía
+            # nucleo.clima.estacion_actual() antes de poder leer .value.
+            # nucleo.clima.objetivo_confort_termico() ya combina estación
+            # (base) + clima del día (ajuste_confort), en el mismo eje
+            # bipolar (config/clima.yaml recalibrado el mismo día). Mismo
+            # patrón defensivo que sistema_recursos.py/sistema_flora.py
+            # para leer zona.clima_actual (puede no existir en un mundo
+            # recién creado antes del primer sorteo de clima).
             clima_actual = getattr(zona, "clima_actual", None) or Clima.DESPEJADO
             obj_termico = objetivo_confort_termico(
                 estacion_actual(reloj.estacion), clima_actual,
                 self.config.get("estaciones", {}), self.config.get("clima", {}),
             )
-            # Refugio/Fogata (ver nucleo/fuego.py): SUMAN al objetivo
-            # ambiental, no lo sustituyen -- la severidad real del frío
-            # importa. Ambos pueden coincidir en la misma celda y se
-            # acumulan.
+            # Fuentes de CALOR (refugio/fogata/madriguera/salón/cocina/
+            # pareja, ver nucleo/fuego.py): bajo el eje bipolar, ya NO
+            # suman sin condición -- empujan el objetivo hacia 0.5 SOLO
+            # DESDE ABAJO (protegen del frío; encender una fogata en
+            # pleno verano no tiene sentido y no debe empeorar un golpe
+            # de calor). Se acumula el total antes de aplicar el techo,
+            # para que refugio+fogata combinados en invierno profundo
+            # sigan aportando cada uno hasta el límite conjunto.
+            bono_calor = 0.0
             if hay_refugio_en(gestor, pos.x, pos.y, pos.zona_idx, indice=self._indice_actual):
-                obj_termico += self.bono_confort_refugio
+                bono_calor += self.bono_confort_refugio
             if fogata_en(gestor, pos.x, pos.y, pos.zona_idx, indice=self._indice_actual) is not None:
-                obj_termico += self.bono_confort_fogata
+                bono_calor += self.bono_confort_fogata
             # Madriguera colonial (2026-09-07, circulo B): cualquiera
             # fisicamente en su celda se beneficia, sin exigir que la
             # tenga en su propia memoria -- distinto de refugio
             # individual, que no da ningun bono.
             if madriguera_en(gestor, pos.x, pos.y, pos.zona_idx, indice=self._indice_actual) is not None:
-                obj_termico += self.bono_confort_madriguera
+                bono_calor += self.bono_confort_madriguera
             # Salon comun (2026-09-08): mismo criterio, sin necesitar una
             # Fogata real aparte -- el salon ya implica su propio hogar.
             if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "salon_comun", indice=self._indice_actual):
-                obj_termico += self.bono_confort_salon_comun
+                bono_calor += self.bono_confort_salon_comun
             # Cocina comun (2026-09-08, ver docs/superpowers/specs/
             # 2026-09-08-cocinas-comunes-design.md): mismo criterio.
             if hay_construccion_de_tipo_en(gestor, pos.x, pos.y, pos.zona_idx, "cocina", indice=self._indice_actual):
-                obj_termico += self.bono_confort_cocina_comun
+                bono_calor += self.bono_confort_cocina_comun
             # Pareja estable (2026-09-04, circulo 4b): si la pareja
             # derivada (afinidad mutua >= relaciones.umbral_pareja) esta en
             # la celda EXACTA y la propia entidad es CONSCIENTE, suma su
-            # bono de confort -- un sumando mas del mismo objetivo, no un
-            # sustituto. La fauna no consulta pareja_presente en absoluto.
+            # bono de confort -- un sumando mas del mismo bono de calor, no
+            # un sustituto. La fauna no consulta pareja_presente en absoluto.
             if (
                 relaciones is not None
                 and cap_mental is not None
@@ -523,7 +555,25 @@ class SistemaNecesidades:
                     self.umbral_pareja, indice=self._indice_actual,
                 )
             ):
-                obj_termico += self.bono_confort_pareja
+                bono_calor += self.bono_confort_pareja
+            if bono_calor > 0.0 and obj_termico < 0.5:
+                obj_termico = min(0.5, obj_termico + bono_calor)
+
+            # Fuentes de FRESCOR (2026-09-18, contrapunto simétrico de las
+            # de calor de arriba): agua real en la celda (nucleo/agua.py:
+            # hay_agua_potable, mismo criterio que ya usa la asfixia por
+            # inmersión) y sombra de bosque (TipoTerreno.BOSQUE, mismo
+            # criterio que ya usa sistema_desastres.py para ignición) --
+            # empujan hacia 0.5 SOLO DESDE ARRIBA, nunca enfrían por
+            # debajo del ideal.
+            bono_frescor = 0.0
+            if hay_agua_potable(celda):
+                bono_frescor += self.bono_confort_agua
+            if celda.tipo_terreno == TipoTerreno.BOSQUE:
+                bono_frescor += self.bono_confort_sombra_bosque
+            if bono_frescor > 0.0 and obj_termico > 0.5:
+                obj_termico = max(0.5, obj_termico - bono_frescor)
+
             obj_termico = max(0.0, min(1.0, obj_termico))
             if nec.confort_termico < obj_termico:
                 nec.confort_termico = min(
@@ -610,10 +660,16 @@ class SistemaNecesidades:
                 urgencia_fisiologica = max(
                     1.0 - nec.saciedad, 1.0 - nec.hidratacion, 1.0 - nec.energia
                 )
+                # (2026-09-18) confort_termico ahora es BIPOLAR (0.5=ideal,
+                # ver punto 4 de arriba) -- la urgencia térmica es la
+                # DISTANCIA al ideal, no "1 - valor" (eso solo tenía
+                # sentido bajo el eje monótono anterior). abs(x-0.5)*2
+                # normaliza esa distancia de vuelta a [0, 1].
+                urgencia_termica = abs(nec.confort_termico - 0.5) * 2.0
                 objetivo_animo = (
                     animo.punto_base
                     - self.peso_fisiologico_animo * urgencia_fisiologica
-                    - self.peso_termico_animo * (1.0 - nec.confort_termico)
+                    - self.peso_termico_animo * urgencia_termica
                 )
                 objetivo_animo = max(0.0, min(1.0, objetivo_animo))
                 if animo.estado < objetivo_animo:
@@ -786,6 +842,20 @@ class SistemaNecesidades:
                 )
                 if self.rng.random() < prob_muerte_deshidratacion:
                     causa_muerte = "deshidratacion"
+            elif nec.confort_termico <= self.umbral_hipotermia:
+                # Mortalidad termica dual (2026-09-18, ver docs/superpowers/
+                # specs/2026-09-18-confort-termico-bipolar-design.md):
+                # modulada por (1 - resistencia_enfermedad), mismo patron
+                # exacto que la intoxicacion por comer crudo toxico
+                # (sistema_recursos.py) -- reutilizado, no un atributo
+                # nuevo de "resistencia al frio/calor".
+                prob_hipotermia = self.prob_muerte_hipotermia_base * (1.0 - dims.resistencia_enfermedad)
+                if self.rng.random() < prob_hipotermia:
+                    causa_muerte = "hipotermia"
+            elif nec.confort_termico >= self.umbral_golpe_calor:
+                prob_golpe_calor = self.prob_muerte_golpe_calor_base * (1.0 - dims.resistencia_enfermedad)
+                if self.rng.random() < prob_golpe_calor:
+                    causa_muerte = "golpe_calor"
 
             if causa_muerte is not None:
                 self._resolver_deceso(

@@ -965,9 +965,17 @@ def actualizar(
 
         # ENCENDER_FUEGO (ver componentes/agarre.py, componentes/
         # fogata.py y nucleo/fuego.py). Misma compuerta de consciencia
-        # que CONSTRUIR/RECOLECTAR. Utilidad = 1.0 - confort_termico
-        # (responde a una necesidad real, no a un objetivo administrativo
-        # como CONSTRUIR/RECOLECTAR) -- gateada a 0.0 si faltan piedras
+        # que CONSTRUIR/RECOLECTAR. Utilidad = max(0.0, 0.5 -
+        # confort_termico) * 2 -- (2026-09-18, ver docs/superpowers/specs/
+        # 2026-09-18-confort-termico-bipolar-design.md) fuego SOLO mitiga
+        # el FRIO, nunca el calor: bajo el eje bipolar (0.5=ideal), la
+        # vieja fórmula "1.0 - confort_termico" habría seguido devolviendo
+        # utilidad alta con calor extremo (confort cerca de 1.0), cuando
+        # encender una fogata en un golpe de calor sería absurdo -- la
+        # fórmula nueva da 0.0 automáticamente en todo el rango >= 0.5,
+        # sin gate adicional. (responde a una necesidad real, no a un
+        # objetivo administrativo como CONSTRUIR/RECOLECTAR) -- gateada a
+        # 0.0 si faltan piedras
         # en Agarre, no hay combustible en la celda actual, o ya hay una
         # Fogata ahí (nada que encender, beneficiarse de una ya existente
         # no exige ninguna acción, sistema_necesidades.py la detecta
@@ -1012,7 +1020,7 @@ def actualizar(
                 # Eslabón heredado: "cuánto valdría encender fuego si ya
                 # tuviera las piedras" empuja a RECOLECTAR, no una
                 # utilidad propia de "buscar piedra".
-                valor_heredado_fuego = 1.0 - necesidades.confort_termico
+                valor_heredado_fuego = max(0.0, 0.5 - necesidades.confort_termico) * 2.0
                 utilidad_recolectar = max(utilidad_recolectar, valor_heredado_fuego)
             else:
                 zona_fuego = mundo.territorio.zonas[pos.zona_idx]
@@ -1021,7 +1029,7 @@ def actualizar(
                     celda_tiene_combustible(celda_fuego, catalogo_materiales)
                     and fogata_en(gestor, pos.x, pos.y, pos.zona_idx, indice=indice) is None
                 ):
-                    utilidad_encender_fuego = 1.0 - necesidades.confort_termico
+                    utilidad_encender_fuego = max(0.0, 0.5 - necesidades.confort_termico) * 2.0
 
         # COCINAR (2026-09-08, ver docs/superpowers/specs/
         # 2026-09-08-como-cocinar-design.md). Misma compuerta de

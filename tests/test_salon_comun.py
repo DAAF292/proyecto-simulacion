@@ -263,7 +263,10 @@ def _escenario_necesidades(config, rng, con_salon=True, completado=True):
         _construccion(gestor, "salon_comun", 0, 0, completado=completado, progreso=1.0 if completado else 0.5)
     sistema = SistemaNecesidades(config, rng)
     reloj = Reloj()
-    reloj.tick_actual = 15 * 24  # invierno+despejado = 0.2 (mismo escenario ya usado en el proyecto)
+    # invierno+despejado = 0.35 (2026-09-18, recalibracion bipolar -- ver
+    # docs/superpowers/specs/2026-09-18-confort-termico-bipolar-design.md;
+    # mismo escenario ya usado en el proyecto)
+    reloj.tick_actual = 15 * 24
     return gestor, mundo, sistema, reloj, eid
 
 
@@ -294,8 +297,8 @@ def test_salon_comun_incompleto_no_da_ningun_bono():
     rng = random.Random(22)
     gestor, mundo, sistema, reloj, eid = _escenario_necesidades(config, rng, completado=False)
     nec = gestor.obtener_componente(eid, Necesidades)
-    nec.confort_termico = 0.2
+    nec.confort_termico = 0.35
     nec.seguridad = 0.4
     sistema.ejecutar(gestor, mundo, reloj, BusEventos())
-    assert nec.confort_termico == 0.2
+    assert nec.confort_termico == 0.35
     assert nec.seguridad == 0.4 + sistema.tasa_recup_seguridad

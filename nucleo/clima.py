@@ -12,17 +12,24 @@ Clima: estado de tiempo simple, sorteado a cadencia de día
 (sistemas/sistema_clima.py), con probabilidad condicionada por la
 estación activa -- ver config/clima.yaml.
 
-Efecto mecánico: estación y clima comparten los dos mismos "enganches"
-en vez de un mecanismo distinto cada uno -- modificador multiplicativo
-sobre la regeneración de recursos (sistemas/sistema_recursos.py) y un
-objetivo aditivo hacia el que deriva Necesidades.confort_termico
-(sistemas/sistema_necesidades.py). La estación fija una base; el clima
-del día añade una perturbación alrededor de ella.
+Efecto mecánico (CORREGIDO 2026-09-18 -- la afirmación de "los dos
+mismos enganches" ya era incompleta antes de esta fecha, ver
+docs/historial_nucleo.md): modificador multiplicativo sobre la
+regeneración de recursos (sistemas/sistema_recursos.py), objetivo hacia
+el que deriva Necesidades.confort_termico (sistemas/sistema_necesidades.py),
+tasa_generacion_charco_por_tick (sistemas/sistema_recursos.py) y
+multiplicador_riesgo_por_clima sobre la ignición de incendio
+(sistemas/sistema_desastres.py) -- cuatro enganches reales, no dos. La
+estación fija una base; el clima del día añade una perturbación
+alrededor de ella.
 
-confort_termico se mueve de verdad, pero sin regla de muerte propia
-todavía -- mismo criterio ya aplicado a hidratación y aliviado en su
-momento (ninguna necesidad nueva se cierra de golpe con toda su cadena
-de consecuencias).
+confort_termico es BIPOLAR (2026-09-18, ver docs/superpowers/specs/
+2026-09-18-confort-termico-bipolar-design.md): 0.5 es el ideal, ambos
+extremos son malos, y SÍ tiene mortalidad propia (hipotermia/golpe de
+calor, sistemas/sistema_necesidades.py) modulada por
+resistencia_enfermedad. OLA_CALOR/VENTISCA son los únicos climas
+capaces de acercar de verdad a un extremo peligroso, restringidos cada
+uno a una sola estación (config/clima.yaml).
 
 Historial de diseño y decisiones: docs/historial_nucleo.md.
 """
@@ -40,6 +47,14 @@ class Clima(Enum):
     DESPEJADO = "despejado"
     LLUVIOSO = "lluvioso"
     TORMENTA = "tormenta"
+    # OLA_CALOR/VENTISCA (2026-09-18, ver docs/superpowers/specs/
+    # 2026-09-18-confort-termico-bipolar-design.md): unicos climas
+    # restringidos a una sola estacion cada uno (config/clima.yaml,
+    # probabilidades_por_estacion) -- verano/invierno respectivamente.
+    # sortear_clima() no distingue estos dos de los tres de arriba, solo
+    # itera lo que la tabla de la estacion activa declare.
+    OLA_CALOR = "ola_calor"
+    VENTISCA = "ventisca"
 
 
 _ORDEN_ESTACIONES = [Estacion.PRIMAVERA, Estacion.VERANO, Estacion.OTONO, Estacion.INVIERNO]

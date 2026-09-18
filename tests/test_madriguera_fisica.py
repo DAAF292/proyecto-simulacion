@@ -160,8 +160,10 @@ def _escenario_madriguera(config, rng, especie=Especie.CONEJO, con_madriguera=Tr
         crear_madriguera(gestor, 0, 0, 10, zona_idx=0)
     sistema = SistemaNecesidades(config, rng)
     reloj = Reloj()
-    # tick=360 -> dia 15 -> estacion 3 (invierno); base confort 0.15 +
-    # despejado 0.05 = 0.2 (mismo escenario que test_pareja_estable.py)
+    # tick=360 -> dia 15 -> estacion 3 (invierno); base confort 0.35 +
+    # despejado 0.0 = 0.35 (2026-09-18, recalibracion bipolar -- ver
+    # docs/superpowers/specs/2026-09-18-confort-termico-bipolar-design.md;
+    # mismo escenario que test_pareja_estable.py)
     reloj.tick_actual = 15 * 24
     return gestor, mundo, sistema, reloj, eid
 
@@ -208,10 +210,10 @@ def test_ley_sin_madriguera_fisica_no_hay_ningun_bono() -> None:
         config, rng, con_madriguera=False
     )
     nec = gestor.obtener_componente(eid, Necesidades)
-    nec.confort_termico = 0.2
+    nec.confort_termico = 0.35
     nec.seguridad = 0.4
     sistema.ejecutar(gestor, mundo, reloj, BusEventos())
-    assert nec.confort_termico == 0.2  # objetivo sin bono ya es 0.2, no sube
+    assert nec.confort_termico == 0.35  # objetivo sin bono ya es 0.35, no sube
     assert nec.seguridad == 0.4 + sistema.tasa_recup_seguridad
 
 

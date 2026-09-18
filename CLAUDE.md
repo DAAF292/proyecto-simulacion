@@ -171,16 +171,16 @@ carpeta `in_review/` ahora vacía.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
 - **Tests automatizados (CORREGIDO 2026-09-18, misma tarde)**: `tests/`
-  contiene 88 ficheros / 772 tests reales a esta fecha (verificado con
-  `pytest --collect-only`, no de memoria). El salto de 759 a 772
-  corresponde al círculo de `Animo` (12 tests nuevos,
-  `tests/test_animo.py`, ver `docs/historial_componentes.md`) y al fix
-  del gap de persistencia de colonización espontánea descubierto al
-  verificarlo (1 test). Siguen escritos como "ley física" con docstring
-  explicando el comportamiento que validan. La cobertura sigue siendo
-  parcial (nada del bucle principal salvo el ciclo de vida del hilo de
-  `GestorPartidas`, la mayoría de sistemas de comportamiento, ni la
-  mayor parte de persistencia). CI/linting sigue sin configurar.
+  contiene 89 ficheros / 789 tests reales a esta fecha (verificado con
+  `pytest --collect-only`, no de memoria). El salto de 772 a 789
+  corresponde al círculo de confort_termico bipolar (17 tests nuevos,
+  `tests/test_confort_termico_bipolar.py`, ver
+  `docs/historial_componentes.md`). Siguen escritos como "ley física"
+  con docstring explicando el comportamiento que validan. La cobertura
+  sigue siendo parcial (nada del bucle principal salvo el ciclo de vida
+  del hilo de `GestorPartidas`, la mayoría de sistemas de
+  comportamiento, ni la mayor parte de persistencia). CI/linting sigue
+  sin configurar.
 - **Distingue el tipo de tarea**: diseño conceptual (se resuelve en
   conversación, proponer/justificar/invitar a la crítica/cerrar solo cuando
   Diego confirma), documentación (cuando algo se cierre, ofrece dejarlo por
@@ -389,6 +389,26 @@ completo y la verificación real (incluye dos bugs encontrados al
 implementar: herencia olvidada en `nacer_criatura`, y un gap de
 persistencia real en `sistema_colonizacion.py` -- ajeno a Animo pero
 corregido en el mismo círculo por estar en el mismo dominio).
+
+**Añadido en sesión posterior, mismo día 2026-09-18**: `Necesidades.confort_termico`
+pasa de eje monótono (0=malo/1=bueno) a BIPOLAR (0.5=ideal, ambos
+extremos son malos), con mortalidad térmica dual real (hipotermia/golpe
+de calor, modulada por `resistencia_enfermedad`) y dos climas nuevos
+(`OLA_CALOR`/`VENTISCA`, restringidos a verano/invierno) que son los
+únicos capaces de alcanzar un extremo peligroso — ver
+`docs/historial_componentes.md` y `docs/superpowers/specs/
+2026-09-18-confort-termico-bipolar-design.md` para el diseño completo.
+Verificado con un smoke test real de 6000 ticks: ambas causas de muerte
+se ejercen de verdad (ni inertes ni catastróficas), pero **observación
+honesta sin recalibrar por iniciativa propia**: hipotermia salió ~4.4x
+más frecuente que golpe de calor pese a una exposición climática
+similar (~1.33x) — pendiente real, necesita el harness completo para
+decidir si hace falta ajustar. **Hallazgo colateral señalado, no
+investigado (fuera de alcance de este círculo)**: en el mismo smoke
+test, `ahogamiento` fue la causa de muerte dominante con mucha
+diferencia (71981 eventos) — mecanismo que este círculo no tocó, podría
+ser particularidad de esa semilla/mapa (mucha agua) o un problema
+preexistente sin relación.
 
 **Podada esta sección el 2026-09-17** (venía de las ~465 líneas leídas
 arriba en versiones anteriores de este documento, mezclando pendientes

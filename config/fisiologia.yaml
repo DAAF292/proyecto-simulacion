@@ -103,6 +103,36 @@ necesidades:
     # para diferenciarlos todavia. PROVISIONAL, sin calibrar.
     bono_confort_cocina_comun: 0.3
     bono_seguridad_cocina_comun: 0.1
+    # confort_termico BIPOLAR (2026-09-18, ver docs/superpowers/specs/
+    # 2026-09-18-confort-termico-bipolar-design.md, conversacion con
+    # Diego): 0.5 es el ideal, ambos extremos son malos. Refugio/fogata/
+    # madriguera/salon/cocina/pareja de arriba son fuentes de CALOR --
+    # ahora solo empujan el objetivo hacia 0.5 DESDE ABAJO (nunca lo
+    # suben por encima de 0.5, no tiene sentido encender fuego en pleno
+    # verano). bono_confort_agua/sombra_bosque son el contrapunto de
+    # FRESCOR, simetrico: empujan hacia 0.5 solo DESDE ARRIBA. Magnitud
+    # menor que refugio (0.3) a proposito -- son bonos ambientales
+    # pasivos (posicion, sin ninguna construccion ni decision consciente
+    # de por medio), mas debiles que una estructura construida
+    # deliberadamente. hay_agua_potable() ya existe (nucleo/agua.py);
+    # sombra_bosque reutiliza TipoTerreno.BOSQUE (nucleo/bioma.py), mismo
+    # criterio que ya usa sistema_desastres.py para ignicion. PROVISIONAL
+    # los dos, sin calibrar contra el motor en marcha.
+    bono_confort_agua: 0.2
+    bono_confort_sombra_bosque: 0.15
+    # Mortalidad termica dual (2026-09-18): dos causas nuevas en la
+    # cascada de mortalidad de sistema_necesidades.py, cada una modulada
+    # por (1 - resistencia_enfermedad), mismo patron que la intoxicacion
+    # por comer crudo toxico (sistema_recursos.py). Umbrales PROVISIONAL:
+    # 0.15/0.85 son simetricos respecto al ideal (0.5), y con la
+    # recalibracion de config/clima.yaml de este mismo circulo solo se
+    # alcanzan con un evento climatico raro (ola_calor/ventisca) en la
+    # estacion correspondiente, sin refugio/sombra que lo compense --
+    # nunca observado contra el motor en marcha todavia.
+    umbral_confort_termico_hipotermia: 0.15
+    umbral_confort_termico_golpe_calor: 0.85
+    probabilidad_muerte_hipotermia: 0.005
+    probabilidad_muerte_golpe_calor: 0.005
     # saciedad_minima_para_guardar_provisiones (2026-09-07, ver
     # docs/superpowers/specs/2026-09-07-provisiones-alimento-design.md):
     # umbral de saciedad tras comer por encima del cual un consciente

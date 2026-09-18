@@ -141,6 +141,39 @@ anterior decía por error que NO se persistía, corregido. impulso_
 reproductivo nació el 2026-08-20, diseño conjunto tras investigar por
 qué la reproducción casi nunca ocurría.
 
+**confort_termico pasa a ser BIPOLAR (2026-09-18, conversación con
+Diego, mismo día que `Animo`)**: al proponer un mecanismo de mortalidad
+por frío sobre el eje monótono original (0=malo/1=bueno, nunca modelaba
+"demasiado calor"), Diego propuso el rediseño real: "si le damos un
+enfoque distinto, de 0 a 1. si la criatura está en 0.5 significa que
+esta en un termino medio, lo ideal. si ese valor baja empieza el frio,
+si ese valor sube empieza el calor". Se le señaló antes de diseñar que
+esto no era "añadir mortalidad" sino redefinir la semántica de un
+componente ya consumido en 4 sitios (`nucleo/clima.py`,
+`sistema_decision.py`, los seis bonos de confort de
+`sistema_necesidades.py`, y `Animo` -- cerrado esa misma tarde). Diego
+eligió el alcance completo de una vez ("A es lo correcto") y pidió
+además "más variabilidad" de clima -- sin eso, los extremos del eje
+bipolar nunca serían alcanzables en la práctica.
+
+Diseño completo, recalibración de `config/clima.yaml` (estaciones
+moderadas y simétricas respecto a 0.5, dos climas nuevos `OLA_CALOR`/
+`VENTISCA` restringidos a una sola estación cada uno), techo/suelo
+simétrico en 0.5 para los bonos de calor/frescor (agua/sombra de bosque
+son el contrapunto nuevo, pedido explícito de Diego: "adelante con
+todo" tras preguntarle si diseñaba también la mitigación del calor), y
+mortalidad térmica dual modulada por `resistencia_enfermedad` (mismo
+patrón que la intoxicación): ver
+`docs/superpowers/specs/2026-09-18-confort-termico-bipolar-design.md`
+para el detalle completo, incluida la verificación real (5 tests
+preexistentes rotos por la recalibración y corregidos -- uno de ellos
+tuvo que rediseñarse por completo porque los bonos ya saturaban el
+techo nuevo por sí solos, ocultando lo que pretendía demostrar; y una
+observación honesta sin resolver: hipotermia salió ~4.4x más frecuente
+que golpe de calor en un smoke test de 6000 ticks, pese a una
+exposición climática similar -- PROVISIONAL, sin recalibrar por
+iniciativa propia).
+
 ## `construccion.py`
 
 FUNDAMENTO de la pieza "refugio construido" (2026-08-30, ver
