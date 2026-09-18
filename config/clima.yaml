@@ -125,10 +125,64 @@ desastres:
     # ventisca lo casi anula (nieve/humedad). PROVISIONAL.
     ola_calor: 2.5
     ventisca: 0.05
-  prob_propagacion_por_tick: 0.08
-  prob_extincion_por_tick: 0.35
+  # prob_propagacion_por_tick/prob_extincion_por_tick RECALIBRADOS
+  # 2026-09-18 (ver docs/superpowers/specs/
+  # 2026-09-18-desastres-naturales-design.md): verificado con el motor
+  # real que con los valores anteriores (0.08/0.35) el incendio NUNCA
+  # mataba fauna -- 40 individuos sembrados directamente en bosque, 48
+  # incendios reales en 250 dias, 1 sola Herida, 0 Muertes. Un foco se
+  # apagaba solo en ~3 ticks de media y apenas se propagaba, dando
+  # tiempo de sobra a la amenaza ambiental (nucleo/amenaza.py,
+  # celda.en_llamas) para huir. La flora SI moria (no puede huir,
+  # verificado aparte: 26->4 plantas en celdas forzadas a arder durante
+  # 100 ticks) -- el hueco era especifico de fauna, no del mecanismo de
+  # dano en si. PROVISIONAL, sin recalibrar de nuevo tras este cambio.
+  prob_propagacion_por_tick: 0.15
+  prob_extincion_por_tick: 0.20
   dano_por_tick_en_llamas: 0.15
   aporte_ceniza_planta: 0.15
   fraccion_masa_seca_quemada: 0.20
   fraccion_agua_tisular_quemada: 0.05
   tasa_putrefaccion_calcinada: 0.15
+
+  # Rayo (2026-09-18, ver docs/superpowers/specs/
+  # 2026-09-18-desastres-naturales-design.md): evaluado por TICK (no a
+  # cadencia diaria como la ignicion espontanea), solo en zonas con
+  # Clima.TORMENTA activo -- celda al azar de la zona, sin restringir a
+  # bosque (un rayo puede caer en cualquier terreno). Dano INSTANTANEO,
+  # a diferencia del fuego que quema tick a tick -- reutiliza
+  # nucleo/entidad.py:procesar_deceso si mata, mismas fracciones de
+  # descomposicion normales que el resto del motor (ver
+  # config/flora.yaml seccion descomposicion), no las de "calcinada".
+  # Si cae en bosque, ademas puede iniciar un foco de incendio ahi --
+  # segunda via de ignicion, independiente de la espontanea por
+  # sequedad. PROVISIONAL, sin calibrar contra el motor en marcha.
+  probabilidad_impacto_rayo_por_tick: 0.02
+  dano_rayo: 0.6
+  probabilidad_rayo_inicia_incendio: 0.3
+
+  # Sequia (2026-09-18): ley emergente por zona, SIN entidad de "evento"
+  # propia (a diferencia de incendio) -- un contador de dias
+  # consecutivos con clima seco (despejado/ola_calor). Al superar el
+  # umbral, la zona entra en sequia: reduce fertilidad de forma
+  # sostenida y acelera el drenaje de charcos ya existentes. NO mata
+  # directamente -- amplifica inanicion/deshidratacion, que ya existen
+  # (principio de leyes neutras: no se inventa una "muerte por sequia").
+  # PROVISIONAL.
+  dias_secos_para_sequia: 8
+  penalizacion_fertilidad_sequia_por_dia: 0.02
+  factor_secado_charco_sequia: 0.01
+
+  # Inundacion (2026-09-18): mismo patron de contador que sequia, pero
+  # de dias consecutivos con clima humedo (lluvioso/tormenta/ventisca).
+  # Al ENTRAR en inundacion (transicion, no cada dia que dure) desborda
+  # -- sube profundidad_charco en las celdas vecinas a agua ya
+  # existente. Reutiliza el ahogamiento ya existente
+  # (profundidad_agua_potable > dims.altura, sistema_necesidades.py) sin
+  # inventar una causa de muerte nueva. Mientras dura, dana
+  # construcciones organicas en celdas inundadas (vulnerabilidad_agua,
+  # ver config/materiales.yaml, simetrico a combustibilidad).
+  # PROVISIONAL.
+  dias_humedos_para_inundacion: 5
+  incremento_charco_desborde: 0.15
+  tasa_dano_inundacion_por_tick: 0.1

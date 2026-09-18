@@ -96,6 +96,26 @@ class ZonaBioma:
         # cargar; humedad_subsuelo NO se persiste (regenerada desde la
         # semilla, arranca 0.0 en tierra), igual que al generar.
         self.celdas_humedas: set[tuple[int, int]] = set()
+        # Sequia/inundacion (2026-09-18, ver docs/superpowers/specs/
+        # 2026-09-18-desastres-naturales-design.md): contadores de dias
+        # consecutivos con clima seco/humedo, mismo estado por zona que
+        # clima_actual -- NO se persisten (mismo criterio ya aceptado
+        # para clima_actual/estacion_previa: se resembraria en el
+        # primer corte de dia tras cargar, una sequia/inundacion en
+        # curso se "olvida" al recargar partida, aceptado como el resto
+        # de estado de clima no persistido).
+        self.dias_secos_consecutivos: int = 0
+        self.en_sequia: bool = False
+        self.dias_humedos_consecutivos: int = 0
+        self.en_inundacion: bool = False
+        # Celdas con desborde activo (2026-09-18, mismo patron exacto
+        # que celdas_en_llamas): sistema_desastres.py:procesar_inundacion_tick
+        # necesitaria escanear toda la cuadricula cada tick para saber
+        # que celdas siguen inundadas -- este registro evita ese
+        # escaneo. NO se persiste, mismo criterio que celdas_humedas
+        # (el desborde es consecuencia de en_inundacion, que tampoco
+        # persiste).
+        self.celdas_inundadas: set[tuple[int, int]] = set()
         """Viento dominante fijo de la zona, sorteado una vez en la
         generación del mundo (nucleo/orografia.py:
         sortear_viento_dominante) y conservado como atributo de la zona --

@@ -511,6 +511,8 @@ def ejecutar_tick(
     indice_b = construir_indice_espacial(gestor)
 
     sistemas["desastres"].procesar_fuego_tick(gestor, mundo, reloj, bus_eventos)
+    sistemas["desastres"].procesar_rayo_tick(gestor, mundo, reloj, bus_eventos)
+    sistemas["desastres"].procesar_inundacion_tick(gestor, mundo, reloj, bus_eventos)
     sistemas["depredacion"].ejecutar(gestor, mundo, reloj, bus_eventos, indice=indice_b)
 
     # ---------------------------------------------------------

@@ -1,10 +1,32 @@
 """
 sistemas/sistema_desastres.py
 
-Sistema de desastres naturales y dinámicas de perturbación ambiental (Corte de Día / Fase 2).
-Gestiona la ignición de incendios condicionada por clima a cadencia diaria,
-la propagación/extinción por tick, el daño térmico a criaturas vivas con depósito
-de necromasa calcinada y la conversión de flora quemada en ceniza edáfica.
+Sistema de desastres naturales y dinámicas de perturbación ambiental.
+Incendio (Corte de Día para ignición, cadencia de tick para propagación/
+daño): condicionado por clima, propaga/extingue por tick, daño térmico a
+criaturas con necromasa calcinada, conversión de flora en ceniza.
+
+Ampliado 2026-09-18 (ver docs/superpowers/specs/
+2026-09-18-desastres-naturales-design.md) con tres piezas más, todas
+reutilizando mecanismos ya existentes en vez de inventar donde no hace
+falta:
+- Rayo (cadencia de tick, solo con Clima.TORMENTA): impacto instantáneo
+  en una celda al azar de la zona, daño directo a quien esté ahí, puede
+  iniciar un foco de incendio si cae en bosque.
+- Sequía (ley emergente por zona, sin entidad de "evento" propia):
+  contador de días secos consecutivos -- reduce fertilidad y seca
+  charcos, amplifica inanición/deshidratación ya existentes en vez de
+  inventar una muerte nueva.
+- Inundación (mismo patrón de contador, días húmedos consecutivos):
+  desborda charcos hacia celdas vecinas al entrar (reutiliza el
+  ahogamiento ya existente) y daña construcciones orgánicas mientras
+  dura (vulnerabilidad_agua, simétrico a combustibilidad).
+
+También recalibrado el mismo día: prob_propagacion_por_tick/
+prob_extincion_por_tick del incendio -- verificado con el motor real
+que antes NUNCA mataba fauna (la amenaza ambiental por celda.en_llamas
+daba tiempo de sobra a huir de un fuego que se apagaba solo en pocos
+ticks); la flora SÍ moría (no puede huir), confirmado aparte.
 """
 
 from __future__ import annotations
@@ -18,12 +40,15 @@ from componentes.identidad import Identidad
 from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.posicion import Posicion
+from nucleo.agua import hay_agua_potable
 from nucleo.bioma import TipoTerreno
+from nucleo.clima import Clima
 from nucleo.construccion import masa_minima_para, progreso_construccion
-from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa
+from nucleo.entidad import GestorEntidades, componer_necromasa, crear_necromasa, procesar_deceso
 from nucleo.eventos import BusEventos, Evento, Severidad
 from nucleo.mundo import Mundo
 from nucleo.reloj import Reloj
+from nucleo.zona_bioma import vecinos
 
 
 class SistemaDesastres:
@@ -98,6 +123,49 @@ class SistemaDesastres:
         )
         self.catalogo_materiales: dict[str, Any] = self.config.get("materiales", {})
 
+        # Rayo (2026-09-18, ver docs/superpowers/specs/
+        # 2026-09-18-desastres-naturales-design.md).
+        self.prob_impacto_rayo: float = float(
+            cfg_des.get("probabilidad_impacto_rayo_por_tick", 0.02)
+        )
+        self.dano_rayo: float = float(cfg_des.get("dano_rayo", 0.6))
+        self.prob_rayo_inicia_incendio: float = float(
+            cfg_des.get("probabilidad_rayo_inicia_incendio", 0.3)
+        )
+        # Fracciones de descomposicion NORMALES (no las de "calcinada" de
+        # arriba) -- un rayo mata de un golpe, no calcina tick a tick.
+        # Mismo origen que sistema_necesidades.py:_resolver_deceso.
+        cfg_desc = self.config.get("descomposicion", {})
+        self.fraccion_masa_seca_normal: float = float(
+            cfg_desc.get("fraccion_masa_seca_por_defecto", 0.35)
+        )
+        self.fraccion_agua_tisular_normal: float = float(
+            cfg_desc.get("fraccion_agua_tisular_por_defecto", 0.65)
+        )
+
+        # Sequia (2026-09-18).
+        self.dias_secos_para_sequia: int = int(cfg_des.get("dias_secos_para_sequia", 8))
+        self.penalizacion_fertilidad_sequia: float = float(
+            cfg_des.get("penalizacion_fertilidad_sequia_por_dia", 0.02)
+        )
+        self.factor_secado_charco_sequia: float = float(
+            cfg_des.get("factor_secado_charco_sequia", 0.01)
+        )
+
+        # Inundacion (2026-09-18).
+        self.dias_humedos_para_inundacion: int = int(
+            cfg_des.get("dias_humedos_para_inundacion", 5)
+        )
+        self.incremento_charco_desborde: float = float(
+            cfg_des.get("incremento_charco_desborde", 0.15)
+        )
+        self.tasa_dano_inundacion: float = float(
+            cfg_des.get("tasa_dano_inundacion_por_tick", 0.1)
+        )
+        self.techo_charco: float = float(
+            self.config.get("charcos", {}).get("techo_profundidad_charco", 0.03)
+        )
+
     def ejecutar(
         self,
         gestor: GestorEntidades,
@@ -136,6 +204,93 @@ class SistemaDesastres:
                                     datos={"x": x, "y": y, "zona_idx": zona_idx, "clima": nombre_clima},
                                 )
                             )
+
+            self._actualizar_sequia(zona, zona_idx, nombre_clima, reloj, bus_eventos)
+            self._actualizar_inundacion(zona, zona_idx, nombre_clima, reloj, bus_eventos)
+
+    # Climas SECOS/HUMEDOS (2026-09-18): clasificacion propia de este
+    # sistema, no un atributo de Clima -- ventisca cuenta como HUMEDO
+    # (nieve es precipitacion, aunque enfrie) pese a compartir el
+    # "penaliza-fertilidad" de la sequia con despejado/ola_calor por
+    # motivos climaticos distintos.
+    _CLIMAS_SECOS = {"despejado", "ola_calor"}
+    _CLIMAS_HUMEDOS = {"lluvioso", "tormenta", "ventisca"}
+
+    def _actualizar_sequia(
+        self, zona: Any, zona_idx: int, nombre_clima: str, reloj: Reloj, bus_eventos: BusEventos,
+    ) -> None:
+        if nombre_clima in self._CLIMAS_SECOS:
+            zona.dias_secos_consecutivos += 1
+        else:
+            zona.dias_secos_consecutivos = 0
+
+        deberia_estar_en_sequia = zona.dias_secos_consecutivos >= self.dias_secos_para_sequia
+        if deberia_estar_en_sequia and not zona.en_sequia:
+            zona.en_sequia = True
+            bus_eventos.emitir(
+                Evento(
+                    tipo="SequiaIniciada", severidad=Severidad.NOTABLE, tick=reloj.tick_actual,
+                    datos={"zona_idx": zona_idx},
+                )
+            )
+        elif not deberia_estar_en_sequia and zona.en_sequia:
+            zona.en_sequia = False
+            bus_eventos.emitir(
+                Evento(
+                    tipo="SequiaTerminada", severidad=Severidad.NOTABLE, tick=reloj.tick_actual,
+                    datos={"zona_idx": zona_idx},
+                )
+            )
+
+        if zona.en_sequia:
+            for x, y, celda in zona.celdas():
+                celda.fertilidad = max(0.0, celda.fertilidad - self.penalizacion_fertilidad_sequia)
+                if celda.profundidad_charco > 0.0:
+                    celda.profundidad_charco = max(
+                        0.0, celda.profundidad_charco - self.factor_secado_charco_sequia
+                    )
+
+    def _actualizar_inundacion(
+        self, zona: Any, zona_idx: int, nombre_clima: str, reloj: Reloj, bus_eventos: BusEventos,
+    ) -> None:
+        if nombre_clima in self._CLIMAS_HUMEDOS:
+            zona.dias_humedos_consecutivos += 1
+        else:
+            zona.dias_humedos_consecutivos = 0
+
+        deberia_estar_en_inundacion = zona.dias_humedos_consecutivos >= self.dias_humedos_para_inundacion
+        if deberia_estar_en_inundacion and not zona.en_inundacion:
+            zona.en_inundacion = True
+            # Desborde UNA SOLA VEZ al entrar (no cada dia que dure) --
+            # evita crecimiento de charco sin limite. Cualquier celda
+            # con agua real desborda hacia sus vecinas de tierra firme.
+            nuevas_inundadas: set[tuple[int, int]] = set()
+            for x, y, celda in zona.celdas():
+                if hay_agua_potable(celda):
+                    for nx, ny in vecinos(x, y, zona.ancho, zona.alto):
+                        vecina = zona.obtener_celda(nx, ny)
+                        if not hay_agua_potable(vecina):
+                            vecina.profundidad_charco = min(
+                                self.techo_charco,
+                                vecina.profundidad_charco + self.incremento_charco_desborde,
+                            )
+                            nuevas_inundadas.add((nx, ny))
+            zona.celdas_inundadas |= nuevas_inundadas
+            bus_eventos.emitir(
+                Evento(
+                    tipo="InundacionIniciada", severidad=Severidad.NOTABLE, tick=reloj.tick_actual,
+                    datos={"zona_idx": zona_idx, "celdas_desbordadas": len(nuevas_inundadas)},
+                )
+            )
+        elif not deberia_estar_en_inundacion and zona.en_inundacion:
+            zona.en_inundacion = False
+            zona.celdas_inundadas.clear()
+            bus_eventos.emitir(
+                Evento(
+                    tipo="InundacionTerminada", severidad=Severidad.NOTABLE, tick=reloj.tick_actual,
+                    datos={"zona_idx": zona_idx},
+                )
+            )
 
     def procesar_fuego_tick(
         self,
@@ -341,3 +496,139 @@ class SistemaDesastres:
                     )
                 )
                 gestor.eliminar_entidad(con_id)
+
+    def procesar_rayo_tick(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        bus_eventos: BusEventos,
+    ) -> None:
+        """Rayo (2026-09-18, ver docs/superpowers/specs/
+        2026-09-18-desastres-naturales-design.md): a cadencia de TICK,
+        solo en zonas con Clima.TORMENTA activo. Celda al azar de la
+        zona -- no restringido a bosque, a diferencia de la ignicion
+        espontanea. Dano INSTANTANEO a quien este ahi (si hay alguien);
+        si la celda es bosque, probabilidad adicional de iniciar un
+        foco de incendio."""
+        for zona_idx, zona in enumerate(mundo.territorio.zonas):
+            if zona.clima_actual != Clima.TORMENTA:
+                continue
+            if self.rng.random() >= self.prob_impacto_rayo:
+                continue
+
+            x = self.rng.randrange(zona.ancho)
+            y = self.rng.randrange(zona.alto)
+            celda = zona.obtener_celda(x, y)
+
+            bus_eventos.emitir(
+                Evento(
+                    tipo="RayoImpacto", severidad=Severidad.HISTORICO, tick=reloj.tick_actual,
+                    datos={"x": x, "y": y, "zona_idx": zona_idx},
+                )
+            )
+
+            for cid in sorted(
+                gestor.entidades_con(Posicion, PoolFisico, DimensionesFisicas, Identidad)
+            ):
+                pos_c = gestor.obtener_componente(cid, Posicion)
+                if pos_c is None or pos_c.zona_idx != zona_idx or pos_c.x != x or pos_c.y != y:
+                    continue
+                pool_c = gestor.obtener_componente(cid, PoolFisico)
+                dims_c = gestor.obtener_componente(cid, DimensionesFisicas)
+                ident_c = gestor.obtener_componente(cid, Identidad)
+                dano = self.dano_rayo * dims_c.vitalidad_maxima
+                pool_c.vitalidad = max(0.0, pool_c.vitalidad - dano)
+                if pool_c.vitalidad <= 0.0:
+                    procesar_deceso(
+                        gestor=gestor, bus_eventos=bus_eventos, tick_actual=reloj.tick_actual,
+                        entidad_id=cid, pos_x=x, pos_y=y, dims=dims_c, ident=ident_c,
+                        causa="rayo", zona_idx=zona_idx,
+                        fraccion_masa_seca=self.fraccion_masa_seca_normal,
+                        fraccion_hueso=self.fraccion_hueso,
+                        fraccion_agua_tisular=self.fraccion_agua_tisular_normal,
+                    )
+                else:
+                    bus_eventos.emitir(
+                        Evento(
+                            tipo="Herida", severidad=Severidad.NOTABLE, tick=reloj.tick_actual,
+                            entidad_id=cid,
+                            datos={"causa": "rayo", "vitalidad_restante": pool_c.vitalidad},
+                        )
+                    )
+                break  # una sola criatura por celda de impacto, no hace falta seguir buscando
+
+            if (
+                celda.tipo_terreno == TipoTerreno.BOSQUE
+                and not celda.en_llamas
+                and self.rng.random() < self.prob_rayo_inicia_incendio
+            ):
+                celda.en_llamas = True
+                zona.celdas_en_llamas.add((x, y))
+                bus_eventos.emitir(
+                    Evento(
+                        tipo="IncendioIniciado", severidad=Severidad.HISTORICO, tick=reloj.tick_actual,
+                        datos={"x": x, "y": y, "zona_idx": zona_idx, "clima": "tormenta", "causa": "rayo"},
+                    )
+                )
+
+    def procesar_inundacion_tick(
+        self,
+        gestor: GestorEntidades,
+        mundo: Mundo,
+        reloj: Reloj,
+        bus_eventos: BusEventos,
+    ) -> None:
+        """Inundacion (2026-09-18): dano a construcciones ORGANICAS en
+        celdas desbordadas (zona.celdas_inundadas), mismo patron exacto
+        que el dano por fuego a construcciones -- vulnerabilidad_agua en
+        vez de combustibilidad."""
+        for zona_idx, zona in enumerate(mundo.territorio.zonas):
+            if not zona.celdas_inundadas:
+                continue
+            masa_minima_cache: dict[str, float] = {}
+            for con_id in sorted(gestor.entidades_con(Construccion, Posicion)):
+                pos_co = gestor.obtener_componente(con_id, Posicion)
+                construccion = gestor.obtener_componente(con_id, Construccion)
+                if pos_co is None or construccion is None or not construccion.materiales:
+                    continue
+                if pos_co.zona_idx != zona_idx:
+                    continue
+                if (pos_co.x, pos_co.y) not in zona.celdas_inundadas:
+                    continue
+
+                se_daño_algo = False
+                for material, masa in list(construccion.materiales.items()):
+                    if masa <= 0.0:
+                        continue
+                    vulnerabilidad = float(
+                        self.catalogo_materiales.get(material, {}).get("vulnerabilidad_agua", 0.0)
+                    )
+                    if vulnerabilidad <= 0.0:
+                        continue
+                    delta = masa * vulnerabilidad * self.tasa_dano_inundacion
+                    construccion.materiales[material] = max(0.0, masa - delta)
+                    se_daño_algo = True
+
+                if not se_daño_algo:
+                    continue
+
+                if construccion.tipo not in masa_minima_cache:
+                    masa_minima_cache[construccion.tipo] = masa_minima_para(
+                        construccion.tipo, self.config_construccion
+                    )
+                construccion.progreso = progreso_construccion(
+                    construccion.materiales, self.catalogo_materiales, masa_minima_cache[construccion.tipo]
+                )
+
+                if all(m <= self.umbral_purga_masa for m in construccion.materiales.values()):
+                    bus_eventos.emitir(
+                        Evento(
+                            tipo="ConstruccionColapsada",
+                            severidad=Severidad.NOTABLE if construccion.tipo == "refugio" else Severidad.HISTORICO,
+                            tick=reloj.tick_actual,
+                            entidad_id=con_id,
+                            datos={"x": pos_co.x, "y": pos_co.y, "tipo": construccion.tipo, "causa": "inundacion"},
+                        )
+                    )
+                    gestor.eliminar_entidad(con_id)

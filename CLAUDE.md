@@ -171,12 +171,12 @@ carpeta `in_review/` ahora vacía.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
 - **Tests automatizados (CORREGIDO 2026-09-18, misma tarde)**: `tests/`
-  contiene 89 ficheros / 789 tests reales a esta fecha (verificado con
-  `pytest --collect-only`, no de memoria). El salto de 772 a 789
-  corresponde al círculo de confort_termico bipolar (17 tests nuevos,
-  `tests/test_confort_termico_bipolar.py`, ver
-  `docs/historial_componentes.md`). Siguen escritos como "ley física"
-  con docstring explicando el comportamiento que validan. La cobertura
+  contiene 90 ficheros / 803 tests reales a esta fecha (verificado con
+  `pytest --collect-only`, no de memoria). El salto de 789 a 803
+  corresponde al círculo de desastres naturales (14 tests nuevos,
+  `tests/test_desastres_naturales.py`, ver
+  `docs/historial_sistemas.md`). Siguen escritos como "ley física" con
+  docstring explicando el comportamiento que validan. La cobertura
   sigue siendo parcial (nada del bucle principal salvo el ciclo de vida
   del hilo de `GestorPartidas`, la mayoría de sistemas de
   comportamiento, ni la mayor parte de persistencia). CI/linting sigue
@@ -409,6 +409,32 @@ test, `ahogamiento` fue la causa de muerte dominante con mucha
 diferencia (71981 eventos) — mecanismo que este círculo no tocó, podría
 ser particularidad de esa semilla/mapa (mucha agua) o un problema
 preexistente sin relación.
+
+**Añadido en tercera sesión, mismo día 2026-09-18**: desastres naturales
+ampliados de solo incendio a cuatro piezas — ver `docs/historial_sistemas.md`
+y `docs/superpowers/specs/2026-09-18-desastres-naturales-design.md`.
+**Hallazgo real, no solo diseño**: verificado contra el motor que el
+incendio NUNCA mataba fauna (40 individuos sembrados en bosque, 250
+días, 48 incendios reales, 0 muertes) — causa real: un foco se apagaba
+casi solo (`prob_extincion_por_tick=0.35`) y apenas se propagaba
+(`prob_propagacion_por_tick=0.08`), dando tiempo de sobra a la huida
+por amenaza ambiental ya existente; la flora sí moría (no puede huir,
+confirmado aparte: 26→4 plantas en celdas forzadas a arder). Recalibrado
+a 0.15/0.20 — verificado tras el cambio (333 días): 32 muertes por
+incendio, el fix funciona, pero **observación honesta de posible
+sobrecorrección, sin ajustar más por esta única corrida**: incendio
+pasó a ser la causa de muerte dominante (32 de 61 muertes totales, 52%)
+— pendiente real, necesita el harness completo. Nuevo: rayo (cadencia
+de tick, solo con tormenta, daño instantáneo, puede iniciar incendio en
+bosque — verificado real: 69 impactos en 333 días, 0 muertes directas
+en esa corrida, coherente con `dano_rayo=0.6` no letal siempre); sequía
+e inundación (ley emergente por zona, contador de días consecutivos de
+clima seco/húmedo, ninguna mata directamente — sequía amplifica
+inanición/deshidratación ya existentes, inundación reutiliza el
+ahogamiento ya existente y daña construcciones orgánicas con
+`vulnerabilidad_agua`, nuevo en `config/materiales.yaml`, simétrico a
+`combustibilidad` — verificado real: 8 ciclos de sequía y 32 de
+inundación en 333 días).
 
 **Podada esta sección el 2026-09-17** (venía de las ~465 líneas leídas
 arriba en versiones anteriores de este documento, mezclando pendientes
