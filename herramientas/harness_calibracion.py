@@ -42,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from componentes.construccion import Construccion
 from componentes.identidad import Identidad
+from componentes.planta import Planta
 from componentes.relaciones import Relaciones
 from componentes.vocacion import Vocacion
 from main import (
@@ -118,6 +119,22 @@ def _contar_poblacion(gestor: GestorEntidades) -> Counter:
     return c
 
 
+def _contar_flora(gestor: GestorEntidades) -> tuple[Counter, float]:
+    """Poblacion de Planta por especie + biomasa lenosa total en pie
+    (Planta.masa_tronco_kg, solo > 0.0 en especies con recurso 'madera'
+    real -- manzano/roble/pino, ver config/flora.yaml) -- 2026-09-18,
+    ver docs/superpowers/specs/2026-09-18-instrumentacion-harness-
+    design.md. Hasta esa fecha el harness no media NADA de flora pese a
+    que sistema_recursos.py/sistema_flora.py ya generaban datos reales."""
+    c: Counter = Counter()
+    masa_tronco_total_kg = 0.0
+    for eid in gestor.entidades_con(Planta):
+        planta = gestor.obtener_componente(eid, Planta)
+        c[planta.especie] += 1
+        masa_tronco_total_kg += planta.masa_tronco_kg
+    return c, masa_tronco_total_kg
+
+
 def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
     """Corre una partida completa desde cero con `semilla`, hasta
     `ticks` o `limite_segundos` de tiempo real (lo que llegue primero),
@@ -143,6 +160,7 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
     nacimientos_por_especie: Counter = Counter()
     armas_fabricadas = 0
     herramientas_fabricadas = 0
+    colonizaciones_por_especie: Counter = Counter()
 
     t0 = time.time()
     t = 0
@@ -162,6 +180,8 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
                 armas_fabricadas += 1
             elif ev.tipo == "HerramientaFabricada":
                 herramientas_fabricadas += 1
+            elif ev.tipo == "ColonizacionEspontanea":
+                colonizaciones_por_especie[ev.datos.get("especie", "?")] += 1
         bus.limpiar()
         if t % 1000 == 0:
             trayectoria[t] = dict(_contar_poblacion(gestor))
@@ -171,6 +191,7 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
 
     trayectoria[t] = dict(_contar_poblacion(gestor))
     poblacion_final = _contar_poblacion(gestor)
+    flora_final, masa_tronco_total_kg = _contar_flora(gestor)
 
     construcciones_por_tipo: Counter = Counter()
     for cid in gestor.entidades_con(Construccion):
@@ -273,6 +294,43 @@ def correr_semilla(semilla: int, ticks: int, limite_segundos: float) -> dict:
         "provisiones_guardadas": sistemas["recursos"]._stats_provisiones_guardadas,
         "provisiones_consumidas": sistemas["recursos"]._stats_provisiones_consumidas,
         "muertes_intoxicacion": sistemas["recursos"]._stats_muertes_intoxicacion,
+        # Flora (2026-09-18, ver docs/superpowers/specs/2026-09-18-
+        # instrumentacion-harness-design.md) -- gap real: el harness no
+        # media nada de flora pese a que el motor ya generaba estos datos.
+        "flora_final": dict(flora_final),
+        "masa_tronco_total_kg": masa_tronco_total_kg,
+        "arboles_talados": sistemas["recursos"]._stats_arboles_talados,
+        "arbol_bloqueado_sin_hacha": sistemas["recursos"]._stats_arbol_bloqueado_sin_hacha,
+        # Mineria
+        "picos_fabricados": sistemas["recursos"]._stats_picos_fabricados,
+        "veta_bloqueada_sin_pico": sistemas["recursos"]._stats_veta_bloqueada_sin_pico,
+        "piedra_sustrato_bloqueada_sin_pico": sistemas["recursos"]._stats_piedra_sustrato_bloqueada_sin_pico,
+        # Taller/mobiliario y mejora de vivienda
+        "muebles_fabricados": sistemas["recursos"]._stats_muebles_fabricados,
+        "deposito_almacen_refugio": sistemas["recursos"]._stats_deposito_almacen_refugio,
+        "mejora_refugio_sustituciones": sistemas["recursos"]._stats_mejora_refugio_sustituciones,
+        "construir_mejora_elegido": sistemas["decision"]._stats_construir_mejora_elegido,
+        # Socializacion / rumor / sonido (desglose)
+        "socializar_elegidas": sistemas["decision"]._stats_socializar_elegidas,
+        # set de pares DIRIGIDOS (a,b) y (b,a) -- se guarda el conteo de
+        # pares NO dirigidos (//2), no el set crudo (ids de entidad sin
+        # sentido fuera de esta semilla, y JSON no serializa tuplas).
+        "socializar_afinidad_pares": len(sistemas["movimiento"]._stats_socializar_afinidad_pares) // 2,
+        "rumor_terceros_nuevos": len(sistemas["movimiento"]._stats_rumor_terceros_nuevos),
+        "sonido_caza_fallback_carrona": sistemas["movimiento"]._stats_sonido_caza_fallback_carrona,
+        "sonido_caza_fallback_caza": sistemas["movimiento"]._stats_sonido_caza_fallback_caza,
+        "sonido_caza_fallback_nulo": sistemas["movimiento"]._stats_sonido_caza_fallback_nulo,
+        # Colocacion comunal (ancla/satelite) y madriguera
+        "comunal_creado_ancla": sistemas["movimiento"]._stats_comunal_creado_ancla,
+        "comunal_creado_satelite": sistemas["movimiento"]._stats_comunal_creado_satelite,
+        "madriguera_miembros_nuevos": len(sistemas["manada"]._stats_madriguera_miembros_nuevos),
+        # Colonizacion espontanea (2026-09-17, ver docs/superpowers/specs/
+        # 2026-09-17-colonizacion-espontanea-design.md): el mecanismo ya
+        # se ejecutaba correctamente (reutiliza ejecutar_tick de main.py
+        # sin cambios), pero no se contaba -- solo se podia inferir a
+        # mano mirando saltos en `trayectoria`.
+        "colonizaciones_por_especie": dict(colonizaciones_por_especie),
+        "colonizaciones_totales": sum(colonizaciones_por_especie.values()),
     }
 
 
@@ -374,11 +432,54 @@ def _imprimir_resumen(resultados: list[dict]) -> None:
     print("\nFabricacion (agregado):")
     print(f"  Armas fabricadas: {sum(r['armas_fabricadas'] for r in validos)}")
     print(f"  Herramientas fabricadas: {sum(r['herramientas_fabricadas'] for r in validos)}")
+    print(f"  Picos fabricados: {sum(r.get('picos_fabricados', 0) for r in validos)}")
+    print(f"  Muebles fabricados: {sum(r.get('muebles_fabricados', 0) for r in validos)}")
 
     rob_mat = sum(r["robos_material_exitosos"] for r in validos)
     rob_arma = sum(r["robos_arma_exitosos"] for r in validos)
     print(f"Robo de material exitoso (agregado): {rob_mat}")
     print(f"Robo de arma exitoso (agregado): {rob_arma}")
+
+    print("\nMineria y tala (agregado):")
+    print(f"  Arboles talados: {sum(r.get('arboles_talados', 0) for r in validos)}")
+    print(f"  Arbol bloqueado sin hacha: {sum(r.get('arbol_bloqueado_sin_hacha', 0) for r in validos)}")
+    print(f"  Veta bloqueada sin pico: {sum(r.get('veta_bloqueada_sin_pico', 0) for r in validos)}")
+    print(
+        "  Piedra (sustrato) bloqueada sin pico: "
+        f"{sum(r.get('piedra_sustrato_bloqueada_sin_pico', 0) for r in validos)}"
+    )
+
+    print("\nAsentamiento -- taller/mobiliario y mejora de vivienda (agregado):")
+    print(f"  Depositos en almacen de refugio: {sum(r.get('deposito_almacen_refugio', 0) for r in validos)}")
+    print(
+        "  Mejora de refugio -- CONSTRUIR elegido por mejora: "
+        f"{sum(r.get('construir_mejora_elegido', 0) for r in validos)}, "
+        f"sustituciones reales: {sum(r.get('mejora_refugio_sustituciones', 0) for r in validos)}"
+    )
+    print(f"  Colocacion comunal -- ancla: {sum(r.get('comunal_creado_ancla', 0) for r in validos)}, "
+          f"satelite: {sum(r.get('comunal_creado_satelite', 0) for r in validos)}")
+
+    print("\nColonizacion espontanea (agregado, ver docs/superpowers/specs/"
+          "2026-09-17-colonizacion-espontanea-design.md):")
+    colonizaciones_total: Counter = Counter()
+    for r in validos:
+        colonizaciones_total.update(r.get("colonizaciones_por_especie", {}))
+    total_colonizaciones = sum(colonizaciones_total.values())
+    semillas_con_colonizacion = sum(1 for r in validos if r.get("colonizaciones_totales", 0) > 0)
+    print(f"  {total_colonizaciones} eventos en total, en {semillas_con_colonizacion}/{len(validos)} semillas")
+    if colonizaciones_total:
+        print(f"  Por especie: {dict(colonizaciones_total)}")
+
+    print("\nFlora (agregado, ver docs/superpowers/specs/2026-09-18-"
+          "instrumentacion-harness-design.md):")
+    flora_total: Counter = Counter()
+    for r in validos:
+        flora_total.update(r.get("flora_final", {}))
+    masa_tronco_prom = (
+        sum(r.get("masa_tronco_total_kg", 0.0) for r in validos) / len(validos) if validos else 0.0
+    )
+    print(f"  Poblacion de plantas al cierre (agregado de las {len(validos)} semillas): {dict(flora_total)}")
+    print(f"  Masa lenosa en pie (masa_tronco_kg) -- promedio por semilla: {masa_tronco_prom:.1f} kg")
 
     print("\nVocaciones dominantes de gnomo (agregado al cierre de cada semilla):")
     voc_total: Counter = Counter()
@@ -400,6 +501,16 @@ def _imprimir_resumen(resultados: list[dict]) -> None:
     print(f"  Material descartado por prioridad (kg): {sum(r.get('material_descartado_kg', 0.0) for r in validos):.1f}")
     print(f"  Reputacion: descalificados={sum(r.get('reputacion_descalificados', 0) for r in validos)}, "
           f"desempates cambiados={sum(r.get('reputacion_desempates', 0) for r in validos)}")
+    print(f"  Socializar elegidas: {sum(r.get('socializar_elegidas', 0) for r in validos)}, "
+          f"pares por afinidad: {sum(r.get('socializar_afinidad_pares', 0) for r in validos)}")
+    print(f"  Rumor -- opiniones de terceros nuevas: {sum(r.get('rumor_terceros_nuevos', 0) for r in validos)}")
+    print(
+        "  Caza fallback por sonido -- caza real: "
+        f"{sum(r.get('sonido_caza_fallback_caza', 0) for r in validos)}, "
+        f"carroneo real: {sum(r.get('sonido_caza_fallback_carrona', 0) for r in validos)}, "
+        f"pista falsa: {sum(r.get('sonido_caza_fallback_nulo', 0) for r in validos)}"
+    )
+    print(f"  Madriguera -- miembros con sitio nuevo: {sum(r.get('madriguera_miembros_nuevos', 0) for r in validos)}")
 
     print("\nPoblacion final por especie (promedio / min / max):")
     for esp in ESPECIES:
