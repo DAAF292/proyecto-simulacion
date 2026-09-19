@@ -650,12 +650,33 @@ se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
   `instanciar_sistemas`/`ejecutar_tick` reales de `main.py`): la
   orientación cambia de verdad durante la partida. Deliberadamente NO
   persistido (estado derivado, se regenera en `"este"` al cargar).
-  **Sigue pendiente la mitad de presentación** (reorganizar
-  `pixelLabAssetsCriaturas/` → `sprites_criaturas/<especie>/<direccion>.png`,
-  seleccionar frame en `terminal.html`, nueva ruta en `vista_web.py`) —
-  deliberadamente fuera de esta pieza, sin implementar todavía. Todavía
-  sin tocar: construcciones (regenerar refugio/almacén con las 3
-  correcciones que el propio informe anotó, más 3 nuevas), flora (15
+  **Mitad de presentación completada el mismo día**: sprites
+  reorganizados a `sprites_criaturas/<especie>/<direccion>.png`
+  (español, coherente con `Orientacion.direccion`); `terminal.html`
+  elige el frame real por `ent.orientacion` en vez de la heurística de
+  espejo por CSS `scaleX` que existía desde 2026-09-16 (esa heurística
+  solo invertía izquierda/derecha inferido del delta de X entre ticks,
+  sin distinguir norte/sur en ningún caso -- retirada, ya sin
+  consumidor). Gnomo usa sus 8 direcciones reales; las otras 8 especies
+  (incluida águila, añadida por primera vez al catálogo del visor) solo
+  tienen 4 -- diagonal cae al cardinal horizontal más cercano
+  (noreste/sureste→este, noroeste/suroeste→oeste), decisión explícita
+  de Diego. `vista_web.py::_servir_sprite` no necesitó ningún cambio
+  (ya resolvía subrutas anidadas). Verificado en navegador real
+  (Playwright headless + servidor `SIMULACION_MODO_VISUAL=1`): dos
+  lobos en la misma celda con orientaciones opuestas muestran vistas de
+  frente/espaldas genuinamente distintas; `"suroeste"` confirmado
+  cayendo a `"oeste"` tal como especifica el fallback. Sin errores de
+  consola nuevos. Los 8 sprites planos de una sola vista, ya sin
+  consumidor, se retiraron del repositorio.
+  `pixelLabAssetsCriaturas/` (fuente cruda ya reorganizada a su destino
+  final) se queda sin trackear, a la espera de que Diego decida si la
+  conserva como archivo o la descarta -- **nota para la próxima
+  sesión**: apareció además `pixelLabAssetsFlora/` sin trackear en el
+  repositorio (no generada por Claude, presumiblemente añadida por
+  Diego en paralelo a esta sesión) -- sin auditar ni tocar todavía.
+  Todavía sin tocar: construcciones (regenerar refugio/almacén con las
+  3 correcciones que el propio informe anotó, más 3 nuevas), flora (15
   piezas) y terreno (6 piezas) — ronda a menos de un tercio de
   completarse.
 
