@@ -244,6 +244,15 @@ materiales:
     densidad_kg_m3: 700
     dureza: 0.45
     combustibilidad: 0.55
+    # vulnerabilidad_agua (2026-09-18, inundacion -- ver
+    # docs/superpowers/specs/2026-09-18-desastres-naturales-design.md):
+    # contrapunto SIMETRICO de combustibilidad, mismo criterio de
+    # consumidor (sistema_desastres.py, dano a construcciones) --
+    # madera maciza se pudre con agua estancada, pero mas lento que
+    # fibra/paja. Minerales quedan en 0.0 implicito (mismo
+    # .get(material, {}).get("vulnerabilidad_agua", 0.0) que ya usa
+    # combustibilidad), sin declararlo en sus entradas. PROVISIONAL.
+    vulnerabilidad_agua: 0.3
     tasa_descomposicion_dia: 0.01
     apto_construccion: true
     # calidad_construccion (ver piedra arriba): madera trabajada, un
@@ -261,6 +270,7 @@ materiales:
     densidad_kg_m3: 150
     dureza: 0.1
     combustibilidad: 0.5
+    vulnerabilidad_agua: 0.5
     tasa_descomposicion_dia: 0.015
     apto_construccion: true
     # calidad_construccion (ver piedra arriba): fibra vegetal trenzada,
@@ -273,6 +283,10 @@ materiales:
     dureza: 0.05
     # El material más inflamable del catálogo a propósito -- yesca real.
     combustibilidad: 0.85
+    # vulnerabilidad_agua: paja, se empapa y se pudre mas rapido que
+    # ningun otro material del catalogo -- mismo criterio que su propia
+    # combustibilidad extrema (el material mas precario en ambos ejes).
+    vulnerabilidad_agua: 0.6
     tasa_descomposicion_dia: 0.03
     # apto_construccion (2026-08-30, refugio construido): techo de paja,
     # el propio ejemplo de Diego para un refugio primitivo -- "algo como

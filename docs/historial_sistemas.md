@@ -114,6 +114,63 @@ El procesamiento de todas las zonas del territorio (en vez de solo
 zonas[0]) en ignición, propagación y flora/construcciones quemadas es
 del círculo 1 de profundidad (2026-08-30).
 
+**Ampliación real (2026-09-18, conversación con Diego, mismo día que
+el confort térmico bipolar -- ver `docs/historial_componentes.md`)**:
+al plantear rayo/sequía/inundación como los tres desastres que
+faltaban (la sección de config `desastres:` solo tenía incendio pese
+al nombre en plural), Diego señaló un hueco real: "una cosa, el
+incendio ahora no mata fauna, esto hay que solucionarlo". Verificado
+contra el motor real (no aceptado sin más): 40 individuos sembrados
+directamente en bosque, 250 días, 48 incendios reales, 1 sola Herida,
+0 muertes. La primera pasada de ese mismo experimento reportó 34727
+incendios -- un bug real en el propio arnés de verificación (el script
+no llamaba a `bus_eventos.limpiar()` entre ticks, acumulando y
+recontando eventos), corregido antes de sacar ninguna conclusión.
+
+Causa real, sin ningún filtro que excluya fauna del código: la
+combinación de `prob_extincion_por_tick=0.35`/`prob_propagacion_por_tick=0.08`
+(un foco se apagaba solo en ~3 ticks, apenas se propagaba) con la
+amenaza ambiental ya existente por `celda.en_llamas`
+(`nucleo/amenaza.py`, HUIR con prioridad alta, radio hasta 4 celdas)
+daba a la fauna tiempo de sobra para escapar. La flora, verificada
+aparte con la siembra inicial real (`main.py:sembrar_flora_inicial`,
+sin la cual el mapa no tiene ninguna Planta -- omitida en la primera
+pasada del experimento, con 0 plantas de resultado), SÍ moría: 26
+plantas en celdas forzadas a arder bajaron a 4 en 100 ticks (no puede
+huir). Recalibrado `prob_propagacion_por_tick: 0.08→0.15`,
+`prob_extincion_por_tick: 0.35→0.20` -- verificado tras el cambio (8000
+ticks, mismos individuos): 32 muertes por incendio, el fix funciona,
+pero **observación honesta de posible sobrecorrección**: incendio pasó
+a ser la causa de muerte dominante de esa corrida (32 de 61 muertes
+totales) -- PROVISIONAL, sin una segunda ronda de calibración.
+
+Rayo (cadencia de tick, solo con `Clima.TORMENTA`, celda al azar de
+toda la zona sin restringir a bosque, daño instantáneo vía
+`procesar_deceso` con fracciones de descomposición normales -- un rayo
+no calcina como el fuego, puede además iniciar un foco de incendio si
+cae en bosque): verificado real, 69 impactos en 333 días, 0 muertes
+directas en esa corrida concreta (`dano_rayo=0.6` hiere mucho, rara
+vez mata de un solo golpe -- coherente, no un bug).
+
+Sequía e inundación, ambas ley emergente por zona sin entidad de
+"evento" propia (contador de días consecutivos de clima
+seco/húmedo -- ventisca cuenta como húmedo, es precipitación aunque
+enfríe): sequía reduce fertilidad y seca charcos existentes, NUNCA
+mata directamente (principio de leyes neutras: amplifica
+inanición/deshidratación ya existentes, verificado con un test
+dedicado de que ningún evento Muerte con esa causa sale de este
+sistema); inundación desborda charcos hacia celdas vecinas al ENTRAR
+(no cada día que dure, evita crecimiento sin límite) reutilizando el
+ahogamiento ya existente, y daña construcciones orgánicas mientras
+dura con `vulnerabilidad_agua` (config/materiales.yaml, nuevo,
+contrapunto simétrico de `combustibilidad` -- pedido explícito de
+Diego, "plantea también el daño a estructuras"). Verificado real: 8
+ciclos completos de sequía y 32 de inundación en 333 días.
+
+Spec completo: `docs/superpowers/specs/
+2026-09-18-desastres-naturales-design.md`. 14 tests nuevos
+(`tests/test_desastres_naturales.py`).
+
 ## `sistema_necesidades.py`
 
 El periodo de plenitud es el incremento 2 del diseño de microsueños
