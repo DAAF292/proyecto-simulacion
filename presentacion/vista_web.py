@@ -38,6 +38,7 @@ from componentes.identidad import Identidad
 from componentes.intencion import Intencion
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
+from componentes.orientacion import Orientacion
 from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
@@ -322,6 +323,10 @@ def construir_instantanea(
         intencion = gestor.obtener_componente(eid, Intencion)
         if intencion:
             dato["accion"] = intencion.accion.value
+
+        orientacion = gestor.obtener_componente(eid, Orientacion)
+        if orientacion:
+            dato["orientacion"] = orientacion.direccion
 
         reproduccion = gestor.obtener_componente(eid, Reproduccion)
         if reproduccion:

@@ -34,6 +34,7 @@ from componentes.madriguera import Madriguera
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
+from componentes.orientacion import Orientacion
 from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
@@ -1040,6 +1041,13 @@ class Persistencia:
             for fila in cur.fetchall():
                 eid = fila[0]
                 gestor.anadir_componente(eid, Posicion(x=fila[1], y=fila[2], zona_idx=fila[47]))
+                # Orientacion (2026-09-19) NO se persiste a propósito (ver
+                # docs/superpowers/specs/2026-09-19-orientacion-direccional-
+                # design.md) -- estado puramente derivado del último
+                # movimiento, se regenera con el mismo valor por defecto
+                # que un fundador nuevo y se corrige solo en cuanto la
+                # entidad vuelve a moverse.
+                gestor.anadir_componente(eid, Orientacion())
                 gestor.anadir_componente(
                     eid,
                     Necesidades(

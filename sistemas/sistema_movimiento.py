@@ -22,6 +22,7 @@ from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
+from componentes.orientacion import Orientacion
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
 from componentes.posicion import Posicion
@@ -64,6 +65,24 @@ from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
 from nucleo.sonido import emitir_sonido, sonido_mas_cercano
 from nucleo.relieve import costo_resistencia_por_pendiente, pendiente_maxima_transitable
+
+
+# Orientacion (2026-09-19, ver docs/superpowers/specs/
+# 2026-09-19-orientacion-direccional-design.md): mapeo total de las 8
+# combinaciones posibles de (dx, dy) con dx, dy en {-1, 0, 1} y no
+# ambos cero -- convención de ejes confirmada contra el renderizado
+# real (presentacion/terminal_prototipo/terminal.html, cy = wy * tam):
+# x creciente = este, y creciente = sur.
+_DIRECCION_POR_DELTA: dict[tuple[int, int], str] = {
+    (1, 0): "este",
+    (-1, 0): "oeste",
+    (0, 1): "sur",
+    (0, -1): "norte",
+    (1, 1): "sureste",
+    (1, -1): "noreste",
+    (-1, 1): "suroeste",
+    (-1, -1): "noroeste",
+}
 
 
 class SistemaMovimiento:
@@ -485,6 +504,7 @@ class SistemaMovimiento:
             mem = gestor.obtener_componente(eid, MemoriaEspacial)
             cap_mental = gestor.obtener_componente(eid, CapacidadMental)
             temperamento = gestor.obtener_componente(eid, Temperamento)
+            orientacion = gestor.obtener_componente(eid, Orientacion)
 
             if intencion is None or pos is None or dims is None or ident is None:
                 continue
@@ -588,7 +608,8 @@ class SistemaMovimiento:
 
             if dx != 0 or dy != 0:
                 self._aplicar_movimiento(
-                    gestor, mundo, zona, eid, pos, dims, pf, dx, dy, accion, vuela=vuela,
+                    gestor, mundo, zona, eid, pos, dims, pf, dx, dy, accion,
+                    vuela=vuela, orientacion=orientacion,
                 )
 
     def _aplicar_movimiento(
@@ -604,6 +625,7 @@ class SistemaMovimiento:
         dy: int,
         accion: Accion,
         vuela: bool = False,
+        orientacion: Orientacion | None = None,
     ) -> None:
         """Valida restricciones de terreno y aplica el gasto metabólico de
         resistencia.
@@ -615,7 +637,14 @@ class SistemaMovimiento:
         coste de resistencia por pendiente SOLO en superficie
         (zona_idx==0): bajo tierra, una elevación alta sigue siendo
         pared sólida real (nucleo/cueva.py: "PAREDES IMPASABLES SIN
-        CAMPO NUEVO"), ni un ave la atraviesa."""
+        CAMPO NUEVO"), ni un ave la atraviesa.
+
+        orientacion (2026-09-19, ver docs/superpowers/specs/
+        2026-09-19-orientacion-direccional-design.md): actualizada SOLO
+        si el desplazamiento se confirma de verdad (paso 4 de abajo) --
+        cualquier `return` anterior por restricción de terreno/agua/
+        pendiente deja la orientación intacta, igual que deja intacta
+        la posición."""
         nx, ny = pos.x + dx, pos.y + dy
 
         if not (0 <= nx < zona.ancho and 0 <= ny < zona.alto):
@@ -693,6 +722,8 @@ class SistemaMovimiento:
         # 4. Actualización atómica de coordenadas espaciales
         pos.x = nx
         pos.y = ny
+        if orientacion is not None:
+            orientacion.direccion = _DIRECCION_POR_DELTA[(dx, dy)]
 
     def _calcular_huida(
         self,

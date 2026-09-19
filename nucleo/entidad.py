@@ -24,6 +24,7 @@ from componentes.madriguera import Madriguera
 from componentes.memoria_espacial import MemoriaEspacial
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
+from componentes.orientacion import Orientacion
 from componentes.planta import Planta
 from componentes.pool_fisico import PoolFisico
 from componentes.pool_mental import PoolMental
@@ -432,6 +433,11 @@ def crear_criatura(
         ),
     )
     gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
+    # Orientacion (2026-09-19, ver docs/superpowers/specs/
+    # 2026-09-19-orientacion-direccional-design.md): valor por defecto
+    # "este", actualizado solo por sistema_movimiento.py al confirmarse
+    # un desplazamiento real.
+    gestor.anadir_componente(entidad_id, Orientacion())
 
     # 3. Temperamento
     temp = Temperamento(
@@ -678,6 +684,10 @@ def nacer_criatura(
         ),
     )
     gestor.anadir_componente(entidad_id, Posicion(x=pos_x, y=pos_y, zona_idx=zona_idx))
+    # Orientacion (2026-09-19): no se hereda, arranca en el mismo valor
+    # por defecto que crear_criatura -- no es un rasgo biológico, es
+    # estado puramente derivado del propio movimiento del recién nacido.
+    gestor.anadir_componente(entidad_id, Orientacion())
 
     temp_padre = gestacion.temperamento_padre
     temp = Temperamento(
