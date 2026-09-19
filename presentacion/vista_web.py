@@ -34,6 +34,7 @@ from typing import Any
 from componentes.capacidad_mental import CapacidadMental
 from componentes.construccion import Construccion
 from componentes.dimensiones_fisicas import DimensionesFisicas
+from componentes.fogata import Fogata
 from componentes.identidad import Identidad
 from componentes.intencion import Intencion
 from componentes.necesidades import Necesidades
@@ -94,6 +95,10 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
             self._servir_sprite("sprites_construcciones", self.path[len("/sprites_construcciones/"):])
         elif self.path.startswith("/sprites_flora/"):
             self._servir_sprite("sprites_flora", self.path[len("/sprites_flora/"):])
+        elif self.path.startswith("/sprites_terreno/"):
+            self._servir_sprite("sprites_terreno", self.path[len("/sprites_terreno/"):])
+        elif self.path.startswith("/sprites_elementos/"):
+            self._servir_sprite("sprites_elementos", self.path[len("/sprites_elementos/"):])
         else:
             self.send_response(404)
             self.end_headers()
@@ -111,9 +116,11 @@ class ManejadorWeb(http.server.BaseHTTPRequestHandler):
         self.wfile.write(destino.read_bytes())
 
     def _servir_sprite(self, subcarpeta: str, ruta_relativa: str) -> None:
-        """Sprites reales de fauna, construcciones y flora (arbol/arbusto,
-        2026-09-16, ver presentacion/terminal_prototipo/sprites_criaturas/,
-        sprites_construcciones/ y sprites_flora/) -- excepcion deliberada al
+        """Sprites reales de fauna, construcciones, flora (arbol/arbusto) y
+        terreno (2026-09-16 fauna/construcciones/flora, 2026-09-19 terreno,
+        ver presentacion/terminal_prototipo/sprites_criaturas/,
+        sprites_construcciones/, sprites_flora/ y sprites_terreno/) --
+        excepcion deliberada al
         "mapa 100% glifos" original del mismo dia: decision de Diego de usar
         un estilo hibrido ASCII+sprite, introduciendo assets solo donde se
         vayan encontrando los adecuados (ver CLAUDE.md, "Estado actual").
@@ -440,6 +447,28 @@ def construir_instantanea(
                 }
             )
 
+    # 2.6 Fogatas (componentes/fogata.py, 2026-09-19) -- fuego controlado
+    # y beneficioso (sube el objetivo de confort térmico de quien esté en
+    # su celda, ver sistema_necesidades.py), entidad real desde antes de
+    # esta sesión pero NUNCA expuesta hasta ahora en este DTO (verificado:
+    # cero referencias a "Fogata"/"fogata" en este fichero antes de esta
+    # línea) -- el visor no tenía forma de saber que existían. Sin
+    # "completado_alguna_vez" ni progreso: una Fogata existe entera desde
+    # que se enciende (ver nucleo/entidad.py::crear_fogata) o no existe.
+    fogatas_data: list[dict[str, Any]] = []
+    for fid in sorted(gestor.entidades_con(Fogata, Posicion)):
+        fog = gestor.obtener_componente(fid, Fogata)
+        pos_f = gestor.obtener_componente(fid, Posicion)
+        if fog and pos_f and pos_f.zona_idx == 0:
+            fogatas_data.append(
+                {
+                    "id": fid,
+                    "x": pos_f.x,
+                    "y": pos_f.y,
+                    "combustible_restante": round(fog.combustible_restante, 2),
+                }
+            )
+
     # 3. Grid de celdas -- solo campos que ya existen en nucleo/celda.py.
     celdas_data: list[list[dict[str, Any]]] = []
     for y in range(zona.alto):
@@ -495,6 +524,7 @@ def construir_instantanea(
         "censo": censo,
         "entidades": lista_entidades,
         "construcciones": construcciones_data,
+        "fogatas": fogatas_data,
         "celdas": celdas_data,
         "cronica": cronica,
     }

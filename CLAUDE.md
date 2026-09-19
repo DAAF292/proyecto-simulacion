@@ -372,7 +372,7 @@ sesiones quede junto).
   ambos del 2026-09-16, movidos aquí el 2026-09-17 en la segunda poda de
   este documento (ver más abajo).
 
-## Estado actual y pendientes reales (actualizado 2026-09-18)
+## Estado actual y pendientes reales (actualizado 2026-09-19)
 
 Lista corta de lo que sigue genuinamente abierto hoy — para el detalle de
 cómo se llegó a cada punto, abre el historial correspondiente de arriba.
@@ -671,14 +671,148 @@ se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
   consumidor, se retiraron del repositorio.
   `pixelLabAssetsCriaturas/` (fuente cruda ya reorganizada a su destino
   final) se queda sin trackear, a la espera de que Diego decida si la
-  conserva como archivo o la descarta -- **nota para la próxima
-  sesión**: apareció además `pixelLabAssetsFlora/` sin trackear en el
-  repositorio (no generada por Claude, presumiblemente añadida por
-  Diego en paralelo a esta sesión) -- sin auditar ni tocar todavía.
-  Todavía sin tocar: construcciones (regenerar refugio/almacén con las
-  3 correcciones que el propio informe anotó, más 3 nuevas), flora (15
-  piezas) y terreno (6 piezas) — ronda a menos de un tercio de
-  completarse.
+  conserva como archivo o la descarta.
+
+  **Continuación, mismo día 2026-09-19 -- ronda completada + segunda
+  tanda de assets + ronda de corrección visual.** Tras el hallazgo de
+  `pixelLabAssetsFlora/` sin trackear (nota de arriba), Claude generó
+  directamente (acceso MCP a PixelLab ya probado) el catálogo completo
+  que faltaba: 15 especies de flora (`pixelLabAssetsFlora/`, técnica
+  "recortado como fotografía" para eliminar suelo persistente en
+  arbusto_desertico/helecho), 6 tiles de terreno de 32×32
+  (`pixelLabAssetsTerreno/`, uno por bioma + agua, elegido de un lote de
+  16 variantes por `create_tiles_pro`) y 5 construcciones
+  (`pixelLabAssetsConstrucciones/`, con las correcciones de suelo/
+  paisajismo ya resueltas por recorte manual en cocina/taller). Todo
+  integrado en `presentacion/terminal_prototipo/` (rutas nuevas
+  `/sprites_terreno/` y `/sprites_elementos/` en `vista_web.py`).
+  Corrección real encontrada y ARREGLADA en esa misma sesión (no
+  aceptada tal cual): necromasa/pico/madera/piedra_suelta traían un
+  óvalo de tierra horneado en el PNG que a tamaño de preview se
+  confundía con el patrón de transparencia -- arreglado por
+  post-proceso (eliminación de color por croma + análisis de componente
+  conectada, ver `pixelLabAssetsElementos/MANIFEST.txt`); lección
+  documentada ahí: verificar SIEMPRE con zoom real 5-8x antes de
+  integrar un sprite pequeño sin base.
+
+  **Diego generó un SEGUNDO lote él mismo, fuera de la sesión**
+  (`pixellabAssetsNuevos/`, 13 ZIPs: 7 especies de flora en 16 variantes
+  cada una, 3 árboles en 4 variantes, 5 construcciones rediseñadas, un
+  lote de hogueras encendidas, y un rig de 8 direcciones para gnomo
+  hembra) -- integrado por Claude: cada categoría se abrió, se
+  inspeccionó a zoom real (lección de arriba aplicada de verdad esta
+  vez) y se curó antes de copiar -- descartada 1 de 16 "flores" que leía
+  como planta carnívora, 1 de 16 "hierba" con forma de insecto, y las
+  variantes de "piedras" con tinte fantástico (gema/obsidiana/musgo) por
+  no leerse como piedra suelta neutra. Mecanismo nuevo en
+  `terminal.html`: `imgVariante()`/pool `imgs` por especie (mismo hash
+  determinista por celda que ya usaba `glifoTextura` para la textura de
+  suelo) -- roble/pino/manzano pasan de 1 sprite fijo a 5 variantes
+  (estacionales: roble desnudo/otoño/verde/retorcido, pino nevado/
+  verde), cactus/flor_silvestre/helecho/hierba_silvestre a pools de
+  12-17, y los 16 "arbustos de bayas" genéricos se repartieron entre las
+  4 especies de arbusto (antes solo montano/ártico). Gnomo hembra:
+  `imgDirHembra` en el catálogo, `infoCriatura()` ahora lee
+  `ent.sexo` (ya viajaba en el DTO desde antes, sin consumidor) para
+  elegir el rig. Hallazgo real no pedido, corregido de paso: `Fogata`
+  (componentes/fogata.py, fuego controlado y beneficioso, ya
+  implementado en el motor) nunca había tenido NINGUNA representación
+  visual ni estaba expuesta en el DTO -- cerrado con las hogueras
+  encendidas del lote (`vista_web.py::construir_instantanea` ahora
+  exporta `"fogatas"`, `terminal.html` las renderiza).
+  **Corrección posterior, a petición explícita de Diego**: se purgó del
+  todo el arte "inicial" de flor_silvestre (el ramo/bouquet) y de los 4
+  arbustos (quedaban como variante ocasional dentro del pool) --
+  sustituido enteramente por los sprites individuales nuevos.
+
+  **Tercera fase, mismo día -- ronda de corrección visual sobre feedback
+  real de Diego jugando la partida en vivo**, todo en `terminal.html`/
+  `vista_web.py`, verificado siempre offline (Playwright contra
+  `terminal.html` vía `file://` + `datos.js` estático, o contra una
+  instancia de prueba en un puerto propio) para no interferir con la
+  partida real de Diego en marcha:
+  - **Pico de montaña invisible tras una piedra suelta -- bug real, no
+    de tamaño** ("los picos... son del tamaño de una piedra"): el
+    marcador de pico vivía dentro de un `if (items.length===0)`
+    evaluado DESPUÉS de los recursos -- una piedra suelta en la celda
+    (frecuente en montaña) ya dejaba `items.length=1`, y el pico nunca
+    llegaba a dibujarse. Movido antes de los recursos, mismo criterio
+    badge-si-ya-hay-contenido.
+  - **Tamaño de flora/recursos**: los sprites nuevos traían entre 6% y
+    72% de lienzo transparente sin recortar, muy inconsistente entre
+    variantes -- recortadas 136 imágenes a su contenido real (bbox+2px)
+    y bajadas las constantes fijas en consecuencia (cobertura
+    0.75→0.5·CELDA, piedra/madera 0.85→0.4·CELDA) para que el recorte no
+    las hiciera VER más grandes que antes.
+  - **Textura ASCII vieja doblada sobre el tile real**: `TEXTURA_TERRENO`
+    (glifo `░` de suelo desnudo, de antes de que existiera un tile PNG
+    por bioma) se seguía imprimiendo en el MISMO `<div>` que el
+    `background-image` real -- retirado del todo, el tile PNG es ya la
+    única textura de suelo.
+  - **Cuadrícula entre celdas -- tres intentos hasta la causa real**: (1)
+    un borde de 1px negro horneado en los 6 PNG de tile (extendido con
+    el píxel interior); (2) redondeo de subpíxel al escalar cada
+    `background-image` de celda por CSS `transform:scale(zoom)` a un
+    zoom no-entero (parche: cuantizar el zoom a píxeles enteros por
+    celda); confirmado con (1)+(2) que la costura seguía reapareciendo
+    en la máquina real de Diego (el escalado propio del dispositivo/
+    pantalla no está bajo nuestro control) -- causa de raíz real: cada
+    `<div>` de 32×32 escala su PROPIO `background-image`
+    independientemente, ninguna cantidad de ajuste de zoom elimina el
+    riesgo de redondeo entre N elementos DOM distintos. Fix definitivo:
+    el terreno ya NO es `background-image` por celda -- se dibuja una
+    sola vez por frame en un único `<canvas>` (`capaTerreno`,
+    `renderTerrenoCanvas()`) que cubre el mapa entero, con
+    `imageSmoothingEnabled=false`. Una sola superficie de rasterizado no
+    tiene costura posible entre "elementos" porque no hay más que uno.
+  - **Transición entre biomas** (`dibujarTransicionBioma`, ahora sobre
+    el mismo canvas): dos vueltas -- la primera (overlays DOM con CSS
+    `mask-image`) tenía el mismo riesgo de costura que el punto anterior
+    y además solo miraba 2 de 4 vecinos (mezcla asimétrica) con un
+    degradado demasiado ancho (90% de la celda, leía como parche); la
+    versión final mira los 4 vecinos y solo insinúa al vecino en el 40%
+    de celda más cercano al borde compartido, a opacidad baja.
+  - **Drag nativo del navegador + paneo a trompicones**: el mapa son
+    cientos de `<img>`, arrastrables por defecto -- el pan personalizado
+    (mousedown/mousemove) competía con el drag nativo de imagen del
+    navegador cada vez que el gesto empezaba sobre un sprite. Corregido
+    con `draggable=false` en las 4 factorías de `<img>` +
+    `-webkit-user-drag:none` + `preventDefault()` en `mousedown`.
+  - **Salto/teleport de criaturas -- persistía tras un primer fix de esta
+    misma sesión** (que ya corrigió el desajuste de `velocidadActual`):
+    el umbral fijo de 3 celdas para "no animar, es una reubicación real"
+    no escalaba con la velocidad de partida -- a partir de ~5x el
+    sondeo del cliente choca con su suelo de 80ms mientras el tick real
+    del servidor sigue acelerando sin límite, comprimiendo varios ticks
+    reales en un solo sondeo de forma sistemática (no por jitter de
+    red). `maxCeldasAnimables()` ahora escala con `velocidadActual`.
+
+  **Pendiente real, señalado a Diego y NO tocado** (calibración/diseño
+  de motor, no presentación -- ver "Claude diseña, el pipeline
+  implementa"): cadena causal encontrada al investigar el reporte de
+  Diego jugando en vivo ("muchos incendios... las criaturas no se
+  mueven... las crisis mentales duran mucho... los incendios se
+  propagan sin control") -- `PoolMental.estabilidad` solo se recupera
+  cuando `Necesidades.seguridad>=0.8` (`sistema_capacidad_mental.py`),
+  imposible cerca de un incendio activo; `HUIDA_ERRATICA` huye del
+  vecino más cercano, NO de la amenaza real (por diseño, ver su propio
+  docstring); combinado con `prob_propagacion_por_tick=0.15` vs
+  `prob_extincion_por_tick=0.20` (ya señalado como posible
+  sobrecorrección en la entrada de desastres naturales más abajo) en
+  una zona muy vegetada, el resultado es un incendio que crece sin
+  límite real y una población atrapada en crisis que no puede resolverse
+  porque nunca alcanza seguridad suficiente. Diagnóstico verificado
+  contra el código real, sin tocar ningún valor de config todavía --
+  pendiente de que Diego decida si quiere una propuesta de
+  recalibración formal.
+
+  Assets fuente sin trackear (mismo criterio ya aplicado a
+  `pixelLabAssetsCriaturas/`): `pixelLabAssetsFlora/`,
+  `pixelLabAssetsTerreno/`, `pixelLabAssetsConstrucciones/`,
+  `pixelLabAssetsElementos/`, `pixellabAssetsNuevos/` (el ZIP original
+  de Diego) -- todos son material de trabajo ya integrado en su destino
+  final (`presentacion/terminal_prototipo/sprites_*/`), no el activo
+  desplegado.
 
 ## Comentarios técnicos vs narrativa histórica (2026-09-02)
 

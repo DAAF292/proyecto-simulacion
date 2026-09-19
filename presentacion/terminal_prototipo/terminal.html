@@ -92,9 +92,25 @@
   #mapa-viewport {
     flex: 1 1 auto; position: relative; overflow: hidden; cursor: grab;
     background: #000;
+    user-select: none; -webkit-user-select: none;
   }
   #mapa-viewport.arrastrando { cursor: grabbing; }
   #mapa-contenido { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  /* CORREGIDO 2026-09-19 (Diego: "el navegador detecta el mapa como un
+     conjunto de imagenes, por lo tanto cuando quieres moverte las
+     selecciona, ademas mover el mapa va a trompicones") -- el mapa esta
+     hecho de cientos de <img> (flora/fauna/construcciones/recursos), y
+     TODA imagen es arrastrable por defecto en el navegador (drag nativo
+     estilo "arrastrar para guardar/copiar"). El pan personalizado de
+     abajo (mousedown/mousemove) competia con ese drag nativo: al empezar
+     a arrastrar sobre una imagen, el navegador iniciaba SU PROPIO drag
+     (fantasma de la imagen, seleccion de texto alrededor) en paralelo,
+     interrumpiendo el mousemove normal -- de ahi el aspecto "a
+     trompicones" (no es lentitud de renderizado, son dos gestos
+     peleando por el mismo puntero). -webkit-user-drag:none desactiva el
+     drag nativo de imagen sin afectar al drag-to-pan propio (que no usa
+     la API HTML5 drag, solo mousedown/mousemove). */
+  #mapa-viewport img { -webkit-user-drag: none; user-drag: none; }
   /* VGA437 es una fuente de bitmap de un solo peso -- "bold" sobre ella
      fuerza una negrita sintetica del navegador que emborrona el pixel
      nitido (confirmado visualmente, no una suposicion), asi que estos dos
@@ -132,6 +148,27 @@
     transform: translateX(-50%);
     image-rendering: pixelated;
     width: auto;
+  }
+  /* Fuego (2026-09-19, Diego: "que el fuego tenga una representacion en
+     el mapa para ver si hay un incendio") -- Celda.en_llamas ya viajaba
+     en el DTO (vista_web.py) desde antes, pero jamas se leia en el visor:
+     un incendio real en marcha era invisible en pantalla, solo se notaba
+     por sus EFECTOS (plantas desaparecidas, cronica). Icono simple
+     (parpadeo, no sprite pixel-art propio -- no hay ningun asset de
+     "incendio de bioma" generado todavia, mismo criterio ya aceptado en
+     este catalogo para gnomo/fauna antes de tener pixel art real) sobre
+     CUALQUIER cosa que ya hubiera en la celda -- un incendio no reemplaza
+     lo que se ve, se superpone, para que siga siendo obvio que celda en
+     concreto esta ardiendo. */
+  .fuego-overlay {
+    position: absolute;
+    pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    animation: parpadeoFuego 0.55s ease-in-out infinite alternate;
+  }
+  @keyframes parpadeoFuego {
+    from { opacity: 0.78; transform: scale(0.86); }
+    to   { opacity: 1; transform: scale(1.14); }
   }
   /* Sprite compartido (2026-09-17, Diego: "quedaria mejor si se
      pudiesen solapar, por ejemplo el refugio y que el pino crezca por
@@ -370,7 +407,7 @@ const CATALOGO_GLIFOS = {
     desierto: { ch: '░', color: '#d9b566', nombre: 'Desierto' },
     tundra:   { ch: '░', color: '#b8ccd6', nombre: 'Tundra' },
     montana:  { ch: '^', color: '#9a8264', nombre: 'Montaña' },
-    pico:     { ch: '▲', color: '#cdbb8c', nombre: 'Pico (elevación alta)' },
+    pico:     { ch: '▲', color: '#cdbb8c', nombre: 'Pico (elevación alta)', img: 'sprites_elementos/pico.png' },
   },
   agua: {
     titulo: 'Agua',
@@ -387,30 +424,63 @@ const CATALOGO_GLIFOS = {
     // img (2026-09-16, assets aportados por Diego -- ver
     // docs/historial_capa_visual.md, entrada del mismo dia): CRITERIO
     // CONFIRMADO por Diego, aclarado dos veces tras un primer mapeo que
-    // interprete solo. El nombre de fichero no tiene que ser 1:1 con la
-    // clave de especie -- el criterio real es el BIOMA real de cada
-    // fichero (config/flora.yaml campo `biomas`, mismo dato que ya usa el
-    // motor): un unico arbusto puede compartir arte entre especies con
-    // clima afin (arbustoMontañaTundra.jpg -> montano Y artico) y un
-    // unico fichero generico cubre TODAS las variantes climaticas de una
-    // misma forma (hierba.jpg -> las 3 especies de hierba). Solo quedan
-    // SIN sprite las 2 especies para las que Diego no aporto ningun icono
-    // -- liquen y musgo (categoria cobertura, sin arte disponible).
-    manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol', img: 'sprites_flora/manzano.png' },
-    roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol', img: 'sprites_flora/roble.png' },
-    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol', img: 'sprites_flora/pino.png' },
-    cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto', img: 'sprites_flora/cactus.png' },
-    arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto', img: 'sprites_flora/arbusto_espinoso.png' },
-    arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto', img: 'sprites_flora/arbusto_desertico.png' },
-    arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
-    arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_tundra.png' },
-    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
-    liquen:            { ch: '▒', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura' },
-    musgo:             { ch: '▒', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura' },
-    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura', img: 'sprites_flora/flor_silvestre.png' },
-    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
-    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png' },
-    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura', img: 'sprites_flora/helecho.png' },
+    // interprete solo.
+    // ACTUALIZADO 2026-09-19 (ronda PixelLab, ver
+    // docs/informe_generacion_assets_pixellab.md y
+    // pixelLabAssetsFlora/MANIFEST.txt): el criterio de "un fichero
+    // generico cubre varias especies afines" (arbustoMontañaTundra.jpg ->
+    // montano Y artico, hierba.jpg -> las 3 especies de hierba) queda
+    // SUPERADO -- cada una de las 15 especies de flora tiene ya su propio
+    // sprite real, incluidas liquen y musgo (categoria cobertura), las 2
+    // que se quedaron sin arte en la ronda de 2026-09-16. 5 de las 15 son
+    // diseño inventado sin referencia visual previa (arbusto_artico,
+    // liquen, musgo, hierba_desertica, hierba_artica) -- PROVISIONAL,
+    // pendiente de confirmacion de Diego sobre el diseño concreto (no
+    // sobre si deben tener sprite, eso ya esta resuelto).
+    // imgs (2026-09-19, segunda tanda -- Diego generó lotes de 4-16
+    // variantes por especie via PixelLab, ver pixellabAssetsNuevos/):
+    // pool de sprites reales, uno elegido por celda de forma determinista
+    // (ver imgVariante/glifoTextura). `img` se mantiene como variante
+    // "canónica" (primer elemento del pool, usada en la leyenda). Curación
+    // real hecha antes de integrar: se descartaron por celda un resultado
+    // de "flores" que leía como planta carnívora (no como flor silvestre)
+    // y uno de "hierba" con forma de mariposa/insecto (no como brote);
+    // de "piedras" se excluyeron las variantes con tinte fantástico (gema
+    // verde, obsidiana negra, roca musgo textil) para que el recurso siga
+    // leyéndose como piedra suelta neutra, no como mineral especial. El
+    // pool de "arbustos de bayas" (genérico, no ligado a una especie
+    // propia) se repartió SOLO entre arbusto_montano/arbusto_artico
+    // (bayas son plausibles en clima templado/frío) -- deliberadamente
+    // NO se mezcló con arbusto_espinoso/arbusto_desertico/cactus, cuya
+    // identidad visual (espinas/desierto) no encaja con un arbusto de
+    // bayas verde.
+    manzano:           { ch: '♣', color: '#7a9a3a', nombre: 'Manzano', categoria: 'árbol', img: 'sprites_flora/manzano.png', imgs: ['sprites_flora/manzano.png','sprites_flora/manzano_v2.png','sprites_flora/manzano_v3.png','sprites_flora/manzano_v4.png','sprites_flora/manzano_v5.png'] },
+    roble:             { ch: '♣', color: '#2f5a2a', nombre: 'Roble', categoria: 'árbol', img: 'sprites_flora/roble.png', imgs: ['sprites_flora/roble.png','sprites_flora/roble_v2.png','sprites_flora/roble_v3.png','sprites_flora/roble_v4.png','sprites_flora/roble_v5.png'] },
+    pino:              { ch: '♠', color: '#1f4a4a', nombre: 'Pino', categoria: 'árbol', img: 'sprites_flora/pino.png', imgs: ['sprites_flora/pino.png','sprites_flora/pino_v2.png','sprites_flora/pino_v3.png','sprites_flora/pino_v4.png','sprites_flora/pino_v5.png'] },
+    cactus:            { ch: '*', color: '#4a8a5a', nombre: 'Cactus', categoria: 'arbusto', img: 'sprites_flora/cactus.png', imgs: ['sprites_flora/cactus.png','sprites_flora/cactus_v2.png','sprites_flora/cactus_v3.png','sprites_flora/cactus_v4.png','sprites_flora/cactus_v5.png','sprites_flora/cactus_v6.png','sprites_flora/cactus_v7.png','sprites_flora/cactus_v8.png','sprites_flora/cactus_v9.png','sprites_flora/cactus_v10.png','sprites_flora/cactus_v11.png','sprites_flora/cactus_v12.png','sprites_flora/cactus_v13.png','sprites_flora/cactus_v14.png','sprites_flora/cactus_v15.png','sprites_flora/cactus_v16.png','sprites_flora/cactus_v17.png'] },
+    // CORREGIDO 2026-09-19, mismo dia (Diego: "quita los assets antiguos,
+    // el ramo de flores inicial, y los arbustos iniciales, usa los nuevos
+    // que son mejores") -- los 4 arbustos purgan del todo el sprite
+    // "inicial" (ronda 2026-09-19 temprana, un solo dibujo fijo por
+    // especie) de su pool: ya no aparece ni como variante ocasional. Los
+    // 16 "arbustos de bayas" se reparten ahora entre las 4 especies (antes
+    // solo montano/artico) -- Diego prioriza mas variedad real sobre la
+    // pureza tematica de bioma que motivo dejar fuera a espinoso/
+    // desertico en la primera pasada.
+    arbusto_espinoso:  { ch: '*', color: '#8a6a3a', nombre: 'Arbusto espinoso', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_v2.png', imgs: ['sprites_flora/arbusto_montano_v2.png','sprites_flora/arbusto_montano_v3.png','sprites_flora/arbusto_montano_v4.png','sprites_flora/arbusto_montano_v5.png'] },
+    arbusto_desertico: { ch: '*', color: '#a68a4a', nombre: 'Arbusto desértico', categoria: 'arbusto', img: 'sprites_flora/arbusto_montano_v6.png', imgs: ['sprites_flora/arbusto_montano_v6.png','sprites_flora/arbusto_montano_v7.png','sprites_flora/arbusto_montano_v8.png','sprites_flora/arbusto_montano_v9.png'] },
+    arbusto_montano:   { ch: '*', color: '#6a8a4a', nombre: 'Arbusto montano', categoria: 'arbusto', img: 'sprites_flora/arbusto_artico_v2.png', imgs: ['sprites_flora/arbusto_artico_v2.png','sprites_flora/arbusto_artico_v3.png','sprites_flora/arbusto_artico_v4.png','sprites_flora/arbusto_artico_v5.png'] },
+    arbusto_artico:    { ch: '*', color: '#8aa8a0', nombre: 'Arbusto ártico', categoria: 'arbusto', img: 'sprites_flora/arbusto_artico_v6.png', imgs: ['sprites_flora/arbusto_artico_v6.png','sprites_flora/arbusto_artico_v7.png','sprites_flora/arbusto_artico_v8.png','sprites_flora/arbusto_artico_v9.png'] },
+    hierba_silvestre:  { ch: '▒', color: '#a3c95a', nombre: 'Hierba silvestre', categoria: 'cobertura', img: 'sprites_flora/hierba_silvestre.png', imgs: ['sprites_flora/hierba_silvestre.png','sprites_flora/hierba_silvestre_v2.png','sprites_flora/hierba_silvestre_v3.png','sprites_flora/hierba_silvestre_v4.png','sprites_flora/hierba_silvestre_v5.png','sprites_flora/hierba_silvestre_v6.png','sprites_flora/hierba_silvestre_v7.png','sprites_flora/hierba_silvestre_v8.png','sprites_flora/hierba_silvestre_v9.png','sprites_flora/hierba_silvestre_v10.png','sprites_flora/hierba_silvestre_v11.png','sprites_flora/hierba_silvestre_v12.png','sprites_flora/hierba_silvestre_v13.png','sprites_flora/hierba_silvestre_v14.png','sprites_flora/hierba_silvestre_v15.png','sprites_flora/hierba_silvestre_v16.png'] },
+    liquen:            { ch: '▒', color: '#9aa870', nombre: 'Liquen', categoria: 'cobertura', img: 'sprites_flora/liquen.png' },
+    musgo:             { ch: '▒', color: '#4a6a4a', nombre: 'Musgo', categoria: 'cobertura', img: 'sprites_flora/musgo.png' },
+    // img/imgs ya NO incluyen flor_silvestre.png (el "ramo" original,
+    // ilustracion de un bouquet fijo) -- purgado del pool, ver comentario
+    // junto a arbusto_espinoso mas arriba. Solo flores individuales reales.
+    flor_silvestre:    { ch: '▒', color: '#c97ab0', nombre: 'Flor silvestre', categoria: 'cobertura', img: 'sprites_flora/flor_silvestre_v2.png', imgs: ['sprites_flora/flor_silvestre_v2.png','sprites_flora/flor_silvestre_v3.png','sprites_flora/flor_silvestre_v4.png','sprites_flora/flor_silvestre_v5.png','sprites_flora/flor_silvestre_v6.png','sprites_flora/flor_silvestre_v7.png','sprites_flora/flor_silvestre_v8.png','sprites_flora/flor_silvestre_v9.png','sprites_flora/flor_silvestre_v10.png','sprites_flora/flor_silvestre_v11.png','sprites_flora/flor_silvestre_v12.png','sprites_flora/flor_silvestre_v13.png','sprites_flora/flor_silvestre_v14.png','sprites_flora/flor_silvestre_v15.png','sprites_flora/flor_silvestre_v16.png'] },
+    hierba_desertica:  { ch: '▒', color: '#c9b06a', nombre: 'Hierba desértica', categoria: 'cobertura', img: 'sprites_flora/hierba_desertica.png' },
+    hierba_artica:     { ch: '▒', color: '#c9d8d8', nombre: 'Hierba ártica', categoria: 'cobertura', img: 'sprites_flora/hierba_artica.png' },
+    helecho:           { ch: '▒', color: '#3a7a4a', nombre: 'Helecho', categoria: 'cobertura', img: 'sprites_flora/helecho.png', imgs: ['sprites_flora/helecho.png','sprites_flora/helecho_v2.png','sprites_flora/helecho_v3.png','sprites_flora/helecho_v4.png','sprites_flora/helecho_v5.png','sprites_flora/helecho_v6.png','sprites_flora/helecho_v7.png','sprites_flora/helecho_v8.png','sprites_flora/helecho_v9.png','sprites_flora/helecho_v10.png','sprites_flora/helecho_v11.png','sprites_flora/helecho_v12.png','sprites_flora/helecho_v13.png','sprites_flora/helecho_v14.png','sprites_flora/helecho_v15.png','sprites_flora/helecho_v16.png','sprites_flora/helecho_v17.png'] },
   },
   // (2026-09-16) Pictogramas reales en vez de letras -- Diego: "podriamos
   // buscar pictogramas para las criaturas". Emoji nativos del sistema/
@@ -458,7 +528,12 @@ const CATALOGO_GLIFOS = {
   // conocido en vez de caer a norte/sur).
   fauna: {
     titulo: 'Fauna',
-    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo', imgDir: 'sprites_criaturas/gnomo', direcciones: ['norte','sur','este','oeste','noreste','noroeste','sureste','suroeste'] },
+    // imgDirHembra (2026-09-19): Reproduccion.sexo ya venía expuesto en
+    // el DTO (dato["sexo"], vista_web.py) desde antes de esta sesión, sin
+    // ningún consumidor en el visor -- infoCriatura() ahora lo usa para
+    // elegir el rig de 8 direcciones correcto. Mismas 8 direcciones que
+    // el macho (mismo criterio de generación).
+    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo', imgDir: 'sprites_criaturas/gnomo', imgDirHembra: 'sprites_criaturas/gnomo_hembra', direcciones: ['norte','sur','este','oeste','noreste','noroeste','sureste','suroeste'] },
     lobo:          { ch: '🐺', color: '#e05a3a', nombre: 'Lobo', imgDir: 'sprites_criaturas/lobo', direcciones: ['norte','sur','este','oeste'] },
     conejo:        { ch: '🐰', color: '#c9b590', nombre: 'Conejo', imgDir: 'sprites_criaturas/conejo', direcciones: ['norte','sur','este','oeste'] },
     ardilla:       { ch: '🐿️', color: '#d98a2e', nombre: 'Ardilla', imgDir: 'sprites_criaturas/ardilla', direcciones: ['norte','sur','este','oeste'] },
@@ -467,13 +542,19 @@ const CATALOGO_GLIFOS = {
     cabra_montesa: { ch: '🐐', color: '#b8c0c4', nombre: 'Cabra montesa', imgDir: 'sprites_criaturas/cabra_montesa', direcciones: ['norte','sur','este','oeste'] },
     zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro', imgDir: 'sprites_criaturas/zorro', direcciones: ['norte','sur','este','oeste'] },
     aguila:        { ch: '🦅', color: '#c9a94e', nombre: 'Águila', imgDir: 'sprites_criaturas/aguila', direcciones: ['norte','sur','este','oeste'] },
-    necromasa:     { ch: '💀', color: '#7a7268', nombre: 'Restos (necromasa)' },
+    necromasa:     { ch: '💀', color: '#7a7268', nombre: 'Restos (necromasa)', img: 'sprites_elementos/necromasa.png' },
   },
   // `img` (2026-09-16, Diego subio 5 construcciones a `master` -- "quitales
   // el fondo y usalos"): mismo criterio que fauna, ch/color quedan como
   // referencia de leyenda. El fichero se llama `salon.png` (nombre corto
   // que Diego uso al generarlo) pero la clave real del motor es
   // `salon_comun` -- mapeo explicito aqui, no un rename de fichero.
+  // REGENERADAS 2026-09-19 (ronda PixelLab, mismo criterio de estilo que
+  // fauna/flora -- ver pixelLabAssetsConstrucciones/MANIFEST.txt): las 5
+  // sustituyen al arte que Diego subio en 2026-09-16 (ilustracion con
+  // degradados, no pixel art de paleta real, ver informe seccion 4).
+  // `taller` sigue sin una version que cumpla "sin suelo/paisajismo" tras
+  // 7 intentos -- se queda con el arte de 2026-09-16 hasta resolverlo.
   construcciones: {
     titulo: 'Construcciones',
     refugio:     { ch: '⌂', color: '#c98a4a', nombre: 'Refugio', img: 'sprites_construcciones/refugio.png' },
@@ -484,8 +565,28 @@ const CATALOGO_GLIFOS = {
   },
   recursos: {
     titulo: 'Recursos en el suelo',
-    piedra_suelta: { ch: '•', color: '#9a9a9a', nombre: 'Piedra suelta' },
-    madera:        { ch: '/', color: '#8a6a3a', nombre: 'Madera (rama caída)' },
+    // imgs (2026-09-19, segunda tanda PixelLab): mismo mecanismo de pool
+    // que flora (ver comentario junto a CATALOGO_GLIFOS.flora). De
+    // "piedras" se excluyeron las variantes de tinte fantástico (gema
+    // verde, roca roja, jade, obsidiana, musgo) -- ver esa nota completa
+    // arriba, aplica igual aquí.
+    piedra_suelta: { ch: '•', color: '#9a9a9a', nombre: 'Piedra suelta', img: 'sprites_elementos/piedra_suelta.png', imgs: ['sprites_elementos/piedra_suelta.png','sprites_elementos/piedra_suelta_v2.png','sprites_elementos/piedra_suelta_v3.png','sprites_elementos/piedra_suelta_v4.png','sprites_elementos/piedra_suelta_v5.png','sprites_elementos/piedra_suelta_v6.png','sprites_elementos/piedra_suelta_v7.png','sprites_elementos/piedra_suelta_v8.png','sprites_elementos/piedra_suelta_v9.png','sprites_elementos/piedra_suelta_v10.png','sprites_elementos/piedra_suelta_v11.png','sprites_elementos/piedra_suelta_v12.png'] },
+    madera:        { ch: '/', color: '#8a6a3a', nombre: 'Madera (rama caída)', img: 'sprites_elementos/madera.png', imgs: ['sprites_elementos/madera.png','sprites_elementos/madera_v2.png','sprites_elementos/madera_v3.png','sprites_elementos/madera_v4.png','sprites_elementos/madera_v5.png','sprites_elementos/madera_v6.png','sprites_elementos/madera_v7.png','sprites_elementos/madera_v8.png','sprites_elementos/madera_v9.png','sprites_elementos/madera_v10.png','sprites_elementos/madera_v11.png','sprites_elementos/madera_v12.png','sprites_elementos/madera_v13.png','sprites_elementos/madera_v14.png','sprites_elementos/madera_v15.png','sprites_elementos/madera_v16.png','sprites_elementos/madera_v17.png'] },
+    // fogata (2026-09-19, NUEVO): Fogata (componentes/fogata.py) es una
+    // entidad real del motor desde antes de esta sesión -- fuego
+    // controlado y beneficioso (sube el objetivo de confort térmico de
+    // quien esté en su celda, ver sistema_necesidades.py), persistida,
+    // con su propio ciclo de combustible/extinción -- pero nunca había
+    // tenido NINGUNA representación visual: ni glifo de respaldo ni
+    // sprite, ni siquiera estaba expuesta en el DTO del visor (verificado
+    // contra vista_web.py antes de asumirlo). Con los 5 assets de hoguera
+    // encendida que trajo este lote, se cierra ese hueco -- ver
+    // construir_instantanea()/"fogatas" en vista_web.py y
+    // fogatasPorCelda mas abajo. Sin variante "apagada": Fogata no
+    // modela ningún estado intermedio, arde hasta agotar combustible y
+    // desaparece (ver componentes/fogata.py) -- solo se usaron las
+    // variantes CON llama del lote de 16 ("hogueras").
+    fogata:        { ch: '♨', color: '#e0803a', nombre: 'Fogata', img: 'sprites_elementos/fogata_v1.png', imgs: ['sprites_elementos/fogata_v1.png','sprites_elementos/fogata_v2.png','sprites_elementos/fogata_v3.png','sprites_elementos/fogata_v4.png','sprites_elementos/fogata_v5.png'] },
   },
 };
 
@@ -555,29 +656,137 @@ function tonoCelda(hex, x, y, sal, rango, alfa = 1) {
 function glifoTextura(pool, x, y, sal) {
   return pool[Math.floor(hashDet(x, y, sal) * pool.length) % pool.length];
 }
-// Pools de glifo base por bioma (montaña queda fuera: conserva su propio
-// simbolo '^'/'▲' de relieve, ya establecido).
-//
-// CORREGIDO 2026-09-16 (Diego: "hay otros iconos quizas mejores?" --
-// auditoria real contra la fuente VGA437 antes de decidir, no a ojo):
-// '.'/','/'\'' tienen muy poca masa visual incluso con variacion de tono
-// -- CP437 trae una familia de "sombreado" graduada por densidad
-// (░ claro, ▒ medio, ▓ oscuro) pensada exactamente para esto en
-// terminales DOS/roguelikes reales, confirmada nitida en la fuente real
-// con una pagina de prueba aislada. ░ para todo el suelo desnudo (mucha
-// mas presencia que un punto, sigue leyendose "de fondo" por su propio
-// patron moteado interno) y ▒ para cobertura vegetal (un escalon mas
-// denso que el suelo desnudo, jerarquia visual real: suelo < cobertura <
-// arbusto/arbol solidos).
-const TEXTURA_TERRENO = {
-  pradera:  ['░'],
-  bosque:   ['░'],
-  desierto: ['░'],
-  tundra:   ['░'],
-};
+// imgVariante (2026-09-19, segunda tanda de assets PixelLab -- Diego:
+// "he generado otros que dan mucho mas variedad") -- mismo mecanismo
+// determinista de glifoTextura, aplicado a rutas de sprite en vez de
+// caracteres: una especie/recurso puede declarar `imgs: [...]` (pool de
+// variantes reales, todas distintas) ademas de `img` (variante unica,
+// se mantiene por compatibilidad con la leyenda y como primer elemento
+// del pool). Determinista por celda -- la variante elegida NO cambia
+// entre refrescos, igual que el resto de variacion visual de este
+// fichero.
+function imgVariante(g, x, y, sal) {
+  if (g && g.imgs && g.imgs.length > 0) return glifoTextura(g.imgs, x, y, sal);
+  return (g && g.img) || null;
+}
+// RETIRADO 2026-09-19 (Diego: "siguen habiendo texturas antiguas"):
+// TEXTURA_TERRENO (pool de '░' por bioma) vivia aqui desde 2026-09-16,
+// pensado para el suelo desnudo ANTES de que existiera un tile PNG real
+// por bioma -- desde la ronda PixelLab de terreno (mismo dia, 2026-09-19)
+// itemsCelda() ya usaba glifoTextura(TEXTURA_TERRENO,...) para imprimir
+// ese caracter POR ENCIMA del tile real (crearCeldaTxt pinta backgroundImage
+// Y textContent en el mismo div), doblando literalmente la textura vieja
+// sobre la nueva sin que nadie lo notara hasta que Diego señalo "texturas
+// antiguas" -- justo eso. Ver el fallback de terreno desnudo en
+// itemsCelda(), ahora sin glifo (ch:''), solo el tile real. Pools de
+// cobertura (▒) SI se conservan -- siguen siendo el unico arte para
+// liquen/musgo/hierba_desertica/hierba_artica, que no tienen sprite.
 const TEXTURA_COBERTURA = ['▒'];
 
+// Tiles reales de terreno (2026-09-19, ronda PixelLab -- ver
+// pixelLabAssetsTerreno/MANIFEST.txt). PRIMERA PASADA, sin calibrar: se
+// pintan como background-image DETRAS del glifo/color que ya existia (no
+// lo sustituyen), mismo criterio hibrido ASCII+sprite que fauna/flora/
+// construcciones -- el glifo sigue siendo la fuente de verdad legible, el
+// tile solo aporta textura real debajo. agua usa un unico tile generico
+// para lago/rio/poza (no hay variante por tipo todavia).
+const TEXTURA_IMG_BIOMA = {
+  pradera:  'sprites_terreno/pradera.png',
+  bosque:   'sprites_terreno/bosque.png',
+  desierto: 'sprites_terreno/desierto.png',
+  tundra:   'sprites_terreno/tundra.png',
+  montana:  'sprites_terreno/montana.png',
+};
+const TEXTURA_IMG_AGUA = 'sprites_terreno/agua.png';
+function imagenFondoBioma(c) {
+  if (c.tiene_agua) return TEXTURA_IMG_AGUA;
+  return TEXTURA_IMG_BIOMA[c.bioma] || null;
+}
+
+// REESCRITO 2026-09-19, tercera vuelta (Diego: "zonas en las que se sigue
+// viendo separacion de celdas" -- persistia incluso despues de quitar el
+// borde horneado del tile Y de forzar el zoom a pixel entero). La
+// hipotesis de redondeo de subpixel se confirmo en un harness aislado
+// (ver commit anterior), pero solo cubria el caso device_scale_factor=1
+// -- en la maquina real de Diego (con su propio escalado de pantalla/
+// sistema, fuera de nuestro control) la costura seguia reapareciendo:
+// CADA <div> de 32x32 escala su PROPIO background-image de forma
+// independiente, y ese es el problema de raiz, no un valor de zoom
+// concreto -- ningun ajuste de zoom, por fino que sea, puede garantizar
+// que el redondeo de subpixel de N elementos DOM independientes coincida
+// pixel a pixel en today los dispositivos reales. Fix definitivo: los
+// tiles de terreno ya NO son backgroundImage de cada celda -- se dibujan
+// una sola vez por frame en un UNICO <canvas> que cubre el mapa entero
+// (capaTerreno, ver asegurarCapas), con drawImage nitido
+// (imageSmoothingEnabled=false). Una sola superficie de rasterizado no
+// tiene "entre elementos" donde perder un pixel de redondeo -- elimina
+// la costura en su origen en vez de perseguir sintomas. La mezcla de
+// bioma (antes CSS mask-image, mismo riesgo de costura) se redibuja aqui
+// tambien, con clip+alpha de canvas -- ver dibujarTransicionBioma.
+const cacheImagenesTerreno = {};
+function imagenTerrenoCacheada(src) {
+  let img = cacheImagenesTerreno[src];
+  if (!img) {
+    img = new Image();
+    // el primer renderTerrenoCanvas() puede caer ANTES de que el tile
+    // termine de cargar (img.complete=false, esa celda queda en blanco
+    // ese frame) -- reintentar en cuanto cargue, en vez de esperar al
+    // siguiente sondeo/movimiento de mapa para que aparezca.
+    img.onload = () => renderTerrenoCanvas();
+    img.src = src;
+    cacheImagenesTerreno[src] = img;
+  }
+  return img;
+}
+function claveBiomaCelda(c) { return c.tiene_agua ? '__agua__' : c.bioma; }
+function dibujarTransicionBioma(ctx, c, x, y) {
+  const propia = claveBiomaCelda(c);
+  const franja = CELDA * 0.4; // ver comentario de crearOverlaysTransicionBioma (extinto) -- mismo criterio de "solo el 40% mas cercano al borde", ahora en canvas.
+  const dibujar = (vecino, sx, sy, sw, sh, dx, dy) => {
+    if (!vecino || claveBiomaCelda(vecino) === propia) return;
+    const src = imagenFondoBioma(vecino);
+    if (!src) return;
+    const img = imagenTerrenoCacheada(src);
+    if (!img.complete || img.naturalWidth === 0) return;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, x * CELDA + dx, y * CELDA + dy, sw, sh);
+    ctx.restore();
+  };
+  const der = x + 1 < DATA.ancho ? DATA.celdas[y][x + 1] : null;
+  const izq = x - 1 >= 0 ? DATA.celdas[y][x - 1] : null;
+  const aba = y + 1 < DATA.alto ? DATA.celdas[y + 1][x] : null;
+  const arr = y - 1 >= 0 ? DATA.celdas[y - 1][x] : null;
+  dibujar(der, 0, 0, franja, CELDA, CELDA - franja, 0);
+  dibujar(izq, 0, 0, franja, CELDA, 0, 0);
+  dibujar(aba, 0, 0, CELDA, franja, 0, CELDA - franja);
+  dibujar(arr, 0, 0, CELDA, franja, 0, 0);
+}
+let capaTerreno = null;
+function renderTerrenoCanvas() {
+  if (!capaTerreno || !DATA || !DATA.celdas) return;
+  capaTerreno.width = DATA.ancho * CELDA;
+  capaTerreno.height = DATA.alto * CELDA;
+  const ctx = capaTerreno.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, capaTerreno.width, capaTerreno.height);
+  for (let y = 0; y < DATA.alto; y++) {
+    for (let x = 0; x < DATA.ancho; x++) {
+      const c = DATA.celdas[y][x];
+      const src = imagenFondoBioma(c);
+      if (src) {
+        const img = imagenTerrenoCacheada(src);
+        if (img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, x * CELDA, y * CELDA, CELDA, CELDA);
+        }
+      }
+      dibujarTransicionBioma(ctx, c, x, y);
+    }
+  }
+}
+
 let construccionesPorCelda = {};
+let fogatasPorCelda = {};
 function recalcularDerivados() {
   // Construcciones (DATA.construcciones): una celda podria en teoria tener
   // mas de una (refugio+almacen compartiendo espacio, cupo real del motor)
@@ -587,6 +796,12 @@ function recalcularDerivados() {
   for (const con of (DATA.construcciones || [])) {
     const clave = con.x + ',' + con.y;
     (construccionesPorCelda[clave] = construccionesPorCelda[clave] || []).push(con);
+  }
+  // Fogatas (DATA.fogatas, 2026-09-19) -- mismo criterio que construcciones.
+  fogatasPorCelda = {};
+  for (const fog of (DATA.fogatas || [])) {
+    const clave = fog.x + ',' + fog.y;
+    (fogatasPorCelda[clave] = fogatasPorCelda[clave] || []).push(fog);
   }
 }
 
@@ -615,9 +830,14 @@ function infoCriatura(ent) {
   const g = CATALOGO_GLIFOS.fauna[ent.tipo] || { ch: '?', color: '#ffffff', nombre: ent.tipo };
   let img = null;
   if (g.imgDir) {
+    const dir = (ent.sexo === 'hembra' && g.imgDirHembra) ? g.imgDirHembra : g.imgDir;
     const orientacion = ent.orientacion || 'este';
     const direccion = resolverDireccionSprite(g.direcciones, orientacion);
-    img = `${g.imgDir}/${direccion}.png`;
+    img = `${dir}/${direccion}.png`;
+  } else if (g.img) {
+    // Sprite estatico sin direccion (2026-09-19, ver necromasa mas abajo)
+    // -- restos no caminan, no necesitan variantes por orientacion.
+    img = g.img;
   }
   return { ch: g.ch, color: g.color, img };
 }
@@ -675,7 +895,7 @@ function itemsCelda(c) {
     const item = c.tipo_agua === 'poza'
       ? { ch: ':', color: tonoCelda(g.color, c.x, c.y, 61, 0.2) }
       : { ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 63, 0.2) };
-    return { items: [item], fondo: hexARgba(g.color, alfaFondo) };
+    return { items: [item], fondo: hexARgba(g.color, alfaFondo), fondoImg: imagenFondoBioma(c), fuego: !!c.en_llamas };
   }
 
   const items = [];
@@ -709,7 +929,7 @@ function itemsCelda(c) {
       // PEQUEÑA, no mas transparente; la opacidad decreciente por etapa
       // ya quedo redundante/incorrecta en cuanto el tamaño empezo a
       // reflejar la etapa real (circulo anterior), retirada por completo.
-      items.push({ ch: g.ch, color: g.color, img: g.img || null, especieFlora: competidora.especie, etapaCrecimiento: competidora.etapa ?? 1 });
+      items.push({ ch: g.ch, color: g.color, img: imgVariante(g, c.x, c.y, 79), especieFlora: competidora.especie, etapaCrecimiento: competidora.etapa ?? 1 });
       if (coberturas.length > 0) {
         fondoColor = CATALOGO_GLIFOS.flora[coberturas[0].especie].color;
         fondoAlfa = 0.4;
@@ -733,7 +953,7 @@ function itemsCelda(c) {
           // especieFlora (arbol/arbusto) en renderMapa, porque el tamaño
           // se calcula distinto (tamanoSpriteCobertura, fijo, sin
           // huella_m2 real para esta categoria).
-          items.push({ ch: g.ch, color: g.color, img: g.img, especieCobertura: cob.especie, etapaCrecimiento: cob.etapa ?? 1 });
+          items.push({ ch: g.ch, color: g.color, img: imgVariante(g, c.x, c.y, 81 + i), especieCobertura: cob.especie, etapaCrecimiento: cob.etapa ?? 1 });
         } else {
           const ch = glifoTextura(TEXTURA_COBERTURA, c.x, c.y, 67 + i);
           items.push({ ch, color: tonoCelda(g.color, c.x, c.y, 71 + i, 0.3) });
@@ -755,37 +975,63 @@ function itemsCelda(c) {
   // con el elemento principal de la celda. Si NO hay ningun item todavia
   // (celda de flora/construccion vacia, solo el recurso), se mantiene
   // como item normal a tamaño completo -- es lo unico que hay que ver.
-  const recursos = c.recursos || {};
-  const badges = [];
-  const empujarRecurso = (cantidad, tipo) => {
-    if (cantidad <= 0) return;
-    const g = CATALOGO_GLIFOS.recursos[tipo];
-    if (items.length > 0) badges.push({ ch: g.ch, color: g.color });
-    else items.push({ ch: g.ch, color: g.color });
-  };
-  empujarRecurso(recursos.piedra_suelta || 0, 'piedra_suelta');
-  empujarRecurso(recursos.madera || 0, 'madera');
-
-  if (items.length === 0) {
-    // Terreno base desnudo: SIEMPRE imprime un glifo (nunca vacio) --
-    // variante de textura + tono elegidos por hash determinista de la
-    // celda (ver TEXTURA_TERRENO/tonoCelda arriba). Excepcion real:
-    // montaña distingue pico de ladera por elevacion real, convencion
-    // estandar de todo roguelike.
-    if (c.bioma === 'montana' && c.elevacion > 0.72) {
-      const g = CATALOGO_GLIFOS.terreno.pico;
-      items.push({ ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 41, 0.2) });
-    } else if (c.bioma === 'montana') {
-      const g = CATALOGO_GLIFOS.terreno.montana;
-      items.push({ ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 43, 0.2) });
-    } else {
-      const pool = TEXTURA_TERRENO[c.bioma] || ['░'];
-      const ch = glifoTextura(pool, c.x, c.y, 47);
-      items.push({ ch, color: tonoCelda(fondoBase, c.x, c.y, 53, 0.35) });
-    }
+  // Pico de montaña -- CORREGIDO 2026-09-19 (Diego: "los picos que marcan
+  // las celdas mas altas son del tamaño de una piedra"). Bug real
+  // encontrado, no un problema de tamaño: este bloque vivia mas abajo,
+  // dentro del "if (items.length===0)" que se evalua DESPUES de los
+  // recursos -- una celda de pico con una piedra suelta encima (frecuente
+  // en bioma montana, ver probabilidad_piedra_suelta en zona_bioma.py)
+  // dejaba items.length en 1 antes de llegar aqui, y el pico jamas se
+  // pintaba -- lo unico visible era la piedra, de ahi la confusion ("el
+  // pico es del tamaño de una piedra": literalmente ERA la piedra, el
+  // pico nunca llego a dibujarse). Movido antes de los recursos con el
+  // mismo criterio badge-si-ya-hay-contenido que usa empujarRecurso: un
+  // arbol o construccion sobre el pico siguen ganando (mas relevantes que
+  // la elevacion), pero una piedra suelta ya no puede taparlo.
+  if (items.length === 0 && c.bioma === 'montana' && c.elevacion > 0.72) {
+    const g = CATALOGO_GLIFOS.terreno.pico;
+    items.push({ ch: g.ch, color: tonoCelda(g.color, c.x, c.y, 41, 0.2), img: g.img, esPico: true });
   }
 
-  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa), badges };
+  const recursos = c.recursos || {};
+  const badges = [];
+  const empujarRecurso = (cantidad, tipo, sal) => {
+    if (cantidad <= 0) return;
+    const g = CATALOGO_GLIFOS.recursos[tipo];
+    const img = imgVariante(g, c.x, c.y, sal);
+    if (items.length > 0) badges.push({ ch: g.ch, color: g.color, img });
+    else items.push({ ch: g.ch, color: g.color, img, esRecurso: true });
+  };
+  empujarRecurso(recursos.piedra_suelta || 0, 'piedra_suelta', 83);
+  empujarRecurso(recursos.madera || 0, 'madera', 85);
+
+  // Fogatas (2026-09-19, ver comentario junto a CATALOGO_GLIFOS.recursos.
+  // fogata) -- entidades reales, propias (DATA.fogatas/fogatasPorCelda),
+  // no Celda.recursos: mismo patron badge-si-ya-hay-item/item-si-no que
+  // el resto de recursos en el suelo, una fogata pequeña no deberia tapar
+  // un arbol o construccion real compartiendo su celda.
+  const fogatasCelda = fogatasPorCelda[c.x + ',' + c.y] || [];
+  for (const fog of fogatasCelda) {
+    const g = CATALOGO_GLIFOS.recursos.fogata;
+    const img = imgVariante(g, fog.x, fog.y, 89 + (fog.id % 7));
+    if (items.length > 0) badges.push({ ch: g.ch, color: g.color, img });
+    else items.push({ ch: g.ch, color: g.color, img, esFogata: true });
+  }
+
+  if (items.length === 0) {
+    // Terreno base desnudo -- CORREGIDO 2026-09-19 (Diego: "siguen
+    // habiendo texturas antiguas"): ya NO imprime ningun caracter ASCII
+    // de relleno (ver comentario junto al extinto TEXTURA_TERRENO mas
+    // arriba). Los 6 biomas tienen tile real (fondoImg) desde la ronda
+    // PixelLab de terreno -- el caracter era una textura de ANTES de eso,
+    // y se seguia dibujando ENCIMA del tile real en el mismo div,
+    // doblando visualmente la textura. El item vacio sigue haciendo
+    // falta (portador de fondo/fondoImg para renderMapa), solo que ahora
+    // sin caracter visible -- el tile PNG es la unica textura de suelo.
+    items.push({ ch: '', color: fondoBase });
+  }
+
+  return { items: items.slice(0, 4), fondo: hexARgba(fondoColor, fondoAlfa), fondoImg: imagenFondoBioma(c), badges, fuego: !!c.en_llamas };
 }
 
 function celdaAPantalla(wx, wy, tam) {
@@ -802,6 +1048,14 @@ function celdaAPantalla(wx, wy, tam) {
 let capaEstatica = null, capaCriaturas = null;
 function asegurarCapas() {
   const cont = document.getElementById('mapa-contenido');
+  if (!capaTerreno) {
+    capaTerreno = document.createElement('canvas');
+    capaTerreno.style.position = 'absolute';
+    capaTerreno.style.top = '0'; capaTerreno.style.left = '0';
+    capaTerreno.style.zIndex = '-1'; // siempre detras de cualquier item real (z-index minimo real es 0)
+    capaTerreno.style.imageRendering = 'pixelated';
+    cont.appendChild(capaTerreno);
+  }
   if (!capaEstatica) {
     capaEstatica = document.createElement('div');
     capaEstatica.style.position = 'absolute';
@@ -991,12 +1245,27 @@ function tamanoSpriteFlora(especie, etapa, seedX, seedY) {
 // que un arbusto/arbol". Mismo crecimiento por etapa + jitter de escala
 // que arbol/arbusto (ver su comentario) aplicado tambien aqui. Rango
 // base PROVISIONAL, sin calibrar contra captura real.
-const SPRITE_COBERTURA_ALTURA = CELDA * 0.75;
+// BAJADO 2026-09-19 de 0.75 a 0.5 (Diego: "las flores en comparacion son
+// enormes si las ves con los arboles") -- causa real combinada, no solo
+// el numero: los sprites nuevos (flor/hierba/helecho individuales, ronda
+// PixelLab) se recortaron de relleno transparente (algunos tenian hasta
+// 65% de lienzo vacio, ver commit del mismo dia) para que el pool de
+// variantes se viera consistente entre si -- pero eso significa que
+// 0.75*CELDA, calibrado cuando el lienzo SIN recortar absorbia buena
+// parte de esa altura en aire vacio, ahora se traduce en objeto real
+// mucho mas grande que antes. Bajado junto con el recorte, no por
+// separado, para que el resultado neto sea mas pequeño que antes, no
+// solo mas consistente.
+const SPRITE_COBERTURA_ALTURA = CELDA * 0.5;
 function tamanoSpriteCobertura(etapa, seedX, seedY) {
   return SPRITE_COBERTURA_ALTURA * factorCrecimiento(etapa ?? 1) * factorJitterEscala(seedX, seedY);
 }
 
-function crearCeldaTxt(ch, color, cx, cy, fondo) {
+// fondoImg ya NO se pinta aqui como backgroundImage (2026-09-19, ver
+// renderTerrenoCanvas) -- el tile real vive en el canvas unico de abajo,
+// esta celda solo aporta su tinte de color plano (fondo). El parametro
+// se conserva sin usar para no romper las llamadas existentes.
+function crearCeldaTxt(ch, color, cx, cy, fondo, fondoImg) {
   const el = document.createElement('div');
   el.className = 'celda-txt';
   el.textContent = ch;
@@ -1018,8 +1287,19 @@ function añadirBadges(el, badges) {
   badges.forEach((b, i) => {
     const badge = document.createElement('div');
     badge.className = 'badge-recurso';
-    badge.textContent = b.ch;
-    badge.style.color = b.color;
+    if (b.img) {
+      // Recurso con sprite real (2026-09-19) -- mismo tamaño que el
+      // glifo de texto que sustituye (font-size 11px de .badge-recurso).
+      const img = document.createElement('img');
+      img.src = b.img;
+      img.draggable = false;
+      img.style.width = '13px'; img.style.height = '13px'; img.style.imageRendering = 'pixelated';
+      img.style.display = 'block';
+      badge.appendChild(img);
+    } else {
+      badge.textContent = b.ch;
+      badge.style.color = b.color;
+    }
     badge.style.top = (i * Math.round(CELDA * 0.32)) + 'px';
     el.appendChild(badge);
   });
@@ -1034,7 +1314,8 @@ function añadirBadges(el, badges) {
 // ya calculaba itemsCelda); el <img> se ancla abajo-centro dentro de el,
 // igual que .criatura-img, escalado por huella_m2 real
 // (tamanoSpriteConstruccion) en vez de un tamaño fijo.
-function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
+// fondoImg ya NO se pinta aqui (ver nota junto a crearCeldaTxt).
+function crearCeldaImgEstatica(src, cx, cy, fondo, tamano, fondoImg) {
   const cont = document.createElement('div');
   cont.className = 'celda-txt';
   cont.style.width = CELDA + 'px'; cont.style.height = CELDA + 'px';
@@ -1045,6 +1326,7 @@ function crearCeldaImgEstatica(src, cx, cy, fondo, tamano) {
   // cual para flora (2026-09-16) -- mismo contrato visual, "raices en el
   // suelo de la celda", no hacia falta una clase CSS propia.
   img.className = 'construccion-img';
+  img.draggable = false;
   img.src = src;
   img.style.height = tamano + 'px';
   // Jitter horizontal (ver su comentario junto a hashDet/jitterPx) --
@@ -1075,14 +1357,54 @@ function pesoItem(item) {
 // -- extraidos de renderMapa() para reutilizarlos tanto en el caso de un
 // solo item como en el de varios compartiendo celda.
 function capaItem(item) {
-  return item.tipoConstruccion ? 'construccion' : 'flora';
+  if (item.tipoConstruccion) return 'construccion';
+  if (item.especieFlora || item.especieCobertura) return 'flora';
+  return 'terreno'; // pico/recurso -- elementos de suelo, nunca por encima de flora/fauna
 }
+// TAMANO_SPRITE_PICO/RECURSO (2026-09-19, ver necromasa/pico/madera/
+// piedra_suelta en pixelLabAssetsElementos/MANIFEST.txt): tamaños fijos,
+// sin etapa de crecimiento real que variar (no son seres vivos).
+const TAMANO_SPRITE_PICO = CELDA * 1.15;
+// CORREGIDO 2026-09-19 (Diego, tras verlo: "tienen suelo que claramente
+// no deberian tener"): no hay ningun halo/ovalo dibujado -- ni en el PNG
+// (verificado pixel a pixel, cero semitransparencia) ni en CSS (sin
+// box-shadow/radial-gradient en .celda-txt/.construccion-img). Lo que se
+// ve es el tile de terreno real de esa celda a traves del hueco que deja
+// un sprite pequeño (0.55*CELDA) dentro de un contenedor del tamaño
+// completo de la celda -- exactamente el mismo mecanismo que ya usan
+// arbol/arbusto (fondoImg detras del sprite), pero ahi pasa desapercibido
+// porque el sprite cubre casi toda la celda. Subido a 0.85 para que
+// tape la misma proporcion de fondo que el resto del catalogo.
+// BAJADO 2026-09-19 de 0.85 a 0.55 (Diego: "las ramas y las piedras
+// igual [de enormes]") -- misma causa que SPRITE_COBERTURA_ALTURA arriba:
+// piedra_suelta/madera tenian hasta 72%/62% de lienzo transparente antes
+// del recorte de ese mismo dia; con el lienzo ya ajustado al contenido
+// real, el mismo 0.85 se traducia en una piedra/rama mucho mas grande
+// que antes de recortar. Un recurso suelto en el suelo debe leerse como
+// detalle secundario, mas pequeño que la cobertura (0.5) que a su vez ya
+// es mas pequeña que un arbusto -- jerarquia visual real: recurso <
+// cobertura < arbusto < arbol.
+const TAMANO_SPRITE_RECURSO = CELDA * 0.4;
+// Fogata (2026-09-19): un poco mas grande que un recurso suelto (piedra/
+// madera) pero por debajo de flora/construccion -- objeto colocado a
+// proposito, mas prominente que un palo caido, nunca compite con el
+// elemento principal de la celda.
+const TAMANO_SPRITE_FOGATA = CELDA * 1.0;
 function tamanoItem(item, x, y) {
   if (item.tipoConstruccion) return tamanoSpriteConstruccion(item.tipoConstruccion);
   if (item.especieFlora) return tamanoSpriteFlora(item.especieFlora, item.etapaCrecimiento, x, y);
   if (item.especieCobertura) return tamanoSpriteCobertura(item.etapaCrecimiento, x, y);
+  if (item.esPico && item.img) return TAMANO_SPRITE_PICO;
+  if (item.esFogata && item.img) return TAMANO_SPRITE_FOGATA;
+  if (item.esRecurso && item.img) return TAMANO_SPRITE_RECURSO;
   return null; // glifo simple sin sprite (p.ej. cobertura sin arte)
 }
+
+// Transicion gradual entre biomas: RETIRADO de aqui el 2026-09-19 (tercera
+// vuelta) -- vivia como overlays DOM con CSS mask-image, mismo mecanismo
+// de backgroundImage-por-celda que causaba la costura de subpixel entre
+// celdas (ver renderTerrenoCanvas/dibujarTransicionBioma mas arriba,
+// donde vive ahora sobre el canvas unico -- sin ese riesgo).
 
 // Sprite de un item que comparte celda con otro(s) -- mismo contrato de
 // ancla (inferior-centro, ver .sprite-compartido) que crearCeldaImgEstatica,
@@ -1092,6 +1414,7 @@ function tamanoItem(item, x, y) {
 function crearImgCompartida(src, cx, cy, tamano, indiceJitter, offsetVerticalPx) {
   const img = document.createElement('img');
   img.className = 'sprite-compartido';
+  img.draggable = false;
   img.src = src;
   img.style.height = tamano + 'px';
   const jx = jitterPx(cx / CELDA, cy / CELDA + indiceJitter * 37);
@@ -1101,12 +1424,28 @@ function crearImgCompartida(src, cx, cy, tamano, indiceJitter, offsetVerticalPx)
   return img;
 }
 
-function crearFondoCelda(cx, cy, fondo) {
+// fondoImg ya NO se pinta aqui (ver nota junto a crearCeldaTxt).
+function crearFondoCelda(cx, cy, fondo, fondoImg) {
   const div = document.createElement('div');
   div.className = 'celda-txt';
   div.style.width = CELDA + 'px'; div.style.height = CELDA + 'px';
   div.style.left = cx + 'px'; div.style.top = cy + 'px';
   if (fondo) div.style.backgroundColor = fondo;
+  return div;
+}
+
+// Overlay de incendio (2026-09-19) -- ver comentario junto a .fuego-overlay
+// en el CSS. Se crea/destruye por celda en cada render en vez de guardarse
+// en un mapa como las criaturas: un incendio no se desplaza suave entre
+// celdas (aparece/desaparece por completo cada tick en la celda que sea),
+// no tiene sentido animar una transicion de posicion para el.
+function crearOverlayFuego(cx, cy) {
+  const div = document.createElement('div');
+  div.className = 'fuego-overlay';
+  div.textContent = '🔥';
+  div.style.left = cx + 'px'; div.style.top = cy + 'px';
+  div.style.width = CELDA + 'px'; div.style.height = CELDA + 'px';
+  div.style.fontSize = (CELDA * 0.85) + 'px';
   return div;
 }
 
@@ -1125,8 +1464,8 @@ function crearFondoCelda(cx, cy, fondo) {
 // ejemplo de Diego, no partido en un cuadrante igual de chico que el
 // refugio. Devuelve una LISTA de elementos (uno por item + uno de fondo
 // compartido), no un unico contenedor -- renderMapa() los añade todos.
-function crearElementosCompartidos(items, cx, cy, fondo, x, y) {
-  const elementos = [crearFondoCelda(cx, cy, fondo)];
+function crearElementosCompartidos(items, cx, cy, fondo, x, y, fondoImg) {
+  const elementos = [crearFondoCelda(cx, cy, fondo, fondoImg)];
   const ordenados = [...items].sort((a, b) => pesoItem(a) - pesoItem(b));
   ordenados.forEach((item, i) => {
     const esPrincipal = i === ordenados.length - 1;
@@ -1173,6 +1512,7 @@ function renderMapa() {
   capaEstatica.innerHTML = '';
   cont.style.width = (DATA.ancho * CELDA) + 'px';
   cont.style.height = (DATA.alto * CELDA) + 'px';
+  renderTerrenoCanvas();
   for (let y = 0; y < DATA.alto; y++) {
     for (let x = 0; x < DATA.ancho; x++) {
       const c = DATA.celdas[y][x];
@@ -1213,30 +1553,49 @@ function renderMapa() {
         // un mosaico. Devuelve [fondo, ...sprites], el fondo ya en el
         // indice 0 es donde cuelgan los badges (unico elemento comun a
         // toda la celda compartida).
-        const elementos = crearElementosCompartidos(info.items, cx, cy, info.fondo, x, y);
+        const elementos = crearElementosCompartidos(info.items, cx, cy, info.fondo, x, y, info.fondoImg);
         elementos[0].style.zIndex = String(zIndexPorFila(y, 'terreno'));
         añadirBadges(elementos[0], info.badges);
         elementos.forEach(el => capaEstatica.appendChild(el));
+        if (info.fuego) {
+          const fuego = crearOverlayFuego(cx, cy);
+          fuego.style.zIndex = String(zIndexPorFila(y, 'fauna') + 1);
+          capaEstatica.appendChild(fuego);
+        }
         continue;
       }
       const unico = info.items[0] || {};
       const esConstruccionUnica = !!unico.tipoConstruccion;
       const esFloraUnica = !esConstruccionUnica && !!unico.especieFlora;
       const esCoberturaUnica = !esConstruccionUnica && !esFloraUnica && !!unico.especieCobertura;
+      const esPicoUnico = !esConstruccionUnica && !esFloraUnica && !esCoberturaUnica && !!unico.esPico && !!unico.img;
+      const esFogataUnica = !esConstruccionUnica && !esFloraUnica && !esCoberturaUnica && !esPicoUnico && !!unico.esFogata && !!unico.img;
+      const esRecursoUnico = !esConstruccionUnica && !esFloraUnica && !esCoberturaUnica && !esPicoUnico && !esFogataUnica && !!unico.esRecurso && !!unico.img;
       let el;
       if (esConstruccionUnica) {
-        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion));
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteConstruccion(unico.tipoConstruccion), info.fondoImg);
       } else if (esFloraUnica) {
-        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora, unico.etapaCrecimiento, x, y));
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteFlora(unico.especieFlora, unico.etapaCrecimiento, x, y), info.fondoImg);
       } else if (esCoberturaUnica) {
-        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(unico.etapaCrecimiento, x, y));
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, tamanoSpriteCobertura(unico.etapaCrecimiento, x, y), info.fondoImg);
+      } else if (esPicoUnico) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, TAMANO_SPRITE_PICO, info.fondoImg);
+      } else if (esFogataUnica) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, TAMANO_SPRITE_FOGATA, info.fondoImg);
+      } else if (esRecursoUnico) {
+        el = crearCeldaImgEstatica(unico.img, cx, cy, info.fondo, TAMANO_SPRITE_RECURSO, info.fondoImg);
       } else {
-        el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo);
+        el = crearCeldaTxt(unico.ch || '', unico.color || '#000', cx, cy, info.fondo, info.fondoImg);
       }
       const capaSuelo = esConstruccionUnica ? 'construccion' : (esFloraUnica || esCoberturaUnica) ? 'flora' : 'terreno';
       el.style.zIndex = String(zIndexPorFila(y, capaSuelo));
       añadirBadges(el, info.badges);
       capaEstatica.appendChild(el);
+      if (info.fuego) {
+        const fuego = crearOverlayFuego(cx, cy);
+        fuego.style.zIndex = String(zIndexPorFila(y, 'fauna') + 1);
+        capaEstatica.appendChild(fuego);
+      }
     }
   }
   document.getElementById('titulo-mapa-info').textContent =
@@ -1271,6 +1630,7 @@ function alturaSpriteCriatura(ent) {
 function crearCeldaImg(src, cx, cy, altura, jitter) {
   const el = document.createElement('img');
   el.className = 'criatura-img';
+  el.draggable = false;
   el.src = src;
   el.style.height = altura + 'px';
   el.style.left = (cx + CELDA / 2 + jitter) + 'px';
@@ -1297,9 +1657,74 @@ function crearCeldaImg(src, cx, cy, altura, jitter) {
 // medias, dando tirones. 'ease-in-out' en vez de 'linear':
 // aceleracion/desaceleracion suave en cada paso, un paso a velocidad
 // constante de inicio a fin tambien se lee mecanico/como salto.
-const DURACION_PASO_CRIATURA = 0.35;
+const DURACION_PASO_CRIATURA_BASE = 0.35;
+const INTERVALO_SONDEO_BASE_MS = 400;
+
+// CORREGIDO 2026-09-19 (Diego: "se mueven muy rapido... o desaparecen por
+// debajo de una celda y aparecen en otra"). Causa real: el selector de
+// velocidad (/partida/velocidad, ver mas abajo) escala el ritmo REAL de
+// ticks del motor (main.py: `time.sleep(segundos_por_tick / velocidad)`)
+// pero ni el intervalo de sondeo ni DURACION_PASO_CRIATURA se enteraban --
+// ambos seguian fijos asumiendo siempre velocidad=1x. A velocidad>1 el
+// motor avanza varios ticks (varias celdas) entre dos sondeos de 400ms, la
+// transicion CSS de 0.35s tampoco llega a terminar antes del siguiente
+// sondeo -- exactamente el salto/desaparicion descrito. velocidadActual se
+// actualiza en cada respuesta real de /estado.json (payload.partida.
+// velocidad, confirmado que YA viaja ahi) y tanto el intervalo de sondeo
+// como la duracion de paso se recalculan a partir de ella.
+let velocidadActual = 1;
+function duracionPasoActual() { return DURACION_PASO_CRIATURA_BASE / velocidadActual; }
+function intervaloSondeoActual() {
+  // Clamp: por debajo de ~80ms el navegador no gana nada (el motor real
+  // tampoco puede publicar mas rapido que eso en la practica) y por
+  // encima de 2000ms (velocidad muy baja) el mapa se sentiria congelado.
+  return Math.max(80, Math.min(2000, INTERVALO_SONDEO_BASE_MS / velocidadActual));
+}
 
 let elementosCriatura = {};
+// ultimaPosCriatura (2026-09-19, Diego: "las criaturas siguen saltando y
+// desapareciendo" -- persistia tras el fix de velocidad anterior). Causa
+// real distinta a la ya corregida: duracionPasoActual() es un tiempo FIJO
+// pensado para UN paso (una celda), pero el sondeo del cliente y el tick
+// real del servidor son DOS relojes independientes (el servidor no espera
+// al cliente) -- cuando el sondeo llega tarde (jitter de red, pestaña en
+// segundo plano, hilo principal ocupado) pueden haber pasado varios ticks
+// reales entre dos lecturas, y la criatura aparece desplazada 2-3 celdas
+// de una vez. Animar ese desplazamiento real en la misma duracion fija de
+// "un paso" es exactamente lo que se lee como salto/teleport (recorre 3
+// celdas en el tiempo de 1, mucho mas rapido de lo que camina de verdad).
+// Fix: la duracion de la transicion es PROPORCIONAL a la distancia real
+// recorrida desde la ultima posicion conocida (Chebyshev -- movimiento de
+// 8 direcciones, una diagonal cuenta como 1 paso igual que un cardinal).
+// Un salto MAYOR que maxCeldasAnimables() ya no es "ponerse al dia" de
+// ticks perdidos -- es una reubicacion real (nace/coloniza lejos de donde
+// estaba) y se coloca sin animar en vez de deslizarse en camara rapida
+// por medio mapa.
+//
+// CORREGIDO 2026-09-19, mismo dia (Diego: "las criaturas siguen saltando
+// de celdas" -- persistia tras lo de arriba). Causa real: el umbral fijo
+// de 3 no tenia en cuenta la velocidad de partida. El movimiento del
+// motor SIEMPRE es de 1 celda por TICK (confirmado en
+// sistema_movimiento.py::_aplicar_movimiento, dx/dy nunca es mas de
+// +-1) -- pero intervaloSondeoActual() tiene un suelo de 80ms
+// (Math.max(80,...)) mientras que el tick real del servidor sigue
+// acelerando sin limite con la velocidad (segundos_por_tick/velocidad,
+// main.py) -- a partir de ~5x, el sondeo ya no puede seguirle el ritmo
+// al tick real y varios ticks (varias celdas reales de avance) quedan
+// comprimidos en un solo sondeo, NO por drift/jitter de red sino por
+// diseño del propio clamp. Con el umbral fijo en 3, jugar a velocidad
+// alta (uso normal, no un caso raro) disparaba el "sin transicion" de
+// forma sistematica para CUALQUIER criatura en movimiento -- exactamente
+// el salto que Diego seguia viendo, ahora mas visible que antes del fix
+// anterior (antes al menos se animaba, aunque rapido; ahora se
+// teletransportaba sin animar en absoluto). Fix: el umbral escala con la
+// velocidad real en vez de ser fijo, con un techo para que una
+// reubicacion genuina (nace/coloniza lejos) se siga distinguiendo de
+// "ponerse al dia".
+let ultimaPosCriatura = {};
+function maxCeldasAnimables() {
+  return Math.min(20, Math.max(3, Math.ceil(velocidadActual / 3)));
+}
 function renderCriaturas() {
   asegurarCapas();
   const vistos = new Set();
@@ -1310,10 +1735,14 @@ function renderCriaturas() {
     const { cx, cy } = celdaAPantalla(ent.x, ent.y, CELDA);
     let el = elementosCriatura[idStr];
     const esImg = !!info.img;
+    const esNuevo = !el;
     // Si el tipo de elemento cambia (no deberia pasar en juego normal,
     // el catalogo es estatico, pero es una red de seguridad barata) se
     // recrea en vez de intentar mutar un <img> en un <div> de texto.
     if (el && !!el.dataset.esImg !== esImg) { el.remove(); el = null; }
+    const prev = ultimaPosCriatura[idStr];
+    const distancia = prev ? Math.max(Math.abs(ent.x - prev.x), Math.abs(ent.y - prev.y)) : 0;
+    ultimaPosCriatura[idStr] = { x: ent.x, y: ent.y };
     // Jitter (ver comentario junto a jitterPxPorId) -- semilla el ID de
     // la entidad, no su celda actual, para que el sesgo lateral sea
     // constante mientras camina en vez de recalcularse en cada paso.
@@ -1321,7 +1750,6 @@ function renderCriaturas() {
     if (!el) {
       el = esImg ? crearCeldaImg(info.img, cx, cy, alturaSpriteCriatura(ent), jitter) : crearCeldaTxt(info.ch, info.color, cx, cy);
       el.dataset.esImg = esImg ? '1' : '';
-      el.style.transition = `left ${DURACION_PASO_CRIATURA}s ease-in-out, top ${DURACION_PASO_CRIATURA}s ease-in-out`;
       capaCriaturas.appendChild(el);
       elementosCriatura[idStr] = el;
     } else if (esImg) {
@@ -1335,6 +1763,20 @@ function renderCriaturas() {
       el.style.left = cx + 'px';
       el.style.top = cy + 'px';
     }
+    // esNuevo (recien creado, nada que animar desde donde) o distancia==0
+    // (no se movio este sondeo) o distancia>maxCeldasAnimables() (a la
+    // velocidad actual, esto ya es reubicacion real, no ponerse al dia)
+    // -> sin transicion, se coloca de golpe. En cualquier otro caso, la
+    // duracion escala con la distancia real -- 1 celda usa la duracion
+    // base de siempre, N celdas tardan N veces mas, nunca "rapido"
+    // respecto al paso base.
+    const sinTransicion = esNuevo || distancia === 0 || distancia > maxCeldasAnimables();
+    if (sinTransicion) {
+      el.style.transition = 'none';
+    } else {
+      const duracionPaso = duracionPasoActual() * distancia;
+      el.style.transition = `left ${duracionPaso}s ease-in-out, top ${duracionPaso}s ease-in-out`;
+    }
     if (esImg) el.style.transform = 'translate(-50%, -100%)';
     el.style.zIndex = String(zIndexPorFila(ent.y, 'fauna'));
     el.dataset.entId = idStr;
@@ -1345,6 +1787,7 @@ function renderCriaturas() {
     if (!vistos.has(id)) {
       elementosCriatura[id].remove();
       delete elementosCriatura[id];
+      delete ultimaPosCriatura[id];
     }
   }
 }
@@ -1353,6 +1796,26 @@ function renderCriaturas() {
 let zoom = 1, panX = -CELDA*7, panY = -CELDA*3;
 const viewport = document.getElementById('mapa-viewport');
 const contenido = document.getElementById('mapa-contenido');
+// snapZoomAPixelEntero (2026-09-19, Diego: "se sigue viendo cuadricula" --
+// tras quitar el borde horneado de los tiles, seguia apareciendo). Causa
+// real, verificada con un harness aislado antes de tocar nada (renderizar
+// la MISMA rejilla de tiles a zoom=1.3 vs zoom=2.0): a cualquier zoom que
+// no deje un numero ENTERO de pixeles de pantalla por celda, cada
+// <div> de 32x32 escala su propio background-image de forma
+// independiente -- el redondeo de subpixel resultante no coincide exacto
+// entre celdas vecinas y dibuja una linea/costura de 1px en el limite,
+// que a escala de mapa completo se lee como cuadricula. A cualquier zoom
+// que SI deja un numero entero de pixeles por celda (1.25x, 1.5x, 2x...
+// 32*zoom entero) el mismo test no muestra ninguna costura -- confirmado
+// visualmente antes de aplicar este fix. Con CELDA=32 la mayoria de
+// niveles de zoom "normales" (multiplos de 1/32) ya caen ahi, asi que
+// redondear al pixel entero mas cercano (tambien por dispositivo, para
+// pantallas HiDPI) no se nota como un zoom "a saltos" en uso real.
+function snapZoomAPixelEntero(z) {
+  const dpr = window.devicePixelRatio || 1;
+  const pxPorCeldaDispositivo = Math.max(1, Math.round(CELDA * z * dpr));
+  return pxPorCeldaDispositivo / (CELDA * dpr);
+}
 function aplicarTransform() {
   contenido.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
   document.getElementById('zoom-info').textContent = `ZOOM ${zoom.toFixed(2)}x`;
@@ -1362,7 +1825,7 @@ viewport.addEventListener('wheel', (ev) => {
   const rect = viewport.getBoundingClientRect();
   const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
   const factor = ev.deltaY < 0 ? 1.12 : 1/1.12;
-  const nuevoZoom = Math.min(6, Math.max(0.35, zoom * factor));
+  const nuevoZoom = snapZoomAPixelEntero(Math.min(6, Math.max(0.35, zoom * factor)));
   // Mantener el mismo punto de MUNDO bajo el cursor tras cambiar el zoom
   // (sin esto, el mapa "deriva" al hacer zoom si ya se habia desplazado).
   const contentX = (mx - panX) / zoom;
@@ -1373,7 +1836,10 @@ viewport.addEventListener('wheel', (ev) => {
   aplicarTransform();
 }, { passive: false });
 let arrastrando = false, ax=0, ay=0;
-viewport.addEventListener('mousedown', (ev) => { arrastrando = true; ax=ev.clientX; ay=ev.clientY; viewport.classList.add('arrastrando'); });
+viewport.addEventListener('mousedown', (ev) => {
+  ev.preventDefault(); // evita seleccion de texto/drag nativo al arrastrar sobre una imagen
+  arrastrando = true; ax=ev.clientX; ay=ev.clientY; viewport.classList.add('arrastrando');
+});
 window.addEventListener('mouseup', () => { arrastrando = false; viewport.classList.remove('arrastrando'); });
 window.addEventListener('mousemove', (ev) => {
   if (!arrastrando) return;
@@ -1384,7 +1850,7 @@ window.addEventListener('mousemove', (ev) => {
 document.getElementById('btn-centrar').addEventListener('click', () => {
   if (!DATA) return;
   const rect = viewport.getBoundingClientRect();
-  zoom = 1;
+  zoom = snapZoomAPixelEntero(1);
   panX = rect.width / 2 - (DATA.ancho * CELDA) / 2;
   panY = rect.height / 2 - (DATA.alto * CELDA) / 2;
   aplicarTransform();
@@ -1521,6 +1987,7 @@ function actualizarControlPartida(partida) {
 let primerRenderHecho = false;
 function manejarNuevoEstado(nuevo) {
   estadoPartidaActual = nuevo.partida || null;
+  velocidadActual = (estadoPartidaActual && estadoPartidaActual.velocidad) || 1;
   actualizarControlPartida(estadoPartidaActual);
   if (!nuevo.celdas) return; // sin partida activa: nada real que dibujar
   DATA = nuevo;
@@ -1622,18 +2089,21 @@ async function iniciar() {
   // Sondeo continuo. CORREGIDO 2026-09-16 (Diego: "que quede natural
   // como se desplaza entre celdas, que no parezca que salta") -- bajado
   // de 1000ms a 400ms, igualando segundos_por_tick real del motor
-  // (config/visual.yaml). El comentario original de este intervalo decia
-  // "1000ms ya sondea mas lento que cada tick real" como si fuera una
-  // ventaja (menos trabajo de recalcularDerivados) -- pero era
-  // precisamente la causa de que una criatura pudiera desplazarse 2-3
-  // celdas de golpe entre dos sondeos, viendose como salto/deslizamiento
-  // en vez de caminar (ver DURACION_PASO_CRIATURA mas arriba para el
-  // detalle completo). A 400ms cada sondeo mueve como mucho 1 celda.
-  setInterval(async () => {
+  // (config/visual.yaml) para que cada sondeo mueva como mucho 1 celda.
+  // CORREGIDO OTRA VEZ 2026-09-19 (mismo Diego, mismo sintoma de vuelta):
+  // aquel fix asumia velocidad SIEMPRE 1x -- en cuanto se añadio el
+  // selector de velocidad (servidor de control remoto) sin enterar a
+  // este intervalo, volvio el salto en cuanto se tocaba el selector (ver
+  // el comentario grande junto a velocidadActual/intervaloSondeoActual
+  // mas arriba). setInterval con periodo FIJO no sirve si el periodo
+  // debe cambiar en caliente -- se sustituye por un setTimeout que se
+  // reprograma a si mismo leyendo intervaloSondeoActual() en cada vuelta.
+  async function bucleSondeo() {
     const nuevo = await cargarEstadoVivo();
-    if (!nuevo) return;
-    manejarNuevoEstado(nuevo);
-  }, 400);
+    if (nuevo) manejarNuevoEstado(nuevo);
+    setTimeout(bucleSondeo, intervaloSondeoActual());
+  }
+  setTimeout(bucleSondeo, intervaloSondeoActual());
 }
 iniciar();
 </script>
