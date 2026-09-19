@@ -613,6 +613,35 @@ se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
   demasiado agresiva con una sola observación de escala tan pequeña —
   ninguna constante se tocó a partir de ella. Pendiente real: observar
   contra el harness completo antes de recalibrar con criterio.
+- **Ronda de generación de assets vía PixelLab (2026-09-19)**: catálogo
+  completo de fauna (9/9 especies) ya generado en local, ver
+  `pixelLabAssetsCriaturas/` y `docs/informe_generacion_assets_pixellab.md`
+  (redactado ANTES de que se generase esta carpeta -- su sección 6
+  reporta "8 pendientes", desactualizado, ya están las 9). Verificado
+  con conteo real de colores (10-22 colores únicos frente a 326-1191
+  de los sprites actuales) que sí es pixel art de paleta limitada, el
+  hallazgo que motivó la ronda. Águila aceptada tal cual por Diego pese
+  a la duda visual que el propio informe señalaba (⚠️, silueta no lee
+  con claridad como águila perchada) — no se va a regenerar. Hallazgo
+  real no anticipado por el informe: la API no devolvió una sola vista
+  lateral fija como pedía el prompt, sino un rig de 4 direcciones
+  (fauna, `template_id: dog`) u 8 (gnomo, `template_id: mannequin`) —
+  Diego decidió explícitamente aprovechar la direccionalidad de verdad
+  en vez de quedarse con un solo frame. Diseñado y especificado
+  (`docs/superpowers/specs/2026-09-19-orientacion-direccional-design.md`,
+  componente `Orientacion` + regla enganchada en
+  `sistema_movimiento.py::_aplicar_movimiento`), encargo ya soltado a
+  la cola (`docs/superpowers/encargos/2026-09-19-orientacion-direccional.md`)
+  pero **el centinela sigue sin reiniciarse** (ver el pendiente ya
+  existente más abajo) — no se recogerá hasta entonces. La mitad de
+  presentación (reorganizar `pixelLabAssetsCriaturas/` →
+  `sprites_criaturas/<especie>/<direccion>.png`, seleccionar frame en
+  `terminal.html`, nueva ruta en `vista_web.py`) queda deliberadamente
+  fuera de esa spec, pendiente de implementar directamente por Claude
+  una vez el componente esté mergeado. Todavía sin tocar: construcciones
+  (regenerar refugio/almacén con las 3 correcciones que el propio
+  informe anotó, más 3 nuevas), flora (15 piezas) y terreno (6 piezas)
+  — ronda a menos de un tercio de completarse.
 
 ## Comentarios técnicos vs narrativa histórica (2026-09-02)
 
