@@ -1,0 +1,28 @@
+# Catálogo de lenguas y matriz de comprensión mutua (2026-09-18, ver
+# docs/superpowers/specs/2026-09-18-idiomas-design.md).
+#
+# Dos capas: el catálogo de lenguas con su matriz de comprensión, y la
+# asignación de UNA lengua nativa fija por especie consciente (dato
+# categórico heredado entero de la raza, sin sorteo individual -- no es
+# un rango racial como peso/temperamento).
+#
+# Añadir una raza nueva es una línea en lengua_por_especie, nunca tocar
+# la matriz -- por eso la comprensión se declara entre LENGUAS, no entre
+# pares de especies concretas.
+idiomas:
+  matriz_comprension:
+    # Simétrica por construcción (comprension() nunca depende del orden
+    # de los argumentos). feerica-bruta=0.0 es un valor declarado, no
+    # derivado de restar los dos 33% vía el nodo intermedio "comun" --
+    # decisión explícita de Diego, no transitiva.
+    feerica: {feerica: 1.0, comun: 0.33, bruta: 0.0}
+    comun:   {feerica: 0.33, comun: 1.0, bruta: 0.33}
+    bruta:   {feerica: 0.0, comun: 0.33, bruta: 1.0}
+
+  # PROVISIONAL: solo gnomo existe como especie consciente real hoy. El
+  # resto de razas (elfo, hada, humano, enano, orco, trasgo, ogro) son
+  # declaración de intención a futuro -- se activan solas en cuanto
+  # existan como Especie real y se les añada aquí su entrada, sin tocar
+  # ningún otro fichero.
+  lengua_por_especie:
+    gnomo: feerica

@@ -119,6 +119,23 @@ memoria:
   min_recuerdos_por_categoria: 1
   max_recuerdos_por_categoria: 5
   factor_imprecision_distancia: 0.3
+
+memoria_narrativa:
+  # Leyendas / memoria oral (2026-09-18, ver docs/superpowers/specs/
+  # 2026-09-18-leyendas-memoria-oral-design.md). Mismo cupo lineal que
+  # memoria (arriba), pero de LISTA completa, no por categoria -- no hay
+  # categorias en MemoriaNarrativa. PROVISIONAL, sin calibrar y sin
+  # harness de escala real posible hasta que exista una segunda especie
+  # consciente (ver spec).
+  min_leyendas_capacidad: 1
+  max_leyendas_capacidad: 5
+  # "Cada boca que pasa pierde algo" -- unico factor observable en juego
+  # libre hoy (con una sola especie consciente, comprension() siempre
+  # vale 1.0). PROVISIONAL.
+  factor_perdida_transmision_leyenda: 0.9
+  # Por debajo de este umbral la leyenda no llega a registrarse -- se
+  # pierde del todo, no es una leyenda casi-olvidada. PROVISIONAL.
+  fidelidad_minima_leyenda: 0.05
   # prob_purgar_recuerdo_agotado (2026-08-23, PROVISIONAL -- ver
   # sistema_recursos.py:_resolver_comer/_resolver_beber y el diagnostico
   # de extincion local semilla 1): probabilidad, en CADA visita fallida a

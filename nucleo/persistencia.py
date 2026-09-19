@@ -32,6 +32,7 @@ from componentes.intencion import Accion, Intencion
 from componentes.inventario import Inventario
 from componentes.madriguera import Madriguera
 from componentes.memoria_espacial import MemoriaEspacial
+from componentes.memoria_narrativa import MemoriaNarrativa, RecuerdoNarrativo
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.planta import Planta
@@ -89,7 +90,7 @@ def _reconstruir_gestacion(tick_inicio: int, id_padre: int, snapshot: dict[str, 
     )
 
 
-VERSION_ESQUEMA = "0.42-fase0"
+VERSION_ESQUEMA = "0.43-fase0"
 
 _TABLAS_APP = (
     "entidades",
@@ -274,7 +275,15 @@ class Persistencia:
                     -- DEFAULT 0.5 (centro neutro) para partidas guardadas
                     -- antes de este circulo.
                     animo_estado REAL NOT NULL DEFAULT 0.5,
-                    animo_punto_base REAL NOT NULL DEFAULT 0.5
+                    animo_punto_base REAL NOT NULL DEFAULT 0.5,
+                    -- memoria_narrativa (2026-09-18, ver componentes/
+                    -- memoria_narrativa.py): leyendas registradas por
+                    -- testigo directo o contadas de boca en boca, mismo
+                    -- criterio que agarre/semillas/relaciones -- perderlas
+                    -- al recargar seria una regresion real, no una
+                    -- simplificacion aceptable. AL FINAL por el mismo
+                    -- motivo que comodidad/animo arriba.
+                    memoria_narrativa TEXT
                 )
                 """
             )
@@ -590,6 +599,7 @@ class Persistencia:
                 relaciones = gestor.obtener_componente(eid, Relaciones)
                 vocacion = gestor.obtener_componente(eid, Vocacion)
                 animo = gestor.obtener_componente(eid, Animo)
+                memoria_narrativa = gestor.obtener_componente(eid, MemoriaNarrativa)
 
                 if pos and nec and dims and pf and temp and cm and pm and rep:
                     filas_criaturas.append(
@@ -670,6 +680,17 @@ class Persistencia:
                             nec.comodidad,
                             animo.estado if animo else 0.5,
                             animo.punto_base if animo else 0.5,
+                            json.dumps(
+                                [
+                                    {
+                                        "tipo_suceso": r.tipo_suceso,
+                                        "protagonista_id": r.protagonista_id,
+                                        "tick_suceso": r.tick_suceso,
+                                        "fidelidad": r.fidelidad,
+                                    }
+                                    for r in memoria_narrativa.recuerdos
+                                ]
+                            ) if memoria_narrativa else None,
                         )
                     )
             cur.executemany(
@@ -677,7 +698,7 @@ class Persistencia:
                 INSERT INTO componentes_estado VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 filas_criaturas,
@@ -1024,7 +1045,11 @@ class Persistencia:
             # esos índices una vez más (fila[53]..fila[57]); animo_estado/
             # animo_punto_base (2026-09-18, ver componentes/animo.py) se
             # añadieron DESPUÉS de comodidad, como fila[53]/fila[54], y
-            # desplazan en +2 esos índices una última vez (fila[55]..fila[59]).
+            # desplazan en +2 esos índices una vez más (fila[55]..fila[59]);
+            # memoria_narrativa (2026-09-18, ver componentes/
+            # memoria_narrativa.py) se añadió DESPUÉS de animo_punto_base,
+            # como fila[55], y desplaza en +1 esos índices una última vez
+            # (fila[56]..fila[60]).
             # La columna inventario (fila[46]) guarda un JSON único con
             # {"contenidos": ..., "objetos": ...} desde armas primitivas v2
             # (2026-09-03) -- ver carga de Inventario más abajo. Ninguno
@@ -1169,14 +1194,29 @@ class Persistencia:
                     ),
                 )
                 gestor.anadir_componente(eid, Intencion(accion=Accion.DEAMBULAR))
+                memoria_narrativa_lista = json.loads(fila[55]) if fila[55] else []
+                gestor.anadir_componente(
+                    eid,
+                    MemoriaNarrativa(
+                        recuerdos=[
+                            RecuerdoNarrativo(
+                                tipo_suceso=str(r["tipo_suceso"]),
+                                protagonista_id=r["protagonista_id"],
+                                tick_suceso=int(r["tick_suceso"]),
+                                fidelidad=float(r["fidelidad"]),
+                            )
+                            for r in memoria_narrativa_lista
+                        ]
+                    ),
+                )
                 gestor.anadir_componente(
                     eid,
                     Identidad(
-                        especie=Especie(fila[55]),
-                        nombre=fila[56],
-                        tick_nacimiento=fila[57],
-                        id_madre=fila[58],
-                        id_padre=fila[59],
+                        especie=Especie(fila[56]),
+                        nombre=fila[57],
+                        tick_nacimiento=fila[58],
+                        id_madre=fila[59],
+                        id_padre=fila[60],
                     ),
                 )
 

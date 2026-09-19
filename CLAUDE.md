@@ -170,12 +170,12 @@ carpeta `in_review/` ahora vacía.
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- **Tests automatizados (CORREGIDO 2026-09-18, misma tarde)**: `tests/`
-  contiene 90 ficheros / 803 tests reales a esta fecha (verificado con
-  `pytest --collect-only`, no de memoria). El salto de 789 a 803
-  corresponde al círculo de desastres naturales (14 tests nuevos,
-  `tests/test_desastres_naturales.py`, ver
-  `docs/historial_sistemas.md`). Siguen escritos como "ley física" con
+- **Tests automatizados (CORREGIDO 2026-09-19)**: `tests/` contiene 92
+  ficheros / 823 tests reales a esta fecha (verificado con
+  `pytest --collect-only`, no de memoria). El salto de 803 a 823
+  corresponde a idiomas + leyendas/memoria oral (8 + 12 tests nuevos,
+  `tests/test_idiomas.py` y `tests/test_leyendas_memoria_oral.py`, ver
+  `docs/historial_capa_comunicacion.md`). Siguen escritos como "ley física" con
   docstring explicando el comportamiento que validan. La cobertura
   sigue siendo parcial (nada del bucle principal salvo el ciclo de vida
   del hilo de `GestorPartidas`, la mayoría de sistemas de
@@ -365,7 +365,7 @@ sesiones quede junto).
   ambos del 2026-09-16, movidos aquí el 2026-09-17 en la segunda poda de
   este documento (ver más abajo).
 
-## Estado actual y pendientes reales (actualizado 2026-09-18)
+## Estado actual y pendientes reales (actualizado 2026-09-19)
 
 Lista corta de lo que sigue genuinamente abierto hoy — para el detalle de
 cómo se llegó a cada punto, abre el historial correspondiente de arriba.
@@ -435,6 +435,30 @@ ahogamiento ya existente y daña construcciones orgánicas con
 `vulnerabilidad_agua`, nuevo en `config/materiales.yaml`, simétrico a
 `combustibilidad` — verificado real: 8 ciclos de sequía y 32 de
 inundación en 333 días).
+
+**Añadido en sesión posterior, 2026-09-18/19**: primer paso hacia
+"lenguaje" real entre razas — ver `docs/historial_capa_comunicacion.md`
+y las specs `docs/superpowers/specs/2026-09-18-idiomas-design.md` /
+`2026-09-18-leyendas-memoria-oral-design.md`. Catálogo de lenguas
+(feérica/común/bruta, matriz de comprensión con solapamiento parcial
+declarado por Diego) y su primer consumidor real: leyendas/memoria
+oral, un componente nuevo (`MemoriaNarrativa`) que registra sucesos
+`HISTORICO` por testigo directo y los propaga boca a boca degradando
+fidelidad por número de saltos y por comprensión lingüística. **Hallazgo
+honesto, no una limitación oculta**: hoy solo gnomo es especie
+consciente real, así que el efecto central de la pieza (una leyenda que
+muere al cruzar a una raza sin lengua común) queda sin verificación
+empírica en juego libre — solo cubierto por un test dirigido sintético.
+Verificado real lo que SÍ es observable hoy (smoke test de 4000 ticks):
+19 testigos directos, 358 leyendas propagadas, 386 perdidas del todo
+por fidelidad insuficiente — el "teléfono roto" por número de bocas se
+ejerce de verdad. Matriz de comprensión (1.0/0.33/0.0) y los dos
+factores de leyenda (`factor_perdida_transmision_leyenda`,
+`fidelidad_minima_leyenda`) PROVISIONAL narrativo, sin ningún harness
+que pueda corregirlos hasta que exista una segunda raza consciente.
+Deliberadamente fuera de este círculo, a petición explícita de Diego:
+mutación del protagonista al degradarse la fidelidad, y decaimiento
+temporal de una leyenda ya registrada sin volver a contarse.
 
 **Podada esta sección el 2026-09-17** (venía de las ~465 líneas leídas
 arriba en versiones anteriores de este documento, mezclando pendientes

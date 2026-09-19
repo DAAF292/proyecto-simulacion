@@ -243,3 +243,87 @@ futura**:
   juntas sí capturan el impacto real de la reputación, pero un lector
   de una sola cifra podría subestimarlo. Aclarar en un futuro pase, no
   urgente.
+
+## Idiomas + leyendas / memoria oral (2026-09-18/19)
+
+Diego pidió explorar "lenguaje" -- hoy hay comunicación (los 5/5 de
+arriba) pero ningún concepto de idioma, comprensión mutua o barrera
+lingüística entre razas, algo que daría mucho juego en cuanto el motor
+tenga más de una raza consciente. Confirmado leyendo el código antes de
+diseñar nada (no supuesto): ninguno de los cuatro consumidores reales
+de la capa de comunicación (roce social/conflicto verbal, memoria
+espacial compartida, rumor, liderazgo vía `Relaciones`) consulta
+`Identidad.especie` como condición de entendimiento -- ya había un
+comentario propio en `sistema_movimiento.py` avisando de este hueco.
+
+Diego planteó tres familias de razas con lengua propia y solapamiento
+parcial: feéricas (elfo, hada, gnomo) hablan feérica; comunes (humano,
+enano) hablan común, que comparte 33% con feérica; brutas (orco,
+trasgo, ogro) hablan bruta, que comparte 33% con común y 0% con
+feérica (declarado, no derivado por transitividad). De las ocho razas
+solo gnomo existe como especie consciente real hoy -- el resto son
+intención a futuro, activables con una sola línea de config cuando
+existan.
+
+**Pieza 1 -- catálogo de idiomas** (spec:
+`docs/superpowers/specs/2026-09-18-idiomas-design.md`): modelo de dos
+capas en vez de matriz raza↔raza (que crecería cuadráticamente y
+duplicaría información) -- `config/idiomas.yaml` declara la matriz de
+comprensión entre LENGUAS y la lengua nativa fija por especie, y
+`nucleo/idioma.py:comprension()` es una función pura sin componente ECS
+(la lengua no varía entre individuos, mismo espíritu que la propia
+`Especie`). Sin ningún consumidor tocado en esta pieza -- con una sola
+especie consciente, `comprension()` siempre vale 1.0, cero efecto
+observable todavía.
+
+**Pieza 2 -- leyendas / memoria oral** (spec:
+`docs/superpowers/specs/2026-09-18-leyendas-memoria-oral-design.md`):
+el primer consumidor real de idiomas, y la única idea del "menú de
+ideas futuras" de la sección de arriba que transmite CONTENIDO
+simbólico (un suceso concreto) en vez de un número opaco. Componente
+nuevo `MemoriaNarrativa` (lista de `RecuerdoNarrativo`, capacidad
+acotada por `CapacidadMental.memoria`, universal a las 4 especies,
+vacío al nacer, SÍ persistido). Dos mecanismos:
+- **Nacimiento de una leyenda**: todo evento con `severidad=HISTORICO`
+  cuyos `datos` incluyan `x`/`y` genera testigos entre los conscientes
+  en radio de percepción normal, con fidelidad 1.0
+  (`SistemaMovimiento.procesar_testigos_narrativos`, invocado desde
+  `main.py` sobre `eventos_tick` antes de `bus_eventos.limpiar()`, sin
+  pasar por `IndiceEspacial` porque ese índice es estado transitorio de
+  `ejecutar()`).
+- **Transmisión boca a boca**: calco exacto de `_procesar_rumor`/
+  `_compartir_rumor` (quinta pasada sobre `por_celda`, mismo molde
+  `_pares_ordenados`), degradando la fidelidad por
+  `factor_perdida_transmision_leyenda` (el "teléfono roto" por número
+  de bocas, observable hoy) Y por `comprension()` entre las especies de
+  emisor/receptor (solo observable con una segunda raza consciente o en
+  un test dirigido sintético). Por debajo de `fidelidad_minima_leyenda`
+  la leyenda no llega a registrarse -- se pierde del todo.
+
+Deliberadamente FUERA de este círculo (aceptado explícitamente por
+Diego): mutación del protagonista al degradarse la fidelidad (el efecto
+más vistoso del teléfono roto, pero segunda fuente real de
+complejidad) y decaimiento temporal de una leyenda ya registrada sin
+volver a contarse.
+
+**Verificado real, smoke test de 4000 ticks** (población inicial real
+vía `sembrar_poblacion_inicial`, semillas 42/43/1): 19 testigos
+directos, 358 leyendas propagadas, 386 perdidas del todo por fidelidad
+insuficiente -- el mecanismo se ejerce de verdad. Fidelidades de
+segunda mano observadas entre 0.052 y 0.387, coherente con varias bocas
+de cadena, no un único salto.
+
+**Persistencia**: nueva columna `memoria_narrativa` en
+`componentes_estado` (AL FINAL de la tabla, mismo criterio que
+`comodidad`/`animo_estado` -- no renumerar índices posicionales
+existentes), `VERSION_ESQUEMA` 0.42→0.43-fase0.
+
+**Pendiente real, honesto**: ambas piezas quedan sin verificación
+empírica del efecto central (barrera lingüística real entre razas)
+hasta que exista una segunda especie consciente -- hoy solo cubierto
+por un test dirigido sintético
+(`test_compartir_leyenda_barrera_linguistica_bloquea_transmision`,
+forzando un lobo a consciente). Los valores de la matriz
+(1.0/0.33/0.0) y de `factor_perdida_transmision_leyenda`/
+`fidelidad_minima_leyenda` son PROVISIONAL narrativo, sin ningún
+harness que pueda corregirlos pronto.

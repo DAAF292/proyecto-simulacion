@@ -669,6 +669,13 @@ def avanzar_un_tick(
                     )
     estado.persistencia.persistir_eventos(eventos_tick)
 
+    # Leyendas / memoria oral (2026-09-18, ver docs/superpowers/specs/
+    # 2026-09-18-leyendas-memoria-oral-design.md): nacimiento de una leyenda
+    # -- DESPUES de que todos los sistemas ya emitieron sus eventos del tick,
+    # ANTES de bus_eventos.limpiar() (eventos_tick ya es una copia, sobrevive
+    # a la limpieza de mas abajo).
+    estado.sistemas["movimiento"].procesar_testigos_narrativos(estado.gestor, eventos_tick)
+
     lineas_narradas = narrar(eventos_tick, estado.gestor)
     for linea in lineas_narradas:
         cola_cronica.append(linea)

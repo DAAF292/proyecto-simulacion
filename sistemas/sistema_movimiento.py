@@ -20,6 +20,7 @@ from componentes.identidad import Especie, Identidad
 from componentes.intencion import Accion, Intencion
 from componentes.inventario import Inventario
 from componentes.memoria_espacial import MemoriaEspacial
+from componentes.memoria_narrativa import MemoriaNarrativa
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.pool_fisico import PoolFisico
@@ -54,11 +55,14 @@ from nucleo.construccion import (
     refugio_de_pertenencia,
 )
 from nucleo.entidad import GestorEntidades, crear_construccion
+from nucleo.eventos import Evento, Severidad
+from nucleo.idioma import comprension
 from nucleo.memoria import (
     capacidad_memoria,
     objetivo_recordado,
     registrar_recuerdo,
 )
+from nucleo.memoria_narrativa import capacidad_memoria_narrativa, registrar_leyenda
 from nucleo.relaciones import ajustar_afinidad, capacidad_vinculos
 from nucleo.mundo import Mundo
 from nucleo.percepcion import radio_efectivo_por_peso, radio_individual
@@ -158,6 +162,13 @@ class SistemaMovimiento:
         # los lee.
         self._stats_rumores_propagados: int = 0
         self._stats_rumor_terceros_nuevos: set[tuple[int, int]] = set()
+        # Leyendas / memoria oral (2026-09-18, ver docs/superpowers/specs/
+        # 2026-09-18-leyendas-memoria-oral-design.md): testigos registrados
+        # por procesar_testigos_narrativos, leyendas propagadas boca a boca
+        # y leyendas perdidas del todo por caer bajo fidelidad_minima_leyenda.
+        self._stats_testigos_narrativos_registrados: int = 0
+        self._stats_leyendas_propagadas: int = 0
+        self._stats_leyendas_perdidas_por_fidelidad: int = 0
         # Deduplicacion de conflicto por tick (fix 2026-09-07, encontrado por
         # revision de codigo independiente): _resolver_conflicto_entre tiene
         # TRES disparadores (refugio ocupado, roce social, CRISIS_VIOLENTA por
@@ -346,6 +357,18 @@ class SistemaMovimiento:
         self.peso_credibilidad_rumor: float = float(
             self.config_relaciones.get("peso_credibilidad_rumor", 0.15)
         )
+        # Leyendas / memoria oral (2026-09-18, ver config/comportamiento.yaml
+        # seccion memoria_narrativa y docs/superpowers/specs/
+        # 2026-09-18-leyendas-memoria-oral-design.md). PROVISIONAL, sin
+        # calibrar y sin harness de escala real posible hasta que exista una
+        # segunda especie consciente (ver spec).
+        self.config_memoria_narrativa: dict[str, Any] = self.config.get("memoria_narrativa", {})
+        self.factor_perdida_transmision_leyenda: float = float(
+            self.config_memoria_narrativa.get("factor_perdida_transmision_leyenda", 0.9)
+        )
+        self.fidelidad_minima_leyenda: float = float(
+            self.config_memoria_narrativa.get("fidelidad_minima_leyenda", 0.05)
+        )
         # Compartir por confianza (2026-09-07, circulo 4 del arco
         # "robo/intercambio de recursos" -- ver docs/superpowers/specs/
         # 2026-09-07-robo-compartir-confianza-design.md). PROVISIONAL,
@@ -469,6 +492,7 @@ class SistemaMovimiento:
         self._procesar_roce_social(gestor, mundo, tick_actual, por_celda)
         self._procesar_memoria_compartida(gestor, por_celda)
         self._procesar_rumor(gestor, por_celda, tick_actual)
+        self._procesar_leyenda(gestor, por_celda)
         self._procesar_robo(gestor, mundo, tick_actual, por_celda)
         self._procesar_compartir_confianza(gestor, por_celda)
 
@@ -1554,6 +1578,111 @@ class SistemaMovimiento:
             self._stats_rumor_terceros_nuevos.add((receptor_id, tercero_id))
         ajustar_afinidad(rel_receptor, tercero_id, delta, tick_actual, capacidad)
         self._stats_rumores_propagados += 1
+
+    def _procesar_leyenda(
+        self, gestor: GestorEntidades, por_celda: dict[tuple[int, int, int], list[int]],
+    ) -> None:
+        """Quinta pasada sobre la agrupacion de conscientes por celda
+        (2026-09-18, leyendas / memoria oral -- ver docs/superpowers/specs/
+        2026-09-18-leyendas-memoria-oral-design.md): mismo molde exacto
+        que _procesar_rumor -- cada direccion se sortea por separado con la
+        sociabilidad del emisor, efecto asimetrico (_pares_ordenados)."""
+        for emisor_id, receptor_id in self._pares_ordenados(por_celda):
+            self._compartir_leyenda(gestor, emisor_id, receptor_id)
+
+    def _compartir_leyenda(
+        self, gestor: GestorEntidades, emisor_id: int, receptor_id: int,
+    ) -> None:
+        """Una direccion de leyenda contada de boca en boca: sortea con la
+        sociabilidad del emisor y, si dispara, elige UNA leyenda al azar de
+        su MemoriaNarrativa. La fidelidad se degrada por el propio hecho de
+        contarse (factor_perdida_transmision_leyenda, "cada boca que pasa
+        pierde algo") Y por la comprension linguistica entre las especies de
+        emisor y receptor (nucleo/idioma.py:comprension) -- con una sola
+        especie consciente hoy ese segundo factor siempre vale 1.0, el
+        primero ya es observable en juego libre. Por debajo de
+        fidelidad_minima_leyenda la leyenda no llega a registrarse: se
+        pierde del todo, no es una leyenda casi-olvidada."""
+        temp_emisor = gestor.obtener_componente(emisor_id, Temperamento)
+        if temp_emisor is None or self.rng.random() >= temp_emisor.sociabilidad:
+            return
+        mem_emisor = gestor.obtener_componente(emisor_id, MemoriaNarrativa)
+        mem_receptor = gestor.obtener_componente(receptor_id, MemoriaNarrativa)
+        cap_receptor = gestor.obtener_componente(receptor_id, CapacidadMental)
+        ident_emisor = gestor.obtener_componente(emisor_id, Identidad)
+        ident_receptor = gestor.obtener_componente(receptor_id, Identidad)
+        if (
+            mem_emisor is None or mem_receptor is None or cap_receptor is None
+            or ident_emisor is None or ident_receptor is None or not mem_emisor.recuerdos
+        ):
+            return
+        recuerdo = self.rng.choice(mem_emisor.recuerdos)
+        factor_comprension = comprension(
+            ident_emisor.especie.value, ident_receptor.especie.value, self.config
+        )
+        fidelidad_nueva = (
+            recuerdo.fidelidad * self.factor_perdida_transmision_leyenda * factor_comprension
+        )
+        if fidelidad_nueva < self.fidelidad_minima_leyenda:
+            self._stats_leyendas_perdidas_por_fidelidad += 1
+            return
+        capacidad = capacidad_memoria_narrativa(cap_receptor, self.config)
+        registrar_leyenda(
+            mem_receptor, recuerdo.tipo_suceso, recuerdo.protagonista_id,
+            recuerdo.tick_suceso, fidelidad_nueva, capacidad,
+        )
+        self._stats_leyendas_propagadas += 1
+
+    def procesar_testigos_narrativos(
+        self, gestor: GestorEntidades, eventos_historicos: list[Evento],
+    ) -> None:
+        """Nacimiento de una leyenda (2026-09-18, ver spec arriba):
+        invocado desde main.py sobre los eventos del tick con
+        severidad HISTORICO, DESPUES de que todos los sistemas hayan
+        emitido los suyos y ANTES de bus_eventos.limpiar(). Solo los
+        eventos cuyos datos incluyan 'x'/'y' generan testigos -- no
+        todo evento HISTORICO los lleva (ver "Fuera de alcance" en el
+        spec); zona_idx cae a 0 si no se declara (ningun evento
+        HISTORICO existente hoy lo declara, coherente con que el resto
+        del motor ya asume zona_idx==0 como unico caso real).
+
+        Recorre directamente entidades_con(...) SIN pasar por
+        self._indice_actual -- ese indice es estado transitorio poblado
+        solo durante ejecutar(), y este metodo se invoca en otro punto
+        del tick (ver main.py). Coste aceptable: pocos eventos
+        HISTORICO por tick, poca poblacion consciente."""
+        eventos_con_posicion = [
+            ev for ev in eventos_historicos
+            if ev.severidad == Severidad.HISTORICO and "x" in ev.datos and "y" in ev.datos
+        ]
+        if not eventos_con_posicion:
+            return
+        conscientes = []
+        for eid in gestor.entidades_con(Posicion, DimensionesFisicas, CapacidadMental, MemoriaNarrativa):
+            cap_mental = gestor.obtener_componente(eid, CapacidadMental)
+            if cap_mental is None or cap_mental.consciencia < self.umbral_consciencia_agencia:
+                continue
+            pos = gestor.obtener_componente(eid, Posicion)
+            dims = gestor.obtener_componente(eid, DimensionesFisicas)
+            if pos is None or dims is None:
+                continue
+            conscientes.append((eid, pos, dims, cap_mental))
+        if not conscientes:
+            return
+        for ev in eventos_con_posicion:
+            ev_x, ev_y = ev.datos["x"], ev.datos["y"]
+            ev_zona_idx = ev.datos.get("zona_idx", 0)
+            for eid, pos, dims, cap_mental in conscientes:
+                if pos.zona_idx != ev_zona_idx:
+                    continue
+                radio = radio_individual(dims.agudeza_sensorial, self.radio_min, self.radio_max)
+                dist = abs(pos.x - ev_x) + abs(pos.y - ev_y)
+                if dist > radio:
+                    continue
+                mem = gestor.obtener_componente(eid, MemoriaNarrativa)
+                capacidad = capacidad_memoria_narrativa(cap_mental, self.config)
+                registrar_leyenda(mem, ev.tipo, ev.entidad_id, ev.tick, 1.0, capacidad)
+                self._stats_testigos_narrativos_registrados += 1
 
     def _calcular_caza(
         self,

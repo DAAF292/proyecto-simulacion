@@ -22,6 +22,7 @@ from componentes.intencion import Accion, Intencion
 from componentes.inventario import Inventario
 from componentes.madriguera import Madriguera
 from componentes.memoria_espacial import MemoriaEspacial
+from componentes.memoria_narrativa import MemoriaNarrativa
 from componentes.necesidades import Necesidades
 from componentes.necromasa import Necromasa
 from componentes.planta import Planta
@@ -503,6 +504,10 @@ def crear_criatura(
     # para las 4 especies por igual. Este circulo solo escribe rencor en
     # individuos conscientes (fauna queda vacío indefinidamente).
     gestor.anadir_componente(entidad_id, Relaciones())
+    # MemoriaNarrativa (2026-09-18, ver componentes/memoria_narrativa.py)
+    # -- mismo criterio que Relaciones: componente universal, vacío al
+    # nacer, solo consciente registra testigos o comparte leyendas.
+    gestor.anadir_componente(entidad_id, MemoriaNarrativa())
     # Vocacion (2026-09-11, ver componentes/vocacion.py y nucleo/
     # vocacion.py) -- mismo criterio que Agarre/Semillas/Relaciones:
     # componente universal, contadores en cero al nacer, solo se
@@ -746,6 +751,9 @@ def nacer_criatura(
     # para las 4 especies por igual. Un recién nacido no hereda los
     # vínculos de sus progenitores.
     gestor.anadir_componente(entidad_id, Relaciones())
+    # MemoriaNarrativa (2026-09-18) -- mismo criterio: un recién nacido
+    # no hereda las leyendas que conocían sus progenitores.
+    gestor.anadir_componente(entidad_id, MemoriaNarrativa())
     # Vocacion (2026-09-11, ver componentes/vocacion.py) -- mismo criterio
     # que Agarre/Semillas/Relaciones: un recién nacido no hereda la
     # práctica acumulada de sus progenitores, empieza en cero.
