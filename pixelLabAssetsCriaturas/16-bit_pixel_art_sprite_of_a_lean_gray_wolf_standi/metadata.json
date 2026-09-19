@@ -1,0 +1,32 @@
+{
+  "group_id": "cda108eb-72f1-4215-99e9-da2b72ed875d",
+  "states": [
+    {
+      "character": {
+        "id": "676cecaa-38d1-49a8-bcf7-c6cc81a59c78",
+        "name": "Idle",
+        "prompt": "16-bit pixel art sprite of a lean gray wolf, standing full body, side view, dark gray fur with lighter gray underbelly, pointed upright ears, bushy tail, glowing amber eyes, alert predator stance. Clean dark outline, limited color palette, visible square pixels, retro indie RPG game asset, isolated on a plain solid light gray background, no ground, no shadow.",
+        "size": {
+          "width": 68,
+          "height": 68
+        },
+        "template_id": "dog",
+        "directions": 4,
+        "view": "low top-down",
+        "created_at": "2026-09-19T00:59:17.937480+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "west": "Idle/rotations/west.png",
+          "east": "Idle/rotations/east.png",
+          "north": "Idle/rotations/north.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-09-19T12:08:43.997719"
+}

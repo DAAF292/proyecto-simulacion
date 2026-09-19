@@ -1,0 +1,32 @@
+{
+  "group_id": "69359806-6840-47ed-9513-32d9bc9b2ac5",
+  "states": [
+    {
+      "character": {
+        "id": "60d5daea-7d12-4c25-9b17-229cb953e3c4",
+        "name": "Idle",
+        "prompt": "16-bit pixel art sprite of a small rust-orange squirrel, sitting upright on its hind legs, side view, large bushy tail curled up over its back, small round ears, tiny front paws held together, alert posture. Clean dark outline, limited color palette, visible square pixels, retro indie RPG game asset, isolated on a plain solid light gray background, no ground, no shadow.",
+        "size": {
+          "width": 56,
+          "height": 56
+        },
+        "template_id": "cat",
+        "directions": 4,
+        "view": "low top-down",
+        "created_at": "2026-09-19T01:03:31.084877+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "west": "Idle/rotations/west.png",
+          "east": "Idle/rotations/east.png",
+          "north": "Idle/rotations/north.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-09-19T12:08:31.921267"
+}

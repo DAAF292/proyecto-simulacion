@@ -1,0 +1,21 @@
+Catálogo de terreno generado vía PixelLab — 2026-09-19
+Herramienta: create_tiles_pro (square_topdown, top-down, 32x32px, coincide con CELDA=32 en terminal.html).
+Una sola llamada con los 6 biomas numerados en el prompt generó 16 variaciones (2-3 por bioma) en vez de
+exactamente 6 — se revisaron todas visualmente (hoja de contacto) y se eligió la mejor de cada bioma; el resto
+se descartó, incluidas 2 piezas anómalas (un tile con un objeto tipo cofre de madera encima de hierba, y un
+tile híbrido roca/agua sin uso claro).
+
+pradera.png    OK - césped verde con matas oscuras dispersas
+bosque.png     OK - suelo de bosque verde oscuro con parches de musgo
+desierto.png   OK - arena clara con líneas de viento sutiles
+tundra.png     OK - suelo pálido grisáceo con parches de escarcha y matas secas
+montana.png    OK - roca gris con grietas
+agua.png       OK - azul con ondas
+
+Nota técnica real: la URL de descarga directa por tile (backblaze.pixellab.ai) no es alcanzable desde esta red
+(timeout de conexión) -- funcionó en su lugar el endpoint de descarga en bloque vía api.pixellab.ai
+(/mcp/tiles-pro/<id>/download, devuelve un .zip con las 16 variaciones). Útil para la próxima vez que se use
+create_tiles_pro: pedir descarga por api.pixellab.ai directamente, no fiarse de las storage_urls individuales.
+
+No se aplicó reduce_colors a estos tiles (create_tiles_pro ya usa una paleta bastante contenida por sí solo,
+sin el problema de miles de colores que sí tuvo create_image_pro_flash en la prueba inicial con el pino).

@@ -1,0 +1,43 @@
+Catálogo de flora generado vía PixelLab — 2026-09-19
+Pipeline: create_image_pixflux (texto + negaciones) -> reduce_colors(num_colors=20) -> control de calidad visual manual.
+Estilo: mismo bloque ESTILO que el gnomo aprobado (16-bit, contorno negro duro, cel-shading en bloques planos, sin AA/gradiente/dithering).
+
+=== arborea_raices/ (vista: side view, front elevation, roots visible at the base) ===
+roble.png            OK  (~31 colores)  - referencia base del catálogo
+pino.png             OK  (~29 colores)  - ajustado con reduce_colors sobre paleta de roble
+manzano.png          OK  (20 colores)
+cactus.png           OK  (19 colores)
+arbusto_espinoso.png OK  (20 colores)   - necesitó 3 intentos (v1/v2 salían con hierba junto a las raíces)
+arbusto_montano.png  OK  (19 colores)
+arbusto_artico.png   OK  (19 colores)   - PROVISIONAL, sin referencia visual real en el repo (inventado); necesitó 2
+                                          intentos para diferenciarse bien de arbusto_montano (pálido/escarchado)
+arbusto_desertico.png OK (18 colores)   - necesitó 5 intentos. Los 4 primeros (negación reforzada, semilla
+                       distinta, reformulación sin "desert"/"roots") seguían pintando tierra/hierba en la base.
+                       Lo que funcionó: encuadre "recortado como foto" — describir el tronco cortado limpio por
+                       el borde inferior del lienzo, en vez de negar el suelo.
+
+=== rasante/ (vista: side view, low rounded clump) ===
+hierba_silvestre.png OK (19 colores)    - necesitó 3 intentos (v1/v2 con piedras/tierra visibles)
+flor_silvestre.png   OK (19 colores)    - necesitó 4 intentos; la versión aceptada cambia el encuadre a "ramo
+                                           atado" para evitar la tierra — introduce una pequeña base tipo maceta
+                                           en vez de tierra; no es exactamente el concepto original ("creciendo
+                                           sobre follaje") pero cumple el requisito de "sin suelo". Revisar si
+                                           el matiz de la maceta es aceptable.
+helecho.png           OK (20 colores)   - necesitó 4 intentos, misma solución que arbusto_desertico (encuadre
+                       "recortado como foto"). De paso salió más fiel al concepto de helecho que los intentos
+                       previos.
+liquen.png            OK (19 colores)   - PROVISIONAL, sin referencia visual real (inventado). 1er intento salió
+                                           como roca entera con motas azules (concepto equivocado); 2º intento
+                                           (sin apoyarse en una roca) sí funcionó, aunque se lee más como grumos/
+                                           nódulos que como costra plana de liquen.
+musgo.png             OK (19 colores)   - PROVISIONAL, sin referencia visual real (inventado). Correcto a la 1ª.
+hierba_desertica.png  OK (20 colores)   - PROVISIONAL, sin referencia visual real (inventado). Correcto a la 1ª.
+hierba_artica.png     OK (19 colores)   - PROVISIONAL, sin referencia visual real (inventado). Correcto a la 1ª.
+
+=== Resumen ===
+15/15 especies completadas y limpias.
+5/15 son diseños inventados sin referencia visual previa en el repo (arbusto_artico, liquen, musgo,
+hierba_desertica, hierba_artica) — provisionales, pendientes de confirmación de Diego.
+Técnica que resolvió los 2 casos más difíciles (arbusto_desertico, helecho): en vez de negar el suelo
+("no dirt, no ground"), describir el tronco/tallo como cortado limpiamente por el borde del lienzo, como una
+foto recortada. Útil para el futuro si aparece el mismo problema en otras piezas.

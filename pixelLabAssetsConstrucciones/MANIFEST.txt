@@ -1,0 +1,31 @@
+Catálogo de construcciones generado vía PixelLab — 2026-09-19
+Pipeline: create_image_pixflux (texto + negaciones) -> reduce_colors(num_colors=20) -> control de calidad visual manual.
+Prompts base tomados de docs/informe_generacion_assets_pixellab.md sección 7 (ya con las 3 correcciones que ese
+informe pedía: paja con textura real, señales de función clara en el almacén, estilo pixel reforzado).
+Las 5 piezas están integradas en presentacion/terminal_prototipo/sprites_construcciones/.
+
+refugio.png       OK (20 colores) - correcto a la 1ª.
+almacen.png       OK (20 colores) - necesitó 3 intentos. Los 2 primeros salían con hierba en la base y ventanas
+                   con luz cálida (pedía explícitamente lo contrario, se leía como vivienda en vez de almacén).
+                   El 3º intento, con framing "aislado arquitectónicamente, sin paisajismo alrededor", funcionó.
+salon_comun.png   OK (20 colores) - mismo problema y misma solución que almacén (2 intentos con árboles/hierba
+                   alrededor, 3º intento limpio).
+cocina.png        OK (20 colores) - CORREGIDO 2026-09-19: la primera versión (con plataforma de piedra) fue
+                   rechazada por Diego ("no va a encajar"), no es una excepción válida. 3 intentos de prompt
+                   (incluido "recortado como foto") seguían con piedra/arbustos en la base. Solución real:
+                   recorte manual del PNG (estrechar los laterales, donde estaban los arbustos, y cortar la
+                   franja inferior de piedra) en vez de más iteración de prompt — conserva la hoguera y el
+                   caldero intactos, que es lo que identifica la pieza como cocina.
+taller.png        OK (20 colores) - necesitó 7 intentos de prompt (negación reforzada, "recortado como foto",
+                   "sin paisajismo", combinaciones, quitar la palabra "forest", "sin vegetación de ningún tipo")
+                   SIN resolverlo — siempre arbustos y/o piedra/camino en la base. Es el caso más resistente de
+                   toda la ronda. Solución real, igual que cocina: recorte manual del PNG (cortar la franja
+                   inferior con la base de piedra) sobre la versión del 6º intento (la única sin arbustos,
+                   solo con piedra).
+
+Técnica real que salvó las 2 piezas más tercas (cocina, taller), útil para el futuro: cuando el prompt no
+consigue eliminar un elemento no deseado tras varios intentos razonables, generar de todos modos y recortar
+el PNG con PIL en vez de seguir iterando el texto — más rápido, más barato (recorte no cuesta generaciones,
+solo reduce_colors a 0.1) y más fiable que perseguir al modelo con más negaciones.
+
+Coste acumulado de toda la ronda (flora + construcciones + terreno): ver balance real con get_balance.

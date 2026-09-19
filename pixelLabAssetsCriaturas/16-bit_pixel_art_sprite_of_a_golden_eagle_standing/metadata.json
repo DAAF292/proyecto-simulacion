@@ -1,0 +1,32 @@
+{
+  "group_id": "63158a61-41b2-4298-8327-a680ac9b5104",
+  "states": [
+    {
+      "character": {
+        "id": "59692cf8-d3be-4bd0-a7d7-611aba54bcb3",
+        "name": "Idle",
+        "prompt": "16-bit pixel art sprite of a golden eagle, standing full body on the ground, perched stance with wings folded against its body, sharp curved beak, piercing yellow eyes, dark brown and golden-tan plumage with lighter feather highlights. Clean dark outline, limited color palette, visible square pixels, retro indie RPG game asset, isolated on a plain solid light gray background, no ground, no shadow.",
+        "size": {
+          "width": 68,
+          "height": 68
+        },
+        "template_id": "cat",
+        "directions": 4,
+        "view": "low top-down",
+        "created_at": "2026-09-19T01:06:29.027098+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "west": "Idle/rotations/west.png",
+          "east": "Idle/rotations/east.png",
+          "north": "Idle/rotations/north.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-09-19T12:08:24.250625"
+}

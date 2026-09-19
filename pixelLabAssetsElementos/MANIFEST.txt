@@ -1,0 +1,37 @@
+Elementos sueltos generados vía PixelLab — 2026-09-19
+Sustituyen a 4 glifos/emoji que quedaban del estilo antiguo, señalados por Diego tras ver el visor con
+el resto del catálogo ya en pixel art real.
+
+necromasa.png     OK (14 colores) - rediseñada por completo tras feedback ("es horrible"): de una
+                   composición confusa (calavera + hueso ambiguo) a un icono clásico calavera+huesos
+                   cruzados, mucho más legible.
+pico.png          OK - necesitó 4 pasadas de recorte/croma tras feedback real ("tiene suelo que
+                   claramente no debería tener"): musgo/hierba fusionado con la roca en la base,
+                   eliminado por color + recorte de filas. Queda una mota amarilla mínima que lee como
+                   mineral, no como planta -- aceptada.
+madera.png        OK - la primera versión SÍ tenía un óvalo de tierra gris real (se me pasó en la
+                   revisión inicial, confundido con el patrón de transparencia a tamaño pequeño).
+                   4 intentos de prompt (incluido "llenar el marco", que empeoró las cosas -- el
+                   modelo rellenó de hierba en vez de recortar) no lo resolvieron. Solución real:
+                   quitar el verde por croma sobre la versión más cercana (v2) + quedarse solo con
+                   la componente conectada principal.
+piedra_suelta.png OK - mismo problema y misma solución que madera (óvalo de tierra real en la
+                   primera versión, no un halo de renderizado). Croma + componente conectada
+                   principal + recorte manual de una mota residual por coordenadas.
+
+Lección real de esta ronda, para la próxima vez que un objeto pequeño necesite generarse sin base:
+NO basta con mirar el PNG a tamaño de preview -- el patrón de transparencia (casillero gris/blanco)
+puede camuflar un óvalo de tierra del mismo tono. Verificar SIEMPRE con zoom real (5-8x) antes de
+integrar. Cuando el prompt no lo resuelve en 2-3 intentos razonables, el postproceso (croma +
+componente conectada principal, ver método arriba) es más fiable y barato que seguir iterando texto
+-- "llenar el marco" en particular empeoró el resultado en vez de mejorarlo, evitar esa vía.
+
+Integrados en presentacion/terminal_prototipo/sprites_elementos/ + nueva ruta /sprites_elementos/ en
+vista_web.py + cableado en terminal.html (CATALOGO_GLIFOS.fauna.necromasa, .terreno.pico, .recursos.*
+ya llevan `img`; itemsCelda/tamanoItem/renderMapa/añadirBadges reconocen los casos nuevos: esPico,
+esRecurso).
+
+PENDIENTE REAL DE MOTOR (no de arte, señalado por Diego): el incendio (sistemas/sistema_desastres.py)
+mata Plantas y quema construcciones pero NUNCA toca Celda.recursos -- una rama ya caída sobrevive
+intacta a un incendio que sí mató al árbol que la soltó. Confirmado en el código, sin arreglar aquí
+(es diseño de motor, sigue el flujo de "Claude diseña, el pipeline implementa").
