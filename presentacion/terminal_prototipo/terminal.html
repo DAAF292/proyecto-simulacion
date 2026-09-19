@@ -110,9 +110,12 @@
      glifos de texto por su propio centrado flex. pixelated conserva el
      pixel-art nitido al escalar en el navegador. transform NO se fija
      aqui (solo position/width) -- se compone en JS (renderCriaturas,
-     translate(-50%,-100%) + scaleX segun direccion de movimiento) porque
-     un estilo inline pisaria por completo cualquier transform de esta
-     clase, no se pueden combinar CSS+JS en la misma propiedad. */
+     translate(-50%,-100%)) porque un estilo inline pisaria por completo
+     cualquier transform de esta clase, no se pueden combinar CSS+JS en
+     la misma propiedad. Desde 2026-09-19 el propio `src` de la imagen ya
+     cambia por direccion real (ver infoCriatura/resolverDireccionSprite)
+     -- ya no hace falta espejar por CSS (scaleX), el sprite este/oeste
+     ya viene dibujado de fabrica en cada sentido. */
   .criatura-img {
     position: absolute;
     image-rendering: pixelated;
@@ -442,16 +445,28 @@ const CATALOGO_GLIFOS = {
   // sprite propio para restos). Excepcion real y deliberada a "mapa 100%
   // glifos" -- CP437 no tiene pictogramas de animales (auditado) y los
   // emoji nativos no convencieron del todo a Diego.
+  // imgDir/direcciones (2026-09-19, ver docs/superpowers/specs/
+  // 2026-09-19-orientacion-direccional-design.md): sustituye al antiguo
+  // `img` de vista unica lateral -- cada especie trae un sprite REAL por
+  // direccion (generado via PixelLab, ver pixelLabAssetsCriaturas/),
+  // elegido en runtime segun `ent.orientacion` (dato real del motor
+  // desde este mismo circulo, ya no una heuristica de cliente inferida
+  // de la variacion de X -- ver resolverDireccionSprite/infoCriatura).
+  // gnomo trae las 8 direcciones; el resto solo las 4 cardinales -- las
+  // diagonales de esas 8 especies caen a su cardinal horizontal mas
+  // cercano (decision explicita de Diego: mantiene el perfil lateral ya
+  // conocido en vez de caer a norte/sur).
   fauna: {
     titulo: 'Fauna',
-    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo', img: 'sprites_criaturas/gnomo.png' },
-    lobo:          { ch: '🐺', color: '#e05a3a', nombre: 'Lobo', img: 'sprites_criaturas/lobo.png' },
-    conejo:        { ch: '🐰', color: '#c9b590', nombre: 'Conejo', img: 'sprites_criaturas/conejo.png' },
-    ardilla:       { ch: '🐿️', color: '#d98a2e', nombre: 'Ardilla', img: 'sprites_criaturas/ardilla.png' },
-    caballo:       { ch: '🐴', color: '#c9a06a', nombre: 'Caballo', img: 'sprites_criaturas/caballo.png' },
-    venado:        { ch: '🦌', color: '#a3703f', nombre: 'Venado', img: 'sprites_criaturas/venado.png' },
-    cabra_montesa: { ch: '🐐', color: '#b8c0c4', nombre: 'Cabra montesa', img: 'sprites_criaturas/cabra.png' },
-    zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro', img: 'sprites_criaturas/zorro.png' },
+    gnomo:         { ch: '🧙', color: '#f0e6c0', nombre: 'Gnomo', imgDir: 'sprites_criaturas/gnomo', direcciones: ['norte','sur','este','oeste','noreste','noroeste','sureste','suroeste'] },
+    lobo:          { ch: '🐺', color: '#e05a3a', nombre: 'Lobo', imgDir: 'sprites_criaturas/lobo', direcciones: ['norte','sur','este','oeste'] },
+    conejo:        { ch: '🐰', color: '#c9b590', nombre: 'Conejo', imgDir: 'sprites_criaturas/conejo', direcciones: ['norte','sur','este','oeste'] },
+    ardilla:       { ch: '🐿️', color: '#d98a2e', nombre: 'Ardilla', imgDir: 'sprites_criaturas/ardilla', direcciones: ['norte','sur','este','oeste'] },
+    caballo:       { ch: '🐴', color: '#c9a06a', nombre: 'Caballo', imgDir: 'sprites_criaturas/caballo', direcciones: ['norte','sur','este','oeste'] },
+    venado:        { ch: '🦌', color: '#a3703f', nombre: 'Venado', imgDir: 'sprites_criaturas/venado', direcciones: ['norte','sur','este','oeste'] },
+    cabra_montesa: { ch: '🐐', color: '#b8c0c4', nombre: 'Cabra montesa', imgDir: 'sprites_criaturas/cabra_montesa', direcciones: ['norte','sur','este','oeste'] },
+    zorro:         { ch: '🦊', color: '#c9622e', nombre: 'Zorro', imgDir: 'sprites_criaturas/zorro', direcciones: ['norte','sur','este','oeste'] },
+    aguila:        { ch: '🦅', color: '#c9a94e', nombre: 'Águila', imgDir: 'sprites_criaturas/aguila', direcciones: ['norte','sur','este','oeste'] },
     necromasa:     { ch: '💀', color: '#7a7268', nombre: 'Restos (necromasa)' },
   },
   // `img` (2026-09-16, Diego subio 5 construcciones a `master` -- "quitales
@@ -581,9 +596,30 @@ function recalcularDerivados() {
 // cocina(35) > refugio(15) == taller(15)).
 const ORDEN_HUELLA_CONSTRUCCION = { almacen: 40, salon_comun: 35, cocina: 35, refugio: 15, taller: 15 };
 
+// Diagonal -> cardinal horizontal mas cercano (2026-09-19), para las 8
+// especies que solo tienen 4 direcciones de sprite (norte/sur/este/
+// oeste, sin diagonales) -- decision explicita de Diego: mantiene el
+// perfil lateral ya conocido del juego en vez de caer a norte/sur.
+const FALLBACK_DIAGONAL_HORIZONTAL = {
+  noreste: 'este', sureste: 'este', noroeste: 'oeste', suroeste: 'oeste',
+};
+
+function resolverDireccionSprite(direccionesDisponibles, orientacion) {
+  if (direccionesDisponibles.includes(orientacion)) return orientacion;
+  const alternativa = FALLBACK_DIAGONAL_HORIZONTAL[orientacion];
+  if (alternativa && direccionesDisponibles.includes(alternativa)) return alternativa;
+  return direccionesDisponibles[0];
+}
+
 function infoCriatura(ent) {
   const g = CATALOGO_GLIFOS.fauna[ent.tipo] || { ch: '?', color: '#ffffff', nombre: ent.tipo };
-  return { ch: g.ch, color: g.color, img: g.img || null };
+  let img = null;
+  if (g.imgDir) {
+    const orientacion = ent.orientacion || 'este';
+    const direccion = resolverDireccionSprite(g.direcciones, orientacion);
+    img = `${g.imgDir}/${direccion}.png`;
+  }
+  return { ch: g.ch, color: g.color, img };
 }
 
 // REDISEÑADO 2026-09-16, dos veces seguidas. Primero (feedback: "demasiado
@@ -1278,21 +1314,6 @@ function renderCriaturas() {
     // el catalogo es estatico, pero es una red de seguridad barata) se
     // recrea en vez de intentar mutar un <img> en un <div> de texto.
     if (el && !!el.dataset.esImg !== esImg) { el.remove(); el = null; }
-    // Direccion de movimiento (2026-09-16, Diego: "hacer que la imagen
-    // de la criatura se invierta dependiendo en que direccion va, para
-    // que quede natural"). Comparacion contra la ultima X conocida
-    // (persistida en el propio elemento, no en DATA -- el motor no
-    // expone "direccion", solo posicion) -- sin desplazamiento en X
-    // (movimiento puramente vertical, o quieta) se conserva la
-    // orientacion anterior en vez de resetear a un lado por defecto en
-    // cada tick. Convencion asumida sin poder verificarla contra las 8
-    // especies reales: el arte mira hacia la DERECHA de base (sin flip);
-    // si alguna especie resulta al reves, es un cambio de signo aqui,
-    // no un rediseño.
-    const xPrevia = el ? parseFloat(el.dataset.ultimaX) : ent.x;
-    let mirandoIzquierda = el ? el.dataset.mirandoIzq === '1' : false;
-    if (ent.x > xPrevia) mirandoIzquierda = false;
-    else if (ent.x < xPrevia) mirandoIzquierda = true;
     // Jitter (ver comentario junto a jitterPxPorId) -- semilla el ID de
     // la entidad, no su celda actual, para que el sesgo lateral sea
     // constante mientras camina en vez de recalcularse en cada paso.
@@ -1314,9 +1335,7 @@ function renderCriaturas() {
       el.style.left = cx + 'px';
       el.style.top = cy + 'px';
     }
-    if (esImg) el.style.transform = `translate(-50%, -100%) scaleX(${mirandoIzquierda ? -1 : 1})`;
-    el.dataset.ultimaX = String(ent.x);
-    el.dataset.mirandoIzq = mirandoIzquierda ? '1' : '0';
+    if (esImg) el.style.transform = 'translate(-50%, -100%)';
     el.style.zIndex = String(zIndexPorFila(ent.y, 'fauna'));
     el.dataset.entId = idStr;
   }
