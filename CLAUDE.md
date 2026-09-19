@@ -170,12 +170,19 @@ carpeta `in_review/` ahora vacía.
   como último recurso.
 - Sigue la arquitectura ya decidida en vez de proponer alternativas ya
   descartadas, salvo que Diego pida expresamente reabrir esa decisión.
-- **Tests automatizados (CORREGIDO 2026-09-18, misma tarde)**: `tests/`
-  contiene 90 ficheros / 803 tests reales a esta fecha (verificado con
+- **Tests automatizados (CORREGIDO 2026-09-19)**: `tests/` contiene 92
+  ficheros / 812 tests reales a esta fecha (verificado con
   `pytest --collect-only`, no de memoria). El salto de 789 a 803
-  corresponde al círculo de desastres naturales (14 tests nuevos,
-  `tests/test_desastres_naturales.py`, ver
-  `docs/historial_sistemas.md`). Siguen escritos como "ley física" con
+  (2026-09-18) corresponde al círculo de desastres naturales (14 tests
+  nuevos, `tests/test_desastres_naturales.py`, ver
+  `docs/historial_sistemas.md`); la cifra de 803 ya estaba ligeramente
+  desactualizada (verificado con un worktree temporal en el commit
+  previo a esta sesión: 805 reales, no 803 -- 2 tests de diferencia sin
+  identificar, probablemente de un ajuste menor sin documentar en
+  CLAUDE.md). El salto de 805 a 812 (2026-09-19) sí está identificado
+  por completo: el componente `Orientacion` (7 tests nuevos,
+  `tests/test_orientacion.py`, ver el pendiente de la ronda PixelLab
+  más abajo). Siguen escritos como "ley física" con
   docstring explicando el comportamiento que validan. La cobertura
   sigue siendo parcial (nada del bucle principal salvo el ciclo de vida
   del hilo de `GestorPartidas`, la mayoría de sistemas de
@@ -627,21 +634,30 @@ se migró a `docs/historial_servidor_control.md`, nuevo. Nada se perdió.
   lateral fija como pedía el prompt, sino un rig de 4 direcciones
   (fauna, `template_id: dog`) u 8 (gnomo, `template_id: mannequin`) —
   Diego decidió explícitamente aprovechar la direccionalidad de verdad
-  en vez de quedarse con un solo frame. Diseñado y especificado
-  (`docs/superpowers/specs/2026-09-19-orientacion-direccional-design.md`,
-  componente `Orientacion` + regla enganchada en
-  `sistema_movimiento.py::_aplicar_movimiento`), encargo ya soltado a
-  la cola (`docs/superpowers/encargos/2026-09-19-orientacion-direccional.md`)
-  pero **el centinela sigue sin reiniciarse** (ver el pendiente ya
-  existente más abajo) — no se recogerá hasta entonces. La mitad de
-  presentación (reorganizar `pixelLabAssetsCriaturas/` →
-  `sprites_criaturas/<especie>/<direccion>.png`, seleccionar frame en
-  `terminal.html`, nueva ruta en `vista_web.py`) queda deliberadamente
-  fuera de esa spec, pendiente de implementar directamente por Claude
-  una vez el componente esté mergeado. Todavía sin tocar: construcciones
-  (regenerar refugio/almacén con las 3 correcciones que el propio
-  informe anotó, más 3 nuevas), flora (15 piezas) y terreno (6 piezas)
-  — ronda a menos de un tercio de completarse.
+  en vez de quedarse con un solo frame. Diseñado
+  (`docs/superpowers/specs/2026-09-19-orientacion-direccional-design.md`)
+  e **implementado directamente por Claude a petición explícita de
+  Diego** (no por el pipeline -- encargo retirado de la cola sin
+  llegar a recogerse, el centinela seguía sin reiniciarse): componente
+  `Orientacion` (dato puro, valor por defecto `"este"`), regla única
+  enganchada en `sistema_movimiento.py::_aplicar_movimiento` (mapea
+  `(dx, dy)` a una de 8 direcciones justo donde un desplazamiento se
+  confirma de verdad, dejando la orientación intacta ante cualquier
+  bloqueo por terreno/agua/pendiente), expuesto en el DTO del visor
+  (`vista_web.py::construir_instantanea`). 7 tests nuevos
+  (`tests/test_orientacion.py`), suite completa en verde (812 tests),
+  y verificado contra el motor real (600 ticks con
+  `instanciar_sistemas`/`ejecutar_tick` reales de `main.py`): la
+  orientación cambia de verdad durante la partida. Deliberadamente NO
+  persistido (estado derivado, se regenera en `"este"` al cargar).
+  **Sigue pendiente la mitad de presentación** (reorganizar
+  `pixelLabAssetsCriaturas/` → `sprites_criaturas/<especie>/<direccion>.png`,
+  seleccionar frame en `terminal.html`, nueva ruta en `vista_web.py`) —
+  deliberadamente fuera de esta pieza, sin implementar todavía. Todavía
+  sin tocar: construcciones (regenerar refugio/almacén con las 3
+  correcciones que el propio informe anotó, más 3 nuevas), flora (15
+  piezas) y terreno (6 piezas) — ronda a menos de un tercio de
+  completarse.
 
 ## Comentarios técnicos vs narrativa histórica (2026-09-02)
 
